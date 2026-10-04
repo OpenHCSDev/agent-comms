@@ -289,7 +289,7 @@ class SelectedSummaryAttempt(
         type(self).update(
             db,
             where="operation_id=? AND json_extract(state, '$.kind')=?",
-            parameters=(self.operation_id, self.state.declared_name),
+            parameters=(self.operation_id, FieldCodec.encode(type(self.state))),
             state=target,
         )
         expected = replace(self, state=target)

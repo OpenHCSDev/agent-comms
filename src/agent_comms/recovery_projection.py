@@ -82,12 +82,7 @@ class ProjectedExecution:
     is_current: bool = field(metadata={"wire_name": "isCurrent"})
     attempt: ProjectedAttempt | None
     can_retry: bool = field(metadata={"wire_name": "canRetry"})
-    publications: tuple[str, ...]
-
-    def __post_init__(self):
-        allowed = {member.publication() for member in ResponseState.members_with(ResponseState)}
-        if any(value not in allowed for value in self.publications):
-            raise ValueError("unknown publication status")
+    publications: tuple[type[ResponseState], ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,7 +264,7 @@ class RecoverySelection(TypedRow):
                     return UnavailableRecoveryProjection("invalid_store")
             elif obligations or receipts:
                 return UnavailableRecoveryProjection("invalid_store")
-            publications = tuple(row.lifecycle.publication() for row in obligations)
+            publications = tuple(type(row.lifecycle) for row in obligations)
             projected = ProjectedExecution(
                 status,
                 origin,

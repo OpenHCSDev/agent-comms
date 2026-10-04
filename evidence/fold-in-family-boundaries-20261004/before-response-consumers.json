@@ -1,0 +1,1767 @@
+{
+  "source": "4b99f4d3",
+  "loader": "original refactor-audit Package.load",
+  "roots": [
+    {
+      "root": "src",
+      "modules": 311,
+      "unparsed": []
+    },
+    {
+      "root": "tests",
+      "modules": 364,
+      "unparsed": []
+    },
+    {
+      "root": "tools",
+      "modules": 53,
+      "unparsed": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/obligation_states.py",
+      "line": 15,
+      "kind": "declaration",
+      "name": "ResponseState"
+    },
+    {
+      "path": "src/agent_comms/obligation_states.py",
+      "line": 89,
+      "kind": "declaration",
+      "name": "PublishingResponse"
+    },
+    {
+      "path": "src/agent_comms/recovery_projection.py",
+      "line": 78,
+      "kind": "declaration",
+      "name": "ProjectedExecution"
+    },
+    {
+      "path": "src/agent_comms/recovery_projection.py",
+      "line": 88,
+      "kind": "consumer",
+      "source": "member.publication()"
+    },
+    {
+      "path": "src/agent_comms/recovery_projection.py",
+      "line": 273,
+      "kind": "consumer",
+      "source": "ProjectedExecution(status, origin, is_current, attempt, lifecycle.can_retry(authorized=selected.retry_authorized, attempt=observed_attempt, is_current=is_current), publications)"
+    },
+    {
+      "path": "src/agent_comms/recovery_projection.py",
+      "line": 272,
+      "kind": "consumer",
+      "source": "row.lifecycle.publication()"
+    },
+    {
+      "path": "tests/test_coordination_nominal.py",
+      "line": 91,
+      "kind": "consumer",
+      "source": "ProjectedExecution(PendingExecution, ExecutionOrigin.WIRE, False, None, False, tag.publication())"
+    },
+    {
+      "path": "tests/test_coordination_nominal.py",
+      "line": 90,
+      "kind": "consumer",
+      "source": "tag.publication()"
+    },
+    {
+      "path": "tests/test_coordination_nominal.py",
+      "line": 97,
+      "kind": "consumer",
+      "source": "tag.publication()"
+    },
+    {
+      "path": "tests/test_coordination_nominal.py",
+      "line": 133,
+      "kind": "consumer",
+      "source": "ProjectedExecution(type(record.lifecycle), record.origin, False, None, False, None)"
+    },
+    {
+      "path": "tests/test_coordination_nominal.py",
+      "line": 314,
+      "kind": "consumer",
+      "source": "ProjectedExecution(QueuedExecution, ExecutionOrigin.WIRE, False, None, False, obligation.lifecycle.publication())"
+    },
+    {
+      "path": "tests/test_coordination_nominal.py",
+      "line": 320,
+      "kind": "consumer",
+      "source": "obligation.lifecycle.publication()"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 99,
+      "kind": "declaration",
+      "name": "GoalAction",
+      "bases": [
+        "DeclaredFamily",
+        "Command"
+      ]
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 373,
+      "kind": "declaration",
+      "name": "SetGoalAction",
+      "bases": [
+        "ReplacementGoalAction",
+        "OwnerInvocable",
+        "RuntimeInvocable"
+      ]
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 432,
+      "kind": "declaration",
+      "name": "RetryGoalAction",
+      "bases": [
+        "GoalAction",
+        "OwnerInvocable"
+      ]
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 51,
+      "kind": "declaration",
+      "name": "GoalScheduler",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 170,
+      "kind": "goal consumer",
+      "source": "self.comms.goals.update_goal(name, SetGoalAction(text=text, expect=GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()))), actor=OwnerInvocable, owner_store=self.open_goal_store())"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 189,
+      "kind": "goal consumer",
+      "source": "self.comms.goals.update_goal(name, EditGoalAction(text=text, expect=GoalPrecondition(goal_id=goal_id, expected_goal=goal, expected_owner=ProcessIdentity.capture(os.getpid()))), actor=OwnerInvocable)"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 243,
+      "kind": "goal consumer",
+      "source": "self.comms.goals.update_goal(name, RetryGoalAction(expect=GoalPrecondition(goal_id=goal_id, expected_goal=goal, expected_owner=ProcessIdentity.capture(os.getpid()))), actor=OwnerInvocable, owner_store=self.open_goal_store())"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 216,
+      "kind": "goal consumer",
+      "source": "self.comms.goals.update_goal(name, action(expect=GoalPrecondition(goal_id=goal_id, expected_goal=goal, expected_owner=ProcessIdentity.capture(os.getpid()))), actor=OwnerInvocable, owner_store=self.open_goal_store() if action.owner_grant else None)"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 42,
+      "kind": "declaration",
+      "name": "RuntimeRequest",
+      "bases": [
+        "DeclaredFamily",
+        "Command"
+      ]
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 315,
+      "kind": "declaration",
+      "name": "UpdateGoalRuntimeRequest",
+      "bases": [
+        "GoalRevisionRuntimeRequest",
+        "GoalSnapshotResultRuntimeRequest"
+      ]
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 319,
+      "kind": "goal consumer",
+      "source": "ctx.server.agent.turns.goals.update_goal(ctx.session_id, self.status, self.goal_id, self.expected_revision)"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 451,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(_executing_thread(), SetGoalAction(text=self.text))"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 501,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(name, command, actor=ModelInvocable)"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 527,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(name, ActiveGoalAction(expect=GoalPrecondition(expected_goal=current, goal_id=goal_id), progress=progress))"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 558,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(name, EditGoalAction(expect=GoalPrecondition(expected_goal=current, goal_id=goal_id), text=self.text))"
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "line": 79,
+      "kind": "goal consumer",
+      "source": "self.comms.goals.update_goal(self.thread_name, BlockedGoalAction(expect=GoalPrecondition(goal_id=self.goal.id, expected_goal=self.goal), progress='Goal origin turn did not finish successfully.'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 552,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', SetGoalAction(text='Ship the release'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 571,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', SetGoalAction(text='Ship the release'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 704,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', SetGoalAction(text='Ship the release'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 727,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', SetGoalAction(text='Ship the release'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 788,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', SetGoalAction(text='Ship the release'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 846,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', SetGoalAction(text='Ship the release'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 882,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', SetGoalAction(text='Ship the release'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 919,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', SetGoalAction(text='Ship the release'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1021,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', SetGoalAction(text='Finish safely'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1095,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', SetGoalAction(text='Keep working'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1101,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', BlockedGoalAction(expect=GoalPrecondition(goal_id=goal.id), block_reason='The previous turn failed'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1139,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', SetGoalAction(text='Recover a retry'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1145,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', BlockedGoalAction(expect=GoalPrecondition(goal_id=goal.id), block_reason='Previous turn failed'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1264,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', SetGoalAction(text='No orphan spend'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1281,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', SetGoalAction(text='One attempt'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1313,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', SetGoalAction(text='Count responses'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 743,
+      "kind": "goal consumer",
+      "source": "wire(wired.root).goals.update_goal(name, ActiveGoalAction(expect=GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id), progress='independently verified newer progress'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 850,
+      "kind": "goal consumer",
+      "source": "wire(wired.root).goals.update_goal('proj', ActiveGoalAction(expect=GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id), progress='independently verified newer progress'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 887,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', ActiveGoalAction(expect=GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id), progress='Completed a verified step'), actor=ModelInvocable)"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 927,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress='Verified done'), actor=ModelInvocable)"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 976,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', SetGoalAction(text='Finish the release'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1029,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress='Premature'), actor=ModelInvocable)"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1063,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', SetGoalAction(text='Do not replay'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1192,
+      "kind": "goal consumer",
+      "source": "agent.turns.goals.update_goal('proj', 'paused', goal.id, goal.revision)"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1236,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal(name, SetGoalAction(text='No replay after crash'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1933,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', SetGoalAction(text='Handle assigned work'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1944,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('child',)))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1956,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', ClearGoalAction(expect=GoalPrecondition(goal_id=goal.id)))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 578,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress='Verified complete'), actor=ModelInvocable)"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 803,
+      "kind": "goal consumer",
+      "source": "wire(wired.root).goals.update_goal(name, SetGoalAction(text='New objective') if transition is SetGoalAction else transition(expect=GoalPrecondition(goal_id=original.id), progress='explicit decision'))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 985,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', PausedGoalAction(), actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1109,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('proj', ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1213,
+      "kind": "goal consumer",
+      "source": "agent.turns.goals.update_goal('proj', 'active', goal.id, paused.revision)"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1197,
+      "kind": "goal consumer",
+      "source": "agent.turns.goals.update_goal('proj', 'active', goal.id, paused.revision)"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 132,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('beta', SetGoalAction(text='New independent task'))"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 169,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('project', SetGoalAction(text='Read files until stopped'), owner_store=store)"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 122,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('project', SetGoalAction(text='Read files until stopped'))"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 192,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('project', ClearGoalAction())"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 250,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('project', SetGoalAction(text='Continue until stopped'))"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 194,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('project', SetGoalAction(text='A different goal'), owner_store=store)"
+    },
+    {
+      "path": "tests/test_acp_goal_original_input.py",
+      "line": 51,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('project', SetGoalAction(text='Keep reading'), owner_store=store)"
+    },
+    {
+      "path": "tests/test_acp_goal_original_input.py",
+      "line": 141,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('project', SetGoalAction(text='Keep reading'), owner_store=store)"
+    },
+    {
+      "path": "tests/test_acp_goal_original_input.py",
+      "line": 100,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('project', SetGoalAction(text='Original goal'), owner_store=store)"
+    },
+    {
+      "path": "tests/test_acp_goal_original_input.py",
+      "line": 109,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('project', SetGoalAction(text='New authority'), owner_store=store)"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 794,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('beta', SetGoalAction(text='Separate ongoing goal'))"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 775,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('beta', SetGoalAction(text='Work on a separate task'))"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 31,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('project', SetGoalAction(text='Continue independent work'))"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 112,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('project', SetGoalAction(text='Work'))"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 133,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('project', PausedGoalAction(expect=GoalPrecondition(goal_id=initial.id)))"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 47,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('project', PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress='Explicit owner pause during backend execution'), actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 114,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('project', PausedGoalAction(expect=GoalPrecondition(goal_id=initial.id)), actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 119,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('project', ActiveGoalAction(expect=GoalPrecondition(goal_id=initial.id)), actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 127,
+      "kind": "goal consumer",
+      "source": "wired.goals.update_goal('project', PausedGoalAction(expect=GoalPrecondition(goal_id=initial.id)), actor=ModelInvocable)"
+    },
+    {
+      "path": "tests/test_goal_block_reason.py",
+      "line": 30,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text='Finish selected work'))"
+    },
+    {
+      "path": "tests/test_goal_block_reason.py",
+      "line": 37,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', ActiveGoalAction(progress='Verified 2 of 3 items'))"
+    },
+    {
+      "path": "tests/test_goal_block_reason.py",
+      "line": 98,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', ActiveGoalAction(progress='Verified step'))"
+    },
+    {
+      "path": "tests/test_goal_block_reason.py",
+      "line": 112,
+      "kind": "goal consumer",
+      "source": "comms2.goals.update_goal('worker', CompletedGoalAction(progress='Reported completion'))"
+    },
+    {
+      "path": "tests/test_goal_block_reason.py",
+      "line": 150,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', PausedGoalAction(progress='Half verified by the owner'))"
+    },
+    {
+      "path": "tests/test_goal_block_reason.py",
+      "line": 166,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', ActiveGoalAction(expect=GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()), goal_id=original.id)), actor=OwnerInvocable, owner_store=store)"
+    },
+    {
+      "path": "tests/test_goal_block_reason.py",
+      "line": 55,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', BlockedGoalAction(expect=GoalPrecondition(goal_id=original.id), **kwargs))"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 112,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(sid, SetGoalAction(text='One journaled autonomous continuation'))"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 240,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(sid, SetGoalAction(text='Exercise one explicit failed attempt'))"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 258,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(sid, PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_goal_history.py",
+      "line": 41,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text='Ask @reviewer about the release'))"
+    },
+    {
+      "path": "tests/test_goal_history.py",
+      "line": 42,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', PausedGoalAction(expect=GoalPrecondition(goal_id=first.id), progress='Waiting'))"
+    },
+    {
+      "path": "tests/test_goal_history.py",
+      "line": 51,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('reviewer', CompletedGoalAction(expect=GoalPrecondition(goal_id=first.id)))"
+    },
+    {
+      "path": "tests/test_goal_history.py",
+      "line": 54,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('reviewer', SetGoalAction(text='Start a new objective'))"
+    },
+    {
+      "path": "tests/test_goal_history.py",
+      "line": 55,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('reviewer', ClearGoalAction(expect=GoalPrecondition(goal_id=second.id)))"
+    },
+    {
+      "path": "tests/test_goal_history.py",
+      "line": 84,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text='Existing goal'))"
+    },
+    {
+      "path": "tests/test_goal_history.py",
+      "line": 95,
+      "kind": "goal consumer",
+      "source": "reopened.goals.update_goal('worker', PausedGoalAction(expect=GoalPrecondition(goal_id=current.id)))"
+    },
+    {
+      "path": "tests/test_goal_history.py",
+      "line": 105,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text='Keep current'))"
+    },
+    {
+      "path": "tests/test_goal_history.py",
+      "line": 129,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text='Keep current'))"
+    },
+    {
+      "path": "tests/test_goal_history.py",
+      "line": 162,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text='Known version'))"
+    },
+    {
+      "path": "tests/test_goal_history.py",
+      "line": 116,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', PausedGoalAction(expect=GoalPrecondition(goal_id=current.id)))"
+    },
+    {
+      "path": "tests/test_goal_history.py",
+      "line": 148,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', PausedGoalAction(expect=GoalPrecondition(goal_id=current.id)))"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 35,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text='Delegate and wait'))"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 108,
+      "kind": "goal consumer",
+      "source": "reopened.goals.update_goal('worker', ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)))"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 109,
+      "kind": "goal consumer",
+      "source": "reopened.goals.update_goal('worker', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('parent',)))"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 116,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 148,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text='Current goal'))"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 151,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', action)"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 50,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='Work with @peer and @peer, not @owner or @unknown.'))"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 103,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='@peer.bad @peer/path @peer@host @Peer @other @human @owner @renamed'))"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 125,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text=text))"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 142,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='@peer please inspect'))"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 157,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', EditGoalAction(expect=GoalPrecondition(goal_id=goal.id), text='@peer please inspect'))"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 168,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='@peer'))"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 185,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='Please consider @peer'))"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 190,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress='Progress'))"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 196,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 200,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 209,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', EditGoalAction(expect=GoalPrecondition(goal_id=goal.id), text='No peer mention'))"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 214,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', EditGoalAction(expect=GoalPrecondition(goal_id=goal.id), text='@peer reconsider'))"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 218,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id)))"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 220,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(expect=GoalPrecondition(goal_id=goal.id), text='@other'))"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 278,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='@peer'))"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 292,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='@peer'))"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 238,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='Review with @peer'))"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 268,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='@peer'))"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 39,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text='Keep the durable objective'))"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 53,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', EditGoalAction(text='Revised objective'))"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 118,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', PausedGoalAction(), actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 119,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', action, actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 145,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', PausedGoalAction(), actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 154,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', ActiveGoalAction(progress='same'))"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 155,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', ActiveGoalAction(progress=''))"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 174,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', PausedGoalAction(), actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 62,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', ActiveGoalAction())"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 147,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', action(progress='reason'))"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 159,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', replace(action, expect=GoalPrecondition(expected_goal=goal)))"
+    },
+    {
+      "path": "tests/test_goal_owner_pause.py",
+      "line": 21,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text='Read fifty files'))"
+    },
+    {
+      "path": "tests/test_goal_owner_pause.py",
+      "line": 22,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_goal_owner_pause.py",
+      "line": 45,
+      "kind": "goal consumer",
+      "source": "reopened.goals.update_goal('worker', ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_goal_owner_pause.py",
+      "line": 54,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text='Read fifty files'))"
+    },
+    {
+      "path": "tests/test_goal_owner_pause.py",
+      "line": 57,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=ModelInvocable)"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 35,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', PausedGoalAction(expect=GoalPrecondition(goal_id=started['id']), progress='previous'))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 107,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', ClearGoalAction(expect=GoalPrecondition(goal_id=replacement['id'])))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 133,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', ClearGoalAction(expect=GoalPrecondition(goal_id=goal['id'])))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 142,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', BlockedGoalAction(expect=GoalPrecondition(goal_id=started['id']), progress='uncertain'))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 153,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', CompletedGoalAction(expect=GoalPrecondition(goal_id=started['id'])))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 166,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', CompletedGoalAction(expect=GoalPrecondition(goal_id=started['id'])))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 188,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', BlockedGoalAction(expect=GoalPrecondition(goal_id=started['id']), block_reason='Uncertain turn requires review') if terminal == 'blocked' else CompletedGoalAction(expect=GoalPrecondition(goal_id=started['id'])))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 213,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', PausedGoalAction(expect=GoalPrecondition(goal_id=started['id']), progress='before'))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 241,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', PausedGoalAction(expect=GoalPrecondition(goal_id=started['id']), progress='before'))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 284,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', prior(expect=GoalPrecondition(goal_id=started['id']), progress='unchanged'))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 347,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', BlockedGoalAction(expect=GoalPrecondition(goal_id=started['id']), progress='same'))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 351,
+      "kind": "goal consumer",
+      "source": "Comms(comms.root).goals.update_goal('owner', BlockedGoalAction(expect=GoalPrecondition(goal_id=started['id']), progress='same'))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 362,
+      "kind": "goal consumer",
+      "source": "Comms(comms.root).goals.update_goal('owner', ActiveGoalAction(expect=GoalPrecondition(goal_id=started['id']), progress='verified newer step'))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 383,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', ActiveGoalAction(expect=GoalPrecondition(goal_id=started['id']), progress='Verified first step'))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 170,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', ActiveGoalAction(expect=GoalPrecondition(goal_id=started['id'])))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 201,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', PausedGoalAction(expect=GoalPrecondition(goal_id=started['id'])))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 296,
+      "kind": "goal consumer",
+      "source": "other.goals.update_goal(name, (BlockedGoalAction if prior is BlockedGoalAction else ActiveGoalAction)(expect=GoalPrecondition(goal_id=saved.id), progress='newer report'))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 302,
+      "kind": "goal consumer",
+      "source": "other.goals.update_goal(name, prior(expect=GoalPrecondition(goal_id=saved.id), progress='unchanged'))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 414,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', BlockedGoalAction(expect=GoalPrecondition(goal_id='goal-id'), progress='do not write'))"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 325,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', ActiveGoalAction(expect=GoalPrecondition(expected_goal=saved, goal_id=saved.id), progress='stale second resume'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 37,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('parent', SetGoalAction(text='Work'), owner_store=store)"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 68,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('parent', SetGoalAction(text='Goal with @mention'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 73,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('parent', PausedGoalAction(), actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 74,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('parent', EditGoalAction(text='Edited @mention'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 90,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('alice', SetGoalAction(text='Wait for Bob'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 91,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('bob', SetGoalAction(text='Wait for Alice'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 94,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('alice', StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=('bob',)))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 123,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('alice', SetGoalAction(text='Wait for Bob or Carol'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 124,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('bob', SetGoalAction(text='Wait for Alice'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 127,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('alice', StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=('bob', 'carol')))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 131,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('bob', StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=('alice',)))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 152,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('alice', SetGoalAction(text='Wait for Bob or Carol'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 153,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('bob', SetGoalAction(text='Wait for Alice'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 154,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('carol', SetGoalAction(text='Idle goal'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 157,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('alice', StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=('bob', 'carol')))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 201,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('alice', SetGoalAction(text='Wait for Bob or Carol'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 202,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('bob', SetGoalAction(text='Wait for Alice'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 205,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('alice', StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=('bob', 'carol')))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 228,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('alice', SetGoalAction(text='Wait for Bob'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 229,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('bob', SetGoalAction(text='Wait for Alice'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 231,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('alice', StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=('bob',)))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 281,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('alice', SetGoalAction(text='Wait for Bob'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 282,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('bob', SetGoalAction(text='Wait for Alice'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 284,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('alice', StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=('bob',)))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 326,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('alice', SetGoalAction(text='Wait for Bob'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 327,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('bob', SetGoalAction(text='Wait for Alice'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 329,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('alice', StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=('bob',)))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 368,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('parent', SetGoalAction(text='Delegate work'))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 70,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('parent', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id)))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 102,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('bob', StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=('alice',)))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 162,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('bob', StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=('alice',)))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 210,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('bob', StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=('alice',)))"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 373,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('parent', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('child',)))"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 101,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='Review the delegated work'))"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 104,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=targets))"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 114,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='Work'))"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 285,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 328,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', EditGoalAction(expect=GoalPrecondition(goal_id=goal.id), text='new exact objective'))"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 347,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='Review'))"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 443,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='Await child'))"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 494,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(owner, SetGoalAction(text='Review child work'), owner_store=agent.turns.goals.open_goal_store())"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 522,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='Await child'))"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 571,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='Await child'))"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 122,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('child',)))"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 350,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('child',)))"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 502,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(owner, StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,)))"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 450,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,)))"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 529,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,)))"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 579,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,)))"
+    },
+    {
+      "path": "tests/test_goal_ui_creation.py",
+      "line": 64,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, SetGoalAction(text='Goal without authority'))"
+    },
+    {
+      "path": "tests/test_goal_ui_creation.py",
+      "line": 65,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, BlockedGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress='Goal attempt unresolved'))"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 31,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='Wait for original peer'))"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 32,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('peer',)))"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 66,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='Wait for original owner reply'))"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 67,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('peer',)))"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 111,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(sid, SetGoalAction(text='Process the original peer reply'))"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 120,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(sid, StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('peer',)))"
+    },
+    {
+      "path": "tests/test_goals.py",
+      "line": 27,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text='Verify the release'))"
+    },
+    {
+      "path": "tests/test_goals.py",
+      "line": 36,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', PausedGoalAction())"
+    },
+    {
+      "path": "tests/test_goals.py",
+      "line": 42,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text='New objective'))"
+    },
+    {
+      "path": "tests/test_goals.py",
+      "line": 48,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', ClearGoalAction())"
+    },
+    {
+      "path": "tests/test_goals.py",
+      "line": 62,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text='Finish the release'))"
+    },
+    {
+      "path": "tests/test_goals.py",
+      "line": 63,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', PausedGoalAction(progress='Paused after an uncertain turn'))"
+    },
+    {
+      "path": "tests/test_goals.py",
+      "line": 79,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', BlockedGoalAction(block_reason='Need owner input before retry.'))"
+    },
+    {
+      "path": "tests/test_goals.py",
+      "line": 84,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text='Replacement goal'))"
+    },
+    {
+      "path": "tests/test_goals.py",
+      "line": 44,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id)))"
+    },
+    {
+      "path": "tests/test_goals.py",
+      "line": 51,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', ActiveGoalAction())"
+    },
+    {
+      "path": "tests/test_goals.py",
+      "line": 53,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text=' '))"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 100,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', retry, actor=OwnerInvocable, owner_store=store)"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 118,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='Wait for the peer'))"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 132,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', replace(action, reviewed_inputs=(key,)))"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 151,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', action)"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 92,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', retry, actor=OwnerInvocable, owner_store=store)"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 129,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', action)"
+    },
+    {
+      "path": "tests/test_message_notifications.py",
+      "line": 65,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('beta', SetGoalAction(text='Finish native delivery'))"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 141,
+      "kind": "goal consumer",
+      "source": "owner._comms.goals.update_goal(thread.name, SetGoalAction(text='Preserve the exact retained source; never replay an uncertain input.', expect=GoalPrecondition(expected_owner=thread.require_process())), actor=OwnerInvocable, owner_store=owner.turns.goals.open_goal_store())"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 145,
+      "kind": "goal consumer",
+      "source": "owner._comms.goals.update_goal(thread.name, StandbyGoalAction(wait_for=(peer.name,), expect=GoalPrecondition(goal_id=goal.id)), actor=RuntimeInvocable)"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 296,
+      "kind": "goal consumer",
+      "source": "owner._comms.goals.update_goal(thread.name, ClearGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=RuntimeInvocable)"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 298,
+      "kind": "goal consumer",
+      "source": "owner._comms.goals.update_goal(thread.name, SetGoalAction(text='Replacement acceptance scope', expect=GoalPrecondition(expected_owner=thread.require_process())), actor=OwnerInvocable, owner_store=owner.turns.goals.open_goal_store())"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 301,
+      "kind": "goal consumer",
+      "source": "owner._comms.goals.update_goal(thread.name, StandbyGoalAction(wait_for=(peer.name,), expect=GoalPrecondition(goal_id=replacement.id)), actor=RuntimeInvocable)"
+    },
+    {
+      "path": "tests/test_project.py",
+      "line": 41,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text='Keep this objective'))"
+    },
+    {
+      "path": "tests/test_relationships.py",
+      "line": 304,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('owner', SetGoalAction(text='Review with @peer'))"
+    },
+    {
+      "path": "tests/test_runtime_goal_edit.py",
+      "line": 27,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, SetGoalAction(text=\"Review @child's implementation\"))"
+    },
+    {
+      "path": "tests/test_runtime_goal_edit.py",
+      "line": 28,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, PausedGoalAction(), actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 69,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, SetGoalAction(text='Finish the blocked objective'), owner_store=store)"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 75,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, BlockedGoalAction(expect=GoalPrecondition(goal_id=goal.id), block_reason='Previous goal attempt failed'))"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 212,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, SetGoalAction(text='Keep attempt authority'), owner_store=store)"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 220,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, BlockedGoalAction(expect=GoalPrecondition(goal_id=goal.id), block_reason='Owner input required before retry'))"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 118,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=ModelInvocable)"
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 58,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, SetGoalAction(text='Review child output'))"
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 59,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('child',)))"
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 73,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable)"
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 84,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, SetGoalAction(text='Review child output'), owner_store=owner.turns.goals.open_goal_store())"
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 128,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, SetGoalAction(text='Needs review'))"
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 129,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, BlockedGoalAction(expect=GoalPrecondition(goal_id=goal.id), block_reason='Unknown prior attempt requires review'))"
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 161,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, SetGoalAction(text='Original objective'))"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 150,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('waiting', SetGoalAction(text='Review dependency'))"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 151,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('waiting', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(execution.thread_name,)))"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 381,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('waiting', SetGoalAction(text='Wait for maintenance'))"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 382,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('waiting', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(name,)))"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 476,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('waiting', SetGoalAction(text='Review relay outcome'))"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 477,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('waiting', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(name,)))"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 212,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('beta', SetGoalAction(text='Preserve this goal'))"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 214,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('beta', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('sender',)))"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 382,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('beta', SetGoalAction(text='Preserve unrelated goal'))"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 384,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('beta', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('sender',)))"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 47,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('beta', SetGoalAction(text='Unrelated parked goal'))"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 50,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('beta', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=('sender',)))"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 223,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('beta', ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress='new'))"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 227,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('beta', SetGoalAction(text='Replacement goal'))"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 229,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('beta', PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)))"
+    },
+    {
+      "path": "tests/test_stack_channel_delivery.py",
+      "line": 143,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('worker', SetGoalAction(text='Changed goal'))"
+    },
+    {
+      "path": "tests/test_stack_goal_standby.py",
+      "line": 202,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('parent', SetGoalAction(text='Review @child report'), owner_store=agent.turns.goals.open_goal_store())"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 150,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, SetGoalAction(text='Finish the blocked objective'), owner_store=store)"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 156,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal(session, BlockedGoalAction(expect=GoalPrecondition(goal_id=goal.id), block_reason='Owner retry decision required'))"
+    },
+    {
+      "path": "tests/test_stack_send_now.py",
+      "line": 317,
+      "kind": "goal consumer",
+      "source": "owner._comms.goals.update_goal('project', SetGoalAction(text='Continue useful work'), owner_store=owner.turns.goals.open_goal_store())"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 126,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('b', SetGoalAction(text='Wait for a after reviewing its replies'))"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 231,
+      "kind": "goal consumer",
+      "source": "comms.goals.update_goal('b', SetGoalAction(text='Review a and wait for its next reply'))"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 59,
+      "kind": "goal consumer",
+      "source": "runner.comms.goals.update_goal(execution.thread_name, SetGoalAction(text='new work'))"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 392,
+      "kind": "goal consumer",
+      "source": "service.goals.update_goal(source.name, SetGoalAction(text='Replacement acceptance scope'), actor=RuntimeInvocable)"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 386,
+      "kind": "goal consumer",
+      "source": "service.goals.update_goal(source.name, ClearGoalAction(expect=GoalPrecondition(goal_id=source.goal.id)), actor=RuntimeInvocable)"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 403,
+      "kind": "goal consumer",
+      "source": "service.goals.update_goal(source.name, StandbyGoalAction(wait_for=('context-peer',), expect=GoalPrecondition(goal_id=replacement.id)), actor=RuntimeInvocable)"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 48,
+      "kind": "goal consumer",
+      "source": "service.goals.update_goal('terminal-waiter', SetGoalAction(text='Wait for the original configured turn'))"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 49,
+      "kind": "goal consumer",
+      "source": "service.goals.update_goal('terminal-waiter', StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(thread.name,)))"
+    }
+  ]
+}

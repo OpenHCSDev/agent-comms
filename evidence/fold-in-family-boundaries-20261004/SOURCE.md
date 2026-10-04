@@ -97,3 +97,28 @@ boundary. ACP catalog IDs, native payload stop-reason/command normalization,
 coding-tool wire names, export strings and SQLite scalar parameters use the same
 codec at their original external boundaries. Their wire strings remain unchanged.
 No target-action encoder, catalog or lifecycle producer is replaced.
+
+## Response and owner-control carriers
+
+RecoverySelection now carries original response declarations in publications.
+The separate string roster and ResponseState.publication methods are deleted.
+Publishing is the original unconfirmed lifecycle member, not a published receipt;
+redacted runtime JSON now encodes its canonical `publishing` name. No stored
+obligation, publication receipt, intent or retry authority changes. Gateway
+validation consumes the same FieldCodec family annotation.
+
+GoalAction owns the shared current-goal observation and control request. Set
+owns creation without reading a current goal; Retry owns its explicit request
+while the existing backend RetryGoalAction remains the state/grant authority.
+Toad passes the member, deleting its set/retry string dispatch and duplicate
+blocked-state decision. UpdateGoalRuntimeRequest decodes the family once; the
+scheduler consumes the member without re-decoding. RuntimeRequest.proxy_payload
+is the existing JSON parameter boundary, so it encodes typed parameters once.
+
+SelectedSummaryAttempt.transition retains its exact scalar discriminator CAS
+predicate. FieldCodec encodes type(self.state), not the tagged state instance.
+JsonStorage still encodes the actual replacement state. Response/private/journal
+SQL names are emitted at their actual SQL boundaries; mixed domain modules are
+not exempted wholesale. True exemptions remain field_codec.py, typed_table.py,
+coordination_schema.py, coordinated_runtime_schema.py, pending original collector
+publication and final per-file integration.
