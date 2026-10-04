@@ -446,6 +446,16 @@ class RecordedConditionInstallation:
     entry_selection: JournalProvenance | None = field(default=None,
         metadata={"wire_omit_default": True})
 
+    def require_condition(self, selected: str):
+        """An observed constructor cannot stand in for a different arm.
+
+        This is the original hook's selection, not complete transformed source
+        or provider intervention proof. Absent observations remain absent.
+        """
+        if self.condition != selected:
+            raise ValueError("Declared retention arm differs from its original SDK constructor")
+        return self
+
     def require_original(self, probe, evidence, branch, context):
         if self.input_id != probe.input_id:
             raise ValueError('Installed SDK source belongs to another input')
@@ -582,7 +592,7 @@ class RecordedNativeProbe:
             if row.get('stage')=='installed-transform-applied' and row['input_id']==self.input_id)
         unavailable = {'evaluated': False, 'reason': 'Original SDK journal entry selection unavailable'}
         if not originals:
-            return {'evaluated':False,'entry_selection':unavailable,
+            return {'evaluated':False,'installations':(), 'entry_selection':unavailable,
                 'reason':'Original installed-source hook observation unavailable'}
         selections = tuple(original.source_selection(self.session,
             original.require_original(self,evidence,branch,context)) for original in originals)
@@ -593,16 +603,16 @@ class RecordedNativeProbe:
             'observations':selections,
             'scope':'SDK selected source before this original input; source selection is distinct '
                     'from transform/request admission and provider capacity'}
+        observation = {'observation': self.condition_observation,
+                       'installations': originals, 'entry_selection': selection}
         if not serialized['evaluated'] or manifest is None:
-            return {'evaluated':False,'entry_selection':selection,
-                'reason':'Original matching SDK request bytes unavailable'}
+            return dict(observation, evaluated=False,
+                        reason='Original matching SDK request bytes unavailable')
         applications=tuple(FieldCodec.encode(original) for original in originals)
         binding=self.condition_message_binding(records,applications,serialized,manifest)
-        return {'evaluated':binding['evaluated'],'observation':self.condition_observation,
-            'installations':originals,'message_binding':binding,
-            'entry_selection':selection,
-            'scope':'Original installed source entered configured transform and converter/request; '
-                    'constructor tag is observed metadata, not matched-arm, HTTP or capacity proof'}
+        return dict(observation, evaluated=binding['evaluated'], message_binding=binding,
+            scope='Original installed source entered configured transform and converter/request; '
+                  'constructor tag is observed metadata, not matched-arm, HTTP or capacity proof')
 
     def condition_message_binding(self,records,applications,serialized,manifest):
         """Bind one actual converter result to the sealed SDK request bytes.

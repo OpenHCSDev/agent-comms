@@ -1324,6 +1324,28 @@ class RecordedMeasurementTests(unittest.TestCase):
                     {'evaluated': False}, None, (selected_row, restored))
                 self.assertFalse(no_request['evaluated'])
                 self.assertEqual(no_request['entry_selection'], result['entry_selection'])
+                self.assertEqual(no_request['installations'], (observed,))
+                self.assertIs(observed.require_condition(Condition.RECENT_ONLY.value), observed)
+                for wrong in (Condition.FULL_CONTEXT, Condition.TASK_MEMORY, Condition.BOUNDED):
+                    with self.subTest(wrong=wrong), self.assertRaisesRegex(ValueError, 'original SDK constructor'):
+                        observed.require_condition(wrong.value)
+
+            # Scoring consumes corroborated constructor observations, including
+            # the partial request path, without rereading files/decoding again.
+            scenario = RecallScenario('constructor', (RecallRound('r1', ('history',), (
+                Question('q', 'Original?', 'source', 'oracle'),)),))
+            scored = scenario.score(Condition.RECENT_ONLY, RecordedAnswers({}))
+            def original(installation):
+                return {'r1': {'construction': {'condition_application': {'evaluated': False},
+                    'condition_installation': installation, 'request_budget': {'evaluated': False},
+                    'source_coverage': {'full_context_capacity': {'evaluated': False}}}}}
+            for installation in (complete, partial, no_request):
+                construction = scored.condition_construction(original(installation), {})
+                self.assertTrue(construction['recorded_constructor_selection']['evaluated'])
+                self.assertFalse(construction['evaluated'])
+                for wrong in (Condition.FULL_CONTEXT, Condition.TASK_MEMORY, Condition.BOUNDED):
+                    with self.subTest(wrong=wrong), self.assertRaisesRegex(ValueError, 'original SDK constructor'):
+                        replace(scored, condition=wrong).condition_construction(original(installation), {})
             for selection in (('source', 'prior'), ('source', 'source'), ('input',)):
                 with self.subTest(selection=selection), self.assertRaisesRegex(ValueError, 'ordered subset'):
                     probe.installed_condition(evidence, branch, context, serialized, manifest,
@@ -1347,8 +1369,11 @@ class RecordedMeasurementTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'another session/input'):
                 probe.installed_condition(evidence, branch, context, serialized, manifest,
                     (row, dict(conversion, input_id='f' * 32), restored))
-            self.assertFalse(probe.installed_condition(evidence, branch, context, serialized,
-                                                       manifest, ())['evaluated'])
+            absent = probe.installed_condition(evidence, branch, context, serialized, manifest, ())
+            self.assertFalse(absent['evaluated'])
+            self.assertEqual(absent['installations'], ())
+            self.assertFalse(scored.condition_construction(original(absent), {})
+                ['recorded_constructor_selection']['evaluated'])
 
     def test_condition_groups_preserve_frozen_rounds_and_do_not_promote_labels(self):
         # Keep independent source, transform and complete-history questions;
@@ -1358,7 +1383,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         identities = tuple(item.identity for item in scenario.rounds)
         unavailable = {identity: {'evaluated': False} for identity in identities}
         original = {'construction': {'condition_application': {'evaluated': True},
-            'condition_installation': {'evaluated': False, 'entry_selection': {'evaluated': False}},
+            'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}},
             'request_budget': {'evaluated': True},
             'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
         partial = scored.condition_construction({identities[0]: original}, unavailable)
@@ -1385,7 +1410,7 @@ class RecordedMeasurementTests(unittest.TestCase):
             self.assertFalse(labelled['evaluated'])
         partial_application = {'construction': {'condition_application': {
             'evaluated': False, 'transform': {'evaluated': True}},
-            'condition_installation': {'evaluated': False, 'entry_selection': {'evaluated': False}},
+            'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}},
             'request_budget': {'evaluated': True},
             'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
         self.assertEqual(scored.condition_construction(
@@ -1396,7 +1421,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         original['construction']['source_coverage']['full_context_capacity'] = {'evaluated': True}
         self.assertTrue(scored.condition_construction(evidence, delivered)['full_history_capacity']['evaluated'])
         original['construction']['condition_installation'] = {
-            'evaluated': True, 'entry_selection': {'evaluated': True}}
+            'evaluated': True, 'installations': (), 'entry_selection': {'evaluated': True}}
         self.assertTrue(scored.condition_construction(evidence, delivered)['sdk_entry_selection']['evaluated'])
         self.assertTrue(scored.condition_construction(evidence, delivered)['installed_sdk_source']['evaluated'])
         self.assertFalse(scored.condition_construction(evidence, delivered)['evaluated'])
