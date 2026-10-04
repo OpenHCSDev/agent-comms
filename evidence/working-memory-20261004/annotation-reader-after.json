@@ -1,0 +1,105 @@
+{
+  "revision": "e1bd78705abf908f4242f809a57c82ad6aac3ba3",
+  "parsed": 319,
+  "omissions": [],
+  "sites": [
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 400,
+      "node": "ClassDef",
+      "name": "ContextRecordedSegmentRuntimeRequest"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 420,
+      "node": "ClassDef",
+      "name": "ContextAnnotationsRuntimeRequest"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 403,
+      "node": "AsyncFunctionDef",
+      "name": "selected_segment"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 420,
+      "node": "Name",
+      "name": "ContextRecordedSegmentRuntimeRequest"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 405,
+      "node": "Attribute",
+      "name": "selected_segment"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 408,
+      "node": "Attribute",
+      "name": "selected_segment"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 424,
+      "node": "Attribute",
+      "name": "selected_segment"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 427,
+      "node": "Attribute",
+      "name": "for_segment"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 818,
+      "node": "FunctionDef",
+      "name": "selected_segment"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 839,
+      "node": "Attribute",
+      "name": "selected_segment"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 45,
+      "node": "FunctionDef",
+      "name": "for_segment"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 116,
+      "node": "FunctionDef",
+      "name": "working_memory_section"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 140,
+      "node": "FunctionDef",
+      "name": "working_memory_section"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 141,
+      "node": "Attribute",
+      "name": "working_memory_section"
+    },
+    {
+      "file": "src/agent_comms/working_memory_questions.py",
+      "line": 117,
+      "node": "FunctionDef",
+      "name": "working_memory_section"
+    },
+    {
+      "file": "src/agent_comms/working_memory_questions.py",
+      "line": 126,
+      "node": "FunctionDef",
+      "name": "working_memory_section"
+    }
+  ],
+  "limits": "Lexical AST/compile source evidence; new endpoint/frontend/native assembly not installed or activated.",
+  "fixture_ownership": "No edits to Mendel six retired-active_turns modules or native_backend_fixture/delivery_owner_fixture. No edits to632 retained_native_fixture/compaction_retention_fixture."
+}
