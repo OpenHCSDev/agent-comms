@@ -1,0 +1,77 @@
+{
+  "pairs": [
+    {
+      "candidate": {
+        "evaluated": false,
+        "expected_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "available_rounds": [],
+        "unavailable_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "present_rounds": [],
+        "absent_rounds": []
+      },
+      "baseline": {
+        "evaluated": false,
+        "expected_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "available_rounds": [],
+        "unavailable_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "present_rounds": [],
+        "absent_rounds": []
+      }
+    },
+    {
+      "candidate": {
+        "evaluated": false,
+        "expected_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "available_rounds": [],
+        "unavailable_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "present_rounds": [],
+        "absent_rounds": []
+      },
+      "baseline": {
+        "evaluated": false,
+        "expected_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "available_rounds": [],
+        "unavailable_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "present_rounds": [],
+        "absent_rounds": []
+      }
+    }
+  ],
+  "study_acceptance": {
+    "evaluated": false,
+    "reason": "Recorded pairs do not supply a registered design, verified condition construction or complete cost/end-to-end journeys"
+  },
+  "scope": "Selected original CLI fields; full stdout retained at raw_root with SHA"
+}
