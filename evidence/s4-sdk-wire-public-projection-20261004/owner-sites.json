@@ -1,0 +1,676 @@
+{
+  "before": {
+    "revision": "a7830593",
+    "parsed": 734,
+    "omitted": [],
+    "sites": [
+      {
+        "path": "src/agent_comms/native_turn_context.py",
+        "line": 15,
+        "node": "ClassDef",
+        "name": "NativeContextManifestData"
+      },
+      {
+        "path": "src/agent_comms/native_turn_context.py",
+        "line": 22,
+        "node": "FunctionDef",
+        "name": "for_turn"
+      },
+      {
+        "path": "src/agent_comms/native_turn_context.py",
+        "line": 95,
+        "node": "FunctionDef",
+        "name": "for_turn"
+      },
+      {
+        "path": "src/agent_comms/native_turn_context.py",
+        "line": 26,
+        "node": "Call",
+        "name": "capture_public"
+      },
+      {
+        "path": "src/agent_comms/native_turn_context.py",
+        "line": 37,
+        "node": "Call",
+        "name": "for_turn"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 202,
+        "node": "FunctionDef",
+        "name": "capture_public"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 373,
+        "node": "FunctionDef",
+        "name": "measured_manifest"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 215,
+        "node": "Call",
+        "name": "measured_manifest"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 388,
+        "node": "Call",
+        "name": "measured_manifest"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 204,
+        "node": "Call",
+        "name": "measured_manifest"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 212,
+        "node": "Call",
+        "name": "capture_public"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 485,
+        "node": "ClassDef",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 505,
+        "node": "FunctionDef",
+        "name": "capture_input"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 714,
+        "node": "FunctionDef",
+        "name": "request_manifest"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 729,
+        "node": "FunctionDef",
+        "name": "serialized_construction"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 1036,
+        "node": "Call",
+        "name": "request_manifest"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 1037,
+        "node": "Call",
+        "name": "serialized_construction"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 720,
+        "node": "Call",
+        "name": "measured_manifest"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 129,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 162,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 188,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 256,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 271,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 286,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 397,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 527,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 590,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 654,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 802,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 885,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 949,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 954,
+        "node": "Call",
+        "name": "request_manifest"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 955,
+        "node": "Call",
+        "name": "serialized_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 966,
+        "node": "Call",
+        "name": "serialized_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 994,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1054,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1199,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1201,
+        "node": "Call",
+        "name": "serialized_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 972,
+        "node": "Call",
+        "name": "serialized_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 975,
+        "node": "Call",
+        "name": "serialized_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 977,
+        "node": "Call",
+        "name": "request_manifest"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 227,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 925,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 948,
+        "node": "Call",
+        "name": "measured_manifest"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1198,
+        "node": "Call",
+        "name": "measured_manifest"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 184,
+        "node": "Call",
+        "name": "capture_input"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 244,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 103,
+        "node": "Call",
+        "name": "capture_input"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 360,
+        "node": "Call",
+        "name": "capture_input"
+      }
+    ]
+  },
+  "after": {
+    "revision": "aaf54d81",
+    "parsed": 734,
+    "omitted": [],
+    "sites": [
+      {
+        "path": "src/agent_comms/native_turn_context.py",
+        "line": 15,
+        "node": "ClassDef",
+        "name": "NativeContextManifestData"
+      },
+      {
+        "path": "src/agent_comms/native_turn_context.py",
+        "line": 22,
+        "node": "FunctionDef",
+        "name": "for_turn"
+      },
+      {
+        "path": "src/agent_comms/native_turn_context.py",
+        "line": 95,
+        "node": "FunctionDef",
+        "name": "for_turn"
+      },
+      {
+        "path": "src/agent_comms/native_turn_context.py",
+        "line": 26,
+        "node": "Call",
+        "name": "capture_public"
+      },
+      {
+        "path": "src/agent_comms/native_turn_context.py",
+        "line": 37,
+        "node": "Call",
+        "name": "for_turn"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 202,
+        "node": "FunctionDef",
+        "name": "capture_public"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 373,
+        "node": "FunctionDef",
+        "name": "measured_manifest"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 215,
+        "node": "Call",
+        "name": "measured_manifest"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 388,
+        "node": "Call",
+        "name": "measured_manifest"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 204,
+        "node": "Call",
+        "name": "measured_manifest"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 212,
+        "node": "Call",
+        "name": "capture_public"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 485,
+        "node": "ClassDef",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 508,
+        "node": "FunctionDef",
+        "name": "capture_input"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 719,
+        "node": "FunctionDef",
+        "name": "request_manifest"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 747,
+        "node": "FunctionDef",
+        "name": "serialized_construction"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 1054,
+        "node": "Call",
+        "name": "request_manifest"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 1055,
+        "node": "Call",
+        "name": "serialized_construction"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 730,
+        "node": "Call",
+        "name": "for_turn"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 738,
+        "node": "Call",
+        "name": "measured_manifest"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 129,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 162,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 188,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 256,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 271,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 286,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 397,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 527,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 590,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 654,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 802,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 885,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 949,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 954,
+        "node": "Call",
+        "name": "request_manifest"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 955,
+        "node": "Call",
+        "name": "serialized_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 966,
+        "node": "Call",
+        "name": "serialized_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 994,
+        "node": "Call",
+        "name": "NativeContextManifestData"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 996,
+        "node": "Call",
+        "name": "for_turn"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 997,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1037,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1097,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1242,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1244,
+        "node": "Call",
+        "name": "serialized_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 972,
+        "node": "Call",
+        "name": "serialized_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 975,
+        "node": "Call",
+        "name": "serialized_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 977,
+        "node": "Call",
+        "name": "request_manifest"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1003,
+        "node": "Call",
+        "name": "request_manifest"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1006,
+        "node": "Call",
+        "name": "request_manifest"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1016,
+        "node": "Call",
+        "name": "request_manifest"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1018,
+        "node": "Call",
+        "name": "request_manifest"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1023,
+        "node": "Call",
+        "name": "request_manifest"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 227,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 925,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 948,
+        "node": "Call",
+        "name": "measured_manifest"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 994,
+        "node": "Call",
+        "name": "measured_manifest"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1013,
+        "node": "Call",
+        "name": "request_manifest"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1241,
+        "node": "Call",
+        "name": "measured_manifest"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1009,
+        "node": "Call",
+        "name": "measured_manifest"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 184,
+        "node": "Call",
+        "name": "capture_input"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 244,
+        "node": "Call",
+        "name": "RecordedNativeProbe"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 103,
+        "node": "Call",
+        "name": "capture_input"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 360,
+        "node": "Call",
+        "name": "capture_input"
+      }
+    ]
+  }
+}

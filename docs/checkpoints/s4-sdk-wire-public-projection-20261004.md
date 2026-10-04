@@ -22,3 +22,17 @@ observer, capture_input and request_manifest together. Final checks read the
 completed639 original native event, SDK and public projection without executing
 any native/model/package path. Preserve its first projection refusal and hashes.
 Full S4 and the unapproved30-pair/USD75 study remain unfinished.
+
+## Scoped Ready
+
+Published implementation aaf54d81. Original completed639 read:5SDKsegments,
+2public-capture roots,converter/request and3/3selection verified; all19original
+hashes unchanged. New projection control and original raw-byte control passed,
+Node syntax passed. Source/evidence is in
+`evidence/s4-sdk-wire-public-projection-20261004/`.
+
+No runtime/native/tools changes or new execution/input/provider/package/loan.
+The conditional live capture hook remains source-only, not execution-qualified.
+This Ready is the original SDK event→public projection measurement reader scope,
+not enrolled wire publication or a configured study. No future artifact/holder
+assumed. Exact final hosted Debt is required before parent merge.
