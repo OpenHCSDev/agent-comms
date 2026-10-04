@@ -9,3 +9,9 @@ Before evidence uses the original NRA Package AST across 324 Core production, 36
 Installed negative: 3 PASS / 2 FAIL, 7.428 seconds. App never mounted; no native child, prompt, provider, fork or actual Codex session read. Initial missing-pytest runner negative retained. A corrected runner borrowed existing system pytest after installed application import paths without dependency changes. All 1,470 original holder files, 69 packages and 390 protected proofs restored; privileged 229-process census has zero references and gaps across holder, authored fixtures and native keeper. Both execution purposes returned. No new installed loan or repeat inferred.
 
 After source closure, one batch checks unfiltered and filtered reads, required update/SQL-list rejection, unknown fields, generated-field refusal and actual sidecar verification. A new installed W6 successor remains required for the App historical read/search/export path.
+
+## Final source result
+
+Seven proportionate controls passed in 1.06 seconds: the original typed-table family (unfiltered/WHERE-only/ordered/keyed reads and one, required update/SQL-list/unknown/generated-field refusal, strict stored values and transaction rollback), streaming query cursor ownership, real sidecar snapshot verification, and original working-memory read/correction/calibration controls. A fresh original Comms private initialization then completed in 0.278 seconds with schema 10. No App/native process/provider was involved in this source check. The normal main union includes Parent654/C4 and S4 source without altering frozen native producers.
+
+The installed App remains unqualified. A separately issued W6 successor is needed to consume the corrected source; the original 3PASS/2FAIL and runner negative are not replaced.
