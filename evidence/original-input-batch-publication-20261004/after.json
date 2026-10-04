@@ -1,0 +1,1188 @@
+{
+  "head": "d4d5f6b820c582bc94733297a9f05e842b5a5e4b",
+  "method": "existing refactor-audit Package.load AST; no new scanner; lexical call evidence not dynamic resolution",
+  "roots": [
+    {
+      "root": "src",
+      "parsed": 311,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 364,
+      "omissions": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "omissions": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 19,
+      "kind": "declaration",
+      "name": "InputBatch",
+      "bases": [
+        "ABC"
+      ],
+      "source": "class InputBatch(ABC):\n    originals: tuple[StoredInput, ...]\n\n    @property\n    def keys(self) -> tuple[str, ...]:\n        return tuple(row.key for row in self.originals)\n\n    @property\n    def prompt(self) -> str:\n        return \"\\n\\n\".join(row.source_text for row in self.originals)\n\n    @property\n    @abstractmethod\n    def admits_multiple(self) -> bool: ...\n\n    @staticmethod\n    def capture(\n        origins: tuple[Message, ...],\n        keys: tuple[str, ...],\n        prompt: str,\n        owner: Thread,\n        document: InputDocument,\n    ) -> InputBatch:\n        from .input_disposition import InputDispositions\n\n        originals = document.originals(keys)\n        single = SingleInputBatch(originals)\n        # Sequence identity proves distinct channel originals in admitted order.\n        channels = {\n            origin.seq: origin\n            for origin in origins\n            if origin.seq > 0 and is_channel_target(origin.target)\n        }\n        if len(channels) < 2 or tuple(channels.values()) != origins:\n            return single\n        expected_keys = tuple(InputDispositions.bus_key(origin, owner) for origin in origins)\n        admitted = ChannelInputBatch(originals)\n        return admitted if admitted.keys == expected_keys and admitted.prompt == prompt else single"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 59,
+      "kind": "declaration",
+      "name": "SingleInputBatch",
+      "bases": [
+        "InputBatch"
+      ],
+      "source": "class SingleInputBatch(InputBatch):\n    @property\n    def admits_multiple(self) -> bool:\n        return False"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 66,
+      "kind": "declaration",
+      "name": "ChannelInputBatch",
+      "bases": [
+        "InputBatch"
+      ],
+      "source": "class ChannelInputBatch(InputBatch):\n    @property\n    def admits_multiple(self) -> bool:\n        return True"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 35,
+      "kind": "declaration",
+      "name": "capture",
+      "bases": [],
+      "source": "def capture(\n        origins: tuple[Message, ...],\n        keys: tuple[str, ...],\n        prompt: str,\n        owner: Thread,\n        document: InputDocument,\n    ) -> InputBatch:\n        from .input_disposition import InputDispositions\n\n        originals = document.originals(keys)\n        single = SingleInputBatch(originals)\n        # Sequence identity proves distinct channel originals in admitted order.\n        channels = {\n            origin.seq: origin\n            for origin in origins\n            if origin.seq > 0 and is_channel_target(origin.target)\n        }\n        if len(channels) < 2 or tuple(channels.values()) != origins:\n            return single\n        expected_keys = tuple(InputDispositions.bus_key(origin, owner) for origin in origins)\n        admitted = ChannelInputBatch(originals)\n        return admitted if admitted.keys == expected_keys and admitted.prompt == prompt else single"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 465,
+      "kind": "consumer",
+      "expression": "InputDispositions(ctx.root / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 396,
+      "kind": "consumer",
+      "expression": "InputDispositions(ctx.root / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 866,
+      "kind": "consumer",
+      "expression": "InputDispositions(ctx.root / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 213,
+      "kind": "consumer",
+      "expression": "InputDispositions(self.journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 162,
+      "kind": "consumer",
+      "expression": "InputDispositions(self.journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 101,
+      "kind": "consumer",
+      "expression": "InputDispositions(self.journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 231,
+      "kind": "consumer",
+      "expression": "InputDispositions(ctx.goals.root / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 115,
+      "kind": "consumer",
+      "expression": "InputDispositions(self.root / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 84,
+      "kind": "consumer",
+      "expression": "InputDispositions(self.root / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 48,
+      "kind": "consumer",
+      "expression": "InputDispositions(self.root / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 68,
+      "kind": "consumer",
+      "expression": "InputDispositions(self.root / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 34,
+      "kind": "declaration",
+      "name": "FutureInputQueue",
+      "bases": [
+        "ABC"
+      ],
+      "source": "class FutureInputQueue(ABC):\n    \"\"\"Process-local queue authority; never reconstructed from UNKNOWN rows.\"\"\"\n\n    def compaction_inputs(\n        self, source: SelectedSource, owner: Thread, inputs: InputDocument\n    ) -> InputDocument:\n        \"\"\"Current live queue evidence, checked under the wire/document boundary.\"\"\"\n        from .reservation_rules import CommitReservationCheck\n        from .thread_identity import TurnId\n\n        if owner.active_turn is None:\n            raise RelationViolationError(\"Selected owner has no active turn\")\n        CommitReservationCheck(\n            source=source,\n            revision=source.reserved_revision,\n            incarnation=owner.incarnation,\n            owner=owner.process_identity,\n            turn=TurnId(owner.active_turn.id),\n            pending_input_keys=source.pending_input_keys,\n        ).require_valid()\n        return replace(inputs, rows=inputs.compaction_rows(owner, source.pending_input_keys, self))\n\n    @abstractmethod\n    def future_inputs(\n        self, owner: Thread, pending_input_keys: tuple[str, ...]\n    ) -> dict[str, InputAttempt]: ..."
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 63,
+      "kind": "declaration",
+      "name": "InputDocument",
+      "bases": [],
+      "source": "class InputDocument:\n    rows: dict[str, StoredInput] = field(default_factory=dict, metadata={\"wire_required\": True})\n    version: Literal[1] = field(default=1, metadata={\"wire_required\": True})\n\n    def __post_init__(self) -> None:\n        if any(not row.exists or key != row.key for key, row in self.rows.items()):\n            raise ValueError(\"Input document key differs from its attempt\")\n\n    def lookup(self, key: str | None) -> InputAttempt:\n        return self.rows.get(key, MissingInput())\n\n    def record(self, *originals: ReservedInput) -> InputDocument:\n        \"\"\"An existing original cannot be replaced by another reservation.\"\"\"\n        additions = {}\n        for row in originals:\n            if row.key not in self.rows:\n                additions.setdefault(row.key, row)\n        return replace(self, rows={**self.rows, **additions}) if additions else self\n\n    def originals(self, keys: tuple[str, ...]) -> tuple[StoredInput, ...]:\n        \"\"\"Capture ordered originals from their sole durable declaration owner.\"\"\"\n        if len(set(keys)) != len(keys):\n            raise ValueError(\"Original input membership contains duplicate keys\")\n        try:\n            return tuple(self.rows[key] for key in keys)\n        except KeyError as error:\n            raise ValueError(\"Original input receipt is unavailable\") from error\n\n    def original_provenances(self, keys: tuple[str, ...]) -> tuple[InputProvenance, ...]:\n        \"\"\"Source proofs reference originals without copying mutable disposition data.\"\"\"\n        return tuple(row.context_provenance() for row in self.originals(keys))\n\n    def settle_unbound(self, keys: tuple[str, ...]) -> InputDocument:\n        \"\"\"Original members decide retirement; bound/started evidence stays intact.\"\"\"\n        successors = {\n            key: successor\n            for key in keys\n            if (successor := self.lookup(key).finish_unbound()) is not None\n        }\n        return replace(self, rows={**self.rows, **successors}) if successors else self\n\n    def require_compaction_ready(\n        self, owner: ThreadIncarnation, pending_input_keys: tuple[str, ...]\n    ) -> None:\n        \"\"\"Original input members own custody; notices never decide source admission.\n\n        A live future queue may select a view before this check. Neither an old\n        admission nor naming an uncertain native binding makes it settled.\n        \"\"\"\n        if any(row.matches_owner(owner) and row.unsettled_for(pending_input_keys)\n               for row in self.rows.values()):\n            raise RelationViolationError(\"Unsettled owner input; compaction not dispatched\")\n\n    def compaction_rows(\n        self, owner: Thread, pending_input_keys: tuple[str, ...], queue: FutureInputQueue | None = None\n    ) -> dict[str, StoredInput]:\n        \"\"\"Caller holds wire; native CAS additionally retains document lock.\"\"\"\n        assert owner.active_turn is not None\n        if len(set(pending_input_keys)) != len(pending_input_keys) or any(\n            not self.lookup(key).pending_for(owner) for key in pending_input_keys\n        ):\n            raise RelationViolationError(\"Original owner input already attempted\")\n        future = queue.future_inputs(owner, pending_input_keys) if queue is not None else {}\n        if any(self.lookup(key) != receipt for key, receipt in future.items()):\n            raise RelationViolationError(\"Queued owner input changed after acceptance\")\n        relevant = {}\n        for key, row in self.rows.items():\n            if not row.matches_owner(owner.incarnation):\n                continue\n            if key not in pending_input_keys and key in future and row.pending_for(owner):\n                continue\n            relevant[key] = row\n        replace(self, rows=relevant).require_compaction_ready(owner.incarnation, pending_input_keys)\n        return relevant\n\n    def compaction_material(self, owner: Thread, pending_input_keys: tuple[str, ...],\n                            queue: FutureInputQueue | None):\n        \"\"\"Project exactly the input source selected by existing queue custody.\n\n        Unadmitted future inputs remain in their original durable queue; they\n        cannot become the source of an earlier native checkpoint.\n        \"\"\"\n        rows = self.compaction_rows(owner, pending_input_keys, queue)\n        return rows, self.retained_task_facts(tuple(rows))\n\n    def retained_task_facts(self, keys: tuple[str, ...]):\n        \"\"\"The original input origin owns fact membership and provenance.\"\"\"\n        return tuple(row.origin.retained_fact(row) for row in self.originals(keys))\n\n    def owner_originals(self, owner: Thread) -> tuple[str, ...]:\n        \"\"\"Observe durable membership without selecting a compaction queue.\n\n        Reserved and UNKNOWN rows keep their exact recorded disposition. Only\n        compaction_rows, with the live queue's custody, can admit a source cut.\n        \"\"\"\n        return tuple(key for key, row in self.rows.items()\n                     if row.matches_owner(owner.incarnation))\n\n    def started_for_native(\n        self, lease: TurnLeaseFence, native_id: str, sent_text: str,\n        *, snapshot: RegistrySnapshot,\n    ) -> tuple[StartedInput, ...]:\n        \"\"\"Original rows for one actual native user, including grouped inputs.\n\n        Corrections and followups may own the final assistant's closest user.\n        Look up that producer's exact native ID/text rather than choosing the\n        initial turn input, a public event or the first matching row.\n        \"\"\"\n        return tuple(receipt for row in self.rows.values()\n                     if (receipt := row.started_for_native(\n                         lease, native_id, sent_text, snapshot=snapshot\n                     )) is not None)\n\n    def shared_state(self, keys: tuple[str, ...]) -> type[InputAttempt] | None:\n        \"\"\"Project only a complete, homogeneous durable observation.\"\"\"\n        states = {type(self.lookup(key)) for key in keys}\n        if len(states) == 1 and all(self.lookup(key).exists for key in keys):\n            return states.pop()\n        return None\n\n    def all_started(self, keys) -> bool:\n        return all(self.lookup(key).has_started for key in keys)\n\n    def unknown(self, owners: frozenset[str]) -> tuple[InputAttempt, ...]:\n        return tuple(\n            sorted(\n                (row for row in self.rows.values() if row.owner in owners and row.unresolved),\n                key=lambda row: row.order,\n            )\n        )\n\n    def bound_bus_inputs(self) -> tuple[SentInput, ...]:\n        return tuple(\n            bound for row in self.rows.values() if (bound := row.bound_bus_input()) is not None\n        )\n\n    def delivery_overview(\n        self,\n        owners: frozenset[str],\n        *,\n        include_history: bool = False,\n        awaiting_keys: frozenset[str] | None = None,\n    ) -> dict:\n        current, historical = [], []\n        dismissed = historical_count = 0\n        for row in self.unknown(owners):\n            if row.historical_notice(awaiting_keys):\n                dismissed += int(row.notice_dismissed)\n                historical_count += int(not row.notice_dismissed)\n                if include_history:\n                    historical.append({**row.public(), \"noticeDismissed\": row.notice_dismissed})\n            else:\n                current.append(row.public())\n        return {\n            \"inputs\": current,\n            \"historicalCount\": historical_count,\n            \"dismissedHistoricalCount\": dismissed,\n            \"historicalInputs\": historical,\n            \"currentScope\": \"owner_queue\" if awaiting_keys is not None else \"unobserved\",\n        }"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 226,
+      "kind": "declaration",
+      "name": "InputDispositions",
+      "bases": [
+        "LockedStore[InputDocument]"
+      ],
+      "source": "class InputDispositions(LockedStore[InputDocument]):\n    filename: ClassVar[str] = \"input_dispositions.json\"\n    json_sort_keys = True\n\n    @property\n    def record_type(self) -> type[InputDocument]:\n        return InputDocument\n\n    def empty(self) -> InputDocument:\n        return InputDocument()\n\n    @staticmethod\n    def bus_key(message: Message, owner: Thread) -> str:\n        return message.response_policy.disposition_key(message, owner)\n\n    def record(\n        self, key: str, *, seq: int | None, owner: str, admission: int, target: str, text: str,\n        origin: InputOrigin = UnattributedInputOrigin(), custody: ExitStack | None = None,\n    ) -> bool:\n        \"\"\"Enlist supplied reservation custody before publishing acceptance.\"\"\"\n        row = ReservedInput(key, seq, owner, admission, target, text,\n                            origin=origin)\n        document = self.record_originals(row, custody=custody)\n        return document.rows[key] is row\n\n    def record_originals(\n        self, *originals: ReservedInput, custody: ExitStack | None = None,\n    ) -> InputDocument:\n        \"\"\"Publish one original cohort; return its exact captured document.\"\"\"\n        def reserve(original: InputDocument) -> InputDocument:\n            changed = original.record(*originals)\n            if changed is not original and custody is not None:\n                custody.callback(\n                    self.settle_unbound,\n                    tuple(key for key in changed.rows if key not in original.rows),\n                )\n            return changed\n\n        return self.update(reserve)\n\n    def reserve_turn(\n        self, owner: str, turn: TurnId, admission: int, text: str, *, custody: ExitStack,\n    ) -> SingleInputBatch:\n        \"\"\"Enlist rollback before publication; caller retains the original wire scope.\"\"\"\n        from .channel_input_batch import SingleInputBatch\n\n        row = ReservedInput(f\"turn:{turn.value}\", None, owner, admission, owner, text)\n\n        document = self.record_originals(row, custody=custody)\n        if document.rows[row.key] is not row:\n            raise RelationViolationError(\"Original turn input was already reserved\")\n        return SingleInputBatch(document.originals((row.key,)))\n\n    def _transition(self, key: str, change) -> bool:\n        changed = False\n\n        def update(document: InputDocument) -> InputDocument:\n            nonlocal changed\n            next_row = change(document.lookup(key))\n            if next_row is None:\n                return document\n            changed = True\n            return replace(document, rows={**document.rows, key: next_row})\n\n        self.update(update)\n        return changed\n\n    def bind(self, key: str, *, admission: int, turn_id: str, native_id: str, text: str) -> bool:\n        return self.bind_originals(\n            (key,), admission=admission, turn_id=turn_id, native_id=native_id, text=text\n        )\n\n    def bind_originals(\n        self, keys: tuple[str, ...], *, admission: int, turn_id: str, native_id: str, text: str\n    ) -> bool:\n        \"\"\"Bind the complete captured original atomically; no partial batch grant.\"\"\"\n        bound = False\n\n        def change(document: InputDocument) -> InputDocument:\n            nonlocal bound\n            if not keys or len(set(keys)) != len(keys):\n                return document\n            successors = tuple(document.lookup(key).bind(\n                admission=admission, turn_id=turn_id, native_id=native_id, text=text\n            ) for key in keys)\n            if any(row is None for row in successors):\n                return document\n            bound = True\n            return replace(document, rows={**document.rows, **dict(zip(keys, successors, strict=True))})\n\n        self.update(change)\n        return bound\n\n    def started(self, key: str, *, turn_id: str, native_id: str, text: str) -> bool:\n        return self._transition(\n            key, lambda row: row.started(turn_id=turn_id, native_id=native_id, text=text)\n        )\n\n    def settle_unbound(self, keys: tuple[str, ...]) -> InputDocument:\n        \"\"\"Publish one complete retirement and return that exact document cut.\"\"\"\n        return self.update(lambda document: document.settle_unbound(keys))\n\n    def review_for_goal(\n        self,\n        keys: tuple[str, ...],\n        *,\n        owners: frozenset[str],\n        goal_id: str,\n        goal_revision: int,\n        turn_id: str,\n        observed: tuple[InputAttempt, ...] = (),\n    ) -> None:\n        decision = GoalInputDecision(goal_revision, turn_id)\n\n        def review(document: InputDocument) -> InputDocument:\n            rows = dict(document.rows)\n            for row in observed:\n                if row.key not in keys or (row.key in rows and rows[row.key] != row):\n                    raise ValueError(\"Reviewed inputs changed; inspect them again.\")\n                rows.setdefault(row.key, row)\n            if any(\n                key not in rows or rows[key].owner not in owners or not rows[key].unresolved\n                for key in keys\n            ):\n                raise ValueError(\"Reviewed inputs changed; inspect them again.\")\n            if not keys:\n                return document\n            return replace(\n                document,\n                rows={**rows, **{key: rows[key].review(goal_id, decision) for key in keys}},\n            )\n\n        self.update(review)\n\n    def dismiss_historical(\n        self,\n        owners: frozenset[str],\n        *,\n        awaiting_keys: frozenset[str] | None = None,\n    ) -> dict:\n        def dismiss(document: InputDocument) -> InputDocument:\n            changed = {\n                row.key: replace(row, notice_dismissed=True)\n                for row in document.unknown(owners)\n                if row.historical_notice(awaiting_keys) and not row.notice_dismissed\n            }\n            return replace(document, rows={**document.rows, **changed}) if changed else document\n\n        return self.update(dismiss).delivery_overview(owners, awaiting_keys=awaiting_keys)"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 74,
+      "kind": "declaration",
+      "name": "record",
+      "bases": [],
+      "source": "def record(self, *originals: ReservedInput) -> InputDocument:\n        \"\"\"An existing original cannot be replaced by another reservation.\"\"\"\n        additions = {}\n        for row in originals:\n            if row.key not in self.rows:\n                additions.setdefault(row.key, row)\n        return replace(self, rows={**self.rows, **additions}) if additions else self"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 241,
+      "kind": "declaration",
+      "name": "record",
+      "bases": [],
+      "source": "def record(\n        self, key: str, *, seq: int | None, owner: str, admission: int, target: str, text: str,\n        origin: InputOrigin = UnattributedInputOrigin(), custody: ExitStack | None = None,\n    ) -> bool:\n        \"\"\"Enlist supplied reservation custody before publishing acceptance.\"\"\"\n        row = ReservedInput(key, seq, owner, admission, target, text,\n                            origin=origin)\n        document = self.record_originals(row, custody=custody)\n        return document.rows[key] is row"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 251,
+      "kind": "declaration",
+      "name": "record_originals",
+      "bases": [],
+      "source": "def record_originals(\n        self, *originals: ReservedInput, custody: ExitStack | None = None,\n    ) -> InputDocument:\n        \"\"\"Publish one original cohort; return its exact captured document.\"\"\"\n        def reserve(original: InputDocument) -> InputDocument:\n            changed = original.record(*originals)\n            if changed is not original and custody is not None:\n                custody.callback(\n                    self.settle_unbound,\n                    tuple(key for key in changed.rows if key not in original.rows),\n                )\n            return changed\n\n        return self.update(reserve)"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 266,
+      "kind": "declaration",
+      "name": "reserve_turn",
+      "bases": [],
+      "source": "def reserve_turn(\n        self, owner: str, turn: TurnId, admission: int, text: str, *, custody: ExitStack,\n    ) -> SingleInputBatch:\n        \"\"\"Enlist rollback before publication; caller retains the original wire scope.\"\"\"\n        from .channel_input_batch import SingleInputBatch\n\n        row = ReservedInput(f\"turn:{turn.value}\", None, owner, admission, owner, text)\n\n        document = self.record_originals(row, custody=custody)\n        if document.rows[row.key] is not row:\n            raise RelationViolationError(\"Original turn input was already reserved\")\n        return SingleInputBatch(document.originals((row.key,)))"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 235,
+      "kind": "consumer",
+      "expression": "InputDocument()"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 248,
+      "kind": "consumer",
+      "expression": "self.record_originals(row, custody=custody)"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 274,
+      "kind": "consumer",
+      "expression": "self.record_originals(row, custody=custody)"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 86,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 55,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 52,
+      "kind": "declaration",
+      "name": "OwnedTurn",
+      "bases": [],
+      "source": "class OwnedTurn:\n    \"\"\"One admitted owner turn; stable source facts and native callbacks live here.\"\"\"\n\n    @property\n    def thread(self):\n        return self.registry_owner.thread\n\n    @property\n    def turn_lease(self):\n        return self.registry_owner.turn_lease\n\n    async def attach_native_session(self, session_file):\n        \"\"\"Publish through the owner returned by this original begin operation.\"\"\"\n        self.registry_owner = await Coordination.run_worker(partial(\n            self.runner.comms.registry.attach_native_session,\n            self.registry_owner, str(session_file),\n        ))\n\n    def __init__(\n        self,\n        runner: TurnRunner,\n        session_id: str,\n        thread_name: str,\n        task: str,\n        *,\n        reply_targets: tuple[str, ...] = (),\n        origins: tuple[Message, ...] = (),\n        images: tuple[Any, ...] = (),\n        original_keys: tuple[str, ...] = (),\n        initial_display_text: str | None = None,\n        autonomous_goal: bool = False,\n        original_owner_input: bool = False,\n        original_goal_id: str | None = None,\n        accepted_input_id: str | None = None,\n        dependency_wait_id: str | None = None,\n    ) -> None:\n        self.runner = runner\n        self.session_id = session_id\n        self.thread_name = thread_name\n        self.task = task\n        self.reply_targets = reply_targets\n        self.origins = origins\n        self.images = images\n        self.original_keys = original_keys\n        self.initial_display_text = initial_display_text\n        self.autonomous_goal = autonomous_goal\n        self.original_owner_input = original_owner_input\n        self.original_goal_id = original_goal_id\n        self.accepted_input_id = accepted_input_id\n        self.dependency_wait_id = dependency_wait_id\n\n    def admit(self, permits: ExitStack):\n        self.original_display = (\n            None if self.autonomous_goal else (self.initial_display_text or self.task)\n        )\n        self.registry_owner = RegistryOwner.capture_local(\n            self.runner.comms.registry.snapshot(), self.thread_name\n        )\n        self.thread_name = self.thread.name\n        wait = self.runner.comms.goals.goal_wait(self.thread_name)\n        active_goal = self.thread.active_goal\n        if (\n            wait is not None\n            and not self.original_owner_input\n            and wait.wait_id != self.dependency_wait_id\n        ):\n            return\n        if self.dependency_wait_id is not None and (\n            wait is None or wait.wait_id != self.dependency_wait_id\n        ):\n            return\n        if self.original_owner_input and self.original_goal_id != (\n            active_goal.id if active_goal is not None else None\n        ):\n            raise RequestError.invalid_params({\"reason\": \"input_authority_changed\"})\n        self.goal_permit: LaunchPermit | None = None\n        if self.autonomous_goal and active_goal is None:\n            return\n        if active_goal is not None and not self.original_owner_input:\n            self.goal_permit = TurnGoalAccount.reserve(\n                owner=self.thread,\n                comms=self.runner.comms,\n                store=self.runner.goals.goal_store,\n                open_store=self.runner.goals.open_goal_store,\n                ready_grant=self.runner.goals.ready_goal_grant_locked,\n                autonomous=self.autonomous_goal,\n            )\n            if self.goal_permit is None:\n                return\n            permits.callback(\n                self.goal_permit.retire_unverified, self.runner.goals.goal_store\n            )\n        return True\n\n    def begin(self, resources: AsyncExitStack):\n        self.turn_id = uuid4().hex\n        self.routing = TurnRouting(\n            tuple(origin.reference for origin in self.origins),\n            MessageRoute(self.thread_name, self.reply_targets) if self.reply_targets else None,\n        )\n        self.checkpoint = self.runner.comms.transcripts.transcript_checkpoint(self.thread_name)\n        self.lease_custody = AsyncExitStack()\n        resources.push_async_callback(self.lease_custody.aclose)\n        self.registry_owner = self.runner.acquire_turn(\n            self.lease_custody, self.session_id, self.thread_name,\n            self.turn_id, self.task[:80], self.routing,\n        )\n        self.input_custody = AsyncExitStack()\n        resources.push_async_callback(self.input_custody.aclose)\n        self.input_custody.push_async_callback(Coordination.run_worker, self.settle_unbound)\n        self.bus_origins = tuple(origin for origin in self.origins if origin.seq > 0)\n        if self.bus_origins:\n            with _store_lock(self.runner.comms._wire_lock_path):\n                snapshot = self.runner.comms.registry.snapshot()\n                metadata = self.runner.comms.bus.log.read_metadata_unlocked()\n                originals = tuple(\n                    ReservedInput(\n                        key=self.runner.inputs.dispositions.bus_key(origin, self.thread),\n                        sequence=origin.seq,\n                        owner=self.thread_name,\n                        admission=snapshot.admission_generations[self.thread_name],\n                        target=origin.target,\n                        source_text=ScheduledTurn.incoming(\n                            origin, aliases=snapshot.aliases\n                        ).prompt,\n                        origin=WireInputOrigin(\n                            metadata.wire_root_id,\n                            origin.reference,\n                        ),\n                    )\n                    for origin in self.bus_origins\n                )\n                self.original_keys = (*self.original_keys, *(row.key for row in originals))\n                document = self.runner.inputs.dispositions.record_originals(*originals)\n        else:\n            document = self.runner.inputs.dispositions.read()\n        batch = InputBatch.capture(\n            self.origins,\n            self.original_keys,\n            self.task,\n            self.thread,\n            document,\n        )\n        self.prepare_prompt(batch)\n        self.reserve_input(batch)\n\n    def prepare_prompt(self, batch: InputBatch):\n        self.worktree = (\n            self.thread.worktree if Path(self.thread.worktree).is_dir() else str(Path.cwd())\n        )\n        self.env_extra = self.thread.native_environment(\n            self.runner.comms.root, self.runner.comms.registry.snapshot(), self.worktree\n        )\n        from .turn_context import (\n            TurnContext,\n            AutomaticTitleSegment,\n            ReplyRouteSegment,\n            InstructionFile,\n            OwnerProvenance,\n            RecordedContextTurn,\n        )\n\n        self.context = TurnContext.for_owner(\n            self.thread,\n            RecordedContextTurn(TurnId(self.turn_id), self.turn_lease.identity),\n            self.task,\n            self.runner.comms.views.thread_views(),\n            tuple(origin.reference for origin in self.origins),\n            batch.originals,\n        )\n        if self.goal_permit is not None:\n            for segment in self.thread.context_goal_segments():\n                self.context = self.context.prepend(segment)\n        if self.thread.auto_title_pending:\n            instruction = InstructionFile.read(\"automatic-title.md\")\n            self.context = self.context.prepend(\n                AutomaticTitleSegment(\n                    provenance=(\n                        instruction.source,\n                        OwnerProvenance(self.thread.incarnation, self.turn_id),\n                    ),\n                    instruction=instruction,\n                )\n            )\n        if self.reply_targets:\n            instruction = InstructionFile.read(\"reply-route.md\")\n            self.context = self.context.prepend(\n                ReplyRouteSegment(\n                    provenance=(\n                        instruction.source,\n                        OwnerProvenance(self.thread.incarnation, self.turn_id),\n                    ),\n                    instruction=instruction,\n                    targets=self.reply_targets,\n                )\n            )\n\n    def reserve_input(self, batch: InputBatch):\n        \"\"\"Acquire the original durable input before opening loop capabilities.\"\"\"\n        if self.original_owner_input:\n            permission = OwnerGoalPermission(self.thread.goal)\n        elif active_goal := self.thread.active_goal:\n            permission = ContinuationGoalPermission(active_goal)\n        else:\n            permission = InactiveGoalPermission()\n        if self.original_owner_input:\n            source_type = OwnerOriginalInput\n        elif not self.origins:\n            source_type = ScheduledOriginalInput\n        elif self.dependency_wait_id is not None:\n            source_type = DependencyOriginalInput\n        else:\n            source_type = RoutedOriginalInput\n        original = source_type(\n            accepted_id=self.accepted_input_id,\n            goal_permission=permission,\n            prompt=self.context.render().text,\n            original_display=self.original_display,\n            origins=self.origins,\n            dependency=(\n                CapturedInputDependency(self.dependency_wait_id)\n                if self.dependency_wait_id is not None\n                else NoInputDependency()\n            ),\n            batch=batch,\n        )\n        with _store_lock(self.runner.comms._wire_lock_path), ExitStack() as reservation:\n            self.original = original.reserve(\n                self.runner.inputs.dispositions,\n                self.thread,\n                TurnId(self.turn_id),\n                self.turn_lease.admission_generation,\n                custody=reservation,\n            )\n            self.original_keys = self.original.keys\n            # The store enlists rollback before publication. The original keys\n            # now belong to the outer custody before the worker can return.\n            reservation.pop_all()\n\n    def open_stream(self, resources: AsyncExitStack, permits: ExitStack):\n        self.backend_inbox = self.runner.inputs.bind_native_turn(\n            self.session_id, self.thread, self.turn_lease.admission_generation, self.turn_id\n        )\n        resources.push_async_callback(\n            self.runner.inputs.finish_turn_inputs, self.session_id, self.backend_inbox\n        )\n        self.finish_event = asyncio.Event()\n        self.controller = (\n            self.runner.inputs.queued_inputs[self.session_id][self.accepted_input_id].controller\n            if self.accepted_input_id is not None\n            else self.runner.runtime.controller.get()\n        )\n        if self.controller is UNBOUND_CONTROLLER:\n            self.controller = None  # Autonomous/channel/goal turns have no controller.\n        self.runner.inputs.turn_input_keys.setdefault(self.session_id, set()).update(\n            self.original_keys\n        )\n        self.runner.inputs.original_sources[self.session_id] = self.original\n        self.input_custody.pop_all()\n        origin_claims = ExitStack()\n        permits.callback(origin_claims.close)\n        self.progress = TurnProgress(\n            comms=self.runner.comms,\n            sessions=self.runner.sessions,\n            inputs=self.runner.inputs,\n            effects=self.runner.effects,\n            runtime=self.runner.runtime,\n            emitted_errors=self.runner.emitted_errors,\n            session_id=self.session_id,\n            turn=self,\n            finish_event=self.finish_event,\n            goals=TurnGoalAccount(\n                comms=self.runner.comms,\n                owner=self.thread,\n                turn=TurnId(self.turn_id),\n                lease=self.turn_lease,\n                permit=self.goal_permit,\n                open_store=self.runner.goals.open_goal_store,\n                pending_origins=self.runner.goals.pending_goal_origins,\n                claims=origin_claims,\n            ),\n            sync_goals=self.runner.goals.sync_goal_execution,\n        )\n        permits.callback(self.finish_goals)\n        resources.push_async_callback(self.close_changed_project)\n        self.lease_custody.push_async_callback(self.continue_changed_project)\n\n    def finish_goals(self) -> None:\n        self.progress.goals.finish(self.progress.result)\n\n    async def close_changed_project(self) -> None:\n        name = await self.runner.sessions.sync_identity(self.session_id)\n        current = await Coordination.run_worker(partial(self.runner.comms.registry.require, name))\n        if current.worktree != self.thread.worktree:\n            if persistent := self.runner.persistent_backends.get(self.session_id):\n                await persistent.close_idle()\n\n    async def continue_changed_project(self) -> None:\n        if self.progress.result is not None:\n            name = self.runner.sessions.bindings[self.session_id]\n            current = await Coordination.run_worker(partial(self.runner.comms.registry.require, name))\n            self.runner.inputs.continue_in_project(\n                self.session_id, self.progress.result, self.thread.worktree,\n                current.worktree,\n            )\n\n    async def prepare_native(self):\n        await self.runner.effects._emit_event(\n            self.session_id,\n            await Coordination.run_worker(partial(\n                self.runner.current_turn_update, self.session_id,\n            )),\n        )\n        await self.runner.inputs.emit_input_delivery_changed(self.session_id)\n        # This turn already holds the session authority. Publish its cursor\n        # without reacquiring the observer lock held by a selected handoff;\n        # Private delivery sees the registry lease and cannot start another turn.\n        await self.runner.inputs.drain_owned_inbox(self.session_id)\n\n        # Existing local ACP owner session only. If delivery is uncertain,\n        # the keyed metadata remains pending; never invent a bus recipient.\n        await self.runner.effects.publish_pending_compaction(self.session_id, self.thread_name)\n        awareness = await Coordination.run_worker(partial(\n            self.runner.comms.bus.awareness_segments, self.thread,\n        ))\n        for segment in awareness:\n            self.context = self.context.append(segment)\n        pending_keys = self.original.compaction_keys(self.thread.session_file)\n        if pending_keys:\n            from .owner_compaction_adaptive import maybe_compact_owner_turn\n\n            def admit_original(admission: SelectedSummaryAdmission) -> None:\n                self.runner.inputs.selected_summary_admissions[self.session_id] = admission\n\n            try:\n                prepared = await self.runner.prepare_selected_session(self.session_id, self.thread)\n                self.committed = await maybe_compact_owner_turn(\n                    self.runner.comms.registry,\n                    self.thread_name,\n                    self.turn_id,\n                    prepared,\n                    pending_keys,\n                    self.runner.persistent_backends.setdefault(\n                        self.session_id, backend.PersistentPiSession()\n                    ),\n                    input_text=self.context.render().text,\n                    on_admission=admit_original,\n                    future_queue=self.runner.inputs,\n                    on_event=self.progress.consume,\n                )\n            except Exception:\n                # A selected adaptive operation may already have paid or\n                # written. Preserve the failed original input outcome.\n                if self.goal_permit is not None:\n                    await Coordination.run_worker(partial(\n                        self.runner.comms.goals.block_goal_after_failed_turn,\n                        self.thread_name,\n                        started_goal=self.thread.goal,\n                        expected_worktree=self.thread.worktree,\n                        diagnostic=(\n                            \"Adaptive native compaction did not establish a \"\n                            \"safe outcome; inspect the exact commit journal.\"\n                        ),\n                    ))\n                raise\n            if self.committed:\n                # Local metadata-only outbox; uncertain subscriber delivery\n                # leaves its exact row pending, never broadcasts a summary.\n                await self.runner.effects.publish_pending_compaction(\n                    self.session_id, self.thread_name\n                )\n        self.image_options: dict[str, Any] = {\"images\": self.images} if self.images else {}\n\n    async def stream(self):\n        await self.runner.transition_turn(self.session_id, self.turn_lease, PromptAcceptancePhase())\n        rendered = self.context.render(images=self.images)\n        admission = OwnedSendAdmission(\n            comms=self.runner.comms,\n            inputs=self.runner.inputs,\n            goal_store=self.runner.goals.goal_store,\n            session_id=self.session_id,\n            thread=self.thread,\n            turn=TurnId(self.turn_id),\n            admission=self.turn_lease.admission_generation,\n            goal_permit=self.goal_permit,\n            original=replace(self.original, prompt=rendered.text),\n        )\n        async for event in backend.stream_agent_events(\n            self.runner.agent_bin,\n            self.runner.native_arguments(self.thread),\n            rendered.text,\n            self.worktree,\n            self.env_extra,\n            **self.image_options,\n            context_contributions=rendered.contributions,\n            session_file=self.thread.session_file,\n            steering_queue=self.backend_inbox,\n            finish_event=self.finish_event,\n            send_boundary=admission,\n            interrupt_boundary=lambda public_id, native_id, text: admission(\n                public_id, native_id, text, already_bound=True\n            ),\n            native_start=admission.native_start,\n            request_observer=self.progress.record_request_progress,\n            persistent_session=self.runner.persistent_backends.setdefault(\n                self.session_id, backend.PersistentPiSession()\n            ),\n            ui_request=lambda request: self.runner.extension_ui_permission(\n                self.session_id, self.turn_id, self.controller, request\n            ),\n        ):\n            await self.progress.consume(event)\n\n    async def acquire(self, resources: AsyncExitStack, permit_custody: AsyncExitStack) -> bool:\n        \"\"\"Join source acquisition before exposing this turn's loop capabilities.\"\"\"\n        self.owner_task = asyncio.current_task()\n        assert self.owner_task is not None\n        permits = ExitStack()\n        permit_custody.push_async_callback(Coordination.run_worker, permits.close)\n        if not await Coordination.run_worker(partial(self.admit, permits)):\n            return False\n        self.runner.sessions.bindings[self.session_id] = self.thread_name\n        self.runner.emitted_errors.pop(self.session_id, None)\n        await Coordination.run_worker(partial(self.begin, resources))\n        self.open_stream(resources, permits)\n        # Early failures close claims before inbox/lease retirement. Once all\n        # stream capabilities exist, goal settlement belongs above those resources.\n        resources.push_async_callback(permit_custody.pop_all().aclose)\n        resources.push_async_callback(backend.terminate_task_process, self.owner_task)\n        return True\n\n    async def run(self) -> None:\n        async with AsyncExitStack() as resources:\n            async with AsyncExitStack() as permit_custody:\n                if not await self.acquire(resources, permit_custody):\n                    return\n                await self.run_native()\n\n    def settle_unbound(self):\n        \"\"\"Close the actual input batch and observe its result under one wire cut.\"\"\"\n        with _store_lock(self.runner.comms._wire_lock_path):\n            document = self.runner.inputs.dispositions.settle_unbound(self.original_keys)\n            return document.shared_state(self.original_keys)\n\n    async def run_native(self) -> None:\n        try:\n            await self.prepare_native()\n            await self.stream()\n            await self.progress.publish_result()\n            if failure := self.runner.emitted_errors.get(self.session_id):\n                raise PromptFailureReceipt(failure, True).request_error()\n        except asyncio.CancelledError:\n            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())\n            await backend.terminate_task_process(self.owner_task)\n            state = await Coordination.run_worker(self.settle_unbound)\n            await self.runner.effects._emit_event(\n                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id\n            )\n            raise\n        except Exception as error:\n            await Coordination.run_worker(self.settle_unbound)\n            await self.progress.report_failure(error)\n            failure = self.runner.emitted_errors.get(self.session_id)\n            if failure is not None:\n                raise PromptFailureReceipt(failure, True).request_error() from error\n            raise"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 146,
+      "kind": "declaration",
+      "name": "begin",
+      "bases": [],
+      "source": "def begin(self, resources: AsyncExitStack):\n        self.turn_id = uuid4().hex\n        self.routing = TurnRouting(\n            tuple(origin.reference for origin in self.origins),\n            MessageRoute(self.thread_name, self.reply_targets) if self.reply_targets else None,\n        )\n        self.checkpoint = self.runner.comms.transcripts.transcript_checkpoint(self.thread_name)\n        self.lease_custody = AsyncExitStack()\n        resources.push_async_callback(self.lease_custody.aclose)\n        self.registry_owner = self.runner.acquire_turn(\n            self.lease_custody, self.session_id, self.thread_name,\n            self.turn_id, self.task[:80], self.routing,\n        )\n        self.input_custody = AsyncExitStack()\n        resources.push_async_callback(self.input_custody.aclose)\n        self.input_custody.push_async_callback(Coordination.run_worker, self.settle_unbound)\n        self.bus_origins = tuple(origin for origin in self.origins if origin.seq > 0)\n        if self.bus_origins:\n            with _store_lock(self.runner.comms._wire_lock_path):\n                snapshot = self.runner.comms.registry.snapshot()\n                metadata = self.runner.comms.bus.log.read_metadata_unlocked()\n                originals = tuple(\n                    ReservedInput(\n                        key=self.runner.inputs.dispositions.bus_key(origin, self.thread),\n                        sequence=origin.seq,\n                        owner=self.thread_name,\n                        admission=snapshot.admission_generations[self.thread_name],\n                        target=origin.target,\n                        source_text=ScheduledTurn.incoming(\n                            origin, aliases=snapshot.aliases\n                        ).prompt,\n                        origin=WireInputOrigin(\n                            metadata.wire_root_id,\n                            origin.reference,\n                        ),\n                    )\n                    for origin in self.bus_origins\n                )\n                self.original_keys = (*self.original_keys, *(row.key for row in originals))\n                document = self.runner.inputs.dispositions.record_originals(*originals)\n        else:\n            document = self.runner.inputs.dispositions.read()\n        batch = InputBatch.capture(\n            self.origins,\n            self.original_keys,\n            self.task,\n            self.thread,\n            document,\n        )\n        self.prepare_prompt(batch)\n        self.reserve_input(batch)"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 188,
+      "kind": "consumer",
+      "expression": "InputBatch.capture(self.origins, self.original_keys, self.task, self.thread, document)"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 185,
+      "kind": "consumer",
+      "expression": "self.runner.inputs.dispositions.record_originals(*originals)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 52,
+      "kind": "consumer",
+      "expression": "InputDispositions(root / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 550,
+      "kind": "consumer",
+      "expression": "InputDispositions(original_source.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 558,
+      "kind": "consumer",
+      "expression": "InputDispositions(self.root / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 230,
+      "kind": "consumer",
+      "expression": "InputDispositions(log.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 514,
+      "kind": "consumer",
+      "expression": "InputDispositions(self.root / InputDispositions.filename)"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 142,
+      "kind": "consumer",
+      "expression": "dispositions.reserve_turn(owner.name, turn, admission, self.prompt, custody=custody)"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 192,
+      "kind": "consumer",
+      "expression": "InputDispositions(self.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "line": 178,
+      "kind": "consumer",
+      "expression": "InputDispositions(root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "line": 182,
+      "kind": "consumer",
+      "expression": "InputDispositions(root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 98,
+      "kind": "consumer",
+      "expression": "InputDispositions(service.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 205,
+      "kind": "consumer",
+      "expression": "InputDispositions(service.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 195,
+      "kind": "consumer",
+      "expression": "InputDispositions(service.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/native_request_wait_installed_journey.py",
+      "line": 194,
+      "kind": "consumer",
+      "expression": "InputDispositions(service.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 193,
+      "kind": "consumer",
+      "expression": "InputDispositions(service.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 175,
+      "kind": "consumer",
+      "expression": "InputDispositions(service.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 464,
+      "kind": "consumer",
+      "expression": "InputDispositions(service.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 89,
+      "kind": "consumer",
+      "expression": "InputDispositions(fixture.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 67,
+      "kind": "consumer",
+      "expression": "InputDispositions(public.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 149,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 215,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_acp_goal_original_input.py",
+      "line": 131,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 236,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 172,
+      "kind": "consumer",
+      "expression": "InputDispositions(owner.inputs.dispositions.path)"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 184,
+      "kind": "consumer",
+      "expression": "InputDispositions(owner.inputs.dispositions.path)"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 37,
+      "kind": "consumer",
+      "expression": "InputDocument(rows={key: row for key, row in inputs.read().rows.items() if key != 'acp:original'})"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 138,
+      "kind": "consumer",
+      "expression": "InputDocument(rows={key: row for key, row in inputs.read().rows.items() if key != 'acp:original'})"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 22,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 51,
+      "kind": "consumer",
+      "expression": "InputBatch.capture(origins, keys, prompt, owner, document)"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 38,
+      "kind": "consumer",
+      "expression": "InputBatch.capture(origins, keys, prompt, owner, document)"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 50,
+      "kind": "consumer",
+      "expression": "InputBatch.capture(origins, (keys[0], 'missing'), prompt, owner, document)"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 47,
+      "kind": "consumer",
+      "expression": "InputBatch.capture(messages, input_keys, text, owner, document)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 54,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 150,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 177,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 197,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 230,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 252,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 289,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 317,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 338,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 354,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 76,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 84,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 103,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 140,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 160,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 166,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 186,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 344,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 76,
+      "kind": "consumer",
+      "expression": "InputDispositions(session.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 112,
+      "kind": "consumer",
+      "expression": "InputDispositions(session.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 49,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 32,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 64,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 78,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 48,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 75,
+      "kind": "consumer",
+      "expression": "InputDispositions(inputs.path)"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 93,
+      "kind": "consumer",
+      "expression": "InputDispositions(inputs.path)"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 40,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 190,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_delivery_history.py",
+      "line": 17,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_delivery_history.py",
+      "line": 77,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 12,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 35,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 46,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 60,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 99,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 78,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 64,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 28,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 60,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 101,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 153,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 223,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 232,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 247,
+      "kind": "consumer",
+      "expression": "InputDispositions(store.path)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 260,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 292,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 322,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 363,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 375,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 384,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 402,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 469,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 38,
+      "kind": "consumer",
+      "expression": "store.record_originals(ReservedInput('prior', 1, 'worker', 1, '#comms', 'Must not replace'), ReservedInput('unknown', 1, 'worker', 1, '#comms', 'Must not replay'), first, replace(first, source_text='Duplicate must not replace'), second, custody=custody)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 73,
+      "kind": "consumer",
+      "expression": "store.record_originals(*rows, custody=custody)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 78,
+      "kind": "consumer",
+      "expression": "store.reserve_turn('worker', TurnId('scheduled'), 1, 'Original schedule', custody=custody)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 83,
+      "kind": "consumer",
+      "expression": "store.reserve_turn('worker', TurnId('scheduled'), 1, 'Replacement', custody=custody)"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 286,
+      "kind": "consumer",
+      "expression": "InputDocument(rows={'missing': missing})"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 49,
+      "kind": "consumer",
+      "expression": "store.record_originals()"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 336,
+      "kind": "consumer",
+      "expression": "InputDispositions(store.path)"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 73,
+      "kind": "consumer",
+      "expression": "InputDispositions(agent._comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_routing_repair.py",
+      "line": 19,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_input_routing_repair.py",
+      "line": 138,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 120,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 215,
+      "kind": "consumer",
+      "expression": "InputDispositions(owner._comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 306,
+      "kind": "consumer",
+      "expression": "InputDispositions(owner._comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 87,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 277,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 441,
+      "kind": "consumer",
+      "expression": "InputDispositions(bridge.boundary.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 467,
+      "kind": "consumer",
+      "expression": "InputDispositions(bridge.boundary.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 494,
+      "kind": "consumer",
+      "expression": "InputDispositions(bridge.boundary.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 551,
+      "kind": "consumer",
+      "expression": "InputDispositions(bridge.boundary.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 536,
+      "kind": "consumer",
+      "expression": "InputDispositions(bridge.boundary.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 812,
+      "kind": "consumer",
+      "expression": "InputDispositions(bridge.journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 27,
+      "kind": "consumer",
+      "expression": "InputDocument(rows={'a': unsent})"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 39,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 77,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 189,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 166,
+      "kind": "consumer",
+      "expression": "InputDocument()"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 37,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_retained_fork_first_input.py",
+      "line": 108,
+      "kind": "consumer",
+      "expression": "InputDispositions(fixture.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 263,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 310,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 187,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 458,
+      "kind": "consumer",
+      "expression": "InputDispositions(root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 62,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 434,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 176,
+      "kind": "consumer",
+      "expression": "InputDispositions(native.root / 'input_dispositions.json')"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 316,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 330,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 435,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 554,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 59,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 346,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 450,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 484,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 530,
+      "kind": "consumer",
+      "expression": "InputDispositions(reopened.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 426,
+      "kind": "consumer",
+      "expression": "InputDispositions(journal.path.parent / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 140,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_stack_native_compaction.py",
+      "line": 420,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 25,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / 'input_dispositions.json')"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 148,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 180,
+      "kind": "consumer",
+      "expression": "InputDispositions(tmp_path / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 421,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 487,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 21,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 133,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 232,
+      "kind": "consumer",
+      "expression": "InputDispositions(comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 259,
+      "kind": "consumer",
+      "expression": "InputDispositions(service.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 324,
+      "kind": "consumer",
+      "expression": "InputDispositions(service.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 216,
+      "kind": "consumer",
+      "expression": "InputDispositions(service.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 136,
+      "kind": "consumer",
+      "expression": "InputDispositions(service.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 102,
+      "kind": "consumer",
+      "expression": "InputDispositions(service.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 367,
+      "kind": "consumer",
+      "expression": "InputDispositions(service.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 313,
+      "kind": "consumer",
+      "expression": "InputDispositions(service.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 254,
+      "kind": "consumer",
+      "expression": "InputDispositions(service.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 341,
+      "kind": "consumer",
+      "expression": "InputDispositions(owner._comms.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 293,
+      "kind": "consumer",
+      "expression": "InputDispositions(service.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 236,
+      "kind": "consumer",
+      "expression": "InputDispositions(ROOT / InputDispositions.filename)"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 310,
+      "kind": "consumer",
+      "expression": "InputDispositions(ROOT / InputDispositions.filename)"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset_controls.py",
+      "line": 45,
+      "kind": "consumer",
+      "expression": "InputDispositions(root / InputDispositions.filename)"
+    },
+    {
+      "path": "tools/cutover/seed_retained_routing_fixture.py",
+      "line": 50,
+      "kind": "consumer",
+      "expression": "InputDispositions(root / InputDispositions.filename)"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 149,
+      "kind": "consumer",
+      "expression": "InputDispositions(root / InputDispositions.filename).reserve_turn('phase-alpha', TurnId('c7cc88d777b947d99b6f28f9e0b6ef97'), 1, 'Protected UNKNOWN; never replay')"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 75,
+      "kind": "consumer",
+      "expression": "InputDispositions(service.root / InputDispositions.filename)"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 149,
+      "kind": "consumer",
+      "expression": "InputDispositions(root / InputDispositions.filename)"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 148,
+      "kind": "consumer",
+      "expression": "InputDispositions(root / InputDispositions.filename)"
+    }
+  ],
+  "ambiguity": "Generic record/capture names in before output require semantic resolution; exact original publication consumers and actual imported declarations selected here. No JavaScript or dependency API change."
+}

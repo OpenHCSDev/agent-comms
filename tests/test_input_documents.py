@@ -26,18 +26,18 @@ from agent_comms.thread_identity import TurnId
 
 def test_original_batch_publication_preserves_prior_rows_and_owns_only_new_custody(tmp_path):
     store = InputDispositions(tmp_path / InputDispositions.filename)
-    args = dict(seq=1, owner="worker", admission=1, target="#comms", text="Prior input")
+    args = dict(seq=None, owner="worker", admission=1, target="worker", text="Prior input")
     assert store.record("prior", **args)
     assert store.record("unknown", **args)
     assert store.bind("unknown", admission=1, turn_id="old", native_id="a" * 32,
                       text="Original sent input")
     prior = store.read()
-    first = ReservedInput("first", 2, "worker", 1, "#comms", "First input")
-    second = ReservedInput("second", 3, "worker", 1, "#comms", "Second input")
+    first = ReservedInput("first", None, "worker", 1, "worker", "First input")
+    second = ReservedInput("second", None, "worker", 1, "worker", "Second input")
     with ExitStack() as custody:
         document = store.record_originals(
-            ReservedInput("prior", 1, "worker", 1, "#comms", "Must not replace"),
-            ReservedInput("unknown", 1, "worker", 1, "#comms", "Must not replay"),
+            ReservedInput("prior", None, "worker", 1, "worker", "Must not replace"),
+            ReservedInput("unknown", None, "worker", 1, "worker", "Must not replay"),
             first, replace(first, source_text="Duplicate must not replace"), second,
             custody=custody,
         )
@@ -67,7 +67,7 @@ def test_original_publication_ack_loss_enlists_batch_and_scheduled_rollback(tmp_
             raise OSError("Original publication acknowledgement lost")
 
     monkeypatch.setattr(LockedStore, "_publish_unlocked", lose_ack)
-    rows = tuple(ReservedInput(f"original:{seq}", seq, "worker", 1, "#comms", "Original")
+    rows = tuple(ReservedInput(f"acp:original:{seq}", None, "worker", 1, "worker", "Original")
                  for seq in (1, 2))
     with pytest.raises(OSError, match="acknowledgement lost"), ExitStack() as custody:
         store.record_originals(*rows, custody=custody)

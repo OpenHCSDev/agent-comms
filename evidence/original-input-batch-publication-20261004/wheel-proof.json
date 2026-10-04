@@ -1,0 +1,10 @@
+{
+  "head": "d4d5f6b820c582bc94733297a9f05e842b5a5e4b",
+  "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/original-batch616-wheels/agent_comms-0.1.0-py3-none-any.whl",
+  "sha256": "aa1ec28ed8f7c47bc10ce26d4364ed7d13aed3a02ddb1ed4d7e09b743c0aad80",
+  "source_members_equal": 311,
+  "force_include_members_equal": 3,
+  "force_include_source": "pyproject.toml existing declared build target",
+  "source_overlay": false,
+  "native_build": false
+}
