@@ -92,11 +92,37 @@ if (output && packageRoot) {
         lineNumber: line(source.readFileSync(`${packageRoot}/dist/core/turn-context.js`, 'utf8').split('\n'),
             "    observation(requestId) {"),
     });
+    // Borrow the actual emitted event after observation() has returned. This
+    // preserves its selected publication values without calling the producer
+    // again or deriving a public capture from the full SDK body.
+    const publicationPoint = contexts && await post('Debugger.setBreakpointByUrl', {
+        url:pathToFileURL(`${packageRoot}/dist/core/agent-session.js`).href,
+        lineNumber:line(source.readFileSync(`${packageRoot}/dist/core/agent-session.js`,'utf8').split('\n'),
+            '    _emit(event) {') + 1,
+        condition: "event.type==='turn_context_observed'",
+    });
     appendFileSync(output, JSON.stringify({ stage: 'observer-ready' }) + '\n', { mode: 0o600 });
     async function paused(params) {
         try {
             if (!params.hitBreakpoints.length) return;
             const frame = params.callFrames[0];
+            if (publicationPoint && params.hitBreakpoints.includes(publicationPoint.breakpointId)) {
+                const original = await post('Debugger.evaluateOnCallFrame', {
+                    callFrameId:frame.callFrameId,
+                    expression:"event.context",
+                    returnByValue:true,
+                });
+                if (original.exceptionDetails) throw new Error('Original SDK emitted observation unavailable');
+                const observed=original.result.value;
+                const [provenance]=observed.segments[0].provenance.filter(value=>value.kind==='native');
+                if (!provenance) throw new Error('Emitted SDK observation has no committed native source');
+                const path=`${contexts}/observation-${provenance.request_generation}-${provenance.context_digest}.json`;
+                source.writeFileSync(path,JSON.stringify(observed),{mode:0o600,flag:'wx'});
+                appendFileSync(output,JSON.stringify({stage:'source-observation',path,
+                    request_generation:provenance.request_generation,
+                    context_digest:provenance.context_digest})+'\n',{mode:0o600});
+                return;
+            }
             if (conversionPoint && params.hitBreakpoints.includes(conversionPoint.breakpointId)) {
                 const original = await post('Debugger.evaluateOnCallFrame', {
                     callFrameId:frame.callFrameId,
