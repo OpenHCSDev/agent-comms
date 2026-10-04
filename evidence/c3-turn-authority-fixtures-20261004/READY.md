@@ -49,3 +49,17 @@ Fixture followup removed22 lines/added45 across three modules; initial fixture
 family and production deletions are separately recorded in their SOURCE files.
 Final exact-head required Debt ratchet must remain successful before merge;
 wider deferred CI is not claimed as green. Parent owns normal merge/publication.
+
+## Current main source integration
+
+Normal main02f26ce4398d8c0dc4f7542d70dd0b4b0de255fd joined after actual
+#640 merge. #638 f430feb0 and #6406b8edafa are now merged dependencies.
+All six affected suites plus NativeBackendFixture, compaction_loopback and
+the existing native lifecycle fixture consumer are byte-identical to
+qualified8c27ad41 (nine Git blobs checked). Production src, stack, .pi and
+pyproject.toml are byte-identical to current main; this does not reuse the
+old whole-wheel source-equality claim for newer main. Final #637 source and
+#643 publisher remain intact. Original1a05 acceptance scope and negatives
+are unchanged. Only normal integration/evidence occurred: no SDK, App,
+package, matrix, provider or resource loan. Final exact-head main-base
+Debt success is required before parent merge.
