@@ -1,0 +1,93 @@
+{
+  "scope": "Actual scorer CLI prospective construction export from authored frozen coding/research/goal cases; not recorded native inputs or executed interventions",
+  "results": [
+    {
+      "scenario": "coding-corrections-v1",
+      "prospective_samples": 10,
+      "rounds": 3,
+      "new_history_lines": [
+        6,
+        3,
+        3
+      ],
+      "command": [
+        "/usr/bin/python",
+        "tests/compaction_retention_fixture.py",
+        "--construction-plan",
+        "--comparison-design",
+        ".artifacts/s4-construction-plan630/design-0.json",
+        "--sampling-seed",
+        "20261004"
+      ],
+      "exit_code": 0,
+      "oracle_sha256": "71a415b30200f49736fdcf2656cf95ee10c33857ef9625b2e6dfb9c18d908a35",
+      "plan_sha256": "1a3fb8f08201ff0427cbd7651bb17fa3113f9b69a1877679c3686909216ced31"
+    },
+    {
+      "scenario": "research-held-out-v1",
+      "prospective_samples": 10,
+      "rounds": 3,
+      "new_history_lines": [
+        7,
+        3,
+        3
+      ],
+      "command": [
+        "/usr/bin/python",
+        "tests/compaction_retention_fixture.py",
+        "--construction-plan",
+        "--comparison-design",
+        ".artifacts/s4-construction-plan630/design-1.json",
+        "--sampling-seed",
+        "20261004"
+      ],
+      "exit_code": 0,
+      "oracle_sha256": "6b45bc998b4a4b3f0949258a3c8ab76709350f95f02e166eca1368703ad40fd8",
+      "plan_sha256": "d685fdb1610552f6d270aeed896af68720c3195bbf1c64c08246d6f70786fa7c"
+    },
+    {
+      "scenario": "goal-unknown-revisit-v1",
+      "prospective_samples": 10,
+      "rounds": 3,
+      "new_history_lines": [
+        6,
+        3,
+        4
+      ],
+      "command": [
+        "/usr/bin/python",
+        "tests/compaction_retention_fixture.py",
+        "--construction-plan",
+        "--comparison-design",
+        ".artifacts/s4-construction-plan630/design-2.json",
+        "--sampling-seed",
+        "20261004"
+      ],
+      "exit_code": 0,
+      "oracle_sha256": "bbfd8fbdb7619299848f25c4a957d28fb14e1cdf05e00a2a6f991092c9783d38",
+      "plan_sha256": "d103cb0f982e5864fd2e8cf7a2c9853d150fff912d505bbddbf5e2b0f166fd21"
+    }
+  ],
+  "argument_refusals": [
+    {
+      "case": "missing-seed",
+      "exit_code": 2,
+      "stderr_sha256": "12eab9a42ce4de0560d74f1228d6e95698ef03c3e44db12a94d124123a25408a"
+    },
+    {
+      "case": "seed-without-plan",
+      "exit_code": 2,
+      "stderr_sha256": "a547e9661c0d39318beab9281b9c9b60bcee9feec8d639be30f215e7a5023dc9"
+    },
+    {
+      "case": "competing-condition",
+      "exit_code": 2,
+      "stderr_sha256": "5eaa43608b2a1a56cb36cf17bfd0dae5326bd98d7a0d85e86b5182345d4303ba"
+    }
+  ],
+  "provider_calls": 0,
+  "native_processes": 0,
+  "original_native_reads": 0,
+  "prospective_not_executed_samples": 30,
+  "study_approved": false
+}

@@ -54,6 +54,7 @@ python tests/compaction_retention_fixture.py --condition task-memory --answers a
 python tests/compaction_retention_fixture.py --scenario-file tests/fixtures/retention/research.json --probe-prompts
 python tests/compaction_retention_fixture.py --scenario-file tests/fixtures/retention/goal.json --native-probes original-probes.json
 python tests/compaction_retention_fixture.py --recorded-run original-run.json
+python tests/compaction_retention_fixture.py --construction-plan --comparison-design design.json --sampling-seed 20261004
 ```
 
 All four labels use the same oracle: full-context, bounded, task-memory and
@@ -61,6 +62,16 @@ recent-only. For native/model evaluation, construct each condition in the runner
 and record its context digest.
 The scorer accepts recorded responses. Authored answers test the scorer; model
 retention requires actual model responses.
+
+`--construction-plan` uses the existing `PairedRecallDesign` and its pinned
+oracle to export each round's new history and unchanged public probe, plus
+prospective paired-arm order from an explicit sampling seed. It refuses source
+snapshots that rewrite the preceding prefix. History text is emitted once,
+rather than duplicated across every prospective sample and arm. Sampling and
+inference seeds are independent. This source export launches no model, creates
+no native cut/input and proves no intervention/capacity/registration/approval.
+Only the history/probe operands belong in the configured execution fixture;
+the complete plan includes private oracle metadata and is not a provider prompt.
 
 `--recorded-run` uses the existing RecordedNativeProbes input with `rounds` and
 unprobed `checkpoints` maps. It validates distinct ancestor cuts in frozen round
