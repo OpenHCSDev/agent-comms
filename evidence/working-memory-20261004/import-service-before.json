@@ -1,0 +1,578 @@
+{
+  "source": "b30b4d5f",
+  "modules": 324,
+  "omissions": [],
+  "scope": "Lexical source evidence; no dynamic resolution proof",
+  "sites": [
+    {
+      "file": "src/agent_comms/attempt_recovery.py",
+      "line": 232,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/channel_management.py",
+      "line": 107,
+      "node": "Name",
+      "source": "ThreadManagement"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 1068,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True, kw_only=True)"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 465,
+      "node": "Attribute",
+      "source": "ctx.threads.import_thread"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 1363,
+      "node": "Attribute",
+      "source": "comms.channels.catalog.read"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 1029,
+      "node": "Attribute",
+      "source": "ctx.ledger.read"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 279,
+      "node": "Attribute",
+      "source": "comms.channels.catalog.read"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 270,
+      "node": "Attribute",
+      "source": "comms.channels.catalog.read"
+    },
+    {
+      "file": "src/agent_comms/comms.py",
+      "line": 44,
+      "node": "Name",
+      "source": "ThreadManagement"
+    },
+    {
+      "file": "src/agent_comms/compaction_private_inputs.py",
+      "line": 60,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/continued_private_session.py",
+      "line": 44,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/continued_private_session.py",
+      "line": 67,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/fresh_private_session.py",
+      "line": 310,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/fresh_private_session.py",
+      "line": 361,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 390,
+      "node": "Name",
+      "source": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 273,
+      "node": "Name",
+      "source": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 119,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 540,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 66,
+      "node": "Name",
+      "source": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 260,
+      "node": "Name",
+      "source": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 288,
+      "node": "Name",
+      "source": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 293,
+      "node": "Name",
+      "source": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 336,
+      "node": "Name",
+      "source": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 498,
+      "node": "Name",
+      "source": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 67,
+      "node": "Attribute",
+      "source": "ImportAdapter.registry[self]().read"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 130,
+      "node": "Name",
+      "source": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 263,
+      "node": "Name",
+      "source": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 297,
+      "node": "Attribute",
+      "source": "OpenCodeSource.for_path(source).read"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 405,
+      "node": "Attribute",
+      "source": "stream.read"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 549,
+      "node": "Name",
+      "source": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 342,
+      "node": "Attribute",
+      "source": "OpenCodeSession.read"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 535,
+      "node": "Attribute",
+      "source": "scan.historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 259,
+      "node": "Name",
+      "source": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 166,
+      "node": "Attribute",
+      "source": "self.historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 330,
+      "node": "Attribute",
+      "source": "OpenCodePart.from_wire"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 352,
+      "node": "Attribute",
+      "source": "SQLiteSchemaObject.read"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 356,
+      "node": "Attribute",
+      "source": "OpenCodeLinkedHistory.read"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 515,
+      "node": "Attribute",
+      "source": "CodexRecord.from_wire"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 508,
+      "node": "Attribute",
+      "source": "CodexRecord.from_wire"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 524,
+      "node": "Attribute",
+      "source": "CodexRecord.from_wire"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 380,
+      "node": "Attribute",
+      "source": "OpenCodePart.read"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 45,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True, kw_only=True)"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 434,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 454,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 525,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 567,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 579,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 81,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 85,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 445,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 106,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 456,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 82,
+      "node": "Attribute",
+      "source": "cls.from_wire"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 87,
+      "node": "Attribute",
+      "source": "cls.from_wire"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 575,
+      "node": "Attribute",
+      "source": "NativeEntryCoordinates.from_wire"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 585,
+      "node": "Attribute",
+      "source": "cls.from_wire"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 207,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 275,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 370,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 371,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 342,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 854,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 287,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 323,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 334,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 81,
+      "node": "ClassDef",
+      "source": "class NativeTranscript:"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 45,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 72,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 26,
+      "node": "Attribute",
+      "source": "stream.read"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 51,
+      "node": "Attribute",
+      "source": "NativeEntry.read"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 107,
+      "node": "Attribute",
+      "source": "NativeEntry.read"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 126,
+      "node": "Attribute",
+      "source": "NativeEntry.read"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 51,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 107,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 126,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 192,
+      "node": "Attribute",
+      "source": "NativeEntry.read"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 209,
+      "node": "Attribute",
+      "source": "NativeRecord.read"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 38,
+      "node": "Attribute",
+      "source": "stream.read"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 192,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 205,
+      "node": "Attribute",
+      "source": "NativeRecord.read"
+    },
+    {
+      "file": "src/agent_comms/native_transcript.py",
+      "line": 34,
+      "node": "Attribute",
+      "source": "stream.read"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 129,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 88,
+      "node": "ClassDef",
+      "source": "class ThreadManagement:"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 119,
+      "node": "Name",
+      "source": "ImportReceipt"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 122,
+      "node": "Attribute",
+      "source": "format.read"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 160,
+      "node": "Name",
+      "source": "ImportReceipt"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 169,
+      "node": "Attribute",
+      "source": "snapshot.historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 50,
+      "node": "Name",
+      "source": "NativeTranscript"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 151,
+      "node": "Attribute",
+      "source": "snapshot.pi_session"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 418,
+      "node": "Name",
+      "source": "NativeEntry"
+    },
+    {
+      "file": "src/agent_comms/transcript_routes.py",
+      "line": 223,
+      "node": "Name",
+      "source": "NativeTranscript"
+    },
+    {
+      "file": "src/agent_comms/transcripts.py",
+      "line": 458,
+      "node": "Name",
+      "source": "NativeTranscript"
+    },
+    {
+      "file": "src/agent_comms/transcripts.py",
+      "line": 315,
+      "node": "Name",
+      "source": "NativeTranscript"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 73,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "file": "src/agent_comms/view_unread.py",
+      "line": 196,
+      "node": "Name",
+      "source": "NativeEntry"
+    }
+  ]
+}

@@ -82,6 +82,26 @@ class NativeTranscript:
     def __init__(self, path: Path):
         self.path = path
 
+    def import_metadata(self):
+        """The original import producer writes metadata immediately after the header.
+
+        Borrow those two records only. This is not a full history scan or a
+        claim that imported instructions entered a subsequent native request.
+        """
+        from .selected_source import SessionRevision
+
+        revision = SessionRevision.observe(str(self.path)).require_available()
+        with self.path.open("rb") as stream:
+            header = NativeEntry.read(stream.readline())
+            if not isinstance(header, SessionEntry):
+                raise ValueError("Imported source has no original native session header")
+            header.require_header()
+            raw = stream.readline()
+            metadata = NativeEntry.read(raw) if raw else header
+        if not revision.current(str(self.path)):
+            raise ValueError("Imported context saved source changed while reading")
+        return metadata
+
     def fragments(self, records, *, max_records, max_bytes):
         """Borrow original decoded records within the caller's page budget.
 

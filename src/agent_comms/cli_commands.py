@@ -1070,6 +1070,8 @@ class ContextCliCommand(CliCommand):
     thread: str = option("thread")
     turn: int | None = option("--turn", default=None, help="Original admitted turn generation")
     diff: bool = option("--diff", default=False, action="store_true")
+    imported: bool = option("--imported", default=False, action="store_true",
+                            help="Original imported instruction references, not current context")
 
     def apply(self, ctx: Comms) -> Any:
         import asyncio
@@ -1079,7 +1081,14 @@ class ContextCliCommand(CliCommand):
         from .native_turn_context import NativeContextData
         from .runtime import RuntimeConnection, socket_path
         from .turn_context import NextContextTurn
+        from .importing import ImportedSessionMetadata
 
+        if self.imported:
+            if self.turn is not None or self.diff:
+                raise ValueError("Imported source references are not recorded native turns")
+            owner = ctx.registry.require(self.thread)
+            return {"scope": "historical-imported-instructions; not current or recorded native context",
+                    "sources": ImportedSessionMetadata.sources_for_owner(ctx.registry, owner)}
         if self.turn is not None or self.diff:
             manifests = ctx.bus.log.context_manifests(self.thread, ctx.registry)
             selected = tuple(

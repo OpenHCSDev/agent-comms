@@ -116,6 +116,37 @@ class ImportedMessage:
 
 
 @dataclass(frozen=True, slots=True)
+class ImportedSessionMetadata:
+    """Original saved import observation; references grant reading, never execution."""
+
+    format: ImportFormat
+    source_id: str
+    messages_seen: int
+    messages_imported: int
+    truncated_messages: int
+    notices: tuple[str, ...]
+    historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
+
+    @classmethod
+    def sources_for_owner(cls, registry, owner):
+        """Original metadata membership borrows registry and selected-file ownership."""
+        current = registry.require(owner.name)
+        if current.incarnation != owner.incarnation:
+            raise ValueError("Imported context thread incarnation changed")
+        if current.session_file != owner.session_file:
+            raise ValueError("Imported context selected session changed")
+        return current.imported_sources()
+
+    @classmethod
+    def public_source_text(cls, registry, owner, source, comms):
+        from .turn_context import ContextSourceText
+
+        if source not in cls.sources_for_owner(registry, owner):
+            raise ValueError("Source is outside the original imported snapshot")
+        return ContextSourceText(source.public_description(), source.public_text(comms))
+
+
+@dataclass(frozen=True, slots=True)
 class ImportSnapshot:
     format: ImportFormat
     source_id: str
@@ -156,15 +187,9 @@ class ImportSnapshot:
             "custom",
             {
                 "customType": "agent-comms-import",
-                "data": {
-                    "format": self.format.value,
-                    "source_id": self.source_id,
-                    "messages_seen": self.messages_seen,
-                    "messages_imported": len(self.messages),
-                    "truncated_messages": self.truncated_messages,
-                    "notices": list(self.notices),
-                    "historical_instructions": FieldCodec.encode(self.historical_instructions),
-                },
+                "data": FieldCodec.encode(ImportedSessionMetadata(
+                    self.format, self.source_id, self.messages_seen, len(self.messages),
+                    self.truncated_messages, self.notices, self.historical_instructions)),
             },
         )
         context = (

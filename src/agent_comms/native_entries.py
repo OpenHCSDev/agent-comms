@@ -20,6 +20,7 @@ from .pi_rpc import unique_fields
 from .routing import TurnRouting
 from .transcript_events import NoticeTranscript, TranscriptEvent
 from .transcript_routes import InputDisplay
+from .importing import ImportedSessionMetadata
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,9 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
     final_reply: ClassVar[bool] = False
 
     def retained_tool_calls(self):
+        return ()
+
+    def imported_sources(self):
         return ()
 
     def covered_prefix(self, evidence, branch, db):
@@ -561,6 +565,28 @@ class ManagedCompactionEntry(CompactionEntry, NativeSummaryPayload):
             # A copied marker is not an original journal operation.
             return super().covered_prefix(evidence, branch, db)
         return operation.covered_prefix(self, evidence, branch)
+
+
+class CustomEntry(NativeEntry):
+    """External custom records select their declared payload once at ingress."""
+
+    @classmethod
+    def wire_variant(cls, value):
+        return ImportedMetadataEntry if value.get("customType") == "agent-comms-import" else UnknownEntry
+
+
+@dataclass(frozen=True, kw_only=True)
+class ImportedMetadataEntry(CustomEntry):
+    custom_type: Literal["agent-comms-import"] = field(metadata={"wire_name": "customType"})
+    data: ImportedSessionMetadata
+
+    def imported_sources(self):
+        return self.data.historical_instructions
+
+    def to_wire(self):
+        value = super().to_wire()
+        value["type"] = "custom"
+        return value
 
 
 @dataclass(frozen=True, kw_only=True)
