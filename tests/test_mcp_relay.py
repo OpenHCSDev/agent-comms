@@ -4,6 +4,7 @@ import asyncio
 import json
 import sys
 from pathlib import Path
+from contextlib import AsyncExitStack
 from types import SimpleNamespace
 
 import pytest
@@ -12,26 +13,37 @@ from acp.schema import PromptResponse
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms import pi_events as pi
-from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     McpClientReceiptUpdate,
     decode_updates,
 )
-from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_payloads import McpLiveReceipt
 from agent_comms.runtime import UNBOUND_CONTROLLER, RuntimeProxy, SocketClient
 from delivery_owner_fixture import canonical_agent
+from test_backend_native_lifecycle import native_backend
 
 pytestmark = [
     pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable stub"),
-    pytest.mark.usefixtures("native_rpc_fixture"),
 ]
 
 
-async def test_live_projection_requires_owning_acp_turn_and_session(tmp_path):
-    owner = CommsAgent(wire(tmp_path / "wire"), auto_wake=False)
+@pytest.fixture
+async def saved_owner(native_backend):
+    native = native_backend
+    await native.author_history()
+    saved = native.session.read_bytes()
+    async with native.open_owner() as (owner, session_id):
+        yield owner, session_id, native
+    assert native.session.read_bytes() == saved
+    assert native.provider.posts == 0 and native.starts == []
+    assert all(not child.alive() and not child.platform.group_members(child.identity)
+               for child in native.children)
+
+
+async def test_live_projection_requires_owning_acp_turn_and_session(saved_owner):
+    owner, session_id, native = saved_owner
     updates = []
 
     class Observer:
@@ -41,27 +53,26 @@ async def test_live_projection_requires_owning_acp_turn_and_session(tmp_path):
     observer = Observer()
     receipt = McpLiveReceipt(1, "pi-mcp-client", "a" * 32, "running", "turn", ())
     event = ae.McpLiveStatus(receipt)
-    try:
-        owner.turns.active_turns["session-1"] = "turn-1"
-        await owner._emit_event("session-1", event, observer, turn_id="turn-1")
+    async with native.original_input(owner, session_id, "Original receipt operation") as turn:
+        original_id = turn.turn_id
+        await owner._emit_event(session_id, event, observer, turn_id=original_id)
         assert len(updates) == 1
-        assert updates[0]["session_id"] == "session-1"
+        assert updates[0]["session_id"] == session_id
         assert decode_updates(updates[0]["update"].field_meta) == (
-            McpClientReceiptUpdate("turn-1", receipt),
+            McpClientReceiptUpdate(original_id, receipt),
         )
-        owner.turns.active_turns.pop("session-1")  # Settled: no receipt may escape.
-        await owner._emit_event("session-1", event, observer, turn_id="turn-1")
-        owner.turns.active_turns["session-1"] = "turn-2"
+    assert not owner.turns.turn_state(session_id).busy
+    await owner._emit_event(session_id, event, observer, turn_id=original_id)
+    async with native.original_input(owner, session_id, "Distinct successor operation") as successor:
+        assert successor.turn_id != original_id
         # A stale receipt arriving FIRST in a successor turn still loses.
-        await owner._emit_event("session-1", event, observer, turn_id="turn-1")
-        await owner._emit_event("session-2", event, observer, turn_id="turn-1")
-        await owner._emit_event("session-1", event, observer, turn_id=None)
+        await owner._emit_event(session_id, event, observer, turn_id=original_id)
+        await owner._emit_event("unbound-session", event, observer, turn_id=original_id)
+        await owner._emit_event(session_id, event, observer, turn_id=None)
         assert len(updates) == 1
-        await owner._emit_event("session-1", event, observer, turn_id="turn-2")
+        await owner._emit_event(session_id, event, observer, turn_id=successor.turn_id)
         assert len(updates) == 2
-        assert decode_updates(updates[-1]["update"].field_meta)[0].turn_id == "turn-2"
-    finally:
-        await owner.shutdown()
+        assert decode_updates(updates[-1]["update"].field_meta)[0].turn_id == successor.turn_id
 
 
 def stub(tmp_path: Path, body: str) -> str:
@@ -81,6 +92,7 @@ def stub(tmp_path: Path, body: str) -> str:
         ("select", pi.ValueUiChoice("forged"), {"cancelled": True}),
     ],
 )
+@pytest.mark.usefixtures("native_rpc_fixture")
 async def test_same_child_ui_reply_is_correlated_and_denied_without_controller(
     tmp_path, method, choice, answer
 ):
@@ -144,31 +156,20 @@ async def collect_backend(program, cwd, controller):
     ]
 
 
-async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path, monkeypatch):
-    agent = canonical_agent(wire(tmp_path / "wire"))
-    await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
-    session_id = "project"
-    turn = "turn-1"
-    agent.turns.active_turns[session_id] = turn
+async def test_owner_permission_only_for_bound_live_subscriber_and_turn(saved_owner, monkeypatch):
+    agent, session_id, native = saved_owner
     request = pi.ConfirmUiRequest(id="ui-1", title="Confirm", message="One action")
 
     class DirectController:
+        async def session_update(self, **kwargs):
+            pass
+
         async def request_permission(self, **kwargs):
             assert kwargs["session_id"] == session_id
             return {"outcome": {"outcome": "selected", "optionId": "allow-once"}}
 
     controller = DirectController()
-    agent.sessions.client = controller
-    assert (
-        await agent.turns.extension_ui_permission(session_id, turn, controller, request)
-    ) == pi.ConfirmedUiChoice(True)
-    assert (
-        await agent.turns.extension_ui_permission(session_id, "wrong-turn", controller, request)
-    ) == pi.CancelledUiChoice()
-    assert (
-        await agent.turns.extension_ui_permission(session_id, turn, None, request)
-        == pi.CancelledUiChoice()
-    )
+    agent.on_connect(controller)
     assert agent._runtime.controller.get() is UNBOUND_CONTROLLER
     entered, release = asyncio.Event(), asyncio.Event()
 
@@ -177,28 +178,36 @@ async def test_owner_permission_only_for_bound_live_subscriber_and_turn(tmp_path
         await release.wait()
         return {"outcome": {"outcome": "selected", "optionId": "allow-once"}}
 
-    controller.request_permission = delayed
-    in_flight = asyncio.create_task(
-        agent.turns.extension_ui_permission(session_id, turn, controller, request)
-    )
-    await asyncio.wait_for(entered.wait(), timeout=1)
-    agent.turns.active_turns[session_id] = "successor-turn"
-    release.set()
-    assert await asyncio.wait_for(in_flight, timeout=1) == pi.CancelledUiChoice()
-    agent.turns.active_turns[session_id] = turn
-    monkeypatch.setattr("agent_comms.turn_runner.ACP_PERMISSION_TIMEOUT_SECONDS", 0.05)
+    async with AsyncExitStack() as dialogs:
+        async with native.original_input(agent, session_id, "Original permission operation") as turn:
+            assert await agent.turns.extension_ui_permission(
+                session_id, turn.turn_id, controller, request
+            ) == pi.ConfirmedUiChoice(True)
+            assert await agent.turns.extension_ui_permission(
+                session_id, "wrong-turn", controller, request
+            ) == pi.CancelledUiChoice()
+            assert await agent.turns.extension_ui_permission(
+                session_id, turn.turn_id, None, request
+            ) == pi.CancelledUiChoice()
+            controller.request_permission = delayed
+            in_flight = asyncio.create_task(agent.turns.extension_ui_permission(
+                session_id, turn.turn_id, controller, request
+            ))
+            dialogs.push_async_callback(asyncio.gather, in_flight, return_exceptions=True)
+            dialogs.callback(in_flight.cancel)
+            await asyncio.wait_for(entered.wait(), timeout=1)
 
-    async def unresponsive(**kwargs):
-        await asyncio.Event().wait()
+        async def unresponsive(**kwargs):
+            await asyncio.Event().wait()
 
-    controller.request_permission = unresponsive
-    assert (
-        await asyncio.wait_for(
-            agent.turns.extension_ui_permission(session_id, turn, controller, request), timeout=1
-        )
-        == pi.CancelledUiChoice()
-    )
-    await agent.shutdown()
+        controller.request_permission = unresponsive
+        async with native.original_input(agent, session_id, "Distinct successor permission") as successor:
+            release.set()
+            assert await asyncio.wait_for(in_flight, timeout=1) == pi.CancelledUiChoice()
+            monkeypatch.setattr("agent_comms.turn_runner.ACP_PERMISSION_TIMEOUT_SECONDS", 0.05)
+            assert await asyncio.wait_for(agent.turns.extension_ui_permission(
+                session_id, successor.turn_id, controller, request
+            ), timeout=1) == pi.CancelledUiChoice()
 
 
 def test_live_receipt_rejects_stale_input_malformed_and_ambiguous_claims():
@@ -242,6 +251,7 @@ def test_live_receipt_rejects_stale_input_malformed_and_ambiguous_claims():
     assert McpLiveReceipt.from_status(json.dumps(valid), input_id) is None
 
 
+@pytest.mark.usefixtures("native_rpc_fixture")
 async def test_package_live_receipt_after_settlement_is_not_reprojected(tmp_path):
     input_receipt = {
         "version": 1,
@@ -307,11 +317,9 @@ async def test_explicit_owner_cancellation_is_not_swallowed_by_socket_permission
         server.close(); await server.wait_closed()
 
 
-async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/z-ai/glm-5.3-flash")
-    owner = canonical_agent(wire(tmp_path / "wire"), runtime_enabled=True, auto_wake=False)
-    await owner.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
-    session_id = "project"
+async def test_private_subscriber_token_routes_only_active_prompt_permission(saved_owner, monkeypatch):
+    owner, session_id, native = saved_owner
+    await owner._runtime.start()
     calls = [[], []]
     proxies = []
     try:
@@ -325,13 +333,9 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp
                 return {"outcome": {"outcome": "selected", "optionId": "allow-once"}}
 
             instance = SimpleNamespace(session_update=update, request_permission=answer)
-            fake = SimpleNamespace(
-                _comms=owner._comms,
-                sessions=SimpleNamespace(
-                    transcript=SimpleNamespace(snapshots=False, diffs=False), client=instance
-                ),
-            )
-            proxy = RuntimeProxy(fake, session_id, owner._runtime.path)
+            attachment = canonical_agent(owner._comms, auto_wake=False)
+            attachment.on_connect(instance)
+            proxy = RuntimeProxy(attachment, session_id, owner._runtime.path)
             await proxy.subscribe()
             proxies.append(proxy)
         assert proxies[0]._controller_token != proxies[1]._controller_token
@@ -342,21 +346,21 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp
             message="Exactly this request",
         )
 
-        async def fake_prompt(session_id, prompt, **kwargs):
+        async def permission_operation(session_id, prompt, **kwargs):
+            # Supply only this bounded dialog at the runtime dispatch seam.
+            # Turn/input/session authority still comes from the real owners;
+            # no model input, native dialog emission or ACP answer is claimed.
             controller = owner._runtime.controller.get()
-            owner.turns.active_turns[session_id] = "private-turn"
-            try:
+            async with native.original_input(owner, session_id, "Original controller operation") as turn:
                 answer = await owner.turns.extension_ui_permission(
-                    session_id, "private-turn", controller, request
+                    session_id, turn.turn_id, controller, request
                 )
-            finally:
-                owner.turns.active_turns.pop(session_id, None)
             return PromptResponse(
                 stop_reason="end_turn",
                 field_meta={"answer": FieldCodec.encode(answer.response(request))},
             )
 
-        monkeypatch.setattr(owner, "prompt", fake_prompt)
+        monkeypatch.setattr(owner, "prompt", permission_operation)
         result = await asyncio.wait_for(proxies[0].request("prompt", prompt=[]), timeout=4)
         assert result["_meta"]["answer"]["confirmed"] is True
         assert len(calls[0]) == 1 and not calls[1]
@@ -383,12 +387,15 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp
 
         proxies[0].agent.sessions.client.request_permission = blocked_answer
         pending = asyncio.create_task(proxies[0].request("prompt", prompt=[]))
-        await asyncio.wait_for(entered.wait(), timeout=4)
-        await proxies[0].close()
-        disconnected = await asyncio.wait_for(pending, timeout=4)
-        assert disconnected["_meta"]["answer"]["cancelled"] is True
-        assert not calls[1]
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=4)
+            await proxies[0].close()
+            disconnected = await asyncio.wait_for(pending, timeout=4)
+            assert disconnected["_meta"]["answer"]["cancelled"] is True
+            assert not calls[1]
+        finally:
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)
     finally:
         for proxy in proxies:
             await proxy.close()
-        await owner.shutdown()
