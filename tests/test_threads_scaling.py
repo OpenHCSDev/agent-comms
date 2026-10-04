@@ -75,6 +75,7 @@ def test_reopened_listing_does_not_parse_unchanged_bus_history(wired, monkeypatc
 
 
 def test_thread_listing_validates_registry_per_snapshot_not_per_row(wired, monkeypatch):
+    wired.messaging.initialize_private_initial_protocol()
     for index in range(30):
         wired.registry.declare(Thread(f"peer-{index}", frozenset(), f"/peer-{index}"))
     checks = 0

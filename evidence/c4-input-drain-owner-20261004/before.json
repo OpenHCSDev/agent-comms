@@ -1,0 +1,1368 @@
+{
+  "revision": "c159f39e0863448ca621cc567ee131b9c9ffc739",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 316,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 365,
+      "omissions": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 144,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 258,
+      "kind": "Attribute",
+      "expression": "self.inputs.accept_followup"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 287,
+      "kind": "ClassDef",
+      "expression": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 299,
+      "kind": "ClassDef",
+      "expression": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 304,
+      "kind": "ClassDef",
+      "expression": "class QueueProjection(DeclaredFamily, affix='QueueProjection'):"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 324,
+      "kind": "Name",
+      "expression": "QueueProjection"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 334,
+      "kind": "Name",
+      "expression": "QueueProjection"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 344,
+      "kind": "Name",
+      "expression": "QueueProjection"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 370,
+      "kind": "Name",
+      "expression": "QueueProjection"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 510,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 520,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 524,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 368,
+      "kind": "Name",
+      "expression": "QueueScope"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 397,
+      "kind": "Name",
+      "expression": "QueueScope"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 345,
+      "kind": "Name",
+      "expression": "QueueItem"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 346,
+      "kind": "Name",
+      "expression": "QueueItem"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 510,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 515,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 520,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 524,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 305,
+      "kind": "Name",
+      "expression": "QueueItem"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 306,
+      "kind": "Name",
+      "expression": "QueueItem"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 315,
+      "kind": "Name",
+      "expression": "QueueScope"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 355,
+      "kind": "Name",
+      "expression": "QueueScope"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 516,
+      "kind": "Attribute",
+      "expression": "inputs.emit_queue_state"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 318,
+      "kind": "Name",
+      "expression": "QueueScope"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 362,
+      "kind": "Name",
+      "expression": "QueueScope"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 186,
+      "kind": "Attribute",
+      "expression": "self.agent.inputs.original_sources"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 33,
+      "kind": "Name",
+      "expression": "FutureInputQueue"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 67,
+      "kind": "Name",
+      "expression": "FutureInputQueue"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 59,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 34,
+      "kind": "ClassDef",
+      "expression": "class FutureInputQueue(ABC):"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 117,
+      "kind": "Name",
+      "expression": "FutureInputQueue"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 139,
+      "kind": "Name",
+      "expression": "FutureInputQueue"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 64,
+      "kind": "ClassDef",
+      "expression": "class InputDrain(FutureInputQueue):"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 64,
+      "kind": "Name",
+      "expression": "FutureInputQueue"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 128,
+      "kind": "AsyncFunctionDef",
+      "expression": "async def queue_state(self, session_id: str) -> QueueChangedUpdate:"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 154,
+      "kind": "AsyncFunctionDef",
+      "expression": "async def emit_queue_state(self, session_id: str, *, client: Any=None) -> None:"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 164,
+      "kind": "AsyncFunctionDef",
+      "expression": "async def emit_input_started(self, session_id: str, text: str | None, input_id: str | None=None, source_scope: QueueScope | None=None, *, native_id: str | None, client: Any=None) -> None:"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 195,
+      "kind": "AsyncFunctionDef",
+      "expression": "async def emit_input_delivery_changed(self, session_id: str, *, input_id: str | None=None, client: Any=None) -> None:"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 383,
+      "kind": "AsyncFunctionDef",
+      "expression": "async def accept_followup(self, session_id: str, *, text: str, display_text: str, request: PromptRequest, images: tuple[Any, ...]) -> PromptResponse:"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 503,
+      "kind": "AsyncFunctionDef",
+      "expression": "async def input_started(self, session_id: str, input_id: str | None, source_scope: QueueScope) -> None:"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 560,
+      "kind": "AsyncFunctionDef",
+      "expression": "async def finish_turn_inputs(self, session_id: str, inbox: asyncio.Queue[str | dict[str, Any]]) -> None:"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 79,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 80,
+      "kind": "Attribute",
+      "expression": "self.restored_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 82,
+      "kind": "Attribute",
+      "expression": "self.following_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 83,
+      "kind": "Attribute",
+      "expression": "self.turn_input_keys"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 84,
+      "kind": "Attribute",
+      "expression": "self.original_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 114,
+      "kind": "Name",
+      "expression": "QueueScope"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 122,
+      "kind": "Name",
+      "expression": "QueueScope"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 507,
+      "kind": "Name",
+      "expression": "QueueScope"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 509,
+      "kind": "Attribute",
+      "expression": "self.original_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 106,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 112,
+      "kind": "Attribute",
+      "expression": "self.emit_queue_state"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 136,
+      "kind": "Name",
+      "expression": "QueueItem"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 169,
+      "kind": "Name",
+      "expression": "QueueScope"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 193,
+      "kind": "Attribute",
+      "expression": "self.emit_input_delivery_changed"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 209,
+      "kind": "Attribute",
+      "expression": "self.emit_input_delivery_changed"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 469,
+      "kind": "Attribute",
+      "expression": "self.original_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 526,
+      "kind": "Attribute",
+      "expression": "self.emit_input_started"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 534,
+      "kind": "Attribute",
+      "expression": "self.emit_queue_state"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 592,
+      "kind": "Attribute",
+      "expression": "self.emit_input_delivery_changed"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 111,
+      "kind": "Attribute",
+      "expression": "self.restored_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 143,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 144,
+      "kind": "Attribute",
+      "expression": "self.restored_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 217,
+      "kind": "Attribute",
+      "expression": "self.turn_input_keys"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 450,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 484,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 543,
+      "kind": "Attribute",
+      "expression": "self.emit_input_delivery_changed"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 545,
+      "kind": "Attribute",
+      "expression": "self.emit_queue_state"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 571,
+      "kind": "Attribute",
+      "expression": "self.original_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 578,
+      "kind": "Attribute",
+      "expression": "self.following_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 579,
+      "kind": "Attribute",
+      "expression": "self.turn_input_keys"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 583,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 594,
+      "kind": "Attribute",
+      "expression": "self.emit_queue_state"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 626,
+      "kind": "Attribute",
+      "expression": "self.emit_queue_state"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 629,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 79,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 80,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 136,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 138,
+      "kind": "Name",
+      "expression": "QueueItem"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 423,
+      "kind": "Attribute",
+      "expression": "self.following_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 425,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 449,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 511,
+      "kind": "Attribute",
+      "expression": "self.following_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 524,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 533,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 539,
+      "kind": "Attribute",
+      "expression": "self.following_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 544,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 621,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 634,
+      "kind": "Attribute",
+      "expression": "self.emit_queue_state"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 406,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 424,
+      "kind": "Attribute",
+      "expression": "self.turn_input_keys"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 475,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 542,
+      "kind": "Attribute",
+      "expression": "self.turn_input_keys"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 585,
+      "kind": "Attribute",
+      "expression": "self.restored_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 108,
+      "kind": "Attribute",
+      "expression": "self.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 380,
+      "kind": "Attribute",
+      "expression": "self.following_sources"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 160,
+      "kind": "Attribute",
+      "expression": "self.queue_state"
+    },
+    {
+      "path": "src/agent_comms/ordinary_admission_rules.py",
+      "line": 123,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 47,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 59,
+      "kind": "Attribute",
+      "expression": "self.inputs.following_sources"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 89,
+      "kind": "Attribute",
+      "expression": "self.inputs.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 98,
+      "kind": "Attribute",
+      "expression": "self.inputs.following_sources"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 296,
+      "kind": "Attribute",
+      "expression": "self.runner.inputs.finish_turn_inputs"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 309,
+      "kind": "Attribute",
+      "expression": "self.runner.inputs.original_sources"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 365,
+      "kind": "Attribute",
+      "expression": "self.runner.inputs.emit_input_delivery_changed"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 300,
+      "kind": "Attribute",
+      "expression": "self.runner.inputs.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 306,
+      "kind": "Attribute",
+      "expression": "self.runner.inputs.turn_input_keys"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 36,
+      "kind": "Name",
+      "expression": "FutureInputQueue"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 46,
+      "kind": "Name",
+      "expression": "FutureInputQueue"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 62,
+      "kind": "Name",
+      "expression": "FutureInputQueue"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 66,
+      "kind": "ClassDef",
+      "expression": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 216,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 233,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 137,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 140,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 239,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 242,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 209,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 212,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 93,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 104,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 178,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 217,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 243,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 145,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 179,
+      "kind": "Attribute",
+      "expression": "inputs.following_sources"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 218,
+      "kind": "Attribute",
+      "expression": "inputs.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 244,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 262,
+      "kind": "Attribute",
+      "expression": "refusal.queue_state"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 235,
+      "kind": "Attribute",
+      "expression": "refusal.queue_state"
+    },
+    {
+      "path": "src/agent_comms/restart_refusals.py",
+      "line": 17,
+      "kind": "FunctionDef",
+      "expression": "@abstractmethod"
+    },
+    {
+      "path": "src/agent_comms/restart_refusals.py",
+      "line": 21,
+      "kind": "FunctionDef",
+      "expression": "def queue_state(self):"
+    },
+    {
+      "path": "src/agent_comms/restart_refusals.py",
+      "line": 28,
+      "kind": "FunctionDef",
+      "expression": "def queue_state(self):"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 42,
+      "kind": "FunctionDef",
+      "expression": "def original_sources(self):"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 199,
+      "kind": "FunctionDef",
+      "expression": "def original_sources(self):"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 323,
+      "kind": "Attribute",
+      "expression": "fact.original_sources"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 251,
+      "kind": "Attribute",
+      "expression": "ctx.server.agent.inputs.emit_input_delivery_changed"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 90,
+      "kind": "Name",
+      "expression": "FutureInputQueue"
+    },
+    {
+      "path": "src/agent_comms/session_effects.py",
+      "line": 19,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 313,
+      "kind": "Attribute",
+      "expression": "self.effects.inputs.queue_state"
+    },
+    {
+      "path": "src/agent_comms/turn_input_binding.py",
+      "line": 82,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 49,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 147,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 49,
+      "kind": "FunctionDef",
+      "expression": "def input_started(self) -> TurnPhase:"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 211,
+      "kind": "FunctionDef",
+      "expression": "def input_started(self) -> TurnPhase:"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 212,
+      "kind": "Attribute",
+      "expression": "self.resume.input_started"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 205,
+      "kind": "AsyncFunctionDef",
+      "expression": "@handles(events.InputStarted)"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 206,
+      "kind": "Attribute",
+      "expression": "self.inputs.input_started"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 209,
+      "kind": "Name",
+      "expression": "QueueScope"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 186,
+      "kind": "Attribute",
+      "expression": "self.inputs.turn_input_keys"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 141,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 530,
+      "kind": "Attribute",
+      "expression": "self.inputs.finish_turn_inputs"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 518,
+      "kind": "Attribute",
+      "expression": "self.inputs.queued_inputs"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 61,
+      "kind": "Name",
+      "expression": "input_started"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 90,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 100,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "tests/selected_write_owner_child.py",
+      "line": 30,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1930,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1938,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp_extension.py",
+      "line": 51,
+      "kind": "Name",
+      "expression": "QueueScope"
+    },
+    {
+      "path": "tests/test_acp_extension.py",
+      "line": 61,
+      "kind": "Name",
+      "expression": "QueueItem"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 178,
+      "kind": "Attribute",
+      "expression": "agent.inputs.original_sources"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 51,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 87,
+      "kind": "Attribute",
+      "expression": "agent.inputs.restored_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 178,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 52,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 61,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queue_state"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 75,
+      "kind": "Attribute",
+      "expression": "agent.inputs.emit_input_started"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 83,
+      "kind": "Attribute",
+      "expression": "agent.inputs.emit_queue_state"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 88,
+      "kind": "Attribute",
+      "expression": "agent.inputs.emit_queue_state"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 98,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queue_state"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 101,
+      "kind": "Attribute",
+      "expression": "agent.inputs.restored_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 117,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 126,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 141,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queue_state"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 179,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 188,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queue_state"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 196,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queue_state"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 208,
+      "kind": "Name",
+      "expression": "QueueScope"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 64,
+      "kind": "Name",
+      "expression": "QueueItem"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 65,
+      "kind": "Name",
+      "expression": "QueueItem"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 74,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 86,
+      "kind": "Name",
+      "expression": "QueueItem"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 91,
+      "kind": "Name",
+      "expression": "QueueItem"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 164,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 191,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 87,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 116,
+      "kind": "Attribute",
+      "expression": "agent.inputs.original_sources"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 76,
+      "kind": "Attribute",
+      "expression": "agent.inputs.original_sources"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 43,
+      "kind": "Name",
+      "expression": "QueueScope"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 118,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 177,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 184,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 210,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 258,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 113,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 153,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 165,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_image_inputs.py",
+      "line": 174,
+      "kind": "Attribute",
+      "expression": "owner.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_image_inputs.py",
+      "line": 185,
+      "kind": "Attribute",
+      "expression": "owner.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 186,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 69,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 200,
+      "kind": "Attribute",
+      "expression": "owner.inputs.turn_input_keys"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 60,
+      "kind": "Name",
+      "expression": "InputDrain"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 82,
+      "kind": "Name",
+      "expression": "FutureInputQueue"
+    },
+    {
+      "path": "tests/test_prompt_queue.py",
+      "line": 56,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_prompt_queue.py",
+      "line": 71,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_restart_queue_structure.py",
+      "line": 36,
+      "kind": "Attribute",
+      "expression": "refusal.queue_state"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 178,
+      "kind": "Name",
+      "expression": "QueuedInput"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 677,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 105,
+      "kind": "Attribute",
+      "expression": "agent.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 475,
+      "kind": "Attribute",
+      "expression": "agent.inputs.original_sources"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 157,
+      "kind": "Attribute",
+      "expression": "agent.inputs.following_sources"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 159,
+      "kind": "Attribute",
+      "expression": "agent.inputs.following_sources"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 160,
+      "kind": "Attribute",
+      "expression": "agent.inputs.following_sources"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 243,
+      "kind": "Attribute",
+      "expression": "agent.inputs.following_sources"
+    },
+    {
+      "path": "tests/test_stack_send_now.py",
+      "line": 480,
+      "kind": "Attribute",
+      "expression": "owner.inputs.queued_inputs"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 428,
+      "kind": "Name",
+      "expression": "FutureInputQueue"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 489,
+      "kind": "Name",
+      "expression": "FutureInputQueue"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 174,
+      "kind": "Name",
+      "expression": "QueueScope"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 125,
+      "kind": "Attribute",
+      "expression": "owner.inputs.original_sources"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 126,
+      "kind": "Attribute",
+      "expression": "owner.inputs.turn_input_keys"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 182,
+      "kind": "Attribute",
+      "expression": "owner.inputs.original_sources"
+    }
+  ],
+  "limits": "AST enumerates syntax; dynamic callback/attribute resolution is not proved."
+}

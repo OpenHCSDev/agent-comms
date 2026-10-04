@@ -1,0 +1,17 @@
+{
+  "app02.stderr": "9a4feac6dd5a8cf235bad96d1913f287454eded512642cf8b0e6a406372b5f36",
+  "whole-floor-restore.json": "b8666890a71920f4bc9753b3b6448b628895c450829f200bc466e228af99b3dc",
+  "issued-grant.json": "16f5f6055bc1820b9a4a84a310df9568846752b0bee7c0d7061e618c73239140",
+  "app02.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "candidate-activation.json": "d91dc8d7556e132cf4bf372e7bb23276fcbae4b1212749f00b365eefa72fa177",
+  "verify-stage.log": "e54b1315944d786f5682b767b93ca6b53f23435a7a7c1ede0d8714a838424e98",
+  "final-borrowers.json": "8957b84ecb57a8e7b8e5b597f1f8a01c5ddec4374a853caedc927d5144e87d95",
+  "verify-stage-negative01.log": "c89a83042ba61368cb5762b793d9ba6b76bee1745025a40098a053fbcff48ee9",
+  "source-proof.json": "1eb443510c00c9878f65726dcabd3aeae9b63f9258cca95ca8c47d2c0a8ebf41",
+  "ASSESSMENT.md": "a44db770e1b2868e11dede4c4d98b2a22c4366cd8e46c45ead940a66a86ef641",
+  "core-wheel-receipt.json": "4e0ece1c57c348379c4c45da3fd3463ca657a23e2a5c0ea37ec0dbd54ce508f9",
+  "preparation01-negative.json": "c373ae952f6a238779a45fba5bfc1146c860d637da56ace690ad79c057d0debc",
+  "pipcheck-restored.log": "6c087e22f1ff2aa2e68fc3f2b37beb08c31005e6639f016f0be2d60b220b4e25",
+  "code-handback.json": "8474baec3c8d63ebe8718eb59d2d5d3f2e24cb495e1d7f683f7bee96894dd02c",
+  "terminal02.json": "cb10d4be83c49f3c4e2d24fa7b1cdf4f7954bbaa2c5a4661d42c11b8a661c987"
+}

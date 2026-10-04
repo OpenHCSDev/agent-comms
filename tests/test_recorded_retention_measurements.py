@@ -7,6 +7,7 @@ from dataclasses import replace
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -1404,6 +1405,46 @@ class RecordedMeasurementTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'artifact changed'):
                 selected.applied_condition(object(), object(), texts, serialized, manifest,selected.condition_records())
 
+    def test_installed_observer_retains_constructor_source(self):
+        # Exercise the private observer, not an SDK/model turn. This prevents
+        # dropping the constructor's reference or inventing one for another arm.
+        module = Path(__file__).with_name('retained_native_conditions.mjs')
+        output = self.root / 'installed-observation.jsonl'
+        script = '''
+import {armInstalledNativeCondition} from MODULE;
+import assert from 'node:assert/strict';
+const inputId='a'.repeat(32), witness=WITNESS;
+const prefix=[{role:'user',content:'Earlier source'}];
+let callback;
+const agent={subscribe:fn=>{callback=fn; return ()=>{callback=null;};},
+    transformContext:async messages=>messages};
+const previous=agent.transformContext;
+const session={agent, storedContext:{requireReady(){},messages:()=>prefix},
+    sessionManager:{captureCompactionWitness:()=>witness}};
+const source={kind:'file',path:'original-summary',sha256:'b'.repeat(64)};
+for (const original of [source,undefined]) {
+    const restore=armInstalledNativeCondition(session,{condition:'bounded',
+        source_witness:witness,context_sha256:'c'.repeat(64),agent_messages:prefix,
+        narrative_source:original}, OUTPUT,inputId);
+    const messages=[...prefix,{role:'user',inputId,content:'Distinct input'}];
+    assert.equal(await agent.transformContext(messages),messages);
+    callback({type:'agent_end'});
+    restore();
+    assert.equal(agent.transformContext,previous);
+    assert.equal(callback,null);
+}
+'''.replace('MODULE', json.dumps(module.as_uri())).replace('OUTPUT', json.dumps(str(output))).replace(
+            'WITNESS', json.dumps(FieldCodec.encode(NativeWitness(self.identity.session_id,
+                str(self.session), 'source', 'source', FileRevision.from_stat(self.session.stat())))))
+        completed = subprocess.run(['node', '--input-type=module', '-e', script],
+                                   capture_output=True, text=True, check=True)
+        self.assertEqual(completed.stderr, '')
+        applications = tuple(FieldCodec.decode(RecordedConditionInstallation, row)
+            for row in map(json.loads, output.read_text().splitlines())
+            if row['stage'] == 'installed-transform-applied')
+        self.assertEqual(applications[0].narrative_source, FileProvenance('original-summary', 'b' * 64))
+        self.assertIsNone(applications[1].narrative_source)
+
     def test_installed_source_uses_original_witness_ancestry_and_request(self):
         # Installation must precede this input on the same source, and bind its
         # real converter result. A transform may reduce messages legitimately;
@@ -1443,14 +1484,59 @@ class RecordedMeasurementTests(unittest.TestCase):
             _, entries = evidence.observe()
             branch = evidence.branch('answer', entries)
             partial = probe.installed_condition(evidence, branch, context, serialized,
-                                                manifest, (row, restored))
+                                                manifest, (row, restored), parent=evidence, texts=())
             self.assertFalse(partial['evaluated'])
             complete = probe.installed_condition(evidence, branch, context, serialized,
-                                                 manifest, (row, conversion, restored))
+                                                 manifest, (row, conversion, restored), parent=evidence, texts=())
             self.assertTrue(complete['evaluated'])
             self.assertEqual(complete['installations'], (installed,))
+            self.assertFalse(complete['narrative_source']['evaluated'])
             self.assertFalse(complete['entry_selection']['evaluated'])
             self.assertNotIn('entry_selection', row)  # Historical absence stays absent.
+            self.assertNotIn('narrative_source', row)
+            # The installed observer's original reference uses the same fork
+            # acquisition/presence behavior as the bounded replacement hook.
+            reference = self.artifact('installed-narrative.json', 'Original λ narrative')
+            with_source = replace(installed, narrative_source=reference)
+            selected_probe = replace(probe, checkpoint=self.checkpoint,
+                                     fork_journal=self.checkpoint.journal)
+            source = {'evaluated': True, 'summary': 'Original λ narrative',
+                'source': FieldCodec.encode(reference), 'session': FieldCodec.encode(self.identity),
+                'checkpoint_session': FieldCodec.encode(self.identity), 'native_entry_id': 'commit'}
+            source_row = FieldCodec.encode(with_source)
+            texts = (json.dumps(source['summary'], ensure_ascii=False),)
+            self.assertEqual(FieldCodec.decode(RecordedConditionInstallation, source_row), with_source)
+            with patch.object(RecordedNativeCheckpoint, 'fork_condition_acquired', return_value=source) as acquired:
+                def observed(rows, captured_texts=texts):
+                    return selected_probe.installed_condition(evidence, branch, context, serialized,
+                        manifest, rows, parent=evidence, texts=captured_texts)
+                original_source = observed((source_row, conversion, restored))
+                self.assertEqual(acquired.call_count, 1)
+                self.assertTrue(original_source['narrative_source']['evaluated'])
+                self.assertEqual(original_source['narrative_source']['source'], reference)
+                self.assertIs(original_source['narrative_source']['message_binding'],
+                              original_source['message_binding'])
+                partial_source = observed((source_row, restored))
+                self.assertFalse(partial_source['narrative_source']['evaluated'])
+                self.assertEqual(partial_source['narrative_source']['source'], reference)
+                for wrong in (replace(reference, path=str(self.root / 'other.json')),
+                              replace(reference, sha256='f' * 64)):
+                    with self.subTest(reference=wrong), self.assertRaisesRegex(ValueError, 'another original narrative'):
+                        observed((FieldCodec.encode(replace(installed, narrative_source=wrong)), conversion, restored))
+                    with self.subTest(partial_reference=wrong), self.assertRaisesRegex(ValueError, 'another original narrative'):
+                        observed((row, FieldCodec.encode(replace(installed, narrative_source=wrong)), conversion, restored))
+                with self.assertRaisesRegex(ValueError, 'does not contain'):
+                    observed((source_row, conversion, restored), ('"Different narrative"',))
+                # Neither a constructor label nor a partial collection of
+                # source references grants narrative/request binding.
+                self.assertFalse(observed((row, source_row, conversion, restored))
+                                 ['narrative_source']['evaluated'])
+                with patch.object(RecordedNativeCheckpoint, 'fork_condition_acquired',
+                                  return_value={'evaluated': False, 'reason': 'Original assembly unavailable'}):
+                    self.assertFalse(observed((source_row, conversion, restored))['narrative_source']['evaluated'])
+                self.assertFalse(selected_probe.installed_condition(evidence, branch, context,
+                    {'evaluated': False}, None, (source_row, restored), parent=evidence, texts=texts)
+                    ['narrative_source']['evaluated'])
             for selection, selected, unselected in (
                     (('prior', 'source'), ('prior', 'source'), ()),
                     (('source',), ('source',), ('prior',)),
@@ -1460,7 +1546,7 @@ class RecordedMeasurementTests(unittest.TestCase):
                 selected_row = FieldCodec.encode(observed)
                 self.assertEqual(FieldCodec.decode(RecordedConditionInstallation, selected_row), observed)
                 result = probe.installed_condition(evidence, branch, context, serialized,
-                    manifest, (selected_row, conversion, restored))
+                    manifest, (selected_row, conversion, restored), parent=evidence, texts=())
                 observation, = result['entry_selection']['observations']
                 self.assertTrue(observation['evaluated'])
                 self.assertEqual(observation['selected_message_entries'], selected)
@@ -1468,7 +1554,7 @@ class RecordedMeasurementTests(unittest.TestCase):
                 self.assertEqual(observation['all_original_message_entries_selected'], not unselected)
                 # Original selection remains known even without matching request bytes.
                 no_request = probe.installed_condition(evidence, branch, context,
-                    {'evaluated': False}, None, (selected_row, restored))
+                    {'evaluated': False}, None, (selected_row, restored), parent=evidence, texts=())
                 self.assertFalse(no_request['evaluated'])
                 self.assertEqual(no_request['entry_selection'], result['entry_selection'])
                 self.assertEqual(no_request['installations'], (observed,))
@@ -1504,14 +1590,14 @@ class RecordedMeasurementTests(unittest.TestCase):
                 with self.subTest(selection=selection), self.assertRaisesRegex(ValueError, 'ordered subset'):
                     probe.installed_condition(evidence, branch, context, serialized, manifest,
                         (FieldCodec.encode(replace(installed, entry_selection=JournalProvenance(
-                            str(self.session), selection))), conversion, restored))
+                            str(self.session), selection))), conversion, restored), parent=evidence, texts=())
             with self.assertRaises(ValueError):
                 probe.installed_condition(evidence, branch, context, serialized, manifest,
                     (FieldCodec.encode(replace(installed, entry_selection=JournalProvenance(
-                        str(self.root / 'another.jsonl'), ('source',)))), conversion, restored))
+                        str(self.root / 'another.jsonl'), ('source',)))), conversion, restored), parent=evidence, texts=())
             with self.assertRaisesRegex(ValueError, 'has not retired'):
                 probe.installed_condition(evidence, branch, context, serialized,
-                                          manifest, (row, conversion))
+                                          manifest, (row, conversion), parent=evidence, texts=())
             for changed in (replace(witness, leaf_id='answer'),
                             replace(witness, session_id='other'),
                             replace(witness, revision=replace(witness.revision,
@@ -1519,11 +1605,11 @@ class RecordedMeasurementTests(unittest.TestCase):
                 with self.subTest(witness=changed):
                     with self.assertRaises(ValueError):
                         probe.installed_condition(evidence, branch, context, serialized, manifest,
-                            (FieldCodec.encode(replace(installed, source_witness=changed)), conversion, restored))
+                            (FieldCodec.encode(replace(installed, source_witness=changed)), conversion, restored), parent=evidence, texts=())
             with self.assertRaisesRegex(ValueError, 'another session/input'):
                 probe.installed_condition(evidence, branch, context, serialized, manifest,
-                    (row, dict(conversion, input_id='f' * 32), restored))
-            absent = probe.installed_condition(evidence, branch, context, serialized, manifest, ())
+                    (row, dict(conversion, input_id='f' * 32), restored), parent=evidence, texts=())
+            absent = probe.installed_condition(evidence, branch, context, serialized, manifest, (), parent=evidence, texts=())
             self.assertFalse(absent['evaluated'])
             self.assertEqual(absent['installations'], ())
             self.assertFalse(scored.condition_construction(original(absent), {})
@@ -1538,7 +1624,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         unavailable = {identity: {'evaluated': False} for identity in identities}
         original = {'probe_input_presence': {'evaluated': False},
             'construction': {'condition_application': {'evaluated': True},
-            'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}},
+            'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}, 'narrative_source': {'evaluated': False}},
             'request_budget': {'evaluated': True},
             'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
         partial = scored.condition_construction({identities[0]: original}, unavailable)
@@ -1548,6 +1634,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertEqual(partial['source_delivery']['unavailable_rounds'], identities)
         self.assertEqual(partial['source_delivery']['available_rounds'], ())
         self.assertEqual(partial['full_history_capacity']['unavailable_rounds'], identities)
+        self.assertEqual(partial['installed_narrative_source']['unavailable_rounds'], identities)
         evidence = {identity: original for identity in identities}
         delivered = {identity: {'evaluated': True} for identity in identities}
         observed = scored.condition_construction(evidence, delivered)
@@ -1574,7 +1661,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         partial_application = {'probe_input_presence': {'evaluated': False},
             'construction': {'condition_application': {
             'evaluated': False, 'transform': {'evaluated': True}},
-            'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}},
+            'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}, 'narrative_source': {'evaluated': False}},
             'request_budget': {'evaluated': True},
             'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
         self.assertEqual(scored.condition_construction(
@@ -1585,7 +1672,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         original['construction']['source_coverage']['full_context_capacity'] = {'evaluated': True}
         self.assertTrue(scored.condition_construction(evidence, delivered)['full_history_capacity']['evaluated'])
         original['construction']['condition_installation'] = {
-            'evaluated': True, 'installations': (), 'entry_selection': {'evaluated': True}}
+            'evaluated': True, 'installations': (), 'entry_selection': {'evaluated': True}, 'narrative_source': {'evaluated': False}}
         self.assertTrue(scored.condition_construction(evidence, delivered)['sdk_entry_selection']['evaluated'])
         self.assertTrue(scored.condition_construction(evidence, delivered)['installed_sdk_source']['evaluated'])
         self.assertFalse(scored.condition_construction(evidence, delivered)['evaluated'])

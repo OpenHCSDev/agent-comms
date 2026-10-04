@@ -1,0 +1,20 @@
+{
+  "state": "WHOLE Parent654 successor02 purpose closed; actual436 floor restored; no future package/import/read/execution claim",
+  "prefix": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002",
+  "members": 1470,
+  "all_bytes_modes_links_equal": true,
+  "packages": 69,
+  "protected": 390,
+  "all_protected_equal": true,
+  "borrowers": {
+    "processes": 237,
+    "refs": 0,
+    "gaps": 0,
+    "sha256": "8957b84ecb57a8e7b8e5b597f1f8a01c5ddec4374a853caedc927d5144e87d95"
+  },
+  "scratch_removed": true,
+  "owned_controller_absent": true,
+  "terminal": "terminal02.json",
+  "result": "FAIL8.643059s at App private launch/cleanup admission: authored setup supplied RootID without PrivateNkLaunch.PACKAGE_ENV; snapshot full equality/reference windows/actor-vs-human unread assertions reached",
+  "issued_grant_sha256": "16f5f6055bc1820b9a4a84a310df9568846752b0bee7c0d7061e618c73239140"
+}

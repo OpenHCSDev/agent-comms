@@ -1,0 +1,1194 @@
+{
+  "revision": "0052197732b339ce8d49af7b8fe5afd582ba1ffa",
+  "collector": "original audit.findings.Package, FunctionFacts, GodClass",
+  "roots": {
+    "src/agent_comms": {
+      "parsed": 316,
+      "unparsed": [],
+      "consumers": [
+        {
+          "function": "src/agent_comms/agent_activity.py::pending_notification",
+          "calls": [
+            "MessageNotification"
+          ]
+        },
+        {
+          "function": "src/agent_comms/agent_activity.py::pending_notification",
+          "calls": [
+            "MessageNotification"
+          ]
+        },
+        {
+          "function": "src/agent_comms/agent_activity.py::pending_notification",
+          "calls": [
+            "MessageNotification"
+          ]
+        },
+        {
+          "function": "src/agent_comms/assignment_states.py::notification",
+          "calls": [
+            "MessageNotification"
+          ]
+        },
+        {
+          "function": "src/agent_comms/assignment_states.py::notification",
+          "calls": [
+            "MessageNotification"
+          ]
+        },
+        {
+          "function": "src/agent_comms/assignment_states.py::notification",
+          "calls": [
+            "MessageNotification"
+          ]
+        }
+      ],
+      "god_classes": [
+        "  547  src/agent_comms/input_drain.py::InputDrain",
+        "  609  src/agent_comms/wire_log.py::WireLog"
+      ],
+      "owner_sizes": {
+        "src/agent_comms/history_views.py::HistoryViews": 464,
+        "src/agent_comms/presentation.py::MessageNotification": 128,
+        "src/agent_comms/presentation.py::CoordinationSnapshot": 62
+      },
+      "owner_functions": [
+        {
+          "function": "src/agent_comms/history_views.py::__init__",
+          "size": 27,
+          "calls": [
+            "BusPresentation",
+            "transcript_read_state"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::message_notifications",
+          "size": 2,
+          "calls": [
+            "window"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::message_notifications_for_references",
+          "size": 2,
+          "calls": [
+            "references"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::recent_notifications",
+          "size": 2,
+          "calls": [
+            "recent"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::dm_history",
+          "size": 2,
+          "calls": [
+            "DMHistory",
+            "full_history"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::channel_history",
+          "size": 3,
+          "calls": [
+            "ChannelHistory",
+            "full_history",
+            "history_targets",
+            "read"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::dm_history_page",
+          "size": 19,
+          "calls": [
+            "DMHistory",
+            "page"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::attach_history",
+          "size": 11,
+          "calls": [
+            "ChannelCatalog",
+            "Path",
+            "_store_lock",
+            "attach",
+            "editing",
+            "exists",
+            "read",
+            "restore_missing"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::historical_threads",
+          "size": 2,
+          "calls": [
+            "threads"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::dm_display_page",
+          "size": 18,
+          "calls": [
+            "DMDisplayHistory",
+            "page",
+            "user_identity"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::channel_display_page",
+          "size": 30,
+          "calls": [
+            "ChannelDisplayHistory",
+            "ValueError",
+            "channel_page",
+            "get",
+            "page",
+            "read",
+            "snapshot",
+            "sources",
+            "user_identity",
+            "views"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::mark_historical_view_read",
+          "size": 2,
+          "calls": [
+            "acknowledge"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::channel_history_page",
+          "size": 18,
+          "calls": [
+            "ChannelHistory",
+            "history_targets",
+            "page",
+            "read"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::last_sent_timestamps",
+          "size": 8,
+          "calls": [
+            "canonical_name",
+            "get",
+            "items",
+            "last_sent_timestamps",
+            "max",
+            "snapshot"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::full_history",
+          "size": 4,
+          "calls": [
+            "ChannelHistory",
+            "full_history"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::full_history_page",
+          "size": 15,
+          "calls": [
+            "ChannelHistory",
+            "page"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::export_wire",
+          "size": 24,
+          "calls": [
+            "ExitStack",
+            "Path",
+            "WireExportBoundary",
+            "WireTranscriptExporter",
+            "_store_lock",
+            "enter_context",
+            "expanduser",
+            "export",
+            "full_history_snapshot",
+            "matches",
+            "resolve",
+            "time"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::channel_views",
+          "size": 18,
+          "calls": [
+            "all_activity",
+            "channel_activity",
+            "for_views",
+            "last_sent_timestamps",
+            "pinned_members",
+            "read",
+            "roster",
+            "snapshot",
+            "views"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::thread_views",
+          "size": 12,
+          "calls": [
+            "GoalWaits",
+            "all_activity",
+            "roster",
+            "snapshot"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::thread_presentation",
+          "size": 25,
+          "calls": [
+            "GoalWaits",
+            "StaleRevision",
+            "activity_of",
+            "canonical_name",
+            "capture",
+            "capture_page_window",
+            "current",
+            "for_sources",
+            "get",
+            "read",
+            "replace",
+            "snapshot",
+            "visible"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::coordination_snapshot",
+          "size": 23,
+          "calls": [
+            "canonical_name",
+            "capture",
+            "channel_activity",
+            "for_views",
+            "history_targets",
+            "items",
+            "last_sent_timestamps",
+            "pending_counts",
+            "read",
+            "snapshot",
+            "sum",
+            "views"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::viewer_snapshot",
+          "size": 25,
+          "calls": [
+            "capture",
+            "counts",
+            "display_view_metrics",
+            "last_sent_timestamps",
+            "pending_counts",
+            "replace",
+            "snapshot",
+            "user_identity"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::mark_thread_view_read",
+          "size": 7,
+          "calls": [
+            "ValueError",
+            "mark_read",
+            "require",
+            "user_identity"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::mark_channel_view_read",
+          "size": 14,
+          "calls": [
+            "mark_channel_read",
+            "user_identity"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::mark_dm_view_read",
+          "size": 13,
+          "calls": [
+            "ValueError",
+            "acknowledge",
+            "type"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::mark_user_view_read",
+          "size": 17,
+          "calls": [
+            "Path",
+            "_store_lock",
+            "is_channel_target",
+            "is_file",
+            "mark_channel_view_read",
+            "mark_delivered",
+            "mark_read",
+            "require",
+            "transcript_checkpoint",
+            "user_identity"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::revision",
+          "size": 21,
+          "calls": [
+            "WireRevision",
+            "file_revision",
+            "int",
+            "source_paths",
+            "time",
+            "tuple"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::who",
+          "size": 3,
+          "calls": [
+            "_presence"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::presence",
+          "size": 3,
+          "calls": [
+            "_presence"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::_presence",
+          "size": 10,
+          "calls": [
+            "pending_count",
+            "sorted",
+            "thread_views",
+            "to_wire"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::list_threads",
+          "size": 27,
+          "calls": [
+            "GoalWaits",
+            "all_activity",
+            "asdict",
+            "execution",
+            "items",
+            "pending_counts_all",
+            "read",
+            "snapshot",
+            "sorted",
+            "to_wire",
+            "tuple"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/history_views.py::thread_detail",
+          "size": 12,
+          "calls": [
+            "asdict",
+            "goal_execution",
+            "pending_count",
+            "require",
+            "status",
+            "to_wire"
+          ],
+          "dispatch": {},
+          "keys": {
+            "detail": [
+              "goal_execution",
+              "pending"
+            ]
+          }
+        },
+        {
+          "function": "src/agent_comms/history_views.py::poll",
+          "size": 12,
+          "calls": [
+            "current_thread",
+            "inbox",
+            "presence",
+            "read",
+            "require",
+            "thread_detail",
+            "to_wire"
+          ],
+          "dispatch": {},
+          "keys": {
+            "person": [
+              "name"
+            ]
+          }
+        },
+        {
+          "function": "src/agent_comms/presentation.py::recipient",
+          "size": 2,
+          "calls": [],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::window",
+          "size": 17,
+          "calls": [
+            "ValueError",
+            "deliveries_for_references",
+            "delivery_window",
+            "get",
+            "len",
+            "notification_references",
+            "tuple"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::references",
+          "size": 12,
+          "calls": [
+            "deliveries_for_references",
+            "delivery_window",
+            "len",
+            "range",
+            "update"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::delivery_window",
+          "size": 44,
+          "calls": [
+            "AgentActivity",
+            "ReadLedger",
+            "ValueError",
+            "after_inbox_read",
+            "append",
+            "displayed_recipient",
+            "for_delivery",
+            "items",
+            "join",
+            "len",
+            "observe_recipients",
+            "project",
+            "read",
+            "replace",
+            "select",
+            "snapshot",
+            "tuple"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::recent",
+          "size": 15,
+          "calls": [
+            "ValueError",
+            "for_sources",
+            "for_thread",
+            "require",
+            "rows"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::for_sources",
+          "size": 15,
+          "calls": [
+            "delivery_window",
+            "replace",
+            "stable_thread_lookup",
+            "tuple"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::capture",
+          "size": 10,
+          "calls": [
+            "canonical_name",
+            "cls",
+            "frozenset",
+            "seen_sequences"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::reading",
+          "size": 15,
+          "calls": [
+            "capture",
+            "reading",
+            "snapshot"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::channels",
+          "size": 2,
+          "calls": [
+            "views"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::scopes",
+          "size": 5,
+          "calls": [
+            "capture",
+            "tuple",
+            "values"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::viewer_names",
+          "size": 6,
+          "calls": [
+            "frozenset",
+            "names_for"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::scope",
+          "size": 5,
+          "calls": [
+            "ValueError",
+            "capture",
+            "get"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::__init__",
+          "size": 7,
+          "calls": [],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::snapshot",
+          "size": 25,
+          "calls": [
+            "ExitStack",
+            "_record_snapshot",
+            "_store_lock",
+            "enter_context",
+            "file_revision",
+            "reading",
+            "scope"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::channel_page",
+          "size": 35,
+          "calls": [
+            "ExitStack",
+            "ValueError",
+            "_store_lock",
+            "capture",
+            "enter_context",
+            "is_channel_target",
+            "page_snapshot",
+            "read_opened",
+            "reading",
+            "replace",
+            "scope"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::mark_channel_read",
+          "size": 36,
+          "calls": [
+            "ExitStack",
+            "ValueError",
+            "_store_lock",
+            "bus_identity",
+            "capture",
+            "enter_context",
+            "includes",
+            "mark_displayed",
+            "messages",
+            "reading",
+            "require_displayed",
+            "same_projection",
+            "scope",
+            "through",
+            "validate",
+            "verified_snapshot"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::display_view_metrics",
+          "size": 36,
+          "calls": [
+            "BusDisplayIndex",
+            "BusFileRevision",
+            "ChannelActivity",
+            "DisplayMetricScope",
+            "current_for",
+            "dict",
+            "file_revision",
+            "get",
+            "items",
+            "observe",
+            "observe_wire",
+            "snapshot"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::roster",
+          "size": 55,
+          "calls": [
+            "ChannelActivity",
+            "append",
+            "cls",
+            "frozenset",
+            "get",
+            "in_view",
+            "items",
+            "key",
+            "matches",
+            "max",
+            "sorted",
+            "tuple",
+            "values"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::to_wire",
+          "size": 8,
+          "calls": [
+            "list",
+            "sorted",
+            "to_wire"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::visible",
+          "size": 6,
+          "calls": [
+            "in_view"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::capture",
+          "size": 18,
+          "calls": [
+            "cls",
+            "execution",
+            "owner_binding",
+            "seen_at"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::roster",
+          "size": 23,
+          "calls": [
+            "capture",
+            "get",
+            "items",
+            "read",
+            "tuple",
+            "visible"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::presentation",
+          "size": 7,
+          "calls": [
+            "_display_presentation",
+            "presentation",
+            "replace"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::_display_presentation",
+          "size": 13,
+          "calls": [
+            "presentation"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::to_wire",
+          "size": 17,
+          "calls": [
+            "asdict",
+            "bool",
+            "to_wire"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::capture",
+          "size": 23,
+          "calls": [
+            "GoalWaits",
+            "all_activity",
+            "cls",
+            "pinned_members",
+            "roster"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::participants",
+          "size": 10,
+          "calls": [
+            "next",
+            "tuple"
+          ],
+          "dispatch": {},
+          "keys": {}
+        },
+        {
+          "function": "src/agent_comms/presentation.py::mention_candidates",
+          "size": 13,
+          "calls": [
+            "MentionCandidate",
+            "casefold",
+            "frozenset",
+            "next",
+            "sorted",
+            "tuple"
+          ],
+          "dispatch": {},
+          "keys": {}
+        }
+      ],
+      "fields": {
+        "src/agent_comms/presentation.py::MessageNotification": [
+          "busy",
+          "detail",
+          "displayed_to",
+          "message",
+          "priority",
+          "recipient_identity",
+          "state",
+          "window_limit"
+        ],
+        "src/agent_comms/presentation.py::DisplaySelection": [
+          "catalog",
+          "notice",
+          "registry",
+          "seen",
+          "viewer"
+        ],
+        "src/agent_comms/presentation.py::ChannelView": [
+          "channel",
+          "last_activity",
+          "last_user_input",
+          "members",
+          "pinned_members"
+        ],
+        "src/agent_comms/presentation.py::ThreadView": [
+          "activity",
+          "binding",
+          "goal_execution",
+          "last_seen",
+          "runtime",
+          "status",
+          "thread"
+        ],
+        "src/agent_comms/presentation.py::CoordinationSnapshot": [
+          "channel_order",
+          "channel_unread",
+          "channels",
+          "last_sent",
+          "read_marker_notice",
+          "show_archived",
+          "show_stopped",
+          "thread_unread",
+          "thread_unread_pending",
+          "threads",
+          "unread"
+        ],
+        "src/agent_comms/presentation.py::WireRevision": [
+          "expiry_tick",
+          "files"
+        ]
+      }
+    },
+    "tests": {
+      "parsed": 366,
+      "unparsed": [],
+      "consumers": [
+        {
+          "function": "tests/c4_coordination_installed_ui.py::main",
+          "calls": [
+            "coordination_snapshot",
+            "message_notifications_for_references",
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_channel_display.py::test_single_captured_basis_survives_mode_change_during_snapshot",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_channel_display.py::test_opt_in_user_input_activity_uses_same_member_scope",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_channel_display.py::test_alias_retag_and_tag_rename_reproject_without_new_wire_row",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_channel_display.py::test_human_marker_unread_and_own_alias_exclusion",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_channel_display.py::test_direct_rename_and_own_send_do_not_inflate_unread",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_channel_display.py::test_public_mark_read_and_append_share_one_viewer_boundary",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_channels.py::test_channel_list_order_is_persistent_and_independent_of_viewer",
+          "calls": [
+            "coordination_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_channels.py::test_membership_notices_follow_exact_membership_and_do_not_wake",
+          "calls": [
+            "coordination_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_channels.py::test_channel_pins_persist_and_partition_existing_order",
+          "calls": [
+            "coordination_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_history_view_declaration.py::test_ordinary_coordination_snapshot_exposes_actual_active_channel_participant",
+          "calls": [
+            "coordination_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_outbound_transcript_source.py::test_original_target_handling_revokes_open_sender_read_without_new_message",
+          "calls": [
+            "message_notifications_for_references"
+          ]
+        },
+        {
+          "function": "tests/test_read_ledger.py::test_bounded_page_marks_only_shown_messages",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_read_ledger.py::test_displayed_message_is_read_in_every_projection",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_read_ledger.py::test_any_mode_expansion_cannot_read_unshown_message_in_same_conversation",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_read_ledger.py::test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_read_ledger.py::test_replaced_bus_cannot_inherit_sequence_read_facts",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_read_ledger.py::test_partial_paints_share_one_basis_across_read_progress",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_s4_read_characterization.py::test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_thread_unread.py::test_reply_counts_are_persistent_human_read_positions",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_thread_unread.py::test_idle_observation_does_not_reparse_transcripts_and_append_is_incremental",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_thread_unread.py::test_new_process_uses_reply_index_without_reparsing_history",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_thread_unread.py::test_current_index_does_not_contend_with_an_open_previous_ui",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_thread_unread.py::test_reply_index_rebuilds_after_source_replacement",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_thread_unread.py::test_corrupt_derived_index_rebuilds_from_transcript",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_thread_unread.py::test_open_views_share_one_incremental_index_without_sharing_markers",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_thread_unread.py::test_partial_tail_and_replaced_source_do_not_lose_replies",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_thread_unread.py::test_rename_preserves_reads_and_fresh_fork_does_not_count_parent_history",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_thread_unread.py::test_old_or_invalid_checkpoint_does_not_acknowledge_new_source",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_thread_unread.py::test_reopen_wire_does_not_reuse_cancelled_index_owner",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_threads_scaling.py::test_mounted_coordination_snapshot_reopens_without_scanning_bus",
+          "calls": [
+            "coordination_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_threads_scaling.py::test_mounted_activity_rebuilds_after_bus_replacement_or_damaged_checkpoint",
+          "calls": [
+            "coordination_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_user_view_mark_read.py::test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_view_unread.py::test_channel_view_counts_are_not_agent_delivery_counts",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_view_unread.py::test_any_mode_expansion_keeps_unpainted_dm_unread",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_view_unread.py::test_any_mode_ack_covers_only_the_painted_participant_basis",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_view_unread.py::test_any_mode_rejects_stale_painted_page_after_participant_joins",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_view_unread.py::test_any_mode_mark_keeps_captured_basis_if_registry_changes_during_write",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_view_unread.py::test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_viewer_snapshot_index.py::test_reopened_viewer_snapshot_decodes_only_appended_rows",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_viewer_snapshot_index.py::test_display_checkpoint_rebuilds_but_bus_replacement_is_refused",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_viewer_snapshot_index.py::test_append_between_revision_and_opened_bus_boundary_uses_captured_records",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_viewer_snapshot_index.py::test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        },
+        {
+          "function": "tests/test_visibility_views.py::test_stopped_and_archived_are_explicit_view_filters",
+          "calls": [
+            "viewer_snapshot"
+          ]
+        }
+      ]
+    },
+    "tools": {
+      "parsed": 54,
+      "unparsed": [],
+      "consumers": []
+    }
+  },
+  "limits": "Calls are lexical callee names, not receiver/runtime resolution. Related declarations, reads, writes and receiver identities were source-read. No dynamic behavior claim."
+}
