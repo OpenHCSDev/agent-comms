@@ -63,3 +63,13 @@ qualified owned production in #633 1a05c7e9. The three-file production
 scope remains31 added/9 deleted. No SDK, package, App, or native run is
 repeated; all prior loans remain closed. Exact final-head ratchet success
 is required before parent merge.
+
+The first main-base run37204949970 failed at83d08bcd: inherited pre-final
+#637 source would restore LongBooleanChain and foreign absence probes in
+optional_awareness_projection.py/wake_injection.py. Its original log is
+retained unchanged. Normal main e3da159a was joined, preserving final #637
+owner migrations and current #643 publisher. No manual source resolution
+was needed. All three owned #640 production files remain byte-identical
+to83d08bcd; against current main the complete production delta is exactly
+these three files31 additions/9 deletions. The previously installed
+qualification covers those unchanged methods, not newly rerun main.
