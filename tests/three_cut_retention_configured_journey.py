@@ -117,6 +117,7 @@ async def condition_application(stage,package,original_python,selected_condition
                     SDK_child_binding=True,installed_source_in_actual_SDK_request=True,
                     installed_narrative_source_evaluated=installed['narrative_source']['evaluated'],
                     constructed_source_prefix=installed['constructed_prefix'],
+                    full_history_sdk_admission=construction['full_history_sdk_admission'],
                     canonical_request_budget_and_terminal=True,distinct_answer=True,new_original_inputs=1,
                     model_steps=len(measured['model_steps']),model_recall_evaluated=False,
                     final_HTTP_bytes_evaluated=False)

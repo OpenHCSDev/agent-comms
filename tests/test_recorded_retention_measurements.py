@@ -1426,7 +1426,8 @@ const manifest=MANIFEST;
 for (const original of [source,undefined]) {
     const restore=armInstalledNativeCondition(session,{condition:'bounded',
         source_witness:witness,context_sha256:'c'.repeat(64),agent_messages:prefix,
-        narrative_source:original,manifest}, OUTPUT,inputId);
+        narrative_source:original,manifest,
+        uncompacted_selection:{kind:'journal',path:witness.sessionFile,entries:['source']}}, OUTPUT,inputId);
     const messages=[...prefix,{role:'user',inputId,content:'Distinct input'}];
     assert.equal(await agent.transformContext(messages),messages);
     callback({type:'agent_end'});
@@ -1437,17 +1438,20 @@ for (const original of [source,undefined]) {
 '''.replace('MODULE', json.dumps(module.as_uri())).replace('OUTPUT', json.dumps(str(output))).replace(
             'WITNESS', json.dumps(FieldCodec.encode(NativeWitness(self.identity.session_id,
                 str(self.session), 'source', 'source', FileRevision.from_stat(self.session.stat()))))).replace(
-            'MANIFEST', json.dumps(FieldCodec.encode(NativeContextManifestData('counter', ()))))
+            'MANIFEST', json.dumps(NativeContextManifestData('counter', ()).to_wire()))
         completed = subprocess.run(['node', '--input-type=module', '-e', script],
                                    capture_output=True, text=True, check=True)
         self.assertEqual(completed.stderr, '')
-        applications = tuple(FieldCodec.decode(RecordedConditionInstallation, row)
+        applications = tuple(RecordedConditionInstallation.from_wire(row)
             for row in map(json.loads, output.read_text().splitlines())
             if row['stage'] == 'installed-transform-applied')
         self.assertEqual(applications[0].narrative_source, FileProvenance('original-summary', 'b' * 64))
         self.assertIsNone(applications[1].narrative_source)
         self.assertEqual(applications[0].construction_manifest, NativeContextManifestData('counter', ()))
         self.assertEqual(applications[1].construction_manifest, applications[0].construction_manifest)
+        self.assertEqual(applications[0].uncompacted_selection,
+            JournalProvenance(str(self.session), ('source',)))
+        self.assertEqual(applications[1].uncompacted_selection, applications[0].uncompacted_selection)
 
     def test_installed_source_uses_original_witness_ancestry_and_request(self):
         # Installation must precede this input on the same source, and bind its
@@ -1476,8 +1480,8 @@ for (const original of [source,undefined]) {
             (), 'counter', request_id='original-request')
         installed = RecordedConditionInstallation('installed-transform-applied', probe.input_id,
             'recent-only', witness, 'b' * 64, 2, 'c' * 64, 3, 1, 'd' * 64)
-        row = FieldCodec.encode(installed)
-        self.assertEqual(FieldCodec.decode(RecordedConditionInstallation, row), installed)
+        row = installed.to_wire()
+        self.assertEqual(RecordedConditionInstallation.from_wire(row), installed)
         conversion = {'stage': 'bounded-conversion-observed', 'request_id': manifest.request_id,
             'session_id': self.identity.session_id, 'input_id': probe.input_id,
             'agent_messages_sha256': installed.agent_messages_sha256,
@@ -1518,7 +1522,7 @@ for (const original of [source,undefined]) {
                 return SegmentManifest(TranscriptSegment, refs, 'e' * 64, 200, 2, parts)
             constructed = NativeContextManifestData('counter', (group((first, second)),))
             acquired = replace(installed, construction_manifest=constructed)
-            source_record = FieldCodec.encode(acquired)
+            source_record = acquired.to_wire()
             # A fresh input can split/extend original groups without changing
             # their complete ordered message values. Original coordinates stay.
             request = replace(manifest, segments=(group((first,), actual_refs),
@@ -1526,7 +1530,7 @@ for (const original of [source,undefined]) {
             def partition_observed(selected_request=request, selected=acquired, rows=None):
                 return probe.installed_condition(evidence, branch, context, serialized,
                     selected_request, rows if rows is not None else
-                    (FieldCodec.encode(selected), conversion, restored), parent=evidence, texts=())
+                    (selected.to_wire(), conversion, restored), parent=evidence, texts=())
             partitioned = partition_observed()
             prefix = partitioned['constructed_prefix']
             self.assertTrue(prefix['evaluated'])
@@ -1537,7 +1541,7 @@ for (const original of [source,undefined]) {
             self.assertEqual(source_prefix['construction_coordinates'], ((0, 0), (0, 1)))
             self.assertEqual(source_prefix['request_coordinates'], ((0, 0), (1, 0)))
             self.assertIs(source_prefix['message_binding'], partitioned['message_binding'])
-            self.assertEqual(FieldCodec.decode(RecordedConditionInstallation, source_record), acquired)
+            self.assertEqual(RecordedConditionInstallation.from_wire(source_record), acquired)
             for changed_parts in ((second, first, fresh), (first, fresh),
                                   (first, replace(second, sha256='a' * 64), fresh),
                                   (first, replace(second, utf8_bytes=second.utf8_bytes + 1), fresh)):
@@ -1564,6 +1568,49 @@ for (const original of [source,undefined]) {
                 replace(constructed, segments=())))
             self.assertTrue(empty['constructed_prefix']['preserved'])
             self.assertEqual(empty['constructed_prefix']['observations'][0]['constructed_messages'], 0)
+            # The SDK owns full-history membership; an admitted retained
+            # subset and even the same native message count are insufficient.
+            # The arm label never decides this observation.
+            full_ref = JournalProvenance(str(self.session), ('prior', 'source'))
+            full_source = replace(acquired, entry_selection=full_ref,
+                                  uncompacted_selection=full_ref)
+            admitted = RecordedNativeProbe.request_budget((RequestProgress(
+                'original-request', self.identity.session_id, probe.input_id,
+                1, 2, '3', 1, 0, 0, 0, 'budget_admission',
+                model=ReportedModel(provider='original', id='model', context_window=100, max_tokens=20),
+                estimated_input_tokens=80, available_tokens=20,
+                admitted_output_tokens=20, minimum_output_tokens=1),))
+            complete_history = partition_observed(selected=full_source)
+            history = RecordedNativeProbe.full_history_admission(complete_history, admitted)
+            self.assertTrue(history['evaluated'])
+            self.assertTrue(history['admitted_full_history'])
+            self.assertIs(history['request_budget'], admitted)
+            self.assertIs(history['constructed_prefix'], complete_history['constructed_prefix'])
+            for label in Condition:
+                same_source = partition_observed(selected=replace(full_source, condition=label.value))
+                self.assertTrue(RecordedNativeProbe.full_history_admission(
+                    same_source, admitted)['admitted_full_history'])
+            smaller = partition_observed(selected=replace(full_source,
+                entry_selection=JournalProvenance(str(self.session), ('source',))))
+            smaller_history = RecordedNativeProbe.full_history_admission(smaller, admitted)
+            self.assertTrue(smaller_history['evaluated'])
+            self.assertFalse(smaller_history['admitted_full_history'])
+            altered = partition_observed(replace(request, segments=(group((second, first, fresh), actual_refs),)),
+                                         selected=full_source)
+            self.assertFalse(RecordedNativeProbe.full_history_admission(
+                altered, admitted)['admitted_full_history'])
+            for unavailable, budget in ((partitioned, admitted), (missing_binding, admitted),
+                                        (complete_history, {'evaluated': False})):
+                self.assertFalse(RecordedNativeProbe.full_history_admission(unavailable, budget)['evaluated'])
+            # A present bad full-history reference is refused even if the
+            # chosen entry reference is missing; absence cannot hide corruption.
+            for invalid in (JournalProvenance(str(self.session), ('source', 'prior')),
+                            JournalProvenance(str(self.session), ('source', 'source')),
+                            JournalProvenance(str(self.session), ('input',)),
+                            JournalProvenance(str(self.root / 'other'), ('prior',))):
+                with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                    partition_observed(selected=replace(full_source, entry_selection=None,
+                                                         uncompacted_selection=invalid))
             for wrong in (replace(constructed, request_id='another-request'),
                           replace(constructed, segments=(group((first, second),
                               (PreviewProvenance(replace(self.identity, session_id='other'), 'c' * 64),)),)),
@@ -1580,9 +1627,9 @@ for (const original of [source,undefined]) {
             source = {'evaluated': True, 'summary': 'Original λ narrative',
                 'source': FieldCodec.encode(reference), 'session': FieldCodec.encode(self.identity),
                 'checkpoint_session': FieldCodec.encode(self.identity), 'native_entry_id': 'commit'}
-            source_row = FieldCodec.encode(with_source)
+            source_row = with_source.to_wire()
             texts = (json.dumps(source['summary'], ensure_ascii=False),)
-            self.assertEqual(FieldCodec.decode(RecordedConditionInstallation, source_row), with_source)
+            self.assertEqual(RecordedConditionInstallation.from_wire(source_row), with_source)
             with patch.object(RecordedNativeCheckpoint, 'fork_condition_acquired', return_value=source) as acquired:
                 def observed(rows, captured_texts=texts):
                     return selected_probe.installed_condition(evidence, branch, context, serialized,
@@ -1599,9 +1646,9 @@ for (const original of [source,undefined]) {
                 for wrong in (replace(reference, path=str(self.root / 'other.json')),
                               replace(reference, sha256='f' * 64)):
                     with self.subTest(reference=wrong), self.assertRaisesRegex(ValueError, 'another original narrative'):
-                        observed((FieldCodec.encode(replace(installed, narrative_source=wrong)), conversion, restored))
+                        observed((replace(installed, narrative_source=wrong).to_wire(), conversion, restored))
                     with self.subTest(partial_reference=wrong), self.assertRaisesRegex(ValueError, 'another original narrative'):
-                        observed((row, FieldCodec.encode(replace(installed, narrative_source=wrong)), conversion, restored))
+                        observed((row, replace(installed, narrative_source=wrong).to_wire(), conversion, restored))
                 with self.assertRaisesRegex(ValueError, 'does not contain'):
                     observed((source_row, conversion, restored), ('"Different narrative"',))
                 # Neither a constructor label nor a partial collection of
@@ -1620,15 +1667,15 @@ for (const original of [source,undefined]) {
                     ((), (), ('prior', 'source'))):
                 observed = replace(installed, entry_selection=JournalProvenance(
                     str(self.session), selection))
-                selected_row = FieldCodec.encode(observed)
-                self.assertEqual(FieldCodec.decode(RecordedConditionInstallation, selected_row), observed)
+                selected_row = observed.to_wire()
+                self.assertEqual(RecordedConditionInstallation.from_wire(selected_row), observed)
                 result = probe.installed_condition(evidence, branch, context, serialized,
                     manifest, (selected_row, conversion, restored), parent=evidence, texts=())
                 observation, = result['entry_selection']['observations']
                 self.assertTrue(observation['evaluated'])
                 self.assertEqual(observation['selected_message_entries'], selected)
                 self.assertEqual(observation['unselected_message_entries'], unselected)
-                self.assertEqual(observation['all_original_message_entries_selected'], not unselected)
+                self.assertFalse(observation['uncompacted_selection']['evaluated'])
                 # Original selection remains known even without matching request bytes.
                 no_request = probe.installed_condition(evidence, branch, context,
                     {'evaluated': False}, None, (selected_row, restored), parent=evidence, texts=())
@@ -1652,6 +1699,7 @@ for (const original of [source,undefined]) {
                     'probe_input_presence': {'evaluated': False},
                     'construction': {'condition_application': {'evaluated': False},
                     'condition_installation': installation, 'request_budget': {'evaluated': False},
+                    'full_history_sdk_admission': {'evaluated': False},
                     'source_coverage': {'full_context_capacity': {'evaluated': False}}}}}
             for installation, preserved in ((partitioned, True), (changed, False)):
                 metrics = scored.condition_construction(original(installation), {})['constructed_source_prefix']
@@ -1659,6 +1707,22 @@ for (const original of [source,undefined]) {
                 self.assertEqual(metrics['preserved_rounds'], ('r1',) if preserved else ())
                 self.assertEqual(metrics['changed_rounds'], () if preserved else ('r1',))
                 self.assertFalse(scored.condition_construction(original(installation), {})['evaluated'])
+            for installation, measured_history, available, admitted_round in (
+                    (complete_history, history, True, True),
+                    (smaller, smaller_history, True, False),
+                    (partitioned, {'evaluated': False}, False, False)):
+                originals = original(installation)
+                originals['r1']['construction']['full_history_sdk_admission'] = measured_history
+                result = scored.condition_construction(originals, {})['full_history_sdk_admission']
+                self.assertEqual(result['evaluated'], available)
+                self.assertEqual(result['admitted_rounds'], ('r1',) if admitted_round else ())
+                self.assertEqual(result['not_full_history_rounds'],
+                                 ('r1',) if available and not admitted_round else ())
+                extra_round = replace(scenario, rounds=(*scenario.rounds,
+                    RecallRound('r2', ('later',), (Question('q2', 'Later?', 'source', 'oracle'),))))
+                self.assertEqual(extra_round.score(Condition.RECENT_ONLY, RecordedAnswers({}))
+                    .condition_construction(originals, {})['full_history_sdk_admission']['unavailable_rounds'],
+                    ('r2',) if available else ('r1', 'r2'))
             for installation in (complete, partial, no_request):
                 construction = scored.condition_construction(original(installation), {})
                 self.assertTrue(construction['recorded_constructor_selection']['evaluated'])
@@ -1672,8 +1736,8 @@ for (const original of [source,undefined]) {
             for selection in (('source', 'prior'), ('source', 'source'), ('input',)):
                 with self.subTest(selection=selection), self.assertRaisesRegex(ValueError, 'ordered subset'):
                     probe.installed_condition(evidence, branch, context, serialized, manifest,
-                        (FieldCodec.encode(replace(installed, entry_selection=JournalProvenance(
-                            str(self.session), selection))), conversion, restored), parent=evidence, texts=())
+                        (replace(installed, entry_selection=JournalProvenance(
+                            str(self.session), selection)).to_wire(), conversion, restored), parent=evidence, texts=())
             with self.assertRaises(ValueError):
                 probe.installed_condition(evidence, branch, context, serialized, manifest,
                     (FieldCodec.encode(replace(installed, entry_selection=JournalProvenance(
@@ -1709,7 +1773,8 @@ for (const original of [source,undefined]) {
             'construction': {'condition_application': {'evaluated': True},
             'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}, 'narrative_source': {'evaluated': False}, 'constructed_prefix': {'evaluated': False}},
             'request_budget': {'evaluated': True},
-            'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
+            'full_history_sdk_admission': {'evaluated': False},
+                    'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
         partial = scored.condition_construction({identities[0]: original}, unavailable)
         self.assertFalse(partial['evaluated'])
         self.assertEqual(partial['bounded_sdk_application']['available_rounds'], identities[:1])
@@ -1747,7 +1812,8 @@ for (const original of [source,undefined]) {
             'evaluated': False, 'transform': {'evaluated': True}},
             'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}, 'narrative_source': {'evaluated': False}, 'constructed_prefix': {'evaluated': False}},
             'request_budget': {'evaluated': True},
-            'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
+            'full_history_sdk_admission': {'evaluated': False},
+                    'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
         self.assertEqual(scored.condition_construction(
             {**evidence, identities[0]: partial_application}, delivered)
             ['bounded_sdk_application']['unavailable_rounds'], identities[:1])
@@ -1786,6 +1852,28 @@ for (const original of [source,undefined]) {
         _, captured = probe.serialized_construction(data, manifest)
         expected = hashlib.sha256(('['+first[1:-1]+','+second[1:-1]+']').encode()).hexdigest()
         self.assertEqual(captured['provider_messages_sha256'],expected)
+        # Debugger return-by-value can expand executable tool callbacks. Exact
+        # original message bytes remain a distinct question, while whole SDK
+        # value disagreement must still refuse rather than be swallowed.
+        tools = '[{"name":"authored-tool"}]'
+        tool = segment(ToolCatalogSegment, tools,
+                       tools=({'name': 'authored-tool', 'execute': {}},))
+        tool_data = replace(data, segments=(*data.segments, tool))
+        tool_manifest = replace(manifest, segments=tuple(s.measured_manifest() for s in tool_data.segments))
+        tool_probe = replace(probe, sdk_segment_bytes=self.artifact(
+            'tool-segments.json', (system, first, second, tools)))
+        texts, acquired = tool_probe.serialized_segments(tool_data, tool_manifest)
+        self.assertTrue(acquired['evaluated'])
+        self.assertEqual(tool_probe.serialized_messages(tool_data, texts)['provider_messages_sha256'], expected)
+        with self.assertRaisesRegex(ValueError, 'segment value differs'):
+            tool_probe.serialized_construction(tool_data, tool_manifest)
+        with self.assertRaisesRegex(ValueError, 'segment value differs'):
+            tool_probe.serialized_messages(replace(tool_data, segments=(
+                tool_data.segments[0], replace(tool_data.segments[1], messages=()),
+                *tool_data.segments[2:])), texts)
+        with self.assertRaisesRegex(ValueError, 'bytes differ'):
+            tool_probe.serialized_segments(replace(tool_data, segments=(
+                *tool_data.segments[:-1], replace(tool, sha256='f' * 64))), tool_manifest)
         applied = {'agent_messages_sha256':'c' * 64}
         conversion = {'stage':'bounded-conversion-observed','request_id':manifest.request_id,
             'session_id':self.identity.session_id,'input_id':probe.input_id,

@@ -91,6 +91,10 @@ if (output && packageRoot) {
         url: pathToFileURL(`${packageRoot}/dist/core/turn-context.js`).href,
         lineNumber: line(source.readFileSync(`${packageRoot}/dist/core/turn-context.js`, 'utf8').split('\n'),
             "    observation(requestId) {"),
+        // A constructor now uses the same manifest owner for a legitimate
+        // preview. This reader observes only the original request publication,
+        // selected by that owner's request ID, not every preview acquisition.
+        condition: 'requestId !== undefined',
     });
     // Borrow the actual emitted event after observation() has returned. This
     // preserves its selected publication values without calling the producer
@@ -207,7 +211,10 @@ if (output && packageRoot) {
                 // Do not ask for a later preview or reconstruct provider context.
                 const original = await post('Debugger.evaluateOnCallFrame', {
                     callFrameId: frame.callFrameId,
-                    expression: '({context:this.full(), serialized:this.segments.map(segment=>JSON.stringify(segment.value))})',
+                    // Inspector return-by-value expands SDK tool callbacks
+                    // into objects; they are not provider JSON. Cross the
+                    // original JSON publication boundary before inspection.
+                    expression: '({context:JSON.parse(JSON.stringify(this.full())), serialized:this.segments.map(segment=>JSON.stringify(segment.value))})',
                     returnByValue: true,
                 });
                 if (original.exceptionDetails) throw new Error('Original SDK capture unavailable');

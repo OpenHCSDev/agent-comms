@@ -437,7 +437,8 @@ async function observeConditionLoop(session,pkg,root,compaction,before) {
     const installed=process.argv.includes('--installed-condition-loop');
     const originalTransform=session.agent.transformContext;
     const originalMessages=Array.from(session.storedContext.messages(session.agent));
-    const constructions=installed ? await constructNativeConditions(session,pkg,source) : {};
+    const chosen=process.argv.includes('--full-history-partition') ? ['full-context'] : undefined;
+    const constructions=installed ? await constructNativeConditions(session,pkg,source,chosen) : {};
     const selections=installed ? Object.values(constructions) : [undefined];
     const results=[];
     try {
