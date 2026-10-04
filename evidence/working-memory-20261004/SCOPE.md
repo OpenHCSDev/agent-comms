@@ -206,3 +206,19 @@ and authenticated source-read behavior. Explorer membership for imported
 historical sources and final installed worker/UI/schema qualification remain
 unfinished; the references are not reported as currently supplied instructions.
 Focused end validation follows the coherent source/main/artifact union.
+
+Normal joins now include builder6492efaf068 and current main62b0f706. Matching
+native manifest is7a2e4aab; its three producers remain fcbd-byte-identical.
+Original SDK six-case preview acceptance belongs to sdk01-terminal.json under
+evidence/working-memory-native-20261004 (0.989441778s, zero provider/native input).
+It does not establish a committed provider request or the installed W6 worker.
+
+The complete import/read source batch qualified17 distinct cases:16 passed in
+the original batch; one oracle matched the generic import warning as well as
+the prefix of historical wording. The corrected exact-wording case passed
+alone in0.29s, without repeating the other16. Both raw outputs are retained in
+codex-source-receipt.json. New record-source cases verify receipt/FieldCodec
+round-trip, exact historical roles/wording, guardian exclusion, append tolerance,
+changed-record refusal and selected-cut membership. Original generated private
+test directories were retired; no process, native input or provider was launched.
+After mapping:324modules/0omissions/110 lexical sites, codex-after.json.

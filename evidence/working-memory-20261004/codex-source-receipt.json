@@ -1,0 +1,28 @@
+{
+  "source": "68aaeaa5e2bd9c584fdde6a0dd93131365a6e4a5",
+  "main": "62b0f706891ad4517fa2fbe466902ebec15823d4",
+  "builder_join": "2efaf068c6e259112692b3d3b42d6ec61ce3b855",
+  "native_manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+  "scope": "Source-only original import producer, durable historical references/receipt and authenticated record reader; no imported Explorer/installed/committed request claim",
+  "batch": {
+    "passed": 16,
+    "failed": 1,
+    "seconds": 0.62,
+    "failure": "Assertion used generic Historical developer prefix, also present in honest import warning; historical content itself was absent from current messages."
+  },
+  "corrected_only_affected_case": {
+    "passed": 1,
+    "seconds": 0.29
+  },
+  "qualified_distinct_cases": 17,
+  "external_requests": 0,
+  "native_inputs": 0,
+  "schema": "Annotation tables 9->10 remain unreleased; original stopped carry still required before activation",
+  "keepers": {
+    "codex-source-sanity.log": "48d7442486011656a78a0ea8f52faab05359c0b29796cd5d7b74e93688106800",
+    "codex-authenticated-record-final.log": "a132c74d7b7c74739e7571fb00cd0a8be848d9686b936586ce31a93451c151b2",
+    "codex-before.json": "3d8408e7e94c585f2be51c543d2b9738ff8d2c8335586638eb3cf21c7253cda2",
+    "codex-after.json": "ca8cd01dfc2eda70350be47d1c774b24296064bd4889279199c3a39fc2578d25"
+  },
+  "owned_generated_fixture_dirs_removed": true
+}

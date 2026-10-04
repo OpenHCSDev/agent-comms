@@ -1,0 +1,52 @@
+F................                                                        [100%]
+=================================== FAILURES ===================================
+_ test_codex_instructions_are_authenticated_historical_references_not_current_messages _
+
+tmp_path = PosixPath('/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/codex-historical-source-sanity/tmp/test_codex_instructions_are_au0')
+
+    def test_codex_instructions_are_authenticated_historical_references_not_current_messages(tmp_path):
+        source = tmp_path / "historical.jsonl"
+        instructions = [
+            {"type": "message", "role": "system", "content": "Historical base π.\n"},
+            {"type": "message", "role": "developer", "content": [
+                {"type": "input_text", "text": "Historical developer λ.\n"}]},
+        ]
+        records = [{"type": "session_meta", "payload": {"id": "original", "cwd": str(tmp_path)}},
+                   {"type": "compacted", "payload": {"message": "Original summary",
+                     "replacement_history": instructions + [
+                         {"type": "message", "role": "user", "content": "Original question"}],
+                     "guardian_history": [{"type": "message", "role": "developer",
+                                           "content": "Private guardian wording"}]}},
+                   {"type": "response_item", "payload": {
+                       "type": "message", "role": "assistant", "content": "Original answer"}}]
+        source.write_text("".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records))
+        original = source.read_bytes()
+        comms = wire(tmp_path / "wire")
+        receipt = comms.threads.import_thread(source, ImportFormat.CODEX, name="historical")
+        assert source.read_bytes() == original
+        refs = receipt.historical_instructions
+        assert tuple(ref.role for ref in refs) == ("system", "developer")
+        assert all(isinstance(ref, CodexRolloutProvenance) for ref in refs)
+        assert tuple(ref.public_text(comms) for ref in refs) == (
+            "Historical base π.\n", "Historical developer λ.\n")
+        assert FieldCodec.decode(ImportReceipt, receipt.to_wire()) == receipt
+        saved = [json.loads(line) for line in Path(receipt.session_file).read_text().splitlines()]
+        metadata = next(record["data"] for record in saved if record["type"] == "custom")
+        assert FieldCodec.decode(tuple[CodexRolloutProvenance, ...],
+                                 metadata["historical_instructions"]) == refs
+        messages = json.dumps([record for record in saved if record["type"] == "message"], ensure_ascii=False)
+>       assert "Historical base" not in messages and "Historical developer" not in messages
+E       assert ('Historical base' not in '[{"type": "...tal": 0}}}}]'
+E         
+E         'Historical base' is contained here:
+E           al": 0}}}}] and 'Historical developer' not in '[{"type": "...tal": 0}}}}]'
+E         
+E         'Historical developer' is contained here:
+E           mported.\nHistorical developer/system sources are retained as references, not current instructions."}], "timestamp": 1791129164562}}, {"type": "message", "id": "b02251a4281f413b", "parentId": "5f928cb0bd96435e", "timestamp": "2026-10-04T15:52:44.562119+00:00", "message": {"role": "user", "content": [{"type": "text", "text": "Original question"}], "timestamp": 1791129164562}}, {"type": "message", "id": "f7a25f8f42874632", "parentId": "b02251a4281f413b", "timestamp": "2026-10-04T15:52:44.562119+00:00", "message": {"role": "assistant", ...
+E         
+E         ...Full output truncated (2 lines hidden), use '-vv' to show)
+
+tests/test_importing.py:49: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_importing.py::test_codex_instructions_are_authenticated_historical_references_not_current_messages
+1 failed, 16 passed in 0.62s

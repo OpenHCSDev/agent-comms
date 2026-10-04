@@ -46,7 +46,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
     assert FieldCodec.decode(tuple[CodexRolloutProvenance, ...],
                              metadata["historical_instructions"]) == refs
     messages = json.dumps([record for record in saved if record["type"] == "message"], ensure_ascii=False)
-    assert "Historical base" not in messages and "Historical developer" not in messages
+    assert "Historical base π." not in messages and "Historical developer λ." not in messages
     assert "Private guardian wording" not in Path(receipt.session_file).read_text()
     assert "Original question" in messages and "Original answer" in messages
     # Appending future turns preserves the original exact record reference.
