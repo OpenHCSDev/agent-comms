@@ -68,7 +68,8 @@ class WorkingMemoryAnnotations:
                 raise ValueError("Classifier request disposition changed before refusal")
             AnnotationRequestsRow.update(db, where="id=?", parameters=(original.id,), outcome=outcome)
 
-    def correct(self, original: ModelLabel, answer, author):
+    def correct(self, original: ModelLabel, answer, author, registry):
+        registry.require(author.resolved(registry).name).role.require_user()
         with self.session.transaction() as db:
             key = self.address(original.span, original.question, original.classifier)
             rows = tuple(SpanAnnotationsRow.select(db,

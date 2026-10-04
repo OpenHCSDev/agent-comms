@@ -19,6 +19,10 @@ class Classifier(DeclaredFamily, affix="Classifier"):
     @abstractmethod
     def version(cls) -> ClassifierVersion: ...
 
+    @classmethod
+    @abstractmethod
+    async def classify(cls, request, api_key: str): ...
+
 
 @dataclass(frozen=True)
 class ClassifierVersion:
@@ -127,10 +131,11 @@ class JevChoice:
     confidence: float
     probabilities: dict[str, float]
 
-    def label(self, span: ContextSpan, question: type[SpanQuestion], response: JevResponse) -> ModelLabel:
-        family = question.answer_family
-        return ModelLabel(span, QuestionVersion.current(question), family.decode(self.choice),
-            JevClassifier.version(), tuple(AnswerProbability(family.decode(name), probability)
+    def label(self, span: ContextSpan, question: QuestionVersion,
+              classifier: ClassifierVersion, response: JevResponse) -> ModelLabel:
+        family = question.question.answer_family
+        return ModelLabel(span, question, family.decode(self.choice),
+            classifier, tuple(AnswerProbability(family.decode(name), probability)
                 for name, probability in self.probabilities.items()), self.confidence,
             response.id, response.model)
 
@@ -159,16 +164,26 @@ class JevClassifier(Classifier):
         return ClassifierVersion(cls, "typesafe/jev-1.13")
 
     @classmethod
-    def request(cls, state: dict[str, object], questions: tuple[type[SpanQuestion], ...]):
-        return {"model": cls.version().pin, "state": state,
-                "questions": {question.declared_name: question.declaration() for question in questions}}
+    def decode(cls, original: object, request):
+        response = FieldCodec.decode(JevResponse, original)
+        question = request.question.question.declared_name
+        if set(response.answers) != {question}:
+            raise ValueError("Classifier response differs from the original requested questions")
+        request.classifier.require_returned_model(response.model)
+        return response, response.answers[question].label(
+            request.span, request.question, request.classifier, response)
 
     @classmethod
-    def decode(cls, original: object, span: ContextSpan,
-               questions: tuple[type[SpanQuestion], ...]) -> tuple[ModelLabel, ...]:
-        response = FieldCodec.decode(JevResponse, original)
-        if set(response.answers) != {question.declared_name for question in questions}:
-            raise ValueError("Classifier response differs from the original requested questions")
-        cls.version().require_returned_model(response.model)
-        return tuple(response.answers[question.declared_name].label(span, question, response)
-                     for question in questions)
+    async def classify(cls, request, api_key: str):
+        from urllib.request import Request, urlopen
+        from .coordinator import Coordination
+
+        def send():
+            external = Request(cls.endpoint, data=json.dumps(request.payload()).encode(),
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                method="POST")
+            with urlopen(external, timeout=30) as response:
+                return cls.decode(json.load(response), request)
+
+        # The existing resource worker joins cancellation through HTTP close.
+        return await Coordination.run_worker(send)

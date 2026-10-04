@@ -1,0 +1,1732 @@
+{
+  "revision": "2a7841a4903db114df0fa0b2f8f71e1fac362628",
+  "modules": 317,
+  "omissions": [],
+  "sites": [
+    {
+      "file": "src/agent_comms/acp.py",
+      "line": 91,
+      "declaration": "CommsAgent",
+      "bases": [
+        "SessionEffects",
+        "InputEffects",
+        "TurnEffects"
+      ]
+    },
+    {
+      "file": "src/agent_comms/acp.py",
+      "line": 494,
+      "consumer": "CommsAgent"
+    },
+    {
+      "file": "src/agent_comms/acp.py",
+      "line": 129,
+      "consumer": "RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/acp.py",
+      "line": 407,
+      "consumer": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/acp.py",
+      "line": 371,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/acp.py",
+      "line": 395,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/acp.py",
+      "line": 407,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/agent_event_updates.py",
+      "line": 43,
+      "consumer": "CommsAgent"
+    },
+    {
+      "file": "src/agent_comms/agent_event_updates.py",
+      "line": 190,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/agent_event_updates.py",
+      "line": 139,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/agent_events.py",
+      "line": 59,
+      "declaration": "ContextObserved",
+      "bases": [
+        "AgentEvent"
+      ]
+    },
+    {
+      "file": "src/agent_comms/agent_events.py",
+      "line": 388,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/attempt_recovery.py",
+      "line": 44,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/attempt_recovery.py",
+      "line": 52,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/attempt_recovery.py",
+      "line": 108,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/attempt_recovery.py",
+      "line": 151,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/attempt_recovery.py",
+      "line": 158,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/attempt_recovery.py",
+      "line": 203,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/backend.py",
+      "line": 235,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/channel_coding_tools.py",
+      "line": 77,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/channel_coding_tools.py",
+      "line": 131,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/channel_coding_tools.py",
+      "line": 126,
+      "consumer": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/channel_coding_tools.py",
+      "line": 126,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/claim_admission.py",
+      "line": 41,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/claim_admission.py",
+      "line": 70,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/claim_admission.py",
+      "line": 121,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/claim_admission.py",
+      "line": 168,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/claim_admission.py",
+      "line": 232,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/claim_admission.py",
+      "line": 338,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/claim_admission.py",
+      "line": 44,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/claim_admission.py",
+      "line": 124,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/claim_admission.py",
+      "line": 350,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/claim_admission.py",
+      "line": 396,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 90,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 122,
+      "consumer": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 122,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 153,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 191,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 189,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 198,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 236,
+      "consumer": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 236,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/cohort_schema.py",
+      "line": 531,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/cohort_schema.py",
+      "line": 533,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/compaction_publication.py",
+      "line": 68,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/compaction_publication.py",
+      "line": 46,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/compaction_publication.py",
+      "line": 143,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/compaction_publication.py",
+      "line": 73,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/compaction_publication.py",
+      "line": 121,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 195,
+      "consumer": "RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 159,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 186,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 218,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 233,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 278,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/config_options.py",
+      "line": 310,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordinated_runtime.py",
+      "line": 106,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordinated_runtime.py",
+      "line": 104,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordinated_runtime_schema.py",
+      "line": 50,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordinated_runtime_schema.py",
+      "line": 52,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_cohort.py",
+      "line": 234,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_cohort.py",
+      "line": 313,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_cohort.py",
+      "line": 328,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_cohort.py",
+      "line": 344,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_cohort.py",
+      "line": 368,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_cohort.py",
+      "line": 242,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 190,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 192,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 293,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 307,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 367,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 381,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 467,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 492,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 578,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 592,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 266,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 294,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 260,
+      "consumer": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 260,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 51,
+      "consumer": "AnnotationOutcome"
+    },
+    {
+      "file": "src/agent_comms/coordinator.py",
+      "line": 24,
+      "declaration": "Coordination",
+      "bases": []
+    },
+    {
+      "file": "src/agent_comms/coordinator.py",
+      "line": 71,
+      "consumer": "WorkingMemoryAnnotations"
+    },
+    {
+      "file": "src/agent_comms/cursor_owner.py",
+      "line": 49,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/cursor_publication.py",
+      "line": 62,
+      "consumer": "RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/cursor_publication.py",
+      "line": 92,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/cursor_publication.py",
+      "line": 112,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/cursor_publication.py",
+      "line": 105,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/cursor_publication.py",
+      "line": 110,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/durable_turn.py",
+      "line": 47,
+      "consumer": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/durable_turn.py",
+      "line": 47,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/goal_scheduler.py",
+      "line": 72,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/goal_scheduler.py",
+      "line": 170,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/goal_scheduler.py",
+      "line": 185,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/goal_scheduler.py",
+      "line": 189,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/goal_scheduler.py",
+      "line": 212,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/goal_scheduler.py",
+      "line": 238,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/goal_scheduler.py",
+      "line": 242,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/goal_scheduler.py",
+      "line": 263,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/goal_scheduler.py",
+      "line": 215,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/historical_native_inputs.py",
+      "line": 97,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 69,
+      "consumer": "RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 232,
+      "consumer": "self.runtime.background"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 287,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 344,
+      "consumer": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 213,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 344,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 365,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 395,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 513,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 609,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 116,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 396,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 405,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 416,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 610,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 624,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 239,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 573,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 271,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 632,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 245,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 260,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 265,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 277,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 51,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 54,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 56,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 57,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 67,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/messages.py",
+      "line": 77,
+      "consumer": "TaskAttachment"
+    },
+    {
+      "file": "src/agent_comms/messages.py",
+      "line": 116,
+      "consumer": "self.task.require_publication"
+    },
+    {
+      "file": "src/agent_comms/messaging.py",
+      "line": 64,
+      "consumer": "TaskAttachment"
+    },
+    {
+      "file": "src/agent_comms/messaging.py",
+      "line": 158,
+      "consumer": "TaskAttachment"
+    },
+    {
+      "file": "src/agent_comms/messaging.py",
+      "line": 171,
+      "consumer": "HumanConstraintPin"
+    },
+    {
+      "file": "src/agent_comms/native_input_owner.py",
+      "line": 152,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/native_prompt_binding.py",
+      "line": 44,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/native_prompt_binding.py",
+      "line": 46,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/native_prompt_binding.py",
+      "line": 110,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/native_prompt_binding.py",
+      "line": 115,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/native_prompt_binding.py",
+      "line": 121,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/native_prompt_binding.py",
+      "line": 196,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/native_prompt_binding.py",
+      "line": 214,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/native_prompt_binding.py",
+      "line": 223,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/native_prompt_binding.py",
+      "line": 226,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/native_session_prepare.py",
+      "line": 72,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/native_source_cursor.py",
+      "line": 33,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/native_source_cursor.py",
+      "line": 34,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/native_source_cursor.py",
+      "line": 40,
+      "consumer": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/native_source_cursor.py",
+      "line": 55,
+      "consumer": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/native_source_cursor.py",
+      "line": 70,
+      "consumer": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/native_source_cursor.py",
+      "line": 40,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/native_source_cursor.py",
+      "line": 55,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/native_source_cursor.py",
+      "line": 70,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 36,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 313,
+      "consumer": "TurnProgress"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 131,
+      "consumer": "TurnGoalAccount.reserve"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 161,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 279,
+      "consumer": "original.reserve"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 470,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 65,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 344,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 374,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 475,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 352,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 471,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 361,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 506,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 512,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 406,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 197,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 203,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 73,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 140,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_manual.py",
+      "line": 53,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 141,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 153,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owner_lifecycle.py",
+      "line": 342,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_admission.py",
+      "line": 106,
+      "consumer": "stage.reserve"
+    },
+    {
+      "file": "src/agent_comms/private_send_admission.py",
+      "line": 124,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_admission.py",
+      "line": 194,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_admission.py",
+      "line": 155,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_admission.py",
+      "line": 211,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 58,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 61,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 71,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 95,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 118,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 148,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 185,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 199,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 257,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 281,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 299,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 334,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 348,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 362,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/proven_source_coverage.py",
+      "line": 89,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/proven_source_coverage.py",
+      "line": 92,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/publisher.py",
+      "line": 186,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/publisher.py",
+      "line": 483,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/queued_input.py",
+      "line": 163,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 146,
+      "declaration": "RuntimeServer",
+      "bases": []
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 330,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 339,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 347,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 32,
+      "consumer": "RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 75,
+      "consumer": "RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 77,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 126,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 238,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 248,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 260,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 273,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 346,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 348,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 364,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 383,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 392,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 406,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 279,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/schedule_rules.py",
+      "line": 45,
+      "consumer": "self.inputs.runtime.background"
+    },
+    {
+      "file": "src/agent_comms/schedule_rules.py",
+      "line": 53,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/schedule_rules.py",
+      "line": 90,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 38,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 69,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 104,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 145,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 106,
+      "consumer": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 216,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 242,
+      "consumer": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 65,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 97,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 106,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 114,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 133,
+      "consumer": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 242,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 117,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 133,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 134,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 141,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 134,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 134,
+      "consumer": "journal.summaries.reserve"
+    },
+    {
+      "file": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 206,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 187,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_request.py",
+      "line": 25,
+      "consumer": "PrivateSendAdmission.reserve"
+    },
+    {
+      "file": "src/agent_comms/selected_session.py",
+      "line": 146,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_session.py",
+      "line": 177,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_session.py",
+      "line": 221,
+      "consumer": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/selected_session.py",
+      "line": 221,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_session.py",
+      "line": 226,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 256,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 284,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 325,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 287,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_turn.py",
+      "line": 299,
+      "consumer": "SelectedRequest.reserve"
+    },
+    {
+      "file": "src/agent_comms/selected_turn.py",
+      "line": 230,
+      "consumer": "SelectedRequest.reserve"
+    },
+    {
+      "file": "src/agent_comms/selected_write_authority.py",
+      "line": 43,
+      "consumer": "CommsAgent"
+    },
+    {
+      "file": "src/agent_comms/selected_write_plan.py",
+      "line": 206,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 51,
+      "consumer": "RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 180,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 181,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 195,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 196,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 207,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 244,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 275,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 308,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 351,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 363,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 202,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 221,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 224,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 338,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/session_lifecycle.py",
+      "line": 200,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/session_load.py",
+      "line": 44,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/session_load.py",
+      "line": 65,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 170,
+      "declaration": "TaskAttachment",
+      "bases": [
+        "DeclaredFamily"
+      ]
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 441,
+      "declaration": "HumanConstraintPin",
+      "bases": [
+        "ScopedTaskDeclaration"
+      ]
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 250,
+      "consumer": "TaskAttachment"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 255,
+      "consumer": "TaskAttachment"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 300,
+      "consumer": "TaskAttachment"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 523,
+      "consumer": "HumanConstraintPin"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 196,
+      "consumer": "HumanConstraintPin"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 405,
+      "consumer": "self.change.require_publication"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 501,
+      "consumer": "self.change.require_publication"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 342,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 189,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 461,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 216,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 420,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/transcript_routes.py",
+      "line": 263,
+      "consumer": "previous.require_publication"
+    },
+    {
+      "file": "src/agent_comms/transcript_updates.py",
+      "line": 45,
+      "consumer": "RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 570,
+      "consumer": "PiMessage.from_wire(message).annotation_disclosure"
+    },
+    {
+      "file": "src/agent_comms/turn_goal_account.py",
+      "line": 164,
+      "consumer": "store.reserve"
+    },
+    {
+      "file": "src/agent_comms/turn_goal_account.py",
+      "line": 115,
+      "consumer": "store.reserve"
+    },
+    {
+      "file": "src/agent_comms/turn_progress.py",
+      "line": 52,
+      "declaration": "TurnProgress",
+      "bases": [
+        "events.AgentEventConsumer"
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_progress.py",
+      "line": 160,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_progress.py",
+      "line": 169,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_progress.py",
+      "line": 184,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_progress.py",
+      "line": 201,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_progress.py",
+      "line": 230,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_progress.py",
+      "line": 233,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_progress.py",
+      "line": 245,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_progress.py",
+      "line": 331,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 101,
+      "consumer": "RuntimeServer"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 455,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 158,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 168,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 182,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 484,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 488,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 233,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 323,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 350,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 352,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 420,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 475,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 249,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 359,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 382,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 492,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 276,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 281,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 89,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/worker.py",
+      "line": 25,
+      "consumer": "CommsAgent"
+    },
+    {
+      "file": "src/agent_comms/worker.py",
+      "line": 52,
+      "consumer": "CommsAgent"
+    },
+    {
+      "file": "src/agent_comms/worker.py",
+      "line": 24,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/worker.py",
+      "line": 67,
+      "consumer": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 18,
+      "declaration": "WorkingMemoryAnnotations",
+      "bases": []
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 17,
+      "declaration": "Classifier",
+      "bases": [
+        "DeclaredFamily"
+      ]
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 154,
+      "declaration": "JevClassifier",
+      "bases": [
+        "Classifier"
+      ]
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 154,
+      "consumer": "Classifier"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 25,
+      "consumer": "Classifier"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 133,
+      "consumer": "JevClassifier"
+    },
+    {
+      "file": "src/agent_comms/working_memory_requests.py",
+      "line": 43,
+      "declaration": "AnnotationOutcome",
+      "bases": [
+        "DeclaredFamily"
+      ]
+    },
+    {
+      "file": "src/agent_comms/working_memory_requests.py",
+      "line": 49,
+      "consumer": "AnnotationOutcome"
+    },
+    {
+      "file": "src/agent_comms/working_memory_requests.py",
+      "line": 55,
+      "consumer": "AnnotationOutcome"
+    },
+    {
+      "file": "src/agent_comms/working_memory_requests.py",
+      "line": 65,
+      "consumer": "AnnotationOutcome"
+    }
+  ],
+  "limit": "Lexical declarations and consumers; dynamic dispatch is read semantically, not proven by this list."
+}

@@ -28,6 +28,8 @@ from .thread_identity import AdmissionIdentity, ThreadIncarnation
 from .turn_lease import TurnState
 from .wire_metadata import WireRootIdText
 from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
+from .turn_context import ContextManifest
+from .working_memory_labels import ModelLabel
 
 if TYPE_CHECKING:
     import asyncio
@@ -42,6 +44,12 @@ class AgentCommsUpdate(DeclaredFamily, affix="Update"):
 
     def for_session(self, session_id: str) -> AgentCommsUpdate:
         return self
+
+
+@dataclass(frozen=True)
+class ContextAnnotatedUpdate(AgentCommsUpdate):
+    context: ContextManifest
+    labels: tuple[ModelLabel, ...]
 
 
 @dataclass(frozen=True)

@@ -178,13 +178,21 @@ class Messaging:
         return self._pin_constraint(recipient, subject, NativeInputConstraintPin,
                                     worktree=worktree, scope=scope, change=change)
 
-    def _pin_constraint(self, recipient, subject, declaration, *, worktree, scope, change):
+    def approve_annotations(self, recipient, subject, *, worktree, per_hour, segments):
+        from .working_memory_policy import AnnotationDisclosureGrant
+
+        return self._pin_constraint(recipient, subject, AnnotationDisclosureGrant,
+            worktree=worktree, scope=CurrentTaskScopeSelection(), change=OriginalTaskChange(),
+            per_hour=per_hour, segments=segments)
+
+    def _pin_constraint(self, recipient, subject, declaration, *, worktree, scope, change,
+                        **declaration_options):
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             user = self._user_identity_under_wire_lock(worktree)
             owner = self.registry.require(recipient)
             task = declaration(scope=scope.select_human(owner), subject=subject,
                                source_user=user.incarnation, recipient=owner.incarnation,
-                               change=change)
+                               change=change, **declaration_options)
             committed = self._publish_user_under_wire_lock(
                 user, owner.name, "Pinned constraint from its original source",
                 task, notice=True)

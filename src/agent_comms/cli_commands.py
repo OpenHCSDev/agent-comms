@@ -37,6 +37,9 @@ from .exporting import (
     SelectableWireExportFormat,
 )
 from .importing import ImportFormat, ImportLimits
+from .turn_context import ContextSegment
+from .working_memory_labels import ModelLabel
+from .working_memory_questions import SpanAnswer
 from .messages import MessageType
 from .message_reference import MessageReference
 from .thread_management import ForkSpec
@@ -545,6 +548,34 @@ class PinInputConstraintCliCommand(PinConstraintCliCommand, declared_name="pin-i
 
     def pin_original(self, ctx: Comms, source):
         return ctx.messaging.pin_input_constraint(self.thread, source, worktree=self.worktree)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ApproveAnnotationsCliCommand(PinConstraintCliCommand, declared_name="approve-annotations"):
+    help = "Approve a pinned external classifier using original human wording and an hourly request budget"
+    per_hour: int = option("--per-hour", help="Maximum classifier requests in the rolling hour")
+    segments: tuple[type[ContextSegment], ...] = option("--segments", normalize=json.loads,
+        help="JSON list of original segment kinds permitted for disclosure")
+
+    def pin_original(self, ctx: Comms, source):
+        return ctx.messaging.approve_annotations(self.thread, source, worktree=self.worktree,
+                                                per_hour=self.per_hour, segments=self.segments)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CorrectAnnotationCliCommand(CliCommand, declared_name="correct-annotation"):
+    help = "Correct one original stored model answer through the human identity owner"
+    label: ModelLabel = option("--label", normalize=json.loads)
+    answer: type[SpanAnswer] = option("--answer")
+    worktree: str = option("--worktree", default_factory=os.getcwd)
+
+    def apply(self, ctx: Comms):
+        from .coordinator import Coordination
+
+        author = ctx.messaging.user_identity(self.worktree).incarnation
+        snapshot = ctx.registry.snapshot()
+        with Coordination(str(ctx.root / "coordination.sqlite3")) as store:
+            return store.annotations.correct(self.label, self.answer, author, snapshot)
 
 
 @dataclass(frozen=True, kw_only=True)
