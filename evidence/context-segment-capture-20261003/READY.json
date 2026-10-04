@@ -1,0 +1,53 @@
+{
+  "state": "SCOPED_READY",
+  "source_head": "716064b3864c5ee952fee72d46044a9bb520702d",
+  "native_source_head": "653f17e22af926bfa0e66b2066f23dfd95f56354",
+  "matching_pin": "94b91317",
+  "manifest": "2ea0a4d4ff2e362864c156e4b11642775b3f2a96e7f01522b346b6f6d9526936",
+  "tree": "61015ef9b5738be236d9de4dd2d59d24857a6f3b77baa69caa5332addaec280b",
+  "compiled_source_sha256": "372034dd4f5d6afa4fced26940ac886c7d0e7debb32d6c3cded7868f2e6ba906",
+  "compiled_source_byteequal": true,
+  "comparison": {
+    "repeated_and_transformed": {
+      "messages": 10,
+      "original_ms": 2.44638800000007,
+      "current_ms": 1.4611089999998512,
+      "original_journal_encodings": 22,
+      "current_journal_encodings": 5,
+      "exact_manifest_and_values": true,
+      "render_identical": true
+    },
+    "retained": {
+      "messages": 9615,
+      "original_ms": 29640.90002,
+      "current_ms": 735.900330000004,
+      "original_journal_encodings": 92448225,
+      "current_journal_encodings": 9615,
+      "exact_manifest_and_values": true,
+      "render_identical": true,
+      "source_bytes": 42665741,
+      "source_sha256": "75354edad8e2f871d4f334873d8e4b9a75ed8379fd9d523d10bc076621f0a164",
+      "source_unchanged": true
+    }
+  },
+  "gate_elapsed_seconds": 43.92502921400592,
+  "gate_exit": 0,
+  "network_forbidden": true,
+  "provider_requests": 0,
+  "prompt_inputs": 0,
+  "original_source_unchanged": true,
+  "original_retained_fork_sha256": "75354edad8e2f871d4f334873d8e4b9a75ed8379fd9d523d10bc076621f0a164",
+  "recorded_root_child_mixed_internal_assertions_passed": true,
+  "invalid_coordinate_refusals": 5,
+  "public_api_schema_unchanged": true,
+  "no_540_access": true,
+  "raw_root": "/home/ts/.cache/agent-scratch/context610-sdk03",
+  "raw_stdout_sha256": "addfedc6a2cdebe4d4d7e17f1f4d018b91585884a7118ecb55b979e9b859f242",
+  "raw_stderr_bytes": 0,
+  "postexit_scan": {
+    "processes": 485,
+    "matching_gate_commands": [],
+    "permission_gaps": []
+  },
+  "limits": "Original SDK source capture/projection and recorded root/child/mixed contracts, not model onContextReady latency, HTTP bytes, UI performance, historical delay attribution or S4 recall. Whole SDK gate includes reference/candidate startup and private SDK fork; capture milliseconds cover only TurnContext.capture."
+}

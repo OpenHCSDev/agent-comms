@@ -4,6 +4,7 @@ import {mkdirSync, writeFileSync, readFileSync} from 'node:fs';
 import {join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
+import {spawn} from 'node:child_process';
 import {constructNativeConditions,applyBoundedNativeCondition,
     transformBoundedNativeCondition,armBoundedNativeCondition} from './retained_native_conditions.mjs';
 
@@ -13,6 +14,27 @@ globalThis.fetch = async () => {throw new Error('SOURCE_CONTRACT_FORBIDS_NETWORK
 const pi = await import(pathToFileURL(join(pkg,'dist/index.js')));
 const {TurnContext,NativeInputClaim} = await import(pathToFileURL(join(pkg,'dist/core/turn-context.js')));
 const {estimateTokens} = await import(pathToFileURL(join(pkg,'dist/core/compaction/compaction.js')));
+if (process.argv.includes('--comparison-child')) {
+    // Each SDK keeps its original committed import boundary. The child borrows
+    // this fixture's selected file/coordinates and acquired JSON values only.
+    let input=''; for await (const bytes of process.stdin) input+=bytes;
+    const request=JSON.parse(input);
+    const runtime=await pi.ModelRuntime.create({authPath:join(request.agentDir,'auth.json'),
+        modelsPath:join(request.agentDir,'models.json'),modelsStorePath:join(request.agentDir,'models-store.json')});
+    const settings=pi.SettingsManager.inMemory({compaction:{enabled:false},retry:{enabled:false}});
+    const loader=new pi.DefaultResourceLoader({cwd:request.cwd,agentDir:request.agentDir,settingsManager:settings});
+    await loader.reload();
+    const manager=pi.SessionManager.open(request.session_file);
+    const {session}=await pi.createAgentSession({cwd:request.cwd,agentDir:request.agentDir,
+        modelRuntime:runtime,settingsManager:settings,sessionManager:manager,resourceLoader:loader});
+    try {
+        const entries=request.entries===undefined ? undefined : request.entries.map(id=>manager.getEntry(id));
+        const output=JSON.stringify(await measureCapture(TurnContext,session,request.context,entries));
+        await new Promise((resolve,reject)=>process.stdout.write(output+'\n',
+            error=>error ? reject(error) : resolve()));
+    } finally {session.dispose();manager.entryStore.close();}
+    process.exit(0);
+}
 const cwd=join(root,'project'),agentDir=join(root,'config');
 mkdirSync(cwd,{recursive:true,mode:0o700});mkdirSync(agentDir,{mode:0o700});
 writeFileSync(join(cwd,'AGENTS.md'),'Original project instruction π.\n');
@@ -48,6 +70,74 @@ try {
         tools:session.agent.state.tools};
     const captured=await TurnContext.capture(session,provider);
     const full=captured.full();
+    // End validation for capture ownership: compare the unchanged public
+    // contract against the original immutable SDK on the same acquired values.
+    const comparisonIndex=process.argv.indexOf('--comparison-package');
+    const comparisonPackage=comparisonIndex<0 ? undefined : resolve(process.argv[comparisonIndex+1]);
+    const compare=async(selected,context,entries)=>{
+        const child=spawn(process.execPath,[new URL(import.meta.url).pathname,
+            comparisonPackage,root,'--comparison-child'],{stdio:['pipe','pipe','pipe']});
+        let output='',error='';
+        child.stdout.on('data',bytes=>{output+=bytes;});
+        child.stderr.on('data',bytes=>{error+=bytes;});
+        const exited=new Promise((resolve,reject)=>{
+            child.on('error',reject); child.on('close',code=>resolve(code));
+        });
+        child.stdin.end(JSON.stringify({cwd,agentDir,session_file:selected.sessionFile,
+            context,entries:entries?.map(entry=>entry.id)}));
+        const code=await exited;
+        assert.equal(code,0,error);
+        const original=JSON.parse(output), current=await measureCapture(TurnContext,selected,context,entries);
+        const originalFull=original.full, currentFull=current.full;
+        // The system file reference honestly names each artifact. Its original
+        // bytes and every other measurement/source coordinate must be identical.
+        const reference=originalFull.segments[0].provenance[1];
+        const currentReference=currentFull.segments[0].provenance[1];
+        assert.equal(reference.path,join(comparisonPackage,'dist/core/system-prompt.js'));
+        assert.equal(reference.sha256,currentReference.sha256);
+        originalFull.segments[0].provenance[1]={...reference,path:currentReference.path};
+        assert.deepEqual(currentFull,originalFull);
+        assert.deepEqual(current.render,JSON.parse(JSON.stringify(context)));
+        const expected=original.observation;
+        expected.segments[0].provenance[1]={...reference,path:currentReference.path};
+        expected.values[0].provenance[1]={...reference,path:currentReference.path};
+        assert.deepEqual(current.observation,expected);
+        assert.deepEqual(current.manifest,
+            (({values,...manifest})=>manifest)(expected));
+        return {messages:context.messages.length,
+            original_ms:original.elapsed_ms,current_ms:current.elapsed_ms,
+            original_journal_encodings:original.journal_encodings,
+            current_journal_encodings:current.journal_encodings,
+            exact_manifest_and_values:true,render_identical:true};
+    };
+    let captureComparison;
+    if (comparisonPackage) {
+        const repeated={...provider,messages:[...provider.messages,...provider.messages,
+            {role:'user',content:'Authored transformed SDK value',timestamp:999},
+            {role:'user',content:'Second authored transformed SDK value',timestamp:1000}]};
+        captureComparison={repeated_and_transformed:await compare(session,repeated)};
+        const savedIndex=process.argv.indexOf('--saved-source');
+        if (savedIndex>=0) {
+            const saved=resolve(process.argv[savedIndex+1]);
+            const originalHash=hashFile(saved);
+            const fork=pi.SessionManager.forkFrom(saved,cwd,join(root,'saved-sdk-fork'));
+            let acquired;
+            try {
+                ({session:acquired}=await pi.createAgentSession({cwd,agentDir,modelRuntime:runtime,
+                    settingsManager:settings,sessionManager:fork,resourceLoader:loader}));
+                const selectedHash=hashFile(fork.getSessionFile());
+                const sourceView=await TurnContext.fullSource(acquired);
+                const entries=Array.from(fork.entryStore.uncompactedMetadata(fork.getLeafId()),
+                    metadata=>fork.entryStore.get(metadata.id));
+                captureComparison.retained=await compare(acquired,sourceView.render(),entries);
+                assert.equal(hashFile(fork.getSessionFile()),selectedHash);
+                assert.equal(hashFile(saved),originalHash);
+                captureComparison.retained.source_bytes=readFileSync(saved).length;
+                captureComparison.retained.source_sha256=originalHash;
+                captureComparison.retained.source_unchanged=true;
+            } finally {acquired?.dispose();fork.entryStore.close();}
+        }
+    }
     const original=manager.getEntry(kept).message;
     const text=original.content[0].text, images=original.content.slice(1);
     const hash=value=>createHash('sha256').update(value).digest('hex');
@@ -213,8 +303,9 @@ try {
         provider_bytes_identical:true,journal_bytes_unchanged:true,
         original_contribution_tokens:measured.tokens,invalid_coordinates_refused:5,
         transformation_observed_without_input_rejection:true,preview_not_recorded:true,
-        kinds:full.segments.map(s=>s.kind),session_file:manager.getSessionFile(),full,conditions,
-        ...(process.argv.includes('--recorded-readers') ? {
+        kinds:full.segments.map(s=>s.kind),session_file:manager.getSessionFile(),capture_comparison:captureComparison,
+        ...(!process.argv.includes('--summary-only') ? {full,conditions} : {}),
+        ...(process.argv.includes('--recorded-readers') && !process.argv.includes('--summary-only') ? {
             recorded_observation:captured.observation('authored-sdk-source-request'),
             mixed_observation:mixedCapture.observation('authored-sdk-mixed-request'),
             mixed_full:mixedCapture.full(),
@@ -223,3 +314,27 @@ try {
             mixed_single_projection:true,missing_or_other_session_refused:true} : {}),
         bounded_construction_scope:conditions ? 'Authored SDK construction/application control; raw SDK installation and canonical restore; no input or captured model baseline' : undefined}));
 } finally {session.dispose();}
+
+function hashFile(path) {
+    return createHash('sha256').update(readFileSync(path)).digest('hex');
+}
+
+async function measureCapture(declaration,session,context,entries) {
+    const stringify=JSON.stringify;
+    let journalEncodings=0;
+    JSON.stringify=function(value,...args) {
+        if (value?.kind==='journal') journalEncodings++;
+        return stringify.call(this,value,...args);
+    };
+    const started=performance.now();
+    let view,elapsed;
+    try {
+        view=await declaration.capture(session,context,undefined,entries);
+        elapsed=performance.now()-started;
+    } finally {JSON.stringify=stringify;}
+    // The original protocol boundary owns JSON representation, including omitted
+    // undefined JS properties. No alternate import loader or cached source.
+    return JSON.parse(JSON.stringify({full:view.full(),render:view.render(),
+        observation:view.observation('same-acquired-source'),manifest:view.manifest('same-acquired-source'),
+        elapsed_ms:elapsed,journal_encodings:journalEncodings}));
+}

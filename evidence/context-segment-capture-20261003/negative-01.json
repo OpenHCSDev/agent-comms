@@ -1,0 +1,14 @@
+{
+  "state": "PRESERVED_DRIVER_REFUSAL",
+  "raw_root": "/home/ts/.cache/agent-scratch/context610-sdk01",
+  "exit": {
+    "exit_code": 1,
+    "source_sha256_after": "75354edad8e2f871d4f334873d8e4b9a75ed8379fd9d523d10bc076621f0a164",
+    "source_unchanged": true
+  },
+  "stderr_sha256": "0b34ab1619767dd86c86e3f5080e533f568b1939b4d819a4cdb831d7333486ec",
+  "reason": "Original import fence rejected two committed roots in one process",
+  "production_changed": false,
+  "provider_requests": 0,
+  "prompt_inputs": 0
+}

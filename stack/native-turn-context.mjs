@@ -97,25 +97,36 @@ export class NativeInputClaim {
 }
 
 class ContextSegment {
-    constructor(provenance, value) {
+    constructor(provenance, value, contributors=[]) {
         if (!provenance.length) throw new TypeError('Context requires its original source');
         this.provenance = provenance;
         this.value = value;
-        this.contributors = [];
+        this.contributors = contributors;
     }
-    manifest() {
+    static originalSources(sources) {
+        // A capture-local ordered union of original descriptors. Shared whole
+        // cuts are encoded once, not once for every message that names them.
+        const originals=new Map();
+        for (const source of new Set(sources)) {
+            const encoded=JSON.stringify(source);
+            if (!originals.has(encoded)) originals.set(encoded,source);
+        }
+        return [...originals.values()];
+    }
+    projection() {
         const raw = JSON.stringify(this.value);
-        return {kind:kind(this.constructor), provenance:this.provenance,
-            sha256:hash(raw), utf8_bytes:Buffer.byteLength(raw), tokens:this.tokens(),
+        const manifest={kind:kind(this.constructor), provenance:this.provenance,
+            sha256:hash(raw), utf8_bytes:Buffer.byteLength(raw), tokens:this.tokens(raw),
             contributors:this.contributors};
+        return {manifest,value:{...manifest,...this.payload()}};
     }
-    full() { return {...this.manifest(), ...this.payload()}; }
-    publicationValues() { return [this.full()]; }
-    matches(expected) {
-        const manifest=this.manifest();
+    manifest() { return this.projection().manifest; }
+    full() { return this.projection().value; }
+    publicationValues(projection) { return [projection.value]; }
+    static matches(manifest,expected) {
         return manifest.kind===expected.kind && manifest.sha256===expected.sha256;
     }
-    recordedValues() { return [this]; }
+    recordedValues() { return []; }
 }
 class SystemLayerSegment extends ContextSegment {
     tokens() { return estimateTokens({role:'user', content:[{type:'text', text:this.value}], timestamp:0}); }
@@ -123,18 +134,41 @@ class SystemLayerSegment extends ContextSegment {
     render(provider) { provider.systemPrompt = this.value; }
 }
 class NativeMessages extends ContextSegment {
-    constructor(provenance,value) {
-        super(provenance,value);
+    constructor(provenance,value,contributors=[]) {
+        super(provenance,value,contributors);
         // Only values without exact original entry correspondence are retained.
         // These are references to this capture's values, not a history store.
         this.unresolved=[];
     }
+    static *capture(provenance,observations) {
+        let start=0;
+        for (let end=1;end<=observations.length;end++) {
+            if (end===observations.length
+                    || observations[end].segment.constructor!==observations[start].segment.constructor) {
+                yield observations[start].segment.constructor.fromObservations(
+                    provenance,observations.slice(start,end));
+                start=end;
+            }
+        }
+    }
+    static fromObservations(provenance,observations) {
+        // Construct the complete ordered group at its owner. No caller mutates
+        // its values, provenance or contributor manifests one message at a time.
+        const projections=observations.map(({segment})=>segment.projection());
+        const group=new this(this.originalSources([
+            ...provenance,...observations.flatMap(({segment})=>segment.provenance)]),
+            observations.map(({segment})=>segment.value[0]),
+            projections.map(projection=>projection.manifest));
+        group.unresolved=observations.flatMap(({original},index)=>
+            original ? [] : [projections[index].value]);
+        return group;
+    }
     tokens() { return this.value.reduce((count,message) => count + estimateTokens(message),0); }
     payload() { return {messages:this.value}; }
     render(provider) { provider.messages.push(...this.value); }
-    publicationValues() { return this.unresolved.map(segment=>segment.full()); }
+    publicationValues() { return this.unresolved; }
     recordedValues() {
-        return [this,...this.value.map(message=>new this.constructor(this.provenance,[message]))];
+        return this.value.map(message=>new this.constructor(this.provenance,[message]));
     }
 }
 class TranscriptSegment extends NativeMessages {}
@@ -142,7 +176,7 @@ class CompactionSummarySegment extends NativeMessages {}
 class InjectionMessageSegment extends NativeMessages {}
 class TransformedInputSegment extends NativeMessages {}
 class ToolCatalogSegment extends ContextSegment {
-    tokens() { return estimateTokens({role:'user',content:[{type:'text',text:JSON.stringify(this.value)}],timestamp:0}); }
+    tokens(raw) { return estimateTokens({role:'user',content:[{type:'text',text:raw}],timestamp:0}); }
     payload() { return {tools:this.value}; }
     render(provider) { provider.tools = this.value; }
 }
@@ -175,30 +209,26 @@ export class TurnContext {
         for (const entry of entries) {
             const declaration = entry.type === 'compaction' ? CompactionSummarySegment
                 : entry.type === 'custom_message' ? InjectionMessageSegment : TranscriptSegment;
+            const entrySource={kind:'journal',path:journal.path,entries:[entry.id]};
             for (const message of await session.agent.convertToLlm(sessionEntryToContextMessages(entry))) {
                 const encoded=JSON.stringify(message), matches=identified.get(encoded) ?? [];
-                matches.push({declaration,id:entry.id}); identified.set(encoded,matches);
+                matches.push({declaration,source:entrySource}); identified.set(encoded,matches);
             }
         }
+        for (const [encoded,matches] of identified) identified.set(encoded,matches.values());
         const segments=[new SystemLayerSegment(systemSources,context.systemPrompt)];
-        let group;
-        for (const message of context.messages) {
-            const original=identified.get(JSON.stringify(message))?.shift();
-            const declaration=original?.declaration ?? TranscriptSegment;
-            const entrySource=original ? {kind:'journal',path:journal.path,entries:[original.id]} : journal;
-            if (!group || group.constructor !== declaration) {
-                group=new declaration([...provenance],[]); segments.push(group);
-            }
-            group.value.push(message);
-            const observation=new declaration([...provenance,entrySource],[message]);
-            observation.contributors.push(...(source?.contributors ?? [])
-                .filter(item=>item.input_id===message.inputId).flatMap(item=>item.contributors));
-            group.contributors.push(observation.manifest());
-            if (!original) group.unresolved.push(observation);
-            // Provenance is an observation, never an alternate entry/message owner.
-            if (!group.provenance.some(value=>JSON.stringify(value)===JSON.stringify(entrySource)))
-                group.provenance.push(entrySource);
+        const contributions=new Map();
+        for (const item of source?.contributors ?? []) {
+            const originals=contributions.get(item.input_id) ?? [];
+            originals.push(...item.contributors); contributions.set(item.input_id,originals);
         }
+        const observations=context.messages.map(message=>{
+            const original=identified.get(JSON.stringify(message))?.next().value;
+            const declaration=original?.declaration ?? TranscriptSegment;
+            return {original,segment:new declaration([...provenance,original?.source ?? journal],
+                [message],contributions.get(message.inputId) ?? [])};
+        });
+        segments.push(...NativeMessages.capture(provenance,observations));
         segments.push(new ToolCatalogSegment(provenance,context.tools));
         return new TurnContext(identity,segments);
     }
@@ -227,14 +257,15 @@ export class TurnContext {
         if (session.sessionId!==identity.sessionId || session.sessionFile!==identity.sessionFile)
             throw new Error('Original recorded context belongs to another native session');
         const projected=await this.project(session, entries);
-        const whole=projected.segments.find(segment=>segment.matches(expected));
-        if (whole) return new this(projected.identity,[whole]);
+        const groups=projected.segments.map(value=>({value,manifest:value.manifest()}));
+        const whole=groups.find(({manifest})=>ContextSegment.matches(manifest,expected));
+        if (whole) return new this(projected.identity,[whole.value]);
         // One acquired projection supplies a temporary lookup for mixed original
         // groups. No per-message RPC, repeated conversion or retained cache.
         const values=new Map();
-        for (const group of projected.segments) {
-            for (const value of group.recordedValues()) {
-                const manifest=value.manifest();
+        for (const group of groups) {
+            for (const {value,manifest} of [group,...group.value.recordedValues()
+                    .map(value=>({value,manifest:value.manifest()}))]) {
                 const matches=values.get(manifest.sha256) ?? [];
                 matches.push({value,manifest}); values.set(manifest.sha256,matches);
             }
@@ -262,12 +293,17 @@ export class TurnContext {
         return {systemPrompt:provider.systemPrompt,messages:provider.messages,tools:provider.tools};
     }
     manifest(requestId) {
-        return {counter:'pi.estimateTokens',segments:this.segments.map(segment=>segment.manifest()),
-            ...(requestId === undefined ? {} : {requestId})};
+        const {values,...manifest}=this.observation(requestId);
+        return manifest;
     }
     observation(requestId) {
-        return {...this.manifest(requestId),
-            values:this.segments.flatMap(segment=>segment.publicationValues())};
+        const observed=this.segments.map(segment=>{
+            const projection=segment.projection();
+            return {manifest:projection.manifest,values:segment.publicationValues(projection)};
+        });
+        return {counter:'pi.estimateTokens',segments:observed.map(value=>value.manifest),
+            ...(requestId===undefined ? {} : {requestId}),
+            values:observed.flatMap(value=>value.values)};
     }
     full() { return {identity:this.identity,counter:'pi.estimateTokens',segments:this.segments.map(segment=>segment.full())}; }
 }

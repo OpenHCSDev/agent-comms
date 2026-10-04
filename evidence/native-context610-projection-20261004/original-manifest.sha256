@@ -45,7 +45,7 @@ e30bbbbd2043d6b3c9ad87876cf488cce4a3eafa0c27ad3556d39dd35a47f648  node_modules/@
 9605f7cc8986b81f4e11d1d9f297632989d84339779751778c54c2769c85e2b4  node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
 d2cdfd5d0daf4c0df0f52af14773b338045d0c67ae7b564b681c34d3fab013f1  node_modules/@earendil-works/pi-ai/dist/utils/estimate.js
 20c0e1d062855f805bad7193f781123ae79a56cabb682a87a402116f66774178  node_modules/@earendil-works/pi-ai/dist/api/agent-comms-request-input.js
-372034dd4f5d6afa4fced26940ac886c7d0e7debb32d6c3cded7868f2e6ba906  dist/core/turn-context.js
+143e7335e68e5aa89d15c4cf5c012aed3ddf0d0a23c4194b64d1fcb3b00f8db0  dist/core/turn-context.js
 e47a2ad3d14a5802e6736227ecfb7c5acce4e98733aeac66414ea8912e7e0aba  dist/core/turn-context.d.ts
 176621c0f4bcfb7f3d53bca5eaf9c5b7c57d829c0e1529844e8e3ee2100d5ab9  dist/core/tools/agent-comms-file-artifact.js
 b3ad505e285cbd5aa349011e03111212bd88d1a89a0e31b117272e4108548f18  dist/core/tools/edit.js
@@ -53,4 +53,4 @@ b3ad505e285cbd5aa349011e03111212bd88d1a89a0e31b117272e4108548f18  dist/core/tool
 b0a79f274d3f94297337f2533ce511b7be73ef941ba68f6d9e067fe346284cb0  dist/core/tools/write.js
 31e6d4df83f2fc6d4f17287fe0fccb6cf1df429d34bd5315313fac12b1e44891  node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js
 8209e570ef6044ce26f2ee7c95a1bcfda926457cf90b83d3356e10f54355004e  node_modules/@earendil-works/pi-ai/dist/utils/retry.d.ts
-# agent-comms-native-tree-v1 61015ef9b5738be236d9de4dd2d59d24857a6f3b77baa69caa5332addaec280b
+# agent-comms-native-tree-v1 5ff27e716d8adc6cd1a2482fb90d35e24b4c4f837160f262ff05ee2c52769798
