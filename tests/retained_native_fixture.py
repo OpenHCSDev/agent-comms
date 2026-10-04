@@ -455,6 +455,10 @@ class RecordedConditionInstallation:
     # which borrow live SDK messages do not prove a journal entry selection.
     entry_selection: JournalProvenance | None = field(default=None,
         metadata={"wire_omit_default": True})
+    # Original EntryStore.uncompactedMetadata selection at this same witness.
+    # Older observations did not retain it; never infer it from an arm label.
+    uncompacted_selection: JournalProvenance | None = field(default=None,
+        metadata={"wire_omit_default": True})
     # An original constructor resource, not inferred from its condition label.
     narrative_source: FileProvenance | None = field(default=None,
         metadata={"wire_omit_default": True})
@@ -544,23 +548,40 @@ class RecordedConditionInstallation:
             'scope':'Complete ordered constructor message partition compared with the captured SDK request prefix; '
                     'requires original transform/converter/request binding; not HTTP bytes, capacity or a matched study'}
 
-    def source_selection(self, identity, ancestry):
-        """Describe the observed SDK entry selection, never provider capacity."""
-        if self.entry_selection is None:
-            return {'evaluated': False,
-                'reason': 'Original SDK journal entry selection was not captured'}
-        selected = self.entry_selection.journal_entries(identity)
+    @staticmethod
+    def require_selection(source, identity, ancestry):
+        """Both original SDK selections borrow the same acquired ancestry."""
+        selected = source.journal_entries(identity)
         available = tuple(entry.require_entry_id() for entry in ancestry)
         selected_set = set(selected)
         if len(selected_set) != len(selected) or tuple(
                 entry for entry in available if entry in selected_set) != selected:
             raise ValueError('SDK selected entries are not an ordered subset of the original construction ancestry')
+        return selected
+
+    def source_selection(self, identity, ancestry):
+        """Compare SDK-owned selections, never a label or message count."""
+        full = (self.require_selection(self.uncompacted_selection, identity, ancestry)
+                if self.uncompacted_selection is not None else None)
+        selected = (self.require_selection(self.entry_selection, identity, ancestry)
+                    if self.entry_selection is not None else None)
+        complete = {'evaluated': False,
+            'reason': 'Original selected and uncompacted SDK entry references required'}
+        if full is not None and selected is not None:
+            complete = {'evaluated': True, 'selected': selected == full,
+                'source': self.uncompacted_selection,
+                'scope': 'Exact ordered SDK uncompacted entry selection at the original construction witness; '
+                         'not transformed bytes, admission or provider capacity'}
+        if selected is None:
+            return {'evaluated': False, 'uncompacted_selection': complete,
+                'reason': 'Original SDK journal entry selection was not captured'}
+        selected_set = set(selected)
         messages = tuple(entry.require_entry_id() for entry in ancestry if entry.is_message)
         return {'evaluated': True, 'source': self.entry_selection,
+            'uncompacted_selection': complete,
             'original_message_entries': messages,
             'selected_message_entries': tuple(entry for entry in messages if entry in selected_set),
             'unselected_message_entries': tuple(entry for entry in messages if entry not in selected_set),
-            'all_original_message_entries_selected': all(entry in selected_set for entry in messages),
             'scope': 'Original SDK entry-based construction before conversion; not complete transformed content, '
                      'provider token capacity, HTTP bytes or a registered intervention'}
 
@@ -1024,6 +1045,30 @@ class RecordedNativeProbe:
                 "reason": "Original admitted request calculations" if admitted else "No original budget admission observation"}
 
     @staticmethod
+    def full_history_admission(installation, budget):
+        """Join original SDK selection, complete request prefix and admission.
+
+        The native budget alone decides allowance. This reader never computes
+        tokens or treats an admitted smaller context as full-history capacity.
+        Original provider-token/HTTP capacity remains a separate question.
+        """
+        selection = installation['entry_selection']
+        prefix = installation['constructed_prefix']
+        if not selection['evaluated'] or not prefix['evaluated'] or not budget['evaluated']:
+            return {'evaluated': False,
+                'reason': 'Original selected history, complete bound request prefix and native admission required'}
+        full = tuple(value['uncompacted_selection'] for value in selection['observations'])
+        if not all(value['evaluated'] for value in full):
+            return {'evaluated': False, 'observations': full,
+                'reason': 'Original SDK uncompacted selection was not captured'}
+        return {'evaluated': True,
+            'admitted_full_history': all(value['selected'] for value in full) and prefix['preserved'],
+            'selection': full, 'constructed_prefix': prefix, 'request_budget': budget,
+            'scope': 'Original SDK uncompacted selection preserved through this bound constructor/request '
+                     'prefix and its native estimated admission; not provider-token capacity, HTTP bytes, '
+                     'scenario-history equivalence or a matched study'}
+
+    @staticmethod
     def request_timing(observed: tuple[RequestProgress, ...]):
         """Export original native measurements without synthesizing a clock.
 
@@ -1141,6 +1186,8 @@ class RecordedNativeProbe:
         observed_request = observed_requests.get(manifest.request_id, ()) if manifest is not None else ()
         budget = self.request_budget(observed_request)
         records = self.condition_records()
+        installation = self.installed_condition(evidence,branch,context,serialized,manifest,records,
+                                               parent=parent,texts=texts)
         return {
             "fork": fork,
             "journal_settings": {
@@ -1157,9 +1204,9 @@ class RecordedNativeProbe:
             "input_request_measurements": self.input_request_measurements(observed_requests),
             "request_completion": self.request_completion(budget, answer),
             "source_coverage": coverage,
+            "full_history_sdk_admission": self.full_history_admission(installation, budget),
             "condition_application": self.applied_condition(evidence,parent,texts,serialized,manifest,records),
-            "condition_installation": self.installed_condition(evidence,branch,context,serialized,manifest,records,
-                                                              parent=parent,texts=texts),
+            "condition_installation": installation,
         }
 
     @staticmethod

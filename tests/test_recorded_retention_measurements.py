@@ -1426,7 +1426,8 @@ const manifest=MANIFEST;
 for (const original of [source,undefined]) {
     const restore=armInstalledNativeCondition(session,{condition:'bounded',
         source_witness:witness,context_sha256:'c'.repeat(64),agent_messages:prefix,
-        narrative_source:original,manifest}, OUTPUT,inputId);
+        narrative_source:original,manifest,
+        uncompacted_selection:{kind:'journal',path:witness.sessionFile,entries:['source']}}, OUTPUT,inputId);
     const messages=[...prefix,{role:'user',inputId,content:'Distinct input'}];
     assert.equal(await agent.transformContext(messages),messages);
     callback({type:'agent_end'});
@@ -1448,6 +1449,9 @@ for (const original of [source,undefined]) {
         self.assertIsNone(applications[1].narrative_source)
         self.assertEqual(applications[0].construction_manifest, NativeContextManifestData('counter', ()))
         self.assertEqual(applications[1].construction_manifest, applications[0].construction_manifest)
+        self.assertEqual(applications[0].uncompacted_selection,
+            JournalProvenance(str(self.session), ('source',)))
+        self.assertEqual(applications[1].uncompacted_selection, applications[0].uncompacted_selection)
 
     def test_installed_source_uses_original_witness_ancestry_and_request(self):
         # Installation must precede this input on the same source, and bind its
@@ -1564,6 +1568,49 @@ for (const original of [source,undefined]) {
                 replace(constructed, segments=())))
             self.assertTrue(empty['constructed_prefix']['preserved'])
             self.assertEqual(empty['constructed_prefix']['observations'][0]['constructed_messages'], 0)
+            # The SDK owns full-history membership; an admitted retained
+            # subset and even the same native message count are insufficient.
+            # The arm label never decides this observation.
+            full_ref = JournalProvenance(str(self.session), ('prior', 'source'))
+            full_source = replace(acquired, entry_selection=full_ref,
+                                  uncompacted_selection=full_ref)
+            admitted = RecordedNativeProbe.request_budget((RequestProgress(
+                'original-request', self.identity.session_id, probe.input_id,
+                1, 2, '3', 1, 0, 0, 0, 'budget_admission',
+                model=ReportedModel(provider='original', id='model', context_window=100, max_tokens=20),
+                estimated_input_tokens=80, available_tokens=20,
+                admitted_output_tokens=20, minimum_output_tokens=1),))
+            complete_history = partition_observed(selected=full_source)
+            history = RecordedNativeProbe.full_history_admission(complete_history, admitted)
+            self.assertTrue(history['evaluated'])
+            self.assertTrue(history['admitted_full_history'])
+            self.assertIs(history['request_budget'], admitted)
+            self.assertIs(history['constructed_prefix'], complete_history['constructed_prefix'])
+            for label in Condition:
+                same_source = partition_observed(selected=replace(full_source, condition=label.value))
+                self.assertTrue(RecordedNativeProbe.full_history_admission(
+                    same_source, admitted)['admitted_full_history'])
+            smaller = partition_observed(selected=replace(full_source,
+                entry_selection=JournalProvenance(str(self.session), ('source',))))
+            smaller_history = RecordedNativeProbe.full_history_admission(smaller, admitted)
+            self.assertTrue(smaller_history['evaluated'])
+            self.assertFalse(smaller_history['admitted_full_history'])
+            altered = partition_observed(replace(request, segments=(group((second, first, fresh), actual_refs),)),
+                                         selected=full_source)
+            self.assertFalse(RecordedNativeProbe.full_history_admission(
+                altered, admitted)['admitted_full_history'])
+            for unavailable, budget in ((partitioned, admitted), (missing_binding, admitted),
+                                        (complete_history, {'evaluated': False})):
+                self.assertFalse(RecordedNativeProbe.full_history_admission(unavailable, budget)['evaluated'])
+            # A present bad full-history reference is refused even if the
+            # chosen entry reference is missing; absence cannot hide corruption.
+            for invalid in (JournalProvenance(str(self.session), ('source', 'prior')),
+                            JournalProvenance(str(self.session), ('source', 'source')),
+                            JournalProvenance(str(self.session), ('input',)),
+                            JournalProvenance(str(self.root / 'other'), ('prior',))):
+                with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                    partition_observed(selected=replace(full_source, entry_selection=None,
+                                                         uncompacted_selection=invalid))
             for wrong in (replace(constructed, request_id='another-request'),
                           replace(constructed, segments=(group((first, second),
                               (PreviewProvenance(replace(self.identity, session_id='other'), 'c' * 64),)),)),
@@ -1628,7 +1675,7 @@ for (const original of [source,undefined]) {
                 self.assertTrue(observation['evaluated'])
                 self.assertEqual(observation['selected_message_entries'], selected)
                 self.assertEqual(observation['unselected_message_entries'], unselected)
-                self.assertEqual(observation['all_original_message_entries_selected'], not unselected)
+                self.assertFalse(observation['uncompacted_selection']['evaluated'])
                 # Original selection remains known even without matching request bytes.
                 no_request = probe.installed_condition(evidence, branch, context,
                     {'evaluated': False}, None, (selected_row, restored), parent=evidence, texts=())
@@ -1652,6 +1699,7 @@ for (const original of [source,undefined]) {
                     'probe_input_presence': {'evaluated': False},
                     'construction': {'condition_application': {'evaluated': False},
                     'condition_installation': installation, 'request_budget': {'evaluated': False},
+                    'full_history_sdk_admission': {'evaluated': False},
                     'source_coverage': {'full_context_capacity': {'evaluated': False}}}}}
             for installation, preserved in ((partitioned, True), (changed, False)):
                 metrics = scored.condition_construction(original(installation), {})['constructed_source_prefix']
@@ -1659,6 +1707,22 @@ for (const original of [source,undefined]) {
                 self.assertEqual(metrics['preserved_rounds'], ('r1',) if preserved else ())
                 self.assertEqual(metrics['changed_rounds'], () if preserved else ('r1',))
                 self.assertFalse(scored.condition_construction(original(installation), {})['evaluated'])
+            for installation, measured_history, available, admitted_round in (
+                    (complete_history, history, True, True),
+                    (smaller, smaller_history, True, False),
+                    (partitioned, {'evaluated': False}, False, False)):
+                originals = original(installation)
+                originals['r1']['construction']['full_history_sdk_admission'] = measured_history
+                result = scored.condition_construction(originals, {})['full_history_sdk_admission']
+                self.assertEqual(result['evaluated'], available)
+                self.assertEqual(result['admitted_rounds'], ('r1',) if admitted_round else ())
+                self.assertEqual(result['not_full_history_rounds'],
+                                 ('r1',) if available and not admitted_round else ())
+                extra_round = replace(scenario, rounds=(*scenario.rounds,
+                    RecallRound('r2', ('later',), (Question('q2', 'Later?', 'source', 'oracle'),))))
+                self.assertEqual(extra_round.score(Condition.RECENT_ONLY, RecordedAnswers({}))
+                    .condition_construction(originals, {})['full_history_sdk_admission']['unavailable_rounds'],
+                    ('r2',) if available else ('r1', 'r2'))
             for installation in (complete, partial, no_request):
                 construction = scored.condition_construction(original(installation), {})
                 self.assertTrue(construction['recorded_constructor_selection']['evaluated'])
@@ -1709,7 +1773,8 @@ for (const original of [source,undefined]) {
             'construction': {'condition_application': {'evaluated': True},
             'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}, 'narrative_source': {'evaluated': False}, 'constructed_prefix': {'evaluated': False}},
             'request_budget': {'evaluated': True},
-            'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
+            'full_history_sdk_admission': {'evaluated': False},
+                    'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
         partial = scored.condition_construction({identities[0]: original}, unavailable)
         self.assertFalse(partial['evaluated'])
         self.assertEqual(partial['bounded_sdk_application']['available_rounds'], identities[:1])
@@ -1747,7 +1812,8 @@ for (const original of [source,undefined]) {
             'evaluated': False, 'transform': {'evaluated': True}},
             'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}, 'narrative_source': {'evaluated': False}, 'constructed_prefix': {'evaluated': False}},
             'request_budget': {'evaluated': True},
-            'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
+            'full_history_sdk_admission': {'evaluated': False},
+                    'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
         self.assertEqual(scored.condition_construction(
             {**evidence, identities[0]: partial_application}, delivered)
             ['bounded_sdk_application']['unavailable_rounds'], identities[:1])
