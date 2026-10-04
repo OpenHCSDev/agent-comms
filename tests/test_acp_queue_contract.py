@@ -148,6 +148,16 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
         )
     assert inbox.qsize() == before
     assert len(agent.inputs.dispositions.read().rows) == 2
+    sources = frozenset(f"acp:{request.input_id}" for request in requests)
+    assert agent.inputs.input_keys("beta") == sources
+    receipts = agent.inputs.dispositions.path.read_bytes()
+    await agent.inputs.clear_queued_inputs("beta")
+    assert not agent.inputs.queued_inputs["beta"]
+    assert agent.inputs.input_keys("beta") == sources
+    assert agent.inputs.dispositions.path.read_bytes() == receipts
+    await agent.inputs.input_refused("beta", requests[0].input_id)
+    assert agent.inputs.input_keys("beta") == frozenset((f"acp:{requests[1].input_id}",))
+    assert agent.inputs.dispositions.path.read_bytes() == receipts
 
 
 @pytest.mark.parametrize("user_text", [["list"], [], {"text": "dict"}, 7, False])
