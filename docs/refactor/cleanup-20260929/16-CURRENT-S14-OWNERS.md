@@ -97,6 +97,21 @@ His separate draft661 exactb1b59241 has Debt37232366132 SUCCESS. Installed
 current-private inherited-FD/index and refusal acceptance remains pending a
 specific execution-only THIN540 purpose. The historical old-schema installed
 donors are absent; no fabricated schema or new environment replaces them.
+Bohr has now issued that sole661 execution-only purpose2e9939ef after fresh
+236-process clearance and exact347 installed assets,10 distributions and94
+nonCore keepers. It authorizes one authored private canonical seed, unchanged
+writer refusals and actual inherited-FD/current-index checks. No package build
+or install, old-schema fabrication, native/provider input or public operation
+is authorized. Acceptance remains pending the actual terminal and handback.
+
+Arendt660 exactf06b004d has Debt37232065321 SUCCESS. Parent reviewed the shared
+observer's connection/request settlement, original Node completion notification,
+ExitStack/ParentedProcess custody and all caller migrations. All five source
+and four raw keeper hashes match its receipt. Seven authored controls qualify
+only protocol/controller scope. The changed actual SDK observer completion and
+tool/system JSON projection remain unexecuted; the original659 timeout is not
+rewritten. Arendt owns that next changed boundary under separate original086
+read/execution authority, with no provider prompt or study permission implied.
 Only open feature scopes are Core627/Toad434 W6 and Toad441 performance;
 native artifact649 and this tracking432 remain separate draft handoffs.
 
