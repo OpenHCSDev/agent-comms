@@ -139,14 +139,14 @@ class TargetField:
         if formatter is not None:
             return formatter(self.value)
         if self.choices:
-            return type(self.value).declared_name
+            return FieldCodec.encode(type(self.value))
         return ('' if self.value is None else self.value if isinstance(self.value, str)
                 else json.dumps(FieldCodec.encode(self.value)))
 
     @property
     def choices(self) -> tuple[tuple[str, str], ...]:
         if isinstance(self.annotation, type) and issubclass(self.annotation, DeclaredFamily):
-            return tuple((member.label, member.declared_name)
+            return tuple((member.label, FieldCodec.encode(member))
                          for member in self.annotation.members_with(self.annotation))
         return ()
 
@@ -182,7 +182,7 @@ class TargetAction:
 
     def encode(self) -> dict[str, object]:
         """Only the CLI boundary requests the external catalog JSON shape."""
-        return {'command': self.declaration.declared_name, 'label': self.label,
+        return {'command': FieldCodec.encode(self.declaration), 'label': self.label,
                 'parameters': {'type': 'object', 'additionalProperties': False,
                     'properties': {item.name: item.json_schema() for item in self.editable_fields},
                     'required': [item.name for item in self.editable_fields if item.required]},
@@ -337,7 +337,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                     for declared in fields(self) if declared.metadata['target_bound']}
         if captured.keys() & arguments.keys():
             raise ValueError('Target-bound parameters cannot be overridden')
-        return type(self).from_payload({'kind': self.declared_name,
+        return type(self).from_payload({'kind': FieldCodec.encode(type(self)),
                                        **FieldCodec.encode(captured), **arguments})
 
     @classmethod
