@@ -484,7 +484,7 @@ class TurnRunner:
         update = await Coordination.run_worker(partial(self.current_turn_update, session_id))
         await self.effects._emit_event(session_id, update, client=client)
 
-    async def active_backend_inbox(self, session_id: str) -> asyncio.Queue | None:
+    async def active_backend_inbox(self, session_id: str) -> asyncio.Queue[dict[str, Any]] | None:
         state = await Coordination.run_worker(partial(self.turn_state, session_id))
         return self.inputs.backend_inboxes.get(session_id) if state.accepts_followup else None
 
@@ -504,7 +504,7 @@ class TurnRunner:
         async with self.turn_locks.setdefault(session_id, asyncio.Lock()):
             task = asyncio.current_task()
             assert task is not None
-            inbox: asyncio.Queue[str | dict[str, Any]] = asyncio.Queue()
+            inbox: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
             self.turn_tasks[session_id] = task
             self.inputs.backend_inboxes[session_id] = inbox
             try:
@@ -513,7 +513,7 @@ class TurnRunner:
                 )
                 while not inbox.empty():
                     command = inbox.get_nowait()
-                    if not isinstance(command, dict) or not (input_id := command.get("_input_id")):
+                    if not (input_id := command.get("_input_id")):
                         continue  # No accepted prompt: clear/interrupt controls carry no input.
                     item = self.inputs.queued_inputs.get(session_id, {}).get(input_id)
                     if item is None:

@@ -26,6 +26,7 @@ from .thread_identity import AdmissionIdentity
 from .threads import Thread
 
 if TYPE_CHECKING:
+    from .acp_extension import QueueItem, QueueScope
     from .registry_document import RegistrySnapshot
     from .input_drain import InputDrain
     from .turn_runner import TurnRunner
@@ -79,6 +80,12 @@ class QueuedInput:
     @property
     def accepted_id(self) -> str | None:
         return self.input_id
+
+    def queue_items(self, scope: QueueScope) -> tuple[QueueItem, ...]:
+        """Only this acceptance's original admission can appear in its queue."""
+        from .acp_extension import QueueItem
+
+        return (QueueItem(self.input_id, self.text),) if self.context.owns(scope.admission) else ()
 
     def source(self) -> AcceptedFollowingInput:
         return AcceptedFollowingInput(
