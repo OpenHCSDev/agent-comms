@@ -1336,16 +1336,22 @@ class RecordedMeasurementTests(unittest.TestCase):
                 Question('q', 'Original?', 'source', 'oracle'),)),))
             scored = scenario.score(Condition.RECENT_ONLY, RecordedAnswers({}))
             def original(installation):
-                return {'r1': {'construction': {'condition_application': {'evaluated': False},
+                return {'r1': {'model_steps': (),
+                    'answer_support': {'unassisted_recall': False},
+                    'provider_prompt_presence': {'evaluated': False},
+                    'construction': {'condition_application': {'evaluated': False},
                     'condition_installation': installation, 'request_budget': {'evaluated': False},
                     'source_coverage': {'full_context_capacity': {'evaluated': False}}}}}
             for installation in (complete, partial, no_request):
                 construction = scored.condition_construction(original(installation), {})
                 self.assertTrue(construction['recorded_constructor_selection']['evaluated'])
                 self.assertFalse(construction['evaluated'])
+                public = scored.public_native({}, original(installation), {})
+                self.assertTrue(public['condition_construction']['recorded_constructor_selection']['evaluated'])
+                self.assertFalse(public['condition_construction']['evaluated'])
                 for wrong in (Condition.FULL_CONTEXT, Condition.TASK_MEMORY, Condition.BOUNDED):
                     with self.subTest(wrong=wrong), self.assertRaisesRegex(ValueError, 'original SDK constructor'):
-                        replace(scored, condition=wrong).condition_construction(original(installation), {})
+                        replace(scored, condition=wrong).public_native({}, original(installation), {})
             for selection in (('source', 'prior'), ('source', 'source'), ('input',)):
                 with self.subTest(selection=selection), self.assertRaisesRegex(ValueError, 'ordered subset'):
                     probe.installed_condition(evidence, branch, context, serialized, manifest,
