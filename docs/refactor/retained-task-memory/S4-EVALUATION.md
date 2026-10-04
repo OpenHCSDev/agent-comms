@@ -106,6 +106,14 @@ These measurements do not prove a condition installation, complete-history
 capacity, preregistration or a matched study. See
 [original stimulus binding](../../checkpoints/s4-original-stimulus-20261004.md).
 
+The submitted bounded SDK transform is reported only when its existing original
+converter/request binding is complete. Partial transform/source evidence remains
+visible; it does not become a bound request. The scorer groups that observation,
+source delivery and full-history eligibility against all frozen rounds, and the
+paired result retains both arms' evidence. Supplied condition labels and SDK
+previews still do not authenticate intended matched intervention construction.
+See [condition evidence](../../checkpoints/s4-condition-evidence-20261004.md).
+
 ## Required next infrastructure and owner boundaries
 
 Reuse `tests/retained_native_fixture.py`,
