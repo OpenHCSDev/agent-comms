@@ -1,0 +1,71 @@
+{
+  "pairs": [
+    {
+      "candidate": {
+        "evaluated": false,
+        "expected_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "available_rounds": [],
+        "unavailable_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ]
+      },
+      "baseline": {
+        "evaluated": false,
+        "expected_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "available_rounds": [],
+        "unavailable_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ]
+      },
+      "construction_evaluated": false
+    },
+    {
+      "candidate": {
+        "evaluated": false,
+        "expected_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "available_rounds": [],
+        "unavailable_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ]
+      },
+      "baseline": {
+        "evaluated": false,
+        "expected_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "available_rounds": [],
+        "unavailable_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ]
+      },
+      "construction_evaluated": false
+    }
+  ],
+  "study_acceptance": {
+    "evaluated": false,
+    "reason": "Recorded pairs do not supply a registered design, verified condition construction or complete cost/end-to-end journeys"
+  },
+  "scope": "Selected original CLI fields; complete stdout stays at raw_root with its original SHA"
+}

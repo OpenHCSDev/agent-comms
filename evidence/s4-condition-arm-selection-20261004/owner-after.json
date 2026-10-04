@@ -1,0 +1,344 @@
+{
+  "revision": "e483722fe707c3757fba8421d818a68e55972a36",
+  "modules": 734,
+  "parse_omissions": [],
+  "sites": [
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 42,
+      "name": "PairedRecallDesign",
+      "syntax": "ClassDef"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 621,
+      "name": "condition_construction",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1050,
+      "name": "score_native",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1127,
+      "name": "score_native",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1131,
+      "name": "compare_native",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1153,
+      "name": "compare_native_pairs",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 77,
+      "name": "compare_native_pairs",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 861,
+      "name": "PairedRecallDesign",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1349,
+      "name": "PairedRecallDesign",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1368,
+      "name": "score_native",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1374,
+      "name": "score_native",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1378,
+      "name": "compare_native",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1383,
+      "name": "compare_native_pairs",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1162,
+      "name": "compare_native",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 595,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 642,
+      "name": "require_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 426,
+      "name": "RecordedConditionInstallation",
+      "syntax": "ClassDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 449,
+      "name": "require_condition",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 589,
+      "name": "installed_condition",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1010,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 591,
+      "name": "RecordedConditionInstallation",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 221,
+      "name": "score_native",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 229,
+      "name": "score_native",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 94,
+      "name": "PairedRecallDesign",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 340,
+      "name": "PairedRecallDesign",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 415,
+      "name": "PairedRecallDesign",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1093,
+      "name": "score_native",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1100,
+      "name": "compare_native",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1285,
+      "name": "RecordedConditionInstallation",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1395,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1404,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 302,
+      "name": "compare_native_pairs",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 417,
+      "name": "PairedRecallDesign",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1288,
+      "name": "RecordedConditionInstallation",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1298,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1301,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1378,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1414,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1315,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1323,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1346,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1361,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1365,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1376,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1433,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1314,
+      "name": "RecordedConditionInstallation",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1328,
+      "name": "require_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1357,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1422,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1428,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1431,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1432,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1331,
+      "name": "require_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1373,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1381,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 368,
+      "name": "score_native",
+      "syntax": "Attribute"
+    }
+  ],
+  "dependency_scope": "Unchanged JS construction and observer producers read separately; Python lexical AST does not resolve injected toString functions"
+}
