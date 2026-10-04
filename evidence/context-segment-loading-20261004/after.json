@@ -781,6 +781,12 @@
     },
     {
       "path": "tests/test_context_source_inspection.py",
+      "line": 249,
+      "expression": "from agent_comms.context_segments.awareness import UnavailableAwarenessSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
       "line": 24,
       "expression": "SystemLayerSegment",
       "node": "Name"
@@ -801,6 +807,12 @@
       "path": "tests/test_context_source_inspection.py",
       "line": 186,
       "expression": "TranscriptSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 254,
+      "expression": "UnavailableAwarenessSegment",
       "node": "Name"
     },
     {
