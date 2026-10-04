@@ -1,0 +1,35 @@
+{
+  "probe_sha256": "fff818b493fe9a784d20dc318d386c7a14469948d4626e5dd53623693c63ca0d",
+  "originals_unchanged": true,
+  "native_points": 15,
+  "budget_points": 1,
+  "stages": [
+    "preparing",
+    "callback",
+    "callback_end",
+    "budget_admission",
+    "connecting",
+    "connected",
+    "dispatch",
+    "first_event",
+    "callback",
+    "callback_end",
+    "first_delta_consumed",
+    "stream_end",
+    "callback",
+    "callback_end",
+    "finished"
+  ],
+  "last_original_elapsed_ms": 3230.596397,
+  "last_original_callback_ms": 5.413746,
+  "last_original_callback_count": 15,
+  "whole_turn_evaluated": false,
+  "original_files": {
+    "probe-1430b5fe6148de98860a980a68ec97ac-manifest.private.json": "76cb0aa29c1dfe5f2e25ffdffc70b0302725ffc0c756915cc2439938456541c1",
+    "649bd872e4f64869a455bdc149b7594b.requests.jsonl": "6335b5b36b113b0cd06ae269229d3d06f63ac48af26a1ad766e5ce760fe95973"
+  },
+  "native_journal_read": false,
+  "model_provider_calls": 0,
+  "scope": "Existing pinned manifest/request diagnostic metadata only; no SDK/native/input proof reread, request rerun or whole-turn inference",
+  "implementation": "1859e10b73f932fc8d1d969fa5ace33b0a68f2c1"
+}
