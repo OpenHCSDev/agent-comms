@@ -42,8 +42,9 @@ class PairedRecallDesign:
     """Supplied analysis parameters, not preregistration or spending authority.
 
     The original oracle file owns questions and round membership. Original
-    native admission owns model selection. This value owns only the requested
-    comparison and inference parameters; it cannot reconstruct missing facts.
+    native admission owns model selection. This value owns the supplied
+    construction, comparison and inference parameters; it cannot reconstruct
+    missing facts or approve execution.
     """
     oracle: FileProvenance
     candidate: Condition

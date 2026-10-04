@@ -105,7 +105,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertNotEqual(plan['trajectories'], design.construction_plan(18)['trajectories'])
         self.assertEqual(FieldCodec.encode(plan)['comparison_design']['oracle'], FieldCodec.encode(original))
         Path(original.path).write_text('{}')
-        with self.assertRaisesRegex(ValueError, 'differs'):
+        with self.assertRaisesRegex(ValueError, 'artifact changed'):
             design.construction_plan(17)
 
     def test_group_reader_shared_once_and_closed_after_second_arm_refuses(self):
