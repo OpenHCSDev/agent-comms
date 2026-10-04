@@ -1,0 +1,104 @@
+[
+  {
+    "repo": "Core",
+    "head": "e9d7dc09988dfab965dfa12bfc66797057716dce",
+    "collector": "9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10",
+    "parsed": 311,
+    "omissions": [],
+    "sites": [
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 142,
+        "count": 1,
+        "expression": "return type(self.value).declared_name"
+      },
+      {
+        "path": "src/agent_comms/coordinated_runtime_schema.py",
+        "line": 56,
+        "count": 1,
+        "expression": "db.execute('SELECT name,sql FROM sqlite_master WHERE name=?', (NativeRuntimeSchemaMeta.declared_name,))"
+      },
+      {
+        "path": "src/agent_comms/coordination_schema.py",
+        "line": 117,
+        "count": 1,
+        "expression": "_sql_values((member.declared_name,))"
+      },
+      {
+        "path": "src/agent_comms/coordination_schema.py",
+        "line": 99,
+        "count": 1,
+        "expression": "_sql_values((member.declared_name,))"
+      },
+      {
+        "path": "src/agent_comms/coordination_schema.py",
+        "line": 109,
+        "count": 1,
+        "expression": "_sql_values((member.declared_name,))"
+      },
+      {
+        "path": "src/agent_comms/field_codec.py",
+        "line": 298,
+        "count": 1,
+        "expression": "return value.declared_name"
+      },
+      {
+        "path": "src/agent_comms/typed_table.py",
+        "line": 441,
+        "count": 1,
+        "expression": "_identifier(cls.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/typed_table.py",
+        "line": 506,
+        "count": 1,
+        "expression": "_identifier(self.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/typed_table.py",
+        "line": 253,
+        "count": 1,
+        "expression": "_identifier(self.target.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/typed_table.py",
+        "line": 428,
+        "count": 1,
+        "expression": "_identifier(target.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/typed_table.py",
+        "line": 484,
+        "count": 1,
+        "expression": "_identifier(cls.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/typed_table.py",
+        "line": 547,
+        "count": 1,
+        "expression": "_identifier(cls.declared_name)"
+      }
+    ]
+  },
+  {
+    "repo": "Toad",
+    "head": "a6778f320b22f3c526a376b36ee6623861291d63",
+    "collector": "9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10",
+    "parsed": 288,
+    "omissions": [],
+    "sites": [
+      {
+        "path": "src/toad/agent_schema.py",
+        "line": 45,
+        "count": 1,
+        "expression": "return value.declared_name"
+      },
+      {
+        "path": "src/toad/db.py",
+        "line": 126,
+        "count": 1,
+        "expression": "db.execute(\"SELECT 1 FROM sqlite_master WHERE type='table' AND name=?\", (Session.declared_name,))"
+      }
+    ]
+  }
+]

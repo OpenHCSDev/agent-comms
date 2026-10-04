@@ -137,3 +137,26 @@ pi_events 4 to 5). Its original normal wheel is SHA
 8d489731728ebf9f7e0f90ef2b14e7e3b5d2f90ed82bd8b1482d735f82869886.
 Local installed F4 checks remain pending an actually released holder; thin540 is
 exclusively F2's loan. Source/pin changes do not claim installed acceptance.
+
+## Published collector and paired source cut
+
+Core e9d7dc09988dfab965dfa12bfc66797057716dce's automatic required Debt ratchet
+passed (run37179381517). Toad4112dcfa4 pins that exact Core and audit source via
+normal uv resolution, after joining F1's current1715113fb9f464a65a33fc3be2db29e021bc0dec.
+No environment was created or installed by resolution.
+
+after-flattened.json contains the original collector/Package source evidence:
+311 Core and 288 Toad modules parsed, zero omissions. Core55 to12, Toad14 to2.
+The only remaining feature site is F1's TargetField.editor_default in
+cli_commands.py142; Sch owns that declaration/editor family and received the
+exact site. It is not exempted. The other11 Core and2 Toad sites are the six
+named mechanisms. The collector screens calls/returns, not arbitrary nested
+comprehensions or dynamic resolution; source semantics were read beyond its hits.
+
+Owned F4 production commits delete145/add229 Core lines across45files and
+delete57/add66 Toad lines across14files. These totals exclude normal F1/F0 merge
+deltas, fixtures and evidence. They include the actual member consumers, external
+encoder calls, declaration-owned controls and the per-file measure adapter.
+Drafts remain unqualified pending the changed installed boundary/UI batch on a
+released existing holder. Native/input/goal histories and uncertain attempts are
+untouched; there is no provider or latency claim.
