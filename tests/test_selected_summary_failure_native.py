@@ -322,10 +322,10 @@ async def test_original_summary_assembly_inspector(tmp_path):
             assert len([row for row in records if row.get("stage") == "summary-assembly"]) == 1
             assert calls and child.returncode is None
             child.stdin.close()
-        # EOF exit waits for debugger disconnect. Release the original inspector
-        # resource before joining the native child, then retain its actual stderr.
-        await child.wait()
-        (tmp_path / "native-stderr.log").write_text(await errors)
+            # Native completion releases its debugger through the shared observer;
+            # the caller can join normally while the observation resource is open.
+            await child.wait()
+            (tmp_path / "native-stderr.log").write_text(await errors)
 
 
 async def test_summary_observer_releases_before_native_eof(tmp_path):
@@ -340,8 +340,8 @@ async def test_summary_observer_releases_before_native_eof(tmp_path):
                                      summaries=summaries) as observe_launch:
             child, _, _, errors = await launch(observe_launch=observe_launch)
             child.stdin.close()
-        await child.wait()
-        (tmp_path / "native-stderr.log").write_text(await errors)
+            await child.wait()
+            (tmp_path / "native-stderr.log").write_text(await errors)
         assert not calls
         assert session.read_bytes() == original
 
