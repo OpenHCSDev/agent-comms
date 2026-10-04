@@ -1545,15 +1545,25 @@ class TestAgentTurnForwarding:
         assert native.provider.posts == 2 and len(native.saved_inputs()) == 2
 
     async def test_turn_sets_wire_activity(self, native_backend):
+        from agent_comms.turn_phase import ToolRunningPhase
+
         native = native_backend
         await native.author_history()
         native.provider.tool_call = ("bash", {"command": "pwd"})
-        async with native.open_owner(native_options=("--tools", "bash")) as (agent, session):
+        updates = []
+
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+
+        async with native.open_owner(native_options=("--tools", "bash"), client=Client()) as (agent, session):
             await agent.prompt(session, [{"type": "text", "text": "!agent report working directory"}])
             assert agent._comms.agents.activity_of(session).state is ActivityState.IDLE
-            rows = [json.loads(line) for line in (native.root / "activity.jsonl").read_text().splitlines()]
-            assert any(row["thread"] == session and row["state"] == "working" for row in rows)
-            assert not agent.turns.turn_state(session).busy
+            states = [fact.state for update in updates for fact in decode_updates(update.field_meta)
+                      if isinstance(fact, TurnChangedUpdate)]
+            assert any(isinstance(state.phase, ToolRunningPhase) and state.busy for state in states)
+            assert states[-1] == agent._comms.registry.require(session).turn_state
+            assert not states[-1].busy
         assert native.provider.posts == 2
 
 

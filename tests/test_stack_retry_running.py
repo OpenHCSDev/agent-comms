@@ -46,6 +46,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
         )
         original = owner.inputs.dispositions.read().lookup("acp:old-native-unknown")
         proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+        await proxy.subscribe()
         turn = asyncio.create_task(proxy.request(
             "prompt", prompt=[{"type": "text", "text": "Unrelated ordinary native request"}],
         ))

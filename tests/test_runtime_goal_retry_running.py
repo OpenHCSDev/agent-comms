@@ -5,9 +5,11 @@ import os
 from contextlib import aclosing
 
 import pytest
+from acp import RequestError
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
+from agent_comms.acp_failure import PromptFailureReceipt
 from agent_comms.acp_extension import GoalChangedUpdate, decode_updates
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
@@ -48,7 +50,9 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
 
     class Client:
         async def session_update(self, **kwargs):
-            updates.append(kwargs["update"])
+            update = kwargs["update"]
+            updates.append(update if isinstance(update, dict) else
+                           update.model_dump(by_alias=True, exclude_none=True))
 
     owner.on_connect(Client())
     store = owner.turns.goals.open_goal_store()
@@ -117,6 +121,7 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
         native.provider.status = 503
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+    await proxy.subscribe()
     turn = asyncio.create_task(
         proxy.request("prompt", prompt=[{"type": "text", "text": "Current user request"}])
     )
@@ -148,7 +153,7 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
         assert any(
             fact.goal.state.active
             for update in updates
-            for fact in decode_updates(update.field_meta)
+            for fact in decode_updates(update.get("_meta"))
             if isinstance(fact, GoalChangedUpdate) and fact.goal is not None
         )
         if outcome == "cancel":
@@ -169,9 +174,11 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
             assert len(calls) == 1 and not owner.inputs.pending_turns.get(session)
             native.provider.status = 200
             finish.set()
-            if outcome == "exception":
-                with pytest.raises(RuntimeError, match="Current user turn failed"):
+            if outcome in {"exception", "error"}:
+                with pytest.raises(RequestError) as caught:
                     await turn
+                receipt = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
+                assert receipt.notification_published and receipt.failure.input_state.public_status == "started"
             else:
                 assert (await turn)["stopReason"] == "end_turn"
             await asyncio.wait_for(continued.wait(), 30)

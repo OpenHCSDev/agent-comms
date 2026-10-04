@@ -3,11 +3,13 @@
 import asyncio
 
 import pytest
+from acp import RequestError
 from acp.agent.router import build_agent_router
 
 from agent_comms import agent_events as events
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
+from agent_comms.acp_failure import PromptFailureReceipt
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
 from agent_comms.turn_runner import TurnRunner
 from test_backend_native_lifecycle import native_backend as native_backend
@@ -87,10 +89,11 @@ async def test_turn_failure_preserves_exact_exception_cause_and_releases_state(
         yield
 
     monkeypatch.setattr(backend, "stream_agent_events", stream)
-    with pytest.raises(RuntimeError) as caught:
+    with pytest.raises(RequestError) as caught:
         await owner.prompt(session, [{"type": "text", "text": "Work"}])
-    assert caught.value is failure
-    assert caught.value.__cause__ is source
+    assert caught.value.__cause__ is failure and failure.__cause__ is source
+    receipt = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
+    assert receipt.notification_published and receipt.failure.input_state.public_status == "not_sent"
     assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).busy
     assert not owner.inputs.backend_inboxes
     assert not owner.turns.turn_locks[session].locked()
@@ -157,15 +160,21 @@ async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, mo
         raise RuntimeError("execution failed")
 
     monkeypatch.setattr(backend, "stream_agent_events", stream)
-    with pytest.raises(RuntimeError, match="execution failed"):
+    with pytest.raises(RequestError) as caught:
         await owner.prompt(session, [{"type": "text", "text": "Work"}])
+    assert isinstance(caught.value.__cause__, RuntimeError)
+    assert str(caught.value.__cause__) == "execution failed"
+    receipt = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
     errors = failure_facts(updates, RequestFailedUpdate)
     assert len(errors) == (2 if isinstance(prior, events.Error) else 1)
     from agent_comms.input_attempt import NotSentInput
 
     assert errors[-1].failure.input_state is NotSentInput
-    expected = prior.text if prior is not None else "execution failed"
-    assert errors[-1].failure.detail == expected
+    assert receipt.notification_published and receipt.failure == errors[-1].failure
+    if prior is not None:
+        assert errors[-1].failure.detail == prior.text
+    else:
+        assert "Open diagnostic" in errors[-1].failure.detail
     assert native.session.read_bytes() == original
     assert native.provider.posts == 0  # Preparation/fault must not send or replay input.
     assert owner._comms.registry.require(session).active_turn is None
@@ -203,12 +212,14 @@ async def test_compaction_fault_reaches_acp_client_without_original_send(
 
     monkeypatch.setattr("agent_comms.owner_compaction_adaptive.maybe_compact_owner_turn", compact)
     monkeypatch.setattr(backend, "stream_agent_events", forbidden_stream)
-    with pytest.raises(SelectedChildUnknown) as caught:
+    with pytest.raises(RequestError) as caught:
         await owner.prompt(session, [{"type": "text", "text": "Original stays unknown"}])
-    assert caught.value is failure and caught.value.__cause__ is source
+    assert caught.value.__cause__ is failure and failure.__cause__ is source
+    receipt = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
     assert len(attempts) == 1
     errors = failure_facts(updates, RequestFailedUpdate)
-    assert len(errors) == 1 and errors[0].failure.detail == str(failure)
+    assert len(errors) == 1 and receipt.failure == errors[0].failure
+    assert receipt.notification_published and "Open diagnostic" in errors[0].failure.detail
     failed_inputs = failure_facts(updates, InputFailedUpdate)
     assert len(failed_inputs) == 1
     assert failed_inputs[0].text == "Original stays unknown"
@@ -234,10 +245,13 @@ async def test_actual_provider_failure_reports_started_input_once_without_retry(
 
     owner.on_connect(Client())
     native.provider.status = 503
-    async with asyncio.timeout(30):
-        await owner.prompt(session, [{"type": "text", "text": "Actual failed input"}])
+    with pytest.raises(RequestError) as caught:
+        async with asyncio.timeout(30):
+            await owner.prompt(session, [{"type": "text", "text": "Actual failed input"}])
+    receipt = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
     errors = failure_facts(updates, RequestFailedUpdate)
     assert len(errors) == 1
+    assert receipt.notification_published and receipt.failure == errors[0].failure
     assert "loopback retryable failure" in errors[0].failure.detail
     assert errors[0].failure.input_state.public_status == "started"
     assert not failure_facts(updates, InputFailedUpdate)

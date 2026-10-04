@@ -87,3 +87,30 @@ retry settlement, so this batch must not be reported as zero native inputs.
 Only localhost controlled provider responses are used; no external provider or
 public input is authorized by this batch. Preserve failure originals and retain
 terminal/proof/cleanup receipt before handing the holder back.
+
+## Current typed failure and controller consumers
+
+The original OwnedTurn producer reports/publishes the original fault, then raises
+PromptFailureReceipt.request_error. Fixtures now decode that existing typed
+receipt and assert exact chained causes, NotSent/Started and published feedback;
+they no longer demand raw exceptions from the public ACP result or raw private
+exception text where diagnostics intentionally redact it. Real localhost 503
+still preserves the original provider detail and exactly one native Started.
+
+RuntimeProxy.subscription supplies the actual controller token. Late socket
+attachment occurs after the original first input starts but before its distinct
+followup reservation. Retry socket prompts use the same acquired subscription;
+updates decode at the external dictionary boundary. Queued native retirement
+requires a typed unconfirmed failure, never synthetic successful ACP settlement.
+
+Tool-running/idle observations come from TurnChangedUpdate/Registry TurnState,
+not another expected activity.jsonl Working append. The selected busy fixture
+now enables the actual private runtime/wake configuration before expecting
+TRIAGE/FULL and sends while the original busy lease is already acquired. Original
+concurrent runtime observation may own that drain; assertions retain exact two
+native requests and original source/lease cleanup, rather than a caller count.
+
+These changes compile and remain source-only, with the original three negatives
+retained. Production and stack remain unchanged on this fixture branch. #638
+owns the separately published real native ingress custody defect; no installed
+batch resumes until its explicit successor package purpose is granted.

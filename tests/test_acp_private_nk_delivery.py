@@ -578,18 +578,23 @@ async def test_contended_cursor_refresh_still_invalidates_replaced_owner(tmp_pat
 async def test_acp_private_does_not_overlap_owner_turn(native_backend):
     native = native_backend
     await native.author_history()
-    async with native.open_owner() as (agent, session):
+    native.provider.text = '{"decision":"FULL"}'
+    async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
         comms = agent._comms
         comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
-        sent = comms.messaging.send_message("sender", session, "Selected input after current turn")
         async with native.original_input(agent, session, "Current human input") as turn:
+            sent = comms.messaging.send_message("sender", session, "Selected input after current turn")
             assert await agent.inputs.drain_inbox(session) == 0
             assert agent.turns.owns_turn(session, turn.turn_id)
             assert native.provider.posts == 0
         # The original lease's retirement, not a test map mutation, enables
         # canonical selected TRIAGE/FULL on the same SDK-authored saved source.
-        native.provider.text = '{"decision":"FULL"}'
-        assert await agent.inputs.drain_inbox(session) == 1
+        # Runtime observation is an actual concurrent consumer; whichever
+        # original drain owns the admission performs these same two stages.
+        await agent.inputs.drain_inbox(session)
+        async with asyncio.timeout(30):
+            while native.provider.posts != 2 or agent.turns.turn_state(session).busy:
+                await asyncio.sleep(0.01)
         assert native.provider.posts == 2
         assert comms.bus.log.message_by_id(sent.id) == sent
         assert not agent.turns.turn_state(session).busy and not agent.inputs.backend_inboxes

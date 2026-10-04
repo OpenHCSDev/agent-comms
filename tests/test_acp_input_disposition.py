@@ -7,11 +7,13 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from acp import RequestError
 from acp.schema import TextContentBlock
 
 from agent_comms import backend
 from agent_comms import pi_commands as commands
 from agent_comms import pi_events as pi
+from agent_comms.acp_failure import PromptFailureReceipt
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, SteerPromptRequest, decode_updates, encode_request
 from agent_comms.child_process import BoundedRun, ExitedOutcome
 from agent_comms.comms import Comms
@@ -54,8 +56,12 @@ async def test_native_preflight_failure_is_visible_and_cannot_mark_started(nativ
             raise NativePiUnavailable("native preflight refused before prompt")
 
         monkeypatch.setattr(NativeSessionPreparation, "input_ready", refused_preflight)
-        with pytest.raises(NativePiUnavailable, match="preflight"):
+        with pytest.raises(RequestError) as caught:
             await owner.prompt(session, [TextContentBlock(type="text", text="test")])
+        assert isinstance(caught.value.__cause__, NativePiUnavailable)
+        assert "preflight" in str(caught.value.__cause__)
+        failure = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
+        assert failure.notification_published and failure.failure.input_state.public_status == "not_sent"
         rows = owner.inputs.dispositions.read().unknown(frozenset({session}))
         assert len(rows) == 1 and not rows[0].has_native_binding
         assert rows[0].public_status == "not_sent"
@@ -92,6 +98,9 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
         proxy = RuntimeProxy(attachment, session, socket_path(native.root, os.getpid()))
         try:
             await wait_for(lambda: native.provider.posts == 1)
+            # Subscribe after the original input starts, before transferring
+            # this socket controller's distinct follow-up into owned custody.
+            await proxy.subscribe()
             accepted = await proxy.request(
                 "prompt", prompt=[{"type": "text", "text": "followup"}],
                 meta=encode_request(SteerPromptRequest()),
@@ -102,7 +111,6 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
             key = "acp:" + public_id
             await wait_for(lambda: any(event.id == public_id and event.success
                                       for event in acknowledgements))
-            await proxy.subscribe()
             pending = await proxy.request("input_dispositions")
             assert any(isinstance(fact, InputDeliveryChangedUpdate)
                        for update in updates.rows for fact in decode_updates(update.get("_meta")))
@@ -117,7 +125,13 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
                 # Retire this exact private native child before the queued
                 # input starts. Its original sent intent remains UNKNOWN.
                 await backend.terminate_task_process(turn)
-            await asyncio.wait_for(turn, 30)
+            if second_start:
+                assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
+            else:
+                with pytest.raises(RequestError) as caught:
+                    await asyncio.wait_for(turn, 30)
+                failure = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
+                assert failure.notification_published
             final = InputDispositions(owner.inputs.dispositions.path).read().rows
             assert len(final) == 2
             assert final[key].unresolved is (not second_start)
