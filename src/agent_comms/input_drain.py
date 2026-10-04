@@ -12,21 +12,15 @@ from functools import partial
 from typing import Any
 
 from acp import RequestError
-from acp.schema import (
-    AgentMessageChunk,
-    PromptResponse,
-    TextContentBlock,
-)
+from acp.schema import PromptResponse
 
 from .acp_extension import (
-    AvailableQueueProjection,
     PromptRequest,
     InputDeliveryChangedUpdate,
     InputStartedUpdate,
     QueueChangedUpdate,
-    QueueItem,
     QueueScope,
-    UnavailableQueueProjection,
+    QueueProjection,
     encode_updates,
 )
 from .activity import StoppedDrainDiagnostic, UnavailableDrainDiagnostic
@@ -80,7 +74,6 @@ class InputDrain(FutureInputQueue):
         self.restored_inputs: dict[str, dict[str, QueuedInput]] = {}
         self.queue_revisions: dict[str, int] = {}
         self.following_sources: dict[str, dict[str, AcceptedFollowingInput]] = {}
-        self.turn_input_keys: dict[str, set[str]] = {}
         self.original_sources: dict[str, OriginalTurnInput] = {}
         self.selected_summary_admissions: dict[str, SelectedSummaryAdmission] = {}
         self.dispositions = InputDispositions(comms.root / InputDispositions.filename)
@@ -130,35 +123,16 @@ class InputDrain(FutureInputQueue):
         scope = await self.queue_binding(session_id)
         revision = self.queue_revisions.get(session_id, 0) + 1
         self.queue_revisions[session_id] = revision
-        if scope is None:
-            return QueueChangedUpdate(None, revision, UnavailableQueueProjection())
-
-        def current(values: dict[str, QueuedInput]) -> tuple[QueueItem, ...]:
-            return tuple(
-                QueueItem(input_id, item.text)
-                for input_id, item in values.items()
-                if item.context.owns(scope.admission)
-            )
-
-        items = current(self.queued_inputs.get(session_id, {}))
-        restored = current(self.restored_inputs.get(session_id, {}))
-        rows = items + restored
-        try:
-            sizes = [len(row.text.encode("utf-8")) for row in rows]
-        except (AttributeError, UnicodeError):
-            return QueueChangedUpdate(scope, revision, UnavailableQueueProjection())
-        if len(rows) > 32 or any(size > 4096 for size in sizes) or sum(sizes) > 65536:
-            return QueueChangedUpdate(scope, revision, UnavailableQueueProjection())
-        return QueueChangedUpdate(scope, revision, AvailableQueueProjection(items, restored))
+        return QueueChangedUpdate(scope, revision, QueueProjection.capture(
+            scope,
+            tuple(self.queued_inputs.get(session_id, {}).values()),
+            tuple(self.restored_inputs.get(session_id, {}).values()),
+        ))
 
     async def emit_queue_state(self, session_id: str, *, client: Any = None) -> None:
         await (client or self.runtime).session_update(
             session_id=session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(await self.queue_state(session_id)),
-            ),
+            update=(await self.queue_state(session_id)).acp_chunk(),
         )
 
     async def emit_input_started(
@@ -180,11 +154,7 @@ class InputDrain(FutureInputQueue):
             self.queue_revisions[session_id] = revision
         await (client or self.runtime).session_update(
             session_id=session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(InputStartedUpdate(input_id, text, scope, revision, native_id)),
-            ),
+            update=InputStartedUpdate(input_id, text, scope, revision, native_id).acp_chunk(),
         )
 
     async def emit_input_disposition(
@@ -197,16 +167,21 @@ class InputDrain(FutureInputQueue):
     ) -> None:
         await (client or self.runtime).session_update(
             session_id=session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(InputDeliveryChangedUpdate(input_id)),
-            ),
+            update=InputDeliveryChangedUpdate(input_id).acp_chunk(),
         )
 
     async def replay_unknown_inputs(self, session_id: str, client: Any = None) -> None:
         """Refresh the producer-owned delivery ledger; this never replays an input."""
         await self.emit_input_delivery_changed(session_id, client=client)
+
+    def input_keys(self, session_id: str) -> frozenset[str]:
+        """Live captured source membership, never rebuilt from durable notices."""
+        original = self.original_sources.get(session_id)
+        following = frozenset(
+            key for source in self.following_sources.get(session_id, {}).values()
+            for key in source.keys
+        )
+        return following.union(original.keys) if original is not None else following
 
     async def awaiting_input_keys(self, session_id: str) -> frozenset[str] | None:
         """Derive delivery notices from existing owner queues; never create new authority."""
@@ -214,7 +189,7 @@ class InputDrain(FutureInputQueue):
         owner = snapshot.require(self.sessions.require(session_id))
         if owner.pid != os.getpid() or not snapshot.status(owner.name).running:
             return None
-        keys = set(self.turn_input_keys.get(session_id, ()))
+        keys = set(self.input_keys(session_id))
         keys.update(
             self.dispositions.bus_key(turn.origin, owner)
             for turn in self.pending_turns.get(session_id, ())
@@ -421,7 +396,6 @@ class InputDrain(FutureInputQueue):
             followup = replace(followup, provenance=(*followup.provenance, source.context_provenance()))
             rendered = TurnContext.render_segments((followup,), images=images)
             self.following_sources.setdefault(session_id, {})[item.input_id] = item.source()
-            self.turn_input_keys.setdefault(session_id, set()).add(item.key)
             self.queued_inputs.setdefault(session_id, {})[item.input_id] = item
             inbox.put_nowait(
                 {
@@ -539,7 +513,6 @@ class InputDrain(FutureInputQueue):
         source = self.following_sources.get(session_id, {}).pop(input_id, None)
         if source is not None:
             # Native write was refused; keep the durable notice, never replay it.
-            self.turn_input_keys.get(session_id, set()).difference_update(source.keys)
             await self.emit_input_delivery_changed(session_id)
         if self.queued_inputs.get(session_id, {}).pop(input_id, None):
             await self.emit_queue_state(session_id)
@@ -576,7 +549,6 @@ class InputDrain(FutureInputQueue):
             # capabilities. No callback delivery is required to burn a grant or
             # retain accepted queued input for the next distinct turn.
             self.following_sources.pop(session_id, None)
-            self.turn_input_keys.pop(session_id, None)
             admission = self.selected_summary_admissions.pop(session_id, None)
             if admission is not None:
                 admission.invalidate()
