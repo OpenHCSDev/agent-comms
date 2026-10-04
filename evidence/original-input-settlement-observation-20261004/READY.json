@@ -1,0 +1,76 @@
+{
+  "state": "READY_ORIGINAL_INPUT_SETTLEMENT_SCOPE",
+  "qualified_source_head": "10e549adfb058c68f91ac19bb886f33b026b22b6",
+  "base": "fa222810dbff56e221433a7a7d9f23aed1a08102",
+  "production_changes": [
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "deleted": 16,
+      "added": 12
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "deleted": 4,
+      "added": 5
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "deleted": 2,
+      "added": 2
+    }
+  ],
+  "tests": "six direct consumer files,46added/16deleted; all former boolean return consumers ask original row certainty",
+  "installed_python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+  "wheel_sha256": "04016102e2d13ae5a5d4fabc3ada865dd39dbb8a22277d39e514202bfe0c4424",
+  "installed_members_equal": 342,
+  "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+  "manifest_sha256": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+  "native_tree_sha256": "dbc88ed9231d1275da3ce218aa8919a247e41ce1f010ce765e7ac0960193f4ac",
+  "gate": {
+    "log": "installed01.log",
+    "passed": 5,
+    "pytest_seconds": 4.9,
+    "session": 74319,
+    "terminal_exit": 0,
+    "scope": [
+      "NotSent/missing lifecycle and replay refusal",
+      "current compaction readiness keeps bound UNKNOWN",
+      "mixed batch exact published cut, source/unknown/started/unrelated preservation and idempotent no rewrite",
+      "post-dispatch failure retains UNKNOWN feedback",
+      "actual SDK saved native preparation, original acquisition/terminal error feedback, distinct unsent input, lease/input resources and child teardown"
+    ],
+    "source_tests_only": false,
+    "actual_native_prompt_or_provider_request": false
+  },
+  "source_lifetime": "InputAttempt leaf hooks unchanged; document composes retirement; LockedStore.update returns exact published document; worker result shared_state derived under original wire cut. Loop creates/retires original source binding, worker only consumes original keys. Fresh delivery/error/compaction/recovery reads remain distinct.",
+  "none_disposition": "No new domain None-state. Existing optional row transition refusal and homogeneous shared_state projection unchanged. InputDrain absent original binding is resource absence already declared in pop(default=None); it now avoids an empty retirement operation.",
+  "custody_assertions": [
+    "saved SDK native history bytes unchanged",
+    "provider.posts == 0",
+    "original terminal input retained as NotSent with no native binding",
+    "distinct input does not replay original and original row remains unchanged",
+    "original ACP owner turn/input/inbox resources close in original AsyncExitStack lifetime",
+    "actual native children stopped and absence asserted by original fixture teardown"
+  ],
+  "scope_not_executed": "Other changed fixtures were migrated semantically; no unchanged full-suite/summary/provider/UI/MCP/native-stacked gate run. Not claiming every legacy fixture is qualified.",
+  "public_effects": 0,
+  "native_build_or_copy": false,
+  "environment_created": false,
+  "historical_speed_claim": false,
+  "remaining": "Parent normal source review/merge/receiving; historical13s/98s latency and public real-provider acceptance are not covered by this no-prompt retirement gate.",
+  "evidence_sha256": {
+    "installed01.log": "7241dda02f8823e966f80b70932eeb5c378fa071be53d735693279e854006f1d",
+    "build02.log": "78693ee255787a5dbc7ba8670a5732ed15a274d59340a050f9b9a2610ea83aa6",
+    "before-complete-family.json": "c63a304145e995aff01d3c74ccaf1eef4627f9fa3d15ef42aa7581b085229de0",
+    "SOURCE.md": "a5b4f5c01565082ab4682e8c41901fcd4f75c90d2ba419ea9936eade15f772f9",
+    "installed-source-proof.json": "6184c2d887f15ee172bcc4aaf84d8a27842666bdc10881c04711b5f59df2d2d5",
+    "wheel-proof.json": "12ecea6d690a14debf46170e81db4e9d5dc3a4cd7efb90c25122e05a973decfb",
+    "before.json": "db93d32ffe58bc175e88b916cafc37ec5d8f23de25d53938faec9025c1c30686",
+    "wheel-proof02.json": "5857f7c9c9ab2af0202f4b7d63f9dbfd316c0aece3f4b1da7a18d9e2f9d4311a",
+    "build.log": "78693ee255787a5dbc7ba8670a5732ed15a274d59340a050f9b9a2610ea83aa6",
+    "pip-check.log": "32a6466b54c8a3292cc57cf7d4cba591b6701dd93cc9cb1ed6ad14f06d93ea01",
+    "installed-controls.py": "889ffd268d9512629ea5e5e00db125b5e48364799480ca3fb5af882e2e0c44ef",
+    "install.log": "646defd7a5fc1b2c3b63be9d5cc18565d10d4b3df87953c9311aab7c821471c9",
+    "after.json": "8f16cb2fac0a431d69d928dab46767aeaf56016377b23f9753e96f607769c0f7"
+  }
+}
