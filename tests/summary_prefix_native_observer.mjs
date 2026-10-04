@@ -78,8 +78,9 @@ if (output && packageRoot) {
             '        await this.storedContext.beforeInput(this);'),
     });
     // Observe the existing converter's result, not a second conversion. The
-    // original request ID joins this frame to the later sealed manifest.
-    const conversionPoint = conditionSource && await post('Debugger.setBreakpointByUrl', {
+    // original request ID joins this frame to the later sealed manifest. Both
+    // bounded replacement and installed-source observations use this result.
+    const conversionPoint = (conditionSource || contexts) && await post('Debugger.setBreakpointByUrl', {
         url:pathToFileURL(`${packageRoot}/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js`).href,
         lineNumber:line(source.readFileSync(`${packageRoot}/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js`,'utf8').split('\n'),
             '    await config.onContextReady?.(llmContext, request.requestId);'),
