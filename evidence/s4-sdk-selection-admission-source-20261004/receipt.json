@@ -1,0 +1,42 @@
+{
+  "implementation": "c660e46937c6a807e331e1cc1c207794f07c70cb",
+  "scope": "Original authored SDK/RPC entry selection and correlated converter/request, private measurement only",
+  "configured_provider_qualified": false,
+  "enrolled_ACP_publication_qualified": false,
+  "capacity_qualified": false,
+  "study_qualified": false,
+  "provider_calls": 0,
+  "saved_user_input_replays": 0,
+  "new_environments": 0,
+  "native_builds": 0,
+  "hooks_restored": true,
+  "joined_children": true,
+  "source_counts": {
+    "original_message_entries": 3,
+    "selected_message_entries": 3,
+    "unselected_message_entries": 0
+  },
+  "raw_sha256": {
+    ".artifacts/s4-sdk-selection-admission-source/qualify-rpc.py": "fa61d01d9f1ad83b9edccab0cb117e95d7c7dff54b9387f7a875ef73128504d9",
+    ".artifacts/s4-sdk-selection-admission-source/read-completed.py": "345437642121245f95300fde4cb6e29587fd9d088f7ccb83f9be3bb708a80a6c",
+    ".artifacts/s4-sdk-selection-admission-source/sdk-rpc.log": "2d35f3dcd8067468401a646faeb93b8f7786d079eafae15d2acc9c65223d9bc8",
+    ".artifacts/s4-sdk-selection-admission-source/rpc-receipt.json": "b9b2ab965a8559d1bfba09db854d5d1df0a5161b1c123070009a025808663318",
+    ".artifacts/s4-sdk-selection-admission-source/focused.log": "433957ebd47f713eb514a38e1cd31ef342086f8ef7ec3f7aabc410bedd987669",
+    ".artifacts/s4-sdk-selection-admission-source/selection-read.log": "02865c68b0d1d7b36027d3eef64601d052d27d88d397997acaa6f4de5d2b4a77",
+    ".artifacts/s4-sdk-selection-admission-source/selection-first-decoder-refusal.log": "5bac3f0783224a30e8315890fe43dc6fd75b06ce880aec52f7a3c75aad6ee487",
+    ".artifacts/s4-sdk-selection-admission-source/selection-first-projection-refusal.log": "ec8fe7ab6eb35d179b7dbbe8cd8521566a8c64be97bd4fbfa254b879b5acc461",
+    ".artifacts/s4-sdk-selection-admission-source/selection-first-reader-import-refusal.log": "ffcb6846b3f499210b5c46d26219b022a91087e6b4cf81d8c1fb2e18059e4874",
+    ".artifacts/s4-sdk-selection-admission-source/rpc-publication/native.stdout.json": "545bdedc631ef3cc996c8ec9d959722c1fe79a56c5084b1df915c1465f7d470a",
+    ".artifacts/s4-sdk-selection-admission-source/rpc-publication/native.stderr": "e062c5347c11f4250b3f0011c9dc92156960314a66c540319435d2a9f1f1996f",
+    ".artifacts/s4-sdk-selection-admission-source/rpc-publication/observer.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".artifacts/s4-sdk-selection-admission-source/rpc-publication/observation.jsonl": "73f2e18d69eb603accc82f9db4b934342442b927a5d45a1a5db5a3cc1c7b3e95",
+    ".artifacts/s4-sdk-selection-admission-source/rpc-publication/sdk/prompt-exit.json": "f4750e8eb9943ac73e047ed0e5e0d58e6e09846842f11e8b7a7c04a0141b6d09",
+    ".artifacts/s4-sdk-selection-admission-source/rpc-publication/original-manifest.json": "64c6ac438e905bf5e209ca4aa918683c537acf845a5cd866bd63a4deba2d4f99",
+    ".artifacts/s4-sdk-selection-admission-source/rpc-publication/original-sdk-manifest.json": "f1ca1dd7b63928f40475347a60df1751e0d8af59fb65cfe57e5daeb0ca542ede",
+    ".artifacts/s4-sdk-selection-admission-source/rpc-publication/original-selection.json": "6d576263cbb9dcd4a43967cebb98283da565d3edcf4fb1dcf82ba2adc45e8f65",
+    ".artifacts/s4-sdk-selection-admission-source/rpc-publication/contexts/context-f2a7bb302a0cd22770c8805508f62bb6aefa8a75d042df9612f7af5bcd300114.json": "d8e265cf25b0ab649fbd857dff530339e10fa22cd15a1e46fe0bd7229ccd96e6",
+    ".artifacts/s4-sdk-selection-admission-source/rpc-publication/contexts/segments-f2a7bb302a0cd22770c8805508f62bb6aefa8a75d042df9612f7af5bcd300114.json": "0a4734b074b7e91736e799c3614d774bf791b598994ed4fedb8ccfe93b143614"
+  },
+  "reader_refusals": "Import name and direct codec boundary corrected; later Core public-text projection was not the native SDK manifest boundary. Read the original published SDK segments through ContextManifest instead; same completed input, no replay.",
+  "remaining": "Configured matched condition requests, complete transformed-history capacity, HTTP/returned-model evidence and comparative study remain unfinished. Thirty-pair/USD75 study unapproved."
+}
