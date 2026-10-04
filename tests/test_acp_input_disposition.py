@@ -14,7 +14,7 @@ from agent_comms import backend
 from agent_comms import pi_commands as commands
 from agent_comms import pi_events as pi
 from agent_comms.acp_failure import PromptFailureReceipt
-from agent_comms.acp_extension import InputDeliveryChangedUpdate, SteerPromptRequest, decode_updates, encode_request
+from agent_comms.acp_extension import InputDeliveryChangedUpdate, QueuePromptRequest, SteerPromptRequest, decode_updates, encode_request
 from agent_comms.child_process import BoundedRun, ExitedOutcome
 from agent_comms.comms import Comms
 from agent_comms.input_disposition import InputDispositions
@@ -103,7 +103,7 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
             await proxy.subscribe()
             accepted = await proxy.request(
                 "prompt", prompt=[{"type": "text", "text": "followup"}],
-                meta=encode_request(SteerPromptRequest()),
+                meta=encode_request(QueuePromptRequest()),
             )
             (receipt,) = decode_updates(accepted["_meta"])
             assert isinstance(receipt, InputDeliveryChangedUpdate)
@@ -155,6 +155,49 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
             assert not owner.turns.turn_state(session).busy and not owner.inputs.backend_inboxes
         finally:
             native.provider.response_gate.set()
+            turn.cancel()
+            await asyncio.gather(turn, return_exceptions=True)
+            await proxy.close()
+            await attachment.shutdown()
+    assert all(not child.alive() and not child.platform.group_members(child.identity)
+               for child in native.children)
+
+
+async def test_native_steer_keeps_original_input_and_turn_custody(native_backend):
+    native = native_backend
+    await native.author_history()
+    saved = native.session.read_bytes()
+    original_response = asyncio.Event()
+    native.provider.response_gate = original_response
+    async with native.open_owner(runtime_enabled=True) as (owner, session):
+        turn = asyncio.create_task(owner.prompt(session, [TextContentBlock(type="text", text="first")]))
+        attachment = canonical_agent(owner._comms, auto_wake=False)
+        attachment.on_connect(Updates())
+        proxy = RuntimeProxy(attachment, session, socket_path(native.root, os.getpid()))
+        try:
+            await proxy.subscribe()
+            await wait_for(lambda: native.provider.posts == 1)
+            lease = owner._comms.registry.require(session).require_turn_lease()
+            # The first actual response remains held; native interrupt must
+            # consume the distinct steer before it can finish this turn.
+            native.provider.response_gate = None
+            accepted = await proxy.request(
+                "prompt", prompt=[{"type": "text", "text": "steer now"}],
+                meta=encode_request(SteerPromptRequest()),
+            )
+            (receipt,) = decode_updates(accepted["_meta"])
+            assert isinstance(receipt, InputDeliveryChangedUpdate)
+            assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
+            rows = owner.inputs.dispositions.read().rows
+            assert len(rows) == 2 and all(row.has_started for row in rows.values())
+            assert rows["acp:" + receipt.input_id].sent_text.endswith("steer now")
+            assert {row.turn_id for row in rows.values()} == {lease.turn_id}
+            assert len({row.native_id for row in rows.values()}) == 2
+            assert native.provider.posts == 2 and len(native.saved_inputs()) == 3
+            assert native.session.read_bytes().startswith(saved)
+            assert not owner.turns.turn_state(session).busy and not owner.inputs.backend_inboxes
+        finally:
+            original_response.set()
             turn.cancel()
             await asyncio.gather(turn, return_exceptions=True)
             await proxy.close()
