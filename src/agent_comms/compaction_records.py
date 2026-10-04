@@ -178,25 +178,8 @@ class CompactionOperation(UnresolvedJournalHistory, TypedTable, declared_name="o
         outcome = self.committed_outcome()
         intent = NativeIntent.read(self)
         witness = intent.witness
-        witness.require_session(str(evidence.source.path))
-        if (
-            self.session_file != str(evidence.source.path)
-            or evidence.entries[0].id != witness.session_id
-            or evidence.source.identity != witness.revision.identity
-            or evidence.source.identity != outcome.revision.identity
-            or evidence.source.size < outcome.revision.size
-            or entry.id != outcome.entry_id
-            or entry.parent_id != witness.leaf_id
-            or entry.first_kept_entry_id != witness.first_kept_entry_id
-            or entry.details.agent_comms_commit != intent.identity(self.commit_id)
-        ):
-            raise CompactionJournalError("Original committed source cut differs")
-        if (
-            entry.payload_digest(witness) != intent.payload_digest
-            or entry.metadata_digest() != intent.metadata_digest
-            or outcome.metadata_digest != intent.metadata_digest
-        ):
-            raise CompactionJournalError("Original committed source payload differs")
+        witness.require_committed_cut(entry, evidence, outcome)
+        intent.require_committed_payload(self, entry, outcome)
         ids = tuple(item.require_entry_id() for item in branch)
         cut = ids.index(entry.id)
         kept = ids.index(witness.first_kept_entry_id)
@@ -393,17 +376,18 @@ class NativeForkCreation(NativeSessionIdentity, SessionJournalHistory, TypedTabl
             raise CompactionJournalError("Native fork creation requires a distinct original source")
 
     def covered_prefix(self, evidence, entries):
-        self.require_session(str(evidence.source.path))
-        header = entries[0]
-        if (
-            header.id != self.session_id
-            or header.parent_session != self.source.session_file
-            or evidence.source.identity != self.revision.identity
-            or len(entries) < self.entry_count
-        ):
-            raise CompactionJournalError("Original native fork source differs")
-        evidence.source.verify_snapshot(self.revision.size, bytes.fromhex(self.prefix_digest.value))
+        self.require_original_prefix(evidence, entries)
         return frozenset(entry.require_entry_id() for entry in entries[:self.entry_count])
+
+    def require_original_prefix(self, evidence, entries) -> None:
+        """Corroborate the SDK's child and its exact inherited creation bytes."""
+        if not self.covers(evidence, self.revision) or len(entries) < self.entry_count:
+            raise CompactionJournalError("Original native fork source differs")
+        try:
+            self.source.require_session(entries[0].parent_session)
+        except ValueError as error:
+            raise CompactionJournalError("Original native fork source differs") from error
+        evidence.source.verify_snapshot(self.revision.size, bytes.fromhex(self.prefix_digest.value))
 
     @classmethod
     def recorded_prefix(cls, db, evidence, entries):

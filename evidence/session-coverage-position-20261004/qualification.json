@@ -1,0 +1,29 @@
+{
+  "production_checkpoint": "97785da562e07803ae025249ff380ffef9242466",
+  "scope": "Source controls; installed configured saved-compaction journey pending",
+  "sanity": {
+    "passed": 18,
+    "failed": 17,
+    "compaction_boundary_passed": 10,
+    "new_coverage_controls": "Committed cut/fork prefix, legitimate append, altered original session/inode/position/marker/payload/digest refusal",
+    "unchanged_failures": "test_native_evidence_boundary invalid-ID wording and removed session_dir caller; native_pi.py/test file byte-equal to base 56bfe09e",
+    "elapsed_seconds": 0.39,
+    "dependency_initial_refusals": [
+      "old .venv missing metaclass_registry",
+      "existing534 dependencies contain no pytest"
+    ],
+    "runner": "Existing534 dependency interpreter with source imports and system pytest appended; PYTHONDONTWRITEBYTECODE=1; source-only, not installed production"
+  },
+  "debt": {
+    "head": "97785da562e07803ae025249ff380ffef9242466",
+    "result": "success",
+    "url": "https://github.com/OpenHCSDev/agent-comms/actions/runs/37178636773"
+  },
+  "resources": {
+    "available_ram_gib": 6.9,
+    "home_free_gib": 7.9,
+    "level": "critical",
+    "action": "One small source batch only; no environment/package/native/provider/fleet launch"
+  },
+  "protected": "Originals, UNKNOWN, source sessions, journal rows, native artifacts and public owners unchanged"
+}
