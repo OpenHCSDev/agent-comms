@@ -110,10 +110,14 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
     assert "#docs" in observer.channels.channels() and "#ui" not in observer.channels.channels()
 
     before = observer.registry.snapshot()
-    with pytest.raises(ValueError, match="referenced by saved views"):
-        observer.channels.delete_tag("api")
-    assert observer.registry.snapshot() == before
-    assert observer.channels.catalog.read().resolve("#child").parent == "#api"
+    observer.channels.delete_tag("api")
+    after = observer.registry.snapshot()
+    assert {name: thread.incarnation for name, thread in after.threads.items()} == {
+        name: thread.incarnation for name, thread in before.threads.items()
+    }
+    assert all("api" not in thread.tags for thread in after.threads.values())
+    assert observer.channels.catalog.read().saved_views["cross-team"].predicate.tags == {"api", "docs"}
+    assert observer.channels.catalog.read().resolve("#child").parent is None
 
     observer.channels.set_saved_view(
         SavedView(
@@ -122,7 +126,6 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
             ViewPredicate(AllOfMatch, frozenset({"docs"})),
         )
     )
-    observer.channels.delete_tag("api")
     restarted = wire(tmp_path)
     assert restarted.channels.catalog.read().resolve("#child").parent is None
     assert not restarted.channels.catalog.read().resolve("#api").archived

@@ -1190,7 +1190,7 @@ class ArchiveChannelCliCommand(CliCommand, declared_name='archive-channel'):
 
     @classmethod
     def channel_bindings(cls, comms, channel):
-        return (cls(name=channel.name),) if channel.builtin is None and not channel.archived else ()
+        return (cls(name=channel.name),) if channel.can_set_archived(cls.archived) else ()
 
     def confirmation(self):
         return (f"Archive {self.name}? Hide the channel without removing threads, tags or history. It can be restored."
@@ -1207,7 +1207,7 @@ class RestoreChannelCliCommand(ArchiveChannelCliCommand, declared_name='restore-
 
     @classmethod
     def channel_bindings(cls, comms, channel):
-        return (cls(name=channel.name),) if channel.builtin is None and channel.archived else ()
+        return (cls(name=channel.name),) if channel.can_set_archived(cls.archived) else ()
 
 
 @dataclass(frozen=True, kw_only=True)
