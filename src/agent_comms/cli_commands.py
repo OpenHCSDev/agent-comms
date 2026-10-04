@@ -139,7 +139,7 @@ class TargetField:
         if formatter is not None:
             return formatter(self.value)
         if self.choices:
-            return type(self.value).declared_name
+            return FieldCodec.encode(type(self.value))
         return ('' if self.value is None else self.value if isinstance(self.value, str)
                 else json.dumps(FieldCodec.encode(self.value)))
 
