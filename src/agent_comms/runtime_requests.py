@@ -22,6 +22,7 @@ from .field_codec import FieldCodec
 from .goal_actions import GoalAction
 from .thread_presentation import LiveThreadOwnerBinding
 from .turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn
+from .working_memory_labels import ClassifierVersion
 
 if TYPE_CHECKING:
     from .runtime import RuntimeServer, SocketClient
@@ -399,9 +400,12 @@ class ContextReferenceRuntimeRequest(RecordedContextRuntimeRequest):
 class ContextRecordedSegmentRuntimeRequest(RecordedContextRuntimeRequest):
     contributors: tuple[int, ...] = ()
 
-    async def result(self, ctx):
+    async def selected_segment(self, ctx):
         manifest = await self.manifest(ctx)
-        segment = manifest.selected_segment(self.segment, self.contributors)
+        return manifest.selected_segment(self.segment, self.contributors)
+
+    async def result(self, ctx):
+        segment = await self.selected_segment(ctx)
         agent = ctx.server.agent
         owner = await Coordination.run_worker(partial(agent._comms.registry.require, ctx.name))
 
@@ -410,3 +414,15 @@ class ContextRecordedSegmentRuntimeRequest(RecordedContextRuntimeRequest):
 
         text = await segment.public_text(read_reference)
         return FieldCodec.encode(ContextSourceText(segment.public_description(), text))
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContextAnnotationsRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
+    classifier: ClassifierVersion
+
+    async def result(self, ctx):
+        segment = await self.selected_segment(ctx)
+        labels = await Coordination.run_async(
+            ctx.server.agent._comms.root / "coordination.sqlite3",
+            lambda store: store.annotations.for_segment(segment, self.classifier))
+        return FieldCodec.encode(labels)

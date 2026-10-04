@@ -4,6 +4,7 @@ from __future__ import annotations
 from .coordination_tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
 from .working_memory_labels import CalibrationReport, ClassifierVersion, HumanLabel, ModelLabel, QuestionVersion
 from .working_memory_requests import CompletedAnnotationOutcome, DisclosureRequest, SubmittedAnnotationOutcome
+from .working_memory_questions import KindQuestion
 
 
 class PreviouslyRequestedAnnotation(ValueError):
@@ -40,6 +41,21 @@ class WorkingMemoryAnnotations:
                 effective = SpanAnnotationsRow.effective(tuple(rows))
                 cases.extend(effective.evaluate_original(original))
             return CalibrationReport(question, classifier, tuple(cases))
+
+    def for_segment(self, segment, classifier: ClassifierVersion) -> tuple[ModelLabel, ...]:
+        """Read original meaning answers for one authenticated segment digest."""
+        question = QuestionVersion.current(KindQuestion)
+        with self.session.read():
+            rows = SpanAnnotationsRow.select(self.session._connection, order_by=("id",),
+                segment_digest=segment.sha256, question=question.question,
+                question_version=question.sha256, classifier=classifier.classifier,
+                classifier_pin=classifier.pin)
+            grouped = {}
+            for row in rows:
+                key = tuple(self.address(row.label.span, question, classifier).values())
+                grouped.setdefault(key, []).append(row)
+            return tuple(SpanAnnotationsRow.effective(tuple(originals))
+                         for originals in grouped.values())
 
     def reserve(self, request: DisclosureRequest, grant) -> AnnotationRequestsRow:
         key = self.address(request.span, request.question, request.classifier)

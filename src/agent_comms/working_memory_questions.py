@@ -113,10 +113,18 @@ class SpanQuestion(DeclaredFamily, affix="Question"):
     def disclosed_owner_rules(cls, rules: tuple[str, ...]) -> tuple[str, ...]:
         return ()
 
+    @classmethod
+    def working_memory_section(cls, answer: type[SpanAnswer]) -> str:
+        return OtherSpan.section
+
 
 class KindQuestion(SpanQuestion):
     answer_family = SpanKind
     instructions = "Classify the literal span's meaning. Do not infer its author or authority."
+
+    @classmethod
+    def working_memory_section(cls, answer: type[SpanAnswer]) -> str:
+        return cls.require_answer(answer).section
 
 
 class ObligationQuestion(SpanQuestion):

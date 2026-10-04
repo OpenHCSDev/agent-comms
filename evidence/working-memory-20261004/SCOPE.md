@@ -97,3 +97,21 @@ withholds disclosure; that negative is retained and the fixture corrected to
 explicitly unattributed local system text, with no native/token attestation.
 No product guard was changed. This is source sanity, not empirical calibration,
 installed runtime/worker or human-authority acceptance. Zero external requests.
+
+## Authenticated annotation read and view contract
+
+The existing recorded-segment request now owns selected_segment acquisition once.
+Its text reader and the new ContextAnnotationsRuntimeRequest both use original
+ContextManifest turn/request/contributor selection. The latter reads original
+label rows through joined Coordination, with no native/context preview read,
+source reassembly, additional store or transport. Querying one authenticated
+digest returns the effective nominal label for each original addressed span.
+The new endpoint is declared through the existing RuntimeRequest/FieldCodec
+family, not a second router.
+
+ModelLabel's view section is Unclassified while empirical thresholds are absent.
+HumanLabel borrows the original question/member section declaration: an authored
+kind correction can place an item in Obeys/Promised immediately. Other questions
+cannot manufacture a kind group. No caller decides authority from probability
+or guesses source authorship. The W6 frontend consumer is still unfinished and
+no actual installed reader/controller was launched for this source batch.

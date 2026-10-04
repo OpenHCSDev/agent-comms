@@ -11,7 +11,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .thread_identity import ThreadIncarnation
 from .turn_context import ContextSpan
-from .working_memory_questions import SpanAnswer, SpanQuestion
+from .working_memory_questions import OtherSpan, SpanAnswer, SpanQuestion
 
 
 class Classifier(DeclaredFamily, affix="Classifier"):
@@ -112,6 +112,12 @@ class ModelLabel(SpanLabel):
     def public_description(self) -> str:
         return f"{self.classifier.pin} · probability {self.probability:.3f} · confidence {self.confidence:.3f}"
 
+    @property
+    def working_memory_section(self) -> str:
+        # No empirical calibration/threshold has been admitted for this pin.
+        # A probability alone does not classify the human working-memory view.
+        return OtherSpan.section
+
     def evaluate_original(self, original: ModelLabel) -> tuple[CalibrationCase, ...]:
         # An unreviewed prediction supplies no human evaluation evidence.
         return ()
@@ -129,6 +135,10 @@ class HumanLabel(ModelLabel):
 
     def public_description(self) -> str:
         return f"Human correction by {self.author.name} · original classifier {self.classifier.pin}"
+
+    @property
+    def working_memory_section(self) -> str:
+        return self.question.question.working_memory_section(self.answer)
 
     def evaluate_original(self, original: ModelLabel) -> tuple[CalibrationCase, ...]:
         return (CalibrationCase(original, self),)
