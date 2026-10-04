@@ -240,3 +240,43 @@ def test_authored_sdk_observation_retains_read_identity_without_minting_native_p
     with pytest.raises(ValueError, match="unambiguous"):
         replace(original, provenance=(*original.provenance,
             PreviewProvenance(replace(native, session_id="other"), "b" * 64))).native_identity()
+
+
+def test_cold_client_acquires_current_and_recorded_contributor_declarations():
+    """Prevent producer-import order from changing RPC and manifest decoding."""
+    import subprocess
+    import sys
+
+    result = subprocess.run([sys.executable, "-c", '''
+import hashlib, json, sys
+from agent_comms.field_codec import FieldCodec
+from agent_comms.native_turn_context import NativeContextData
+from agent_comms.turn_context import ContextSegment, SegmentManifest
+assert "agent_comms.context_segments.awareness" not in sys.modules
+source = {"kind": "file", "path": "/original/instructions/awareness-unavailable.md", "sha256": "a" * 64}
+original = "Original unavailable awareness instruction"
+wire = {"kind": "unavailable_awareness", "provenance": [source],
+        "instruction": {"content": original, "source": source}}
+preview = FieldCodec.decode(NativeContextData, {
+    "counter": "pi.estimateTokens", "identity": {"session_id": "original-native", "session_file": "/original/saved.jsonl"},
+    "segments": [], "contributors": [wire]})
+assert preview.contributors[0].public_text() == original
+schema = FieldCodec.value_schema(type[ContextSegment])
+# These original stored spellings span every previously producer-local module.
+expected = {"awareness", "unavailable_awareness", "retained", "selected_wake",
+            "selected_triage", "selected_work", "selected_response", "complete_awareness"}
+assert expected <= set(schema["enum"]), schema
+for name in expected:
+    manifest = FieldCodec.decode(SegmentManifest, {"kind": name, "provenance": [source],
+        "sha256": hashlib.sha256(original.encode()).hexdigest(), "utf8_bytes": len(original), "tokens": 7})
+    assert manifest.kind is ContextSegment.decode(name)
+    assert FieldCodec.encode(manifest)["kind"] == name
+try:
+    ContextSegment.decode("not_an_original_contributor")
+except ValueError:
+    pass
+else:
+    raise AssertionError("Unknown context kind must still refuse")
+print(json.dumps({"current_preview": "decoded original unavailable contribution", "recorded_declarations": sorted(expected), "schema_members": len(schema["enum"])}))
+'''], capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stderr

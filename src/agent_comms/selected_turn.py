@@ -23,18 +23,12 @@ from .selected_participant import SelectedParticipant
 from .selected_request import SelectedRequest
 from .selected_result import CoordinatedTurn
 from .selected_session import SelectedSession
-from .selected_triage import SelectedTriage, SelectedTriageOutcome
-from .wake import derive_exact_reply_target
+from .selected_triage import SelectedTriageOutcome
 from .wake_candidate_index import WakeCandidateIndex
-from .wake_injection import SelectedWakeSegment
+from .context_segments.wake import SelectedWakeSegment
+from .context_segments.selected import SelectedTriageSegment, SelectedWorkSegment
 from .thread_identity import TurnId
-from .turn_context import (
-    InstructionFile,
-    InstructionSegment,
-    RecordedContextTurn,
-    RenderedInput,
-    TurnContext,
-)
+from .turn_context import RecordedContextTurn, RenderedInput, TurnContext
 from .turn_phase import PreparingPhase, PromptAcceptancePhase, PublishingPhase
 
 
@@ -90,52 +84,6 @@ class SelectedPrompt:
                 participant.batch.response_segment(participant.owner.thread.name),
             )
         ).render()
-
-
-@dataclass(frozen=True, kw_only=True)
-class SelectedTriageSegment(InstructionSegment):
-    participant: SelectedParticipant
-    output: InstructionFile
-
-    @classmethod
-    def capture(cls, participant, provenance):
-        instruction = InstructionFile.read("selected-triage.md")
-        output = InstructionFile.read("selected-triage-output.md")
-        return cls(
-            provenance=(*provenance, instruction.source, output.source),
-            instruction=instruction,
-            participant=participant,
-            output=output,
-        )
-
-    def values(self):
-        return dict(
-            name=self.participant.owner.thread.name,
-            output=self.output.render(SelectedTriage.output_values()),
-        )
-
-
-@dataclass(frozen=True, kw_only=True)
-class SelectedWorkSegment(InstructionSegment):
-    participant: SelectedParticipant
-    action_instructions: tuple[InstructionFile, ...]
-
-    @classmethod
-    def capture(cls, participant, action, provenance):
-        instruction = InstructionFile.read("selected-work.md")
-        originals = action.instruction_files
-        return cls(
-            provenance=(*provenance, instruction.source, *(item.source for item in originals)),
-            instruction=instruction,
-            participant=participant,
-            action_instructions=originals,
-        )
-
-    def values(self):
-        return dict(
-            name=self.participant.owner.thread.name,
-            action=" ".join(item.content for item in self.action_instructions),
-        )
 
 
 @dataclass(frozen=True)

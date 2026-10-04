@@ -6,7 +6,7 @@ import re
 from abc import ABC, ABCMeta
 from typing import Any, ClassVar, Self, cast
 
-from metaclass_registry import AutoRegisterMeta, RegistryConfig  # type: ignore[import-untyped]
+from metaclass_registry import AutoRegisterMeta, LazyDiscoveryDict, RegistryConfig  # type: ignore[import-untyped]
 
 
 class _FamilyMeta(AutoRegisterMeta, ABCMeta):
@@ -18,6 +18,7 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
         *,
         affix: str | None = None,
         declared_name: str | None = None,
+        discovery_package: str | None = None,
     ) -> _FamilyMeta:
         roots = {
             base._family_root
@@ -34,7 +35,10 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
         )
         if is_root:
             namespace["_family_affix"] = affix or ""
-            namespace["__registry__"] = {}
+            namespace["__registry__"] = (
+                LazyDiscoveryDict(enable_cache=False) if discovery_package else {}
+            )
+            namespace["_family_discovery_package"] = discovery_package
             namespace["declared_name"] = None
         elif root is not None:
             stem = name.removesuffix(root._family_affix) if root._family_affix else name
@@ -54,6 +58,10 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
                 ),
                 key_attribute="declared_name",
                 skip_if_no_key=True,
+                discovery_package=(
+                    discovery_package if is_root
+                    else cast(type[DeclaredFamily], root)._family_discovery_package
+                ),
             )
             if is_root or root is not None
             else None
@@ -64,7 +72,9 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
 
     @staticmethod
     def _register_class(cls: Any, key: str, config: RegistryConfig) -> None:
-        previous = config.registry_dict.get(key)
+        # Registration writes the declared member; it must not start discovery
+        # while the family's defining module is still being initialized.
+        previous = dict.get(config.registry_dict, key)
         if previous is not None:
             # dataclass(slots=True) creates a replacement class, not a new member.
             slot_replacement = (
@@ -89,12 +99,15 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     Declare a root with ``affix=\"Scope\"`` (or omit it for unstripped names).
     Abstract intermediate classes are excluded by AutoRegisterMeta. Override a
     stored spelling only with ``declared_name=`` at the member declaration.
+    A distributed family declares its member package with ``discovery_package``;
+    the existing registry acquires those declarations on decode or schema reads.
     """
 
     declared_name: ClassVar[str]
     family_discriminator: ClassVar[str] = "kind"
     _family_root: ClassVar[type[DeclaredFamily] | None] = None
     _family_affix: ClassVar[str]
+    _family_discovery_package: ClassVar[str | None]
     __registry__: ClassVar[dict[str, type[DeclaredFamily]]]
 
     def __init_subclass__(
@@ -102,6 +115,7 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
         *,
         affix: str | None = None,
         declared_name: str | None = None,
+        discovery_package: str | None = None,
     ) -> None:
         # The metaclass consumes these declaration options before ABC creation.
         super().__init_subclass__()
