@@ -216,6 +216,7 @@ sys.path.insert(0,sys.argv[4])
 from delivery_owner_fixture import canonical_agent
 from native_backend_fixture import NativeBackendFixture
 from agent_comms.comms import Comms
+from agent_comms.queued_input import InitialInput
 async def main():
     owner = canonical_agent(Comms(Path(sys.argv[1])), auto_wake=False,
                             agent_args=['--provider','response-local','--model','fixture','--thinking','off'])
@@ -224,7 +225,7 @@ async def main():
     async def die(*args, **kwargs):
         os._exit(17)
     owner.inputs.emit_input_disposition = die
-    await owner.inputs.run_owned_input(session,session,'Retain exact crash input')
+    await InitialInput.run(owner.inputs,session,session,'Retain exact crash input')
 asyncio.run(main())
 """
     result = await BoundedRun.run(

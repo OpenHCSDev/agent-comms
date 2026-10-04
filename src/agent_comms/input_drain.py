@@ -7,7 +7,7 @@ import os
 import sqlite3
 import time
 from dataclasses import replace
-from contextlib import AsyncExitStack, ExitStack, aclosing
+from contextlib import aclosing
 from functools import partial
 from typing import Any
 
@@ -26,7 +26,6 @@ from .acp_extension import (
 from .activity import StoppedDrainDiagnostic, UnavailableDrainDiagnostic
 from .agent_events import Done
 from .comms import Comms
-from .input_origin import InputOrigin, UnattributedInputOrigin
 from .coordination_errors import CoordinationError, IdentityConflict
 from .coordination_cohort import next_sealed_assignment
 from .coordinator import Coordination
@@ -37,7 +36,7 @@ from .native_input_owner import RegistryOwner
 from .input_attempt import InputAttempt
 from .input_disposition import FutureInputQueue, InputDispositions, InputDocument
 from .input_effects import InputEffects
-from .queued_input import InitialInput, QueuedInput, InputHandoffRefused
+from .queued_input import QueuedInput, InputHandoffRefused
 from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
 from .schedule_rules import WakeScheduleCheck
@@ -349,12 +348,6 @@ class InputDrain(FutureInputQueue):
     async def drain_count(self, session_id: str) -> int:
         return await self.drain_inbox(session_id)
 
-    def pending_followups(self, session_id: str, rows: InputDocument) -> int:
-        return sum(
-            not rows.all_started(source.keys)
-            for source in self.following_sources.get(session_id, {}).values()
-        )
-
     async def accept_followup(
         self,
         session_id: str,
@@ -365,31 +358,16 @@ class InputDrain(FutureInputQueue):
         images: tuple[Any, ...],
     ) -> PromptResponse:
         inbox = self.backend_inboxes[session_id]
-        async with _async_store_lock(self.comms._wire_lock_path), AsyncExitStack() as rollback:
-            custody = ExitStack()
-            rollback.push_async_callback(Coordination.run_worker, custody.close)
-            document = await Coordination.run_worker(self.dispositions.read)
-            if self.pending_followups(session_id, document) >= 32:
-                raise RequestError.invalid_params(
-                    {"reason": "Too many follow-up inputs awaiting their own user start."}
-                )
-            controller = self.runtime.controller.get()
-            if controller is UNBOUND_CONTROLLER:
-                controller = self.sessions.client
-            followup = UserFollowupSegment.capture(text.removeprefix(AGENT_PREFIX))
-            item, owner = await Coordination.run_worker(partial(
-                QueuedInput.capture, self,
-                self.sessions.require(session_id),
-                text=display_text,
-                prompt=TurnContext.render_segments((followup,), images=images).text,
-                echo=request.defer_display,
-                images=images,
-                controller=controller,
-                input_id=request.input_id,
-                origin=request.origin, custody=custody,
-            ))
-            document = await Coordination.run_worker(self.dispositions.read)
-            source = document.rows[item.key]
+        controller = self.runtime.controller.get()
+        if controller is UNBOUND_CONTROLLER:
+            controller = self.sessions.client
+        followup = UserFollowupSegment.capture(text.removeprefix(AGENT_PREFIX))
+        async with QueuedInput.reserve(
+            self, session_id, self.sessions.require(session_id), text=display_text,
+            prompt=TurnContext.render_segments((followup,), images=images).text,
+            echo=request.defer_display, images=images, controller=controller,
+            input_id=request.input_id, origin=request.origin,
+        ) as (item, owner, source, custody):
             if self.backend_inboxes.get(session_id) is not inbox:
                 raise InputHandoffRefused("Original native inbox retired before follow-up handoff")
             item = request.accepted(item, source, owner)
@@ -562,43 +540,3 @@ class InputDrain(FutureInputQueue):
         await self.emit_input_delivery_changed(session_id)
         if remaining:
             await self.emit_queue_state(session_id)
-
-    async def run_owned_input(
-        self,
-        session_id: str,
-        thread_name: str,
-        task: str,
-        *,
-        images: tuple[Any, ...] = (),
-        display_text: str | None = None,
-        input_id: str | None = None,
-        origin: InputOrigin = UnattributedInputOrigin(),
-    ) -> None:
-        async with _async_store_lock(self.comms._wire_lock_path), AsyncExitStack() as rollback:
-            custody = ExitStack()
-            rollback.push_async_callback(Coordination.run_worker, custody.close)
-            item, _owner = await Coordination.run_worker(partial(InitialInput.capture,
-                self,
-                thread_name,
-                text=display_text or task,
-                prompt=task,
-                echo=display_text is not None,
-                images=images,
-                controller=self.runtime.controller.get(),
-                input_id=input_id,
-                origin=origin, custody=custody,
-            ))
-            self.queued_inputs.setdefault(session_id, {})[item.input_id] = item
-            custody.pop_all()
-        try:
-            document = await Coordination.run_worker(self.dispositions.read)
-            await self.emit_input_disposition(session_id, document.lookup(item.key))
-            await self.emit_queue_state(session_id)
-            await item.dispatch(self.effects.turns, session_id, thread_name)
-        finally:
-            queued = self.queued_inputs.get(session_id, {})
-            if queued.get(item.input_id) is item:
-                async with _async_store_lock(self.comms._wire_lock_path):
-                    await Coordination.run_worker(partial(self.dispositions.settle_unbound, (item.key,)))
-                    queued.pop(item.input_id)
-                await self.emit_queue_state(session_id)

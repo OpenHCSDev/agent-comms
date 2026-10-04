@@ -1,5 +1,6 @@
 """Real native Pi must not feed the full UNKNOWN backlog back to its provider."""
 
+from agent_comms.queued_input import InitialInput
 import asyncio
 import json
 import os
@@ -226,7 +227,7 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             }
             assert 900_000 < len(json.dumps(full_result, indent=2).encode()) < 1_100_000
             await asyncio.wait_for(
-                agent.inputs.run_owned_input(
+                InitialInput.run(agent.inputs,
                     "parent", "parent", "Inspect the inbox twice, then finish."
                 ),
                 45,

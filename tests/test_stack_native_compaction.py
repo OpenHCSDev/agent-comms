@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.queued_input import InitialInput
 import asyncio
 import json
 import os
@@ -387,7 +388,7 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                 await asyncio.gather(owner.inputs.drain_tasks["project"], return_exceptions=True)
                 comms.threads.attach_session("project", str(session))
                 turn = asyncio.create_task(
-                    owner.inputs.run_owned_input("project", "project", "Reply OK.")
+                    InitialInput.run(owner.inputs, "project", "project", "Reply OK.")
                 )
                 try:
                     assert await asyncio.to_thread(summary_entered.wait, 10)

@@ -1,5 +1,6 @@
 """Real retained Pi processes must reload the branch after manual compaction."""
 
+from agent_comms.queued_input import InitialInput
 import asyncio
 import json
 import os
@@ -244,12 +245,12 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
         try:
             await owner.new_session(str(project))
             comms.threads.attach_session("worker", str(session))
-            await asyncio.wait_for(owner.inputs.run_owned_input("worker", "worker", "WARMUP"), 20)
+            await asyncio.wait_for(InitialInput.run(owner.inputs, "worker", "worker", "WARMUP"), 20)
             retained = owner.turns.persistent_backends["worker"].custody.idle().child.proc
             assert retained is not None and retained.returncode is None, json.dumps(
                 updates, indent=2
             )
-            await asyncio.wait_for(owner.inputs.run_owned_input("worker", "worker", "REUSE"), 20)
+            await asyncio.wait_for(InitialInput.run(owner.inputs, "worker", "worker", "REUSE"), 20)
             assert owner.turns.persistent_backends["worker"].custody.idle().child.proc is retained
             assert retained.returncode is None
             assert len(requests) == 2
@@ -321,7 +322,7 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
                 .state.committed
             )
             await asyncio.wait_for(
-                owner.inputs.run_owned_input("worker", "worker", "AFTER_COMPACT"), 20
+                InitialInput.run(owner.inputs, "worker", "worker", "AFTER_COMPACT"), 20
             )
             resumed = owner.turns.persistent_backends["worker"].custody.idle().child.proc
             assert resumed is not None and resumed.returncode is None

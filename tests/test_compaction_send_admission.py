@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.queued_input import InitialInput
 import asyncio
 import os
 
@@ -72,7 +73,7 @@ async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        await agent.inputs.run_owned_input("project", "project", "new correction")
+        await InitialInput.run(agent.inputs, "project", "project", "new correction")
         assert observed == [False]
         rows = (
             InputDispositions(comms.root / InputDispositions.filename)
@@ -82,7 +83,7 @@ async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit
         assert len(rows) == 1 and not rows[0].has_native_binding
         assert journal.operations.get(commit_id).state.declared_name == "intent"
         journal.operations.resolve(commit_id, UnknownOperation(), {"status": "unknown", "reason": "uncertain"})
-        await agent.inputs.run_owned_input("project", "project", "distinct later input")
+        await InitialInput.run(agent.inputs, "project", "project", "distinct later input")
         assert observed == [False, False]
         assert journal.operations.get(commit_id).state.declared_name == "unknown"
     finally:

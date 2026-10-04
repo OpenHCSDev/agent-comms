@@ -16,7 +16,7 @@ from acp.schema import (
 )
 
 from .pi_vocabulary import ThinkingLevel
-from .queued_input import InputHandoffRefused
+from .queued_input import InitialInput, InputHandoffRefused
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
 from . import backend
@@ -255,7 +255,7 @@ class TurnRunner:
                 f"sent_seq={sent_seq}"
             )
             if images:
-                await self.inputs.run_owned_input(
+                await InitialInput.run(self.inputs,
                     session_id,
                     thread_name,
                     agent_task or "",
@@ -265,7 +265,7 @@ class TurnRunner:
                     origin=origin,
                 )
             elif agent_task:
-                await self.inputs.run_owned_input(
+                await InitialInput.run(self.inputs,
                     session_id, thread_name, agent_task, display_text=display_text,
                     input_id=input_id,
                     origin=origin,

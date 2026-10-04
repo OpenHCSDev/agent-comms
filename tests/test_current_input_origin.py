@@ -181,7 +181,7 @@ def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope(tmp_p
 
     with _store_lock(comms._wire_lock_path):
         with ExitStack() as custody:
-            queued, _ = QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
+            queued, _, _receipt = QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
                                             echo=True, images=(), controller=Client(), origin=restored, custody=custody)
             custody.pop_all()
     assert agent.inputs.dispositions.read().lookup(queued.key).origin == restored
@@ -207,7 +207,7 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
     exact = 'Keep the original λ /source.\nNever replay UNKNOWN.'
     with _store_lock(comms._wire_lock_path):
         with ExitStack() as custody:
-            queued, _ = QueuedInput.capture(agent.inputs, 'beta', text=exact, prompt=exact,
+            queued, _, _receipt = QueuedInput.capture(agent.inputs, 'beta', text=exact, prompt=exact,
                                             echo=True, images=(), controller=Client(), origin=origin, custody=custody)
             custody.pop_all()
     inputs = agent.inputs.dispositions
@@ -255,7 +255,7 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
     # Same text, separately reserved original inputs never acquire one identity.
     with _store_lock(comms._wire_lock_path):
         with ExitStack() as custody:
-            second, _ = QueuedInput.capture(agent.inputs, 'beta', text=exact, prompt=exact,
+            second, _, _receipt = QueuedInput.capture(agent.inputs, 'beta', text=exact, prompt=exact,
                                             echo=True, images=(), controller=Client(), origin=origin, custody=custody)
             custody.pop_all()
     second_subject = inputs.read().lookup(second.key).context_provenance()

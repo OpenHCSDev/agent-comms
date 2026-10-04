@@ -4,6 +4,7 @@ These tests control backend timing, exercising the real admission callbacks,
 private goal ledger, and durable UNKNOWN/STARTED transition without a provider.
 """
 
+from agent_comms.queued_input import InitialInput
 import json
 
 import pytest
@@ -77,7 +78,7 @@ async def test_idle_owner_original_input_preserves_autonomous_goal_grant(tmp_pat
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        await agent.inputs.run_owned_input("project", "project", "testing steering")
+        await InitialInput.run(agent.inputs, "project", "project", "testing steering")
         rows = disposition_rows(agent)
         assert len(rows) == 1 and rows[0].declared_name == "started"
         current = comms.registry.require("project").goal
@@ -119,7 +120,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         with pytest.raises(InputHandoffRefused, match="Queued input acceptance context changed"):
-            await agent.inputs.run_owned_input("project", "project", "admitted before goal change")
+            await InitialInput.run(agent.inputs, "project", "project", "admitted before goal change")
         assert backend_calls == 0
         rows = disposition_rows(agent)
         assert len(rows) == 1 and rows[0].unresolved
@@ -150,7 +151,7 @@ async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monke
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        await agent.inputs.run_owned_input("project", "project", "do not send after stop")
+        await InitialInput.run(agent.inputs, "project", "project", "do not send after stop")
         assert boundaries == [False]
         rows = disposition_rows(agent)
         assert len(rows) == 1 and rows[0].unresolved

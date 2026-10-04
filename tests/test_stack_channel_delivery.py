@@ -1,5 +1,6 @@
 """Actual native Pi receipts for queued and steered channel requests."""
 
+from agent_comms.queued_input import InitialInput
 import asyncio
 import json
 import os
@@ -114,7 +115,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             await agent.new_session(str(project))
             comms.channels.update_tags("worker", add=frozenset({"team"}))
             comms.registry.declare(Thread("peer", frozenset({"team"}), str(project)))
-            turn = asyncio.create_task(agent.inputs.run_owned_input("worker", "worker", "Warmup"))
+            turn = asyncio.create_task(InitialInput.run(agent.inputs, "worker", "worker", "Warmup"))
             assert await asyncio.to_thread(started.wait, 15)
             if case != "steer":
                 release.set()

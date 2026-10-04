@@ -7,16 +7,19 @@ incarnation birth and admission; the registry resolves its name before compariso
 from __future__ import annotations
 
 import os
-from contextlib import ExitStack
+from collections.abc import AsyncIterator
+from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from functools import partial
 from dataclasses import dataclass, fields, replace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self
+
+from acp import RequestError
 
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError
 from .goals import Goal
 from .image_inputs import ImageInput
-from .input_attempt import ACPInputIdText, InputAttempt
+from .input_attempt import ACPInputIdText, InputAttempt, ReservedInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from .store_files import _async_store_lock
 from .coordinator import Coordination
@@ -108,7 +111,7 @@ class QueuedInput:
         custody: ExitStack,
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
-    ) -> tuple[QueuedInput, Thread]:
+    ) -> tuple[Self, Thread, InputAttempt]:
         """Called inside the wire boundary; acceptance follows the durable reservation."""
         snapshot = inputs.comms.registry.snapshot()
         canonical = snapshot.canonical_name(name)
@@ -127,17 +130,49 @@ class QueuedInput:
             images,
             controller,
         )
-        if not inputs.dispositions.record(
-            item.key,
-            seq=None,
-            owner=canonical,
-            admission=context.admission.admission_generation,
-            target=canonical,
-            text=item.text,
-            origin=origin, custody=custody,
-        ):
-            raise RelationViolationError("Input reservation already exists")
-        return item, owner
+        row = ReservedInput(
+            item.key, None, canonical, context.admission.admission_generation,
+            canonical, item.text, origin=origin,
+        )
+        document = inputs.dispositions.reserve_originals(row, custody=custody)
+        return item, owner, document.lookup(item.key)
+
+    @classmethod
+    async def require_capacity(cls, inputs: InputDrain, session_id: str) -> None:
+        """Follow-ups cannot exceed the original live awaiting-start allowance."""
+        document = await Coordination.run_worker(inputs.dispositions.read)
+        pending = sum(
+            not document.all_started(source.keys)
+            for source in inputs.following_sources.get(session_id, {}).values()
+        )
+        if pending >= 32:
+            raise RequestError.invalid_params(
+                {"reason": "Too many follow-up inputs awaiting their own user start."}
+            )
+
+    @classmethod
+    @asynccontextmanager
+    async def reserve(
+        cls, inputs: InputDrain, session_id: str, name: str, *, text: str, prompt: str,
+        echo: bool, images: tuple[ImageInput, ...], controller: Any,
+        input_id: str | None = None,
+        origin: InputOrigin = UnattributedInputOrigin(),
+    ) -> AsyncIterator[tuple[Self, Thread, InputAttempt, ExitStack]]:
+        """Hold original wire custody and join reservation rollback through handoff.
+
+        The consumer transfers this original ExitStack only after binding its
+        live input, or into its existing longer turn-acquisition lifetime.
+        """
+        async with _async_store_lock(inputs.comms._wire_lock_path), AsyncExitStack() as rollback:
+            custody = ExitStack()
+            rollback.push_async_callback(Coordination.run_worker, custody.close)
+            await cls.require_capacity(inputs, session_id)
+            item, owner, row = await Coordination.run_worker(partial(
+                cls.capture, inputs, name, text=text, prompt=prompt, echo=echo,
+                images=images, controller=controller, input_id=input_id,
+                origin=origin, custody=custody,
+            ))
+            yield item, owner, row, custody
 
     def bind_turn(
         self, owner: Thread, admission: int, turn_id: str
@@ -221,6 +256,45 @@ class QueuedInput:
 
 
 class InitialInput(QueuedInput):
+    @classmethod
+    async def require_capacity(cls, inputs: InputDrain, session_id: str) -> None:
+        """A new original is not a following input in the live native queue."""
+
+    @classmethod
+    async def run(
+        cls, inputs: InputDrain, session_id: str, thread_name: str, task: str, *,
+        images: tuple[ImageInput, ...] = (), display_text: str | None = None,
+        input_id: str | None = None,
+        origin: InputOrigin = UnattributedInputOrigin(),
+    ) -> None:
+        """Own original reservation, dispatch and unbound retirement as one lifetime."""
+        async with AsyncExitStack() as resources:
+            async with cls.reserve(
+                inputs, session_id, thread_name, text=display_text or task, prompt=task,
+                echo=display_text is not None, images=images,
+                controller=inputs.runtime.controller.get(), input_id=input_id, origin=origin,
+            ) as (item, _owner, row, custody):
+                inputs.queued_inputs.setdefault(session_id, {})[item.input_id] = item
+                resources.push_async_callback(item.finish, inputs, session_id)
+                custody.pop_all()
+            await inputs.emit_input_disposition(session_id, row)
+            await inputs.emit_queue_state(session_id)
+            await item.dispatch(inputs.effects.turns, session_id, thread_name)
+
+    async def finish(self, inputs: InputDrain, session_id: str) -> None:
+        """Retire only this captured original after its dispatch resources join."""
+        queued = inputs.queued_inputs.get(session_id, {})
+        if queued.get(self.input_id) is self:
+            try:
+                await Coordination.run_worker(partial(
+                    inputs.finish_original_inputs, (self.key,),
+                ))
+            finally:
+                # The joined original write finishes before cancellation is
+                # propagated. Burn only this live grant; durable UNKNOWN stays.
+                queued.pop(self.input_id)
+            await inputs.emit_queue_state(session_id)
+
     def require_live_source(self, inputs: InputDrain, session_id: str) -> None:
         if inputs.queued_inputs.get(session_id, {}).get(self.input_id) is not self:
             raise RelationViolationError("Original input acceptance changed")

@@ -175,7 +175,7 @@ def original_input_consumer_journey(tmp_path, command):
     with _store_lock(comms._wire_lock_path):
         for _ in range(2):
             with ExitStack() as custody:
-                queued, _ = QueuedInput.capture(
+                queued, _, _receipt = QueuedInput.capture(
                     agent.inputs, "beta", text=wording, prompt=wording, echo=True,
                     images=(), controller=Client(), origin=origin, custody=custody)
                 custody.pop_all()

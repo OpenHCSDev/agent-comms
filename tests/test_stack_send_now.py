@@ -1,5 +1,6 @@
 """Native Pi + streaming localhost provider: Send now interrupts, never replays."""
 
+from agent_comms.queued_input import InitialInput
 import asyncio
 import json
 import os
@@ -322,7 +323,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
 
         async def collect():
             if owner is not None:
-                await owner.inputs.run_owned_input("project", "project", "ORIGINAL_INPUT")
+                await InitialInput.run(owner.inputs, "project", "project", "ORIGINAL_INPUT")
                 return
             async for event in backend.stream_agent_events(
                 native_bin,
