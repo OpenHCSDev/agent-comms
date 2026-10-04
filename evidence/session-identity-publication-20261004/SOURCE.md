@@ -8,7 +8,9 @@ The same identity synchronization builds and sends complete metadata twice when
 both name/title and worktree change. Each copy reads configuration, goal,
 runtime information, queue and cursor, and each publication invalidates clients.
 The existing session owner should publish those related fields together once,
-then record successful delivery for all three existing publication coordinates.
+then complete the same synchronization attempt for all three existing publication
+coordinates. Actual transport acceptance remains `RuntimeServer`'s result; these
+coordinates do not manufacture an acknowledgement when no client is attached.
 Keep `Thread` and `RegistrySnapshot` as the identity/status owners. Preserve the
 original method's canonical-name return contract and process/status-driven idle
 child retirement; no new result type, cache or state flag.
@@ -31,6 +33,6 @@ Catalog IMPL-12: two copies of metadata/publication in one owner become one.
 Existing title/worktree maps are client delivery coordinates; registry remains
 canonical and they grant no turn, input or native custody. Do not create a
 second identity or observation store. Final checks cover simultaneous changes,
-idempotent sync, failed publication retaining delivery coordinates and actual
+idempotent sync, raised publication retaining synchronization coordinates and actual
 saved-native/registry/client update with no provider input. Tests come after
 the source batch; an installed holder requires its own fresh named grant.

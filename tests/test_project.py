@@ -128,6 +128,8 @@ async def test_saved_native_identity_changes_publish_one_complete_update(tmp_pat
             proxy = RuntimeProxy(attached, session_id, socket_path(native.root, os.getpid()))
             try:
                 await proxy.subscribe()
+                sender.updates.clear()
+                receiver.updates.clear()
                 new = tmp_path / "new-project"
                 new.mkdir()
                 agent._comms.threads.set_project(session_id, str(new))
