@@ -121,3 +121,38 @@ RAMavailable12.4GiB/swap9.8GiB. The planned batch is serial and bounded on the
 existing holder. No arbitrary memory cap or fleet is introduced. Actual native
 execution remains unstarted pending Sch's separate immutable086 read/execution
 grant. The540 grant itself authorizes no artifact read or SDK job.
+
+## Installed changed-family acceptance and whole handback
+
+Original Sch artifact-owner grant separately authorized immutable086 READ and
+execution under sole655540 purpose f0618386. The first invocation stopped at
+missing pytest before collection; installed01.log is preserved. The existing
+611 runner approach adds the already installed system test runner at the END
+of the granted interpreter path; actual installed Core remains first. No
+dependency/package changes or source PYTHONPATH overlay.
+
+Installed02: eight cases PASS in 9.36s. Queue clear/refusal preserves distinct
+retained source lifetimes and exact durable bytes. Invalid projections retain
+original rows. Actual runtime socket UNKNOWN/grant refusal runs through the
+original owner. Actual saved SDK/OwnedTurn cases prove ACK is not STARTED;
+UNKNOWN remains until exact native start, and cancelled native delivery is
+not silently resolved. These tests contain actual native inputs and one/two
+controlled localhost HTTP posts; no external provider, public input or replay.
+Raw native fixture receipts report one/three native input-proof files.
+
+Original fixture cleanup joined both tracked native children; independent
+ProcessIdentity/Platform reads attest controller2387692 and native children
+2387889/2387946 absent with all three groups empty. No owned run sockets remain.
+All347 installed assets and92 original nonCore/bin/env keepers remain exact.
+EXECUTION-HANDBACK.json records original births, fixture receipts and custody.
+
+540 whole package/build/import/execution handback goes to Bohr; explicit086
+READ/execution handback goes to Sch. No future purpose, restore, provider run
+or repeated test is inferred. New run roots retain original UNKNOWN/proofs,
+source history and native dispositions. Historical originals remain untouched.
+
+Qualified production remains c265eedd; this final checkpoint adds evidence
+only. Exact previous head6bcf passed required Debt run37221675901. Final evidence
+head triggers its own required job; failing ratchet prevents merge. This is
+scoped installed readiness for this owner batch, not full C4 size closure or
+a historical latency/provider/live-UI claim. InputDrain remains547 lines.
