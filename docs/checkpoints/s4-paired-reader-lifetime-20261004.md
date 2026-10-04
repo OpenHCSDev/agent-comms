@@ -40,3 +40,24 @@ fork/source validation with its standalone acquisition method. RecordedNativePro
 construction and applied_condition require both original readers; read passes them
 through and every direct fixture caller is migrated. The native constructor,
 source/condition digests, SDK capture and all missing evidence refusals are unchanged.
+
+## Final qualification
+
+Original602 SDK child plus shared parent cut PASS4.6236s through observe_runs.
+Exactly two reader acquisitions: one per original child/parent; condition application
+uses those readers too. Original probe SHAfff818b493fe9a784d20dc318d386c7a14469948d4626e5dd53623693c63ca0d,
+commit671a057291324371bf0ded12fd5cc227; all14 native/proof/journal/capture files
+unchanged. Native/model/provider calls0, package/environment writes0.
+The historical converter capture stays unavailable, not inferred from narrative
+presence. This is original-record reader qualification, not a matched model study.
+
+Four initial group/membership/missing/batch controls PASS; after closing the
+additional condition caller, one final four-control batch PASS0.15s verifies
+group/refusal closure, owner membership, source-reference and converter contracts.
+The runner warned about absent pytest-asyncio; selected checks were synchronous.
+No broad suite, original native input, provider probe or three-cut study was repeated.
+
+Source/test/native assets otherwise unchanged; src/stack production delta0. FullS4
+still needs coding/research/goal intervention scheduling, complete-condition
+construction/capacity and frozen registered inference/margin acceptance. This
+checkpoint does not grant the separate30-pair/USD75 study or activate policy.
