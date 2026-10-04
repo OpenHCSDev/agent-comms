@@ -33,3 +33,13 @@ Both edited JS files pass Node syntax validation. The matching artifact is with 
 Normal join94b91317 supplies manifest2ea0a4d4 / tree61015ef9. Only compiled turn-context.js changes;19189 other files equal immutable d5. First SDK comparison01 was refused by the correct native import fence because it attempted importing both committed artifact roots in one process. Zero inputs/providers; c603p01 hash unchanged. Original raw output retained at `/home/ts/.cache/agent-scratch/context610-sdk01/`.
 
 The existing comparison driver now launches each original SDK in its own fenced child, borrowing the SAME selected fixture journal/coordinates and acquired JSON values. No boundary bypass/alternate loader; one child capture rather than repeating the old completed model/SDK journey. No runtime production change after653f17e2 or new artifact needed.
+
+## Ready — matching immutable artifact, original SDK branch
+
+Final03 exits0 in43.925s. Same9,615-message branch from original42,665,741-byte completed c603p01 SDK fork: prior d5 TurnContext.capture29,640.900ms vs matching2ea capture735.900ms. Journal-descriptor encodings92,448,225 ->9,615. This single comparison covers the owned capture operation, not provider/whole-turn/UI latency or retrospective attribution. Full manifests, values, order, digests, input attribution and render match the original; each artifact honestly names its own system-file path with equal bytes. Repeated/transformed SDK values also match (22 ->5 journal encodings). Existing original SDK root/exact-child/mixed readers, malformed coordinate refusal, source preservation and transformed-image/range behavior all pass in the same end batch.
+
+Zero providers/prompts, original c603p01 SHA75354edad8e2f871d4f334873d8e4b9a75ed8379fd9d523d10bc076621f0a164 unchanged. Matching compiled file byte-equal to this source. Postexit485-process scan0 gate commands/0 permission gaps.01 import-boundary refusal and02 truncated-child-output negatives preserved; driver child owns stdout completion and exit joining now. Raw originals under context610-sdk01/02/03 remain; no retry of input/model operation occurred.
+
+Ready receipt: `evidence/context-segment-capture-20261003/READY.json`. Artifact2ea0a4d4/tree61015ef9, pin94b91317 normally joined. Existing current main normally joined after the gate; Python acquisition/lifecycle family retained, no context SDK production changes after653f17e2. Native/public DTO formats unchanged. No borrowed540/environment/native copies or public actions.
+
+Qualified SDK producer/reader source scope. Previous603 actual onContextReady model publication remains its separate proof; this change does not claim measured model execution/HTTP/speed/UI/recall. Full S4 remains unfinished.
