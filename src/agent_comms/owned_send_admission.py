@@ -6,7 +6,7 @@ import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from .ordinary_admission_rules import (
     AcceptedInputCheck,
@@ -52,7 +52,6 @@ class OwnedSendAdmission:
     admission: int
     original: OriginalTurnInput
     goal_permit: LaunchPermit | None
-    _maintenance_wire_locked: ClassVar[bool] = True
 
     def source(self, public_id: str | None) -> TurnInputSource:
         if public_id is None:
@@ -139,52 +138,51 @@ class OwnedSendAdmission:
     def __call__(
         self, public_id: str | None, native_id: str, sent_text: str, *, already_bound: bool = False
     ) -> Iterator[bool | None]:
-        # No await/provider/ACK while held: the same lock spans final checks and write.
-        with self.comms.owners.maintenance.admit_ingress():
-            snapshot = self.comms.registry.snapshot()
-            canonical = snapshot.canonical_name(self.thread.name)
-            current = snapshot.threads.get(canonical)
-            wait = self.comms.goals.goal_wait(canonical) if current is not None else None
-            source = self.source(public_id)
-            binding = self._binding(source)
-            try:
-                self._check_owner(current, snapshot, canonical, source, sent_text)
-            except ReservationViolationError as error:
-                binding.invalidate()
-                yield self._refusal(error.rule, False)
-                return
-            defer = source.defers_for_goal(self.thread.goal, current.goal)
-            try:
-                self._require_context(source, current, wait, binding)
-            except ReservationViolationError as error:
-                binding.invalidate()
-                yield self._refusal(error.rule, defer)
-                return
-            # Binding/journal failures may be uncertain. Exceptions here still propagate;
-            # never reinterpret a failed durable operation as a retryable policy refusal.
-            if not binding.bind(
-                current=current,
-                keys=source.keys,
-                admission=self.admission,
-                turn=self.turn,
-                native_id=native_id,
-                text=sent_text,
-                already_bound=already_bound,
-            ):
-                yield self._refusal(UnboundOrdinaryInputRule(), defer)
-                return
-            if not source.consume_wait(self.comms, canonical, wait):
-                yield self._refusal(UnconsumedDependencyRule(), defer)
-                return
-            self.comms.transcripts.routes.record_input_display(
-                native_id,
-                source.display(self.inputs.dispositions, sent_text),
-                sent_text=sent_text,
-                routing=TurnRouting(
-                    tuple(origin.reference for origin in source.origins), None
-                ) if source.origins else None,
-            )
-            yield True
+        # Backend ingress already owns shared custody through this check and write.
+        snapshot = self.comms.registry.snapshot()
+        canonical = snapshot.canonical_name(self.thread.name)
+        current = snapshot.threads.get(canonical)
+        wait = self.comms.goals.goal_wait(canonical) if current is not None else None
+        source = self.source(public_id)
+        binding = self._binding(source)
+        try:
+            self._check_owner(current, snapshot, canonical, source, sent_text)
+        except ReservationViolationError as error:
+            binding.invalidate()
+            yield self._refusal(error.rule, False)
+            return
+        defer = source.defers_for_goal(self.thread.goal, current.goal)
+        try:
+            self._require_context(source, current, wait, binding)
+        except ReservationViolationError as error:
+            binding.invalidate()
+            yield self._refusal(error.rule, defer)
+            return
+        # Binding/journal failures may be uncertain. Exceptions here still propagate;
+        # never reinterpret a failed durable operation as a retryable policy refusal.
+        if not binding.bind(
+            current=current,
+            keys=source.keys,
+            admission=self.admission,
+            turn=self.turn,
+            native_id=native_id,
+            text=sent_text,
+            already_bound=already_bound,
+        ):
+            yield self._refusal(UnboundOrdinaryInputRule(), defer)
+            return
+        if not source.consume_wait(self.comms, canonical, wait):
+            yield self._refusal(UnconsumedDependencyRule(), defer)
+            return
+        self.comms.transcripts.routes.record_input_display(
+            native_id,
+            source.display(self.inputs.dispositions, sent_text),
+            sent_text=sent_text,
+            routing=TurnRouting(
+                tuple(origin.reference for origin in source.origins), None
+            ) if source.origins else None,
+        )
+        yield True
 
     def native_start(self, public_id: str | None, native_id: str, sent_text: str) -> bool:
         source = self.source(public_id)

@@ -1,0 +1,336 @@
+{
+  "revision": "acf8a253b7ce317bd073e27e6012df625fbe9698",
+  "parser": "original audit.findings.Package.load",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 311,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 365,
+      "omissions": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 177,
+      "node": "FunctionDef",
+      "source": "@contextmanager"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 321,
+      "node": "Attribute",
+      "source": "self.send_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 321,
+      "node": "Name",
+      "source": "send_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 322,
+      "node": "Attribute",
+      "source": "self.interrupt_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 322,
+      "node": "Name",
+      "source": "interrupt_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 193,
+      "node": "Attribute",
+      "source": "MaintenanceBarrier(root / 'registry.json').admit_ingress"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 662,
+      "node": "Name",
+      "source": "_maintenance_send_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 668,
+      "node": "Attribute",
+      "source": "self.send_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 261,
+      "node": "keyword",
+      "source": "send_boundary=send_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 263,
+      "node": "keyword",
+      "source": "interrupt_boundary=interrupt_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 261,
+      "node": "Name",
+      "source": "send_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 263,
+      "node": "Name",
+      "source": "interrupt_boundary"
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "line": 176,
+      "node": "FunctionDef",
+      "source": "@contextmanager"
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "line": 189,
+      "node": "AsyncFunctionDef",
+      "source": "@asynccontextmanager"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 45,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True, kw_only=True)"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 55,
+      "node": "Name",
+      "source": "_maintenance_wire_locked"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "line": 143,
+      "node": "Attribute",
+      "source": "self.comms.owners.maintenance.admit_ingress"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 23,
+      "node": "alias",
+      "source": "OwnedSendAdmission"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 428,
+      "node": "Name",
+      "source": "OwnedSendAdmission"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 450,
+      "node": "keyword",
+      "source": "send_boundary=admission"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 451,
+      "node": "keyword",
+      "source": "interrupt_boundary=lambda public_id, native_id, text: admission(public_id, native_id, text, already_bound=True)"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 213,
+      "node": "Attribute",
+      "source": "MaintenanceBarrier(self.bus._registry.store.path).admit_ingress"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 339,
+      "node": "Attribute",
+      "source": "MaintenanceBarrier(self.maintenance_root / 'registry.json').admit_ingress_async"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 124,
+      "node": "alias",
+      "source": "_maintenance_send_boundary"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 100,
+      "node": "Attribute",
+      "source": "session.interrupt_boundary"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 133,
+      "node": "Name",
+      "source": "_maintenance_send_boundary"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 139,
+      "node": "Attribute",
+      "source": "session.send_boundary"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 99,
+      "node": "Attribute",
+      "source": "session.interrupt_boundary"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 9,
+      "node": "alias",
+      "source": "OwnedSendAdmission"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 90,
+      "node": "Name",
+      "source": "OwnedSendAdmission"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 56,
+      "node": "Name",
+      "source": "OwnedSendAdmission"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 42,
+      "node": "Name",
+      "source": "OwnedSendAdmission"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 70,
+      "node": "AsyncFunctionDef",
+      "source": "async def queue_followup(agent, kwargs):"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 176,
+      "node": "Name",
+      "source": "queue_followup"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 251,
+      "node": "Name",
+      "source": "queue_followup"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 121,
+      "node": "Name",
+      "source": "queue_followup"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 126,
+      "node": "Name",
+      "source": "queue_followup"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 1987,
+      "node": "FunctionDef",
+      "source": "@contextmanager"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2814,
+      "node": "FunctionDef",
+      "source": "@contextmanager"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 1994,
+      "node": "keyword",
+      "source": "send_boundary=send_boundary"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2403,
+      "node": "keyword",
+      "source": "send_boundary=lambda *_: nullcontext(False)"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2830,
+      "node": "keyword",
+      "source": "send_boundary=send_boundary"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 1994,
+      "node": "Name",
+      "source": "send_boundary"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2585,
+      "node": "keyword",
+      "source": "send_boundary=revoked_goal"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2830,
+      "node": "Name",
+      "source": "send_boundary"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 13,
+      "node": "alias",
+      "source": "_maintenance_send_boundary"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 188,
+      "node": "Name",
+      "source": "_maintenance_send_boundary"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 129,
+      "node": "Attribute",
+      "source": "gate.admit_ingress"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 136,
+      "node": "Attribute",
+      "source": "gate.admit_ingress"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 321,
+      "node": "Name",
+      "source": "_maintenance_send_boundary"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 170,
+      "node": "Attribute",
+      "source": "observer.queue_followup"
+    },
+    {
+      "path": "tests/test_stack_send_now.py",
+      "line": 342,
+      "node": "keyword",
+      "source": "interrupt_boundary=lambda *_: nullcontext(surface != 'revoked')"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 46,
+      "node": "Attribute",
+      "source": "kwargs['send_boundary']._maintenance_wire_locked"
+    }
+  ]
+}
