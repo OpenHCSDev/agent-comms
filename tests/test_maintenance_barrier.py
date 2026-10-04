@@ -1,5 +1,6 @@
 """Provider-free disposable checks of the default-off maintenance claim seam."""
 
+import asyncio
 import json
 import multiprocessing as mp
 import os
@@ -16,7 +17,7 @@ from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.registration import Registration
-from agent_comms.store_files import _store_lock
+from agent_comms.store_files import _async_store_lock, _store_lock
 from agent_comms.threads import Thread
 from maintenance_control_fixture import FixtureMaintenanceControl
 
@@ -162,7 +163,7 @@ def test_enabled_witness_damage_never_restores_default_off(tmp_path: Path, fault
         MaintenanceBarrier(gate.registry_path).assert_open_unlocked()
 
 
-def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp_path: Path) -> None:
+async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp_path: Path) -> None:
     root = tmp_path / "wire"
     comms = Comms(root)
     q: mp.Queue = mp.Queue()
@@ -183,11 +184,9 @@ def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp_path:
     proc.join(10)
     assert proc.exitcode == 0
     assert q.get(timeout=2)[0] == "denied"
-    with (
-        pytest.raises(RelationViolationError, match="Maintenance"),
-        _maintenance_send_boundary(root, None, None, "native", "original"),
-    ):
-        pytest.fail("Native stdin would be written")
+    with pytest.raises(RelationViolationError, match="Maintenance"):
+        async with _maintenance_send_boundary(root, None, None, "native", "original"):
+            pytest.fail("Native stdin would be written")
     assert comms.owners.maintenance.read() == receipt
     assert comms.registry.require("owner").active_turn is None
 
@@ -306,6 +305,30 @@ async def test_real_backend_fake_rpc_never_writes_prompt_after_pause(tmp_path: P
     assert not marker.exists()
 
 
+async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: Path) -> None:
+    root = tmp_path / "wire"
+    entered = asyncio.Event()
+
+    async def native_write():
+        async with _maintenance_send_boundary(root, None, None, "native", "original") as allowed:
+            assert allowed
+            entered.set()
+
+    async with _async_store_lock(root / "wire"):
+        send = asyncio.create_task(native_write())
+        try:
+            # The original exclusive owner must resume on the same loop while
+            # its concurrent native write waits for shared ingress custody.
+            await asyncio.sleep(0.025)
+            assert not entered.is_set()
+        except BaseException:
+            send.cancel()
+            await asyncio.gather(send, return_exceptions=True)
+            raise
+    await asyncio.wait_for(send, 1)
+    assert entered.is_set()
+
+
 def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     root = tmp_path / "wire"
     gate = MaintenanceBarrier(root / "registry.json")
@@ -317,8 +340,8 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     release = threading.Event()
     changed = threading.Event()
 
-    def fake_send() -> None:
-        with _maintenance_send_boundary(root, None, None, "id", "text") as allowed:
+    async def fake_send() -> None:
+        async with _maintenance_send_boundary(root, None, None, "id", "text") as allowed:
             assert allowed
             entered.set()
             assert release.wait(5)
@@ -327,7 +350,7 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
         control.begin("operator")
         changed.set()
 
-    sender = threading.Thread(target=fake_send)
+    sender = threading.Thread(target=lambda: asyncio.run(fake_send()))
     sender.start()
     assert entered.wait(5)
     closer = threading.Thread(target=pause)

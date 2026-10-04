@@ -3,13 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import getpass
-import os
 import secrets
-import tempfile
-from contextlib import nullcontext
 from dataclasses import dataclass, field, replace
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -95,12 +90,16 @@ class InputForwarding:
         if not candidates:
             return True
         public_id, sent_text, _, native_id = candidates[0]
-        boundary = (
-            session.interrupt_boundary(public_id, native_id, sent_text)
-            if session.interrupt_boundary
-            else nullcontext(True)
+        from .backend import _maintenance_send_boundary
+
+        boundary = _maintenance_send_boundary(
+            session.startup.root,
+            session.interrupt_boundary,
+            public_id,
+            native_id,
+            sent_text,
         )
-        with boundary as authorized:
+        async with boundary as authorized:
             if authorized:
                 session.stdin.write(
                     session.native.reader.encode(
@@ -131,17 +130,13 @@ class InputForwarding:
         command = replace(command, id=public_id, input_id=native_id, message=text)
         self.pending.append((public_id, text, forwarded.original, native_id))
         boundary = _maintenance_send_boundary(
-            Path(
-                session.launch.env.get("AGENT_COMMS_ROOT")
-                or os.environ.get("AGENT_COMMS_ROOT")
-                or str(Path(tempfile.gettempdir()) / f"agent-comms-startup-{getpass.getuser()}")
-            ),
+            session.startup.root,
             session.send_boundary,
             public_id,
             native_id,
             text,
         )
-        with boundary as authorized:
+        async with boundary as authorized:
             if authorized:
                 if command.images:
                     session.output.sensitive = True

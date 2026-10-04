@@ -59,12 +59,16 @@ class NativeStartupAdmission:
 
     def __init__(self, root: Path, policy: NativeStartupPolicy = NATIVE_STARTUP_POLICY,
                  *, measurements: PublicationMeasurements | None = None):
-        self.directory = root / "runtime" / "native-startup"
+        self.root = root
         self.policy = policy
         self.fd: int | None = None
         # One acquired observation resource. Optional borrowing is resolved here,
         # never interpreted as a lifecycle state by downstream consumers.
         self.measurements = measurements if measurements is not None else PublicationMeasurements()
+
+    @property
+    def directory(self) -> Path:
+        return self.root / "runtime" / "native-startup"
 
     @classmethod
     def for_launch(
