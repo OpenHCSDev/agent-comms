@@ -42,7 +42,10 @@ def test_readers_do_not_create_a_missing_store(tmp_path):
 
 def test_original_answers_human_correction_and_readonly_calibration(tmp_path):
     path = tmp_path / "coordination.sqlite3"
-    segment = local_system("Keep the original instructions.")
+    content = "Keep the original instructions."
+    source = FileProvenance("original-source", "e" * 64)
+    segment = local_system(content, (ContributionCoordinates.capture(
+        SystemLayerSegment, (source,), 0, content),))
     (span,) = segment.public_spans()
     version = QuestionVersion.current(KindQuestion)
     classifier = JevClassifier.version()
@@ -67,8 +70,8 @@ def test_original_answers_human_correction_and_readonly_calibration(tmp_path):
     assert len(report.cases) == 1
     assert FieldCodec.decode(type(report), FieldCodec.encode(report)) == report
     assert (path.stat().st_mtime_ns, path.stat().st_size) == (before.st_mtime_ns, before.st_size)
-    different_source = replace(segment.measured_manifest(), provenance=(
-        FileProvenance("other-source", "f" * 64),))
+    different_source = replace(segment.measured_manifest(), source_spans=(
+        replace(segment.source_spans[0], provenance=(FileProvenance("other-source", "f" * 64),)),))
     assert WorkingMemoryAnnotations.for_segment(path, different_source, classifier) == ()
 
 
@@ -88,3 +91,6 @@ def test_file_attribution_is_bounded_by_original_assembly_range():
         coordinates=replace(span.coordinates, provenance=(first,))))
     assert not manifest.contains_span(replace(span,
         coordinates=replace(span.coordinates, offset=0)))
+    historical = replace(local_system(a + b), provenance=(first, second))
+    assert all(span.coordinates.provenance == (UnattributedProvenance(),)
+               for span in historical.public_spans())

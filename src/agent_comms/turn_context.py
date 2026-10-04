@@ -406,7 +406,7 @@ class ContributionCoordinates:
             byte_offset += len(sentence.encode("utf-8"))
 
     def contains(self, other: ContributionCoordinates) -> bool:
-        return (self.kind is other.kind and self.provenance == other.provenance
+        return ((self.kind, self.provenance) == (other.kind, other.provenance)
                 and self.offset <= other.offset
                 and other.offset + other.length <= self.offset + self.length)
 
@@ -518,7 +518,7 @@ class SystemLayerSegment(MeasuredNativeSegment):
         if original.source_spans:
             return any(source.contains(coordinates) for source in original.source_spans)
         # Historical captures prove wording with no assembly attribution.
-        return coordinates.provenance == (*original.provenance, UnattributedProvenance())
+        return coordinates.provenance == (UnattributedProvenance(),)
 
     def disclosure_for(self, span: ContextSpan):
         from .working_memory_disclosure import PublicInstructionDisclosure
@@ -533,7 +533,7 @@ class SystemLayerSegment(MeasuredNativeSegment):
     def source_ranges(self) -> tuple[ContributionCoordinates, ...]:
         # Old captures prove whole wording, not attribution to today's files.
         return self.source_spans or (ContributionCoordinates.capture(
-            type(self), (*self.provenance, UnattributedProvenance()), 0, self.content),)
+            type(self), (UnattributedProvenance(),), 0, self.content),)
 
     def provider_value(self):
         return self.content
