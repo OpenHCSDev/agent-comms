@@ -77,6 +77,25 @@ class PairedRecallDesign:
         result['recall_inference'] = ScoredScenario.paired_inference(result['pairs'], self)
         return result
 
+    def construction_plan(self, sampling_seed: int):
+        """Export prospective operands; never grant or launch a native turn.
+
+        The pinned oracle owns source additions and held-out questions. The
+        sampling seed owns this prospective ordering, independently of the
+        bootstrap seed used later for analysis. Recorded inputs must still
+        corroborate what was actually executed; this plan cannot supply them.
+        """
+        scenario = RecordedNativeCheckpoint.read_record(self.oracle, RecallScenario)
+        rounds = scenario.construction_rounds()
+        random = Random(sampling_seed)
+        return {'comparison_design': self, 'scenario': scenario.identity,
+                'rounds': rounds, 'sampling_seed': sampling_seed,
+                'trajectories': tuple({'sample': index + 1,
+                    'condition_order': tuple(random.sample((self.candidate, self.baseline), 2))}
+                    for index in range(self.sample_count)),
+                'scope': 'Prospective authored source/probe operands and randomized arm order only; '
+                         'no native input, checkpoint, intervention, registration, capacity or spending grant'}
+
 
 @dataclass(frozen=True)
 class RecordedNativeProbes:
@@ -840,6 +859,12 @@ class RecallRound:
                           "questions": [question.public() for question in self.questions]})
         )
 
+    def history_after(self, previous: tuple[str, ...]) -> tuple[str, ...]:
+        """Return only new authored history; never silently rebuild a branch."""
+        if self.history[:len(previous)] != previous:
+            raise ValueError("Construction requires the exact preceding frozen history prefix")
+        return self.history[len(previous):]
+
     def score_native(self, probe: RecordedNativeProbe):
         return self.score_recorded(probe.observe())
 
@@ -875,6 +900,21 @@ class RecallScenario:
 
     def public(self) -> dict:
         return {"scenario": self.identity, "rounds": [item.public() for item in self.rounds]}
+
+    def construction_rounds(self):
+        """Derive ordered source additions and public probes from one oracle.
+
+        Native execution still owns checkpoint creation and input admission.
+        These operands do not repeat cumulative source at each cut or disclose
+        scoring metadata as provider instructions.
+        """
+        previous, rounds = (), []
+        for round_ in self.rounds:
+            rounds.append({'round': round_.identity,
+                           'history_additions': round_.history_after(previous),
+                           'probe_text': round_.probe_text()})
+            previous = round_.history
+        return tuple(rounds)
 
     def score(self, condition: Condition, answers: RecordedAnswers) -> ScoredScenario:
         unexpected = answers.rounds.keys() - {item.identity for item in self.rounds}
@@ -1075,12 +1115,16 @@ def main() -> None:
                           help="RecordedNativeProbes with ordered checkpoint and original evidence references")
     recorded.add_argument("--recorded-pairs", type=Path,
                           help="Array of candidate/control RecordedNativeProbes pairs; reads originals only, no study launch")
+    recorded.add_argument("--construction-plan", action="store_true",
+                          help="Export prospective original-oracle history/probe operands and arm order; no native/model launch")
     parser.add_argument("--compare-recorded-run", type=Path,
                         help="Independent original control; requires --recorded-run")
     parser.add_argument("--baseline-condition", type=Condition, choices=tuple(Condition),
                         help="Control label for an unplanned recorded comparison")
     parser.add_argument("--comparison-design", type=Path,
-                        help="PairedRecallDesign for --recorded-pairs; owns oracle, conditions and inference parameters, never launches a study")
+                        help="PairedRecallDesign for --recorded-pairs or --construction-plan; owns oracle, conditions and analysis parameters")
+    parser.add_argument("--sampling-seed", type=int,
+                        help="Explicit prospective arm-order seed for --construction-plan; distinct from bootstrap seed")
     recorded.add_argument("--native-checkpoint", type=Path,
                           help="RecordedNativeCheckpoint reference to an original managed cut")
     parser.add_argument("--fork-journal", type=Path,
@@ -1109,10 +1153,17 @@ def main() -> None:
     if args.compare_recorded_run is not None and args.recorded_run is None:
         parser.error("--compare-recorded-run requires --recorded-run")
     if args.comparison_design is not None:
-        if args.recorded_pairs is None:
-            parser.error("--comparison-design requires --recorded-pairs")
+        if args.recorded_pairs is None and not args.construction_plan:
+            parser.error("--comparison-design requires --recorded-pairs or --construction-plan")
         if any(value is not None for value in (args.scenario_file, args.condition, args.baseline_condition)):
             parser.error("The comparison design owns its oracle and condition labels")
+        design = FieldCodec.decode(PairedRecallDesign, json.loads(
+            args.comparison_design.read_text(), object_pairs_hook=unique_fields))
+    if args.construction_plan:
+        if args.comparison_design is None or args.sampling_seed is None:
+            parser.error("--construction-plan requires --comparison-design and --sampling-seed")
+    elif args.sampling_seed is not None:
+        parser.error("--sampling-seed requires --construction-plan")
     condition = args.condition or Condition.BOUNDED
     baseline_condition = args.baseline_condition or Condition.BOUNDED
     scenario = RecallScenario.read(args.scenario_file) if args.scenario_file else coding_scenario()
@@ -1142,9 +1193,9 @@ def main() -> None:
         if args.comparison_design is None:
             result = scenario.compare_native_pairs(condition, pairs, baseline_condition)
         else:
-            design = FieldCodec.decode(PairedRecallDesign, json.loads(
-                args.comparison_design.read_text(), object_pairs_hook=unique_fields))
             result = design.compare(pairs)
+    if args.construction_plan:
+        result = design.construction_plan(args.sampling_seed)
     if args.native_checkpoint is not None:
         checkpoint = FieldCodec.decode(RecordedNativeCheckpoint, json.loads(
             args.native_checkpoint.read_text(), object_pairs_hook=unique_fields
