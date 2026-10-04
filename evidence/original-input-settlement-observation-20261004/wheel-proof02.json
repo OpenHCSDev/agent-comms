@@ -1,0 +1,9 @@
+{
+  "head": "10e549adfb058c68f91ac19bb886f33b026b22b6",
+  "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/original-settlement615-wheels/agent_comms-0.1.0-py3-none-any.whl",
+  "sha256": "04016102e2d13ae5a5d4fabc3ada865dd39dbb8a22277d39e514202bfe0c4424",
+  "source_members_equal": 311,
+  "force_include_members_equal": 3,
+  "source_overlay": false,
+  "native_build": false
+}

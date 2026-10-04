@@ -1,0 +1,10 @@
+{
+  "head": "b29f6bb81e319643c350e578ae232995cf303dcb",
+  "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/original-settlement615-wheels/agent_comms-0.1.0-py3-none-any.whl",
+  "sha256": "24efa21b5308f3dfe51345fb7954f3227a739c970b31f320f9c1b87dfef90990",
+  "source_members_equal": 311,
+  "force_include_members_equal": 3,
+  "source_overlay": false,
+  "native_build": false,
+  "disposition": "Superseded before any install/run by whole caller source10e549ad; named wheel output was rebuilt, first wheel bytes not retained."
+}
