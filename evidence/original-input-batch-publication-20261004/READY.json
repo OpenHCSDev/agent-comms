@@ -1,0 +1,65 @@
+{
+  "state": "READY_ORIGINAL_INPUT_BATCH_PUBLICATION_SCOPE",
+  "base": "8f16339673835114f526d7431032576099764af5",
+  "qualified_production_head": "d4d5f6b820c582bc94733297a9f05e842b5a5e4b",
+  "source_equivalent_receipt_head": "e62b0f3cffb808a0758ea3f1bdeb453859b53480",
+  "production_changes": {
+    "files": 3,
+    "added": 46,
+    "deleted": 30
+  },
+  "fixture_consumers": {
+    "files": 2,
+    "added": 68,
+    "deleted": 5
+  },
+  "ownership": "InputDocument.record decides original membership once; InputDispositions.record_originals publishes once, enlisting only newly admitted rollback keys before publication. Single recording/scheduled reservation derive it; InputBatch.capture consumes the returned document. OwnedTurn captures wire metadata once under original wire lock, declares keys under existing prior-enlisted input custody, then publishes all rows once.",
+  "installed_python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+  "installed_members_equal": 342,
+  "wheel_sha256": "aa1ec28ed8f7c47bc10ce26d4364ed7d13aed3a02ddb1ed4d7e09b743c0aad80",
+  "distribution_count": 10,
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+  "native_manifest": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+  "native_tree": "dbc88ed9231d1275da3ce218aa8919a247e41ce1f010ce765e7ac0960193f4ac",
+  "grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel616-package-execution-grant.json",
+  "gate": [
+    {
+      "log": "installed01.log",
+      "terminal_exit": 1,
+      "passed": 2,
+      "failed": 2,
+      "seconds": 8.65,
+      "scope": "Actual saved SDK native owner acquisition/direct-channel-scheduled context/custody/idle/retirement and channel identity passed. Two new document fixtures rejected invalid key/sequence before publication; retained negative."
+    },
+    {
+      "log": "installed02.log",
+      "terminal_exit": 0,
+      "passed": 2,
+      "seconds": 0.2,
+      "scope": "Only corrected document fixtures: prior row/UNKNOWN preservation, duplicate/no-op, new-key-only rollback and batch/scheduled lost-ACK custody/strict duplicate refusal. No production edit/native repeat."
+    }
+  ],
+  "cleanup": "Saved native gate asserts actual owned children absent/groups empty, lease idle, input resources released and saved bytes unchanged. Both driver sessions terminal. Whole540 and immutable086 read/execution handed back directly to Bohr/Sch; no future lease assumed. All private evidence/originals remain protected.",
+  "limits": [
+    "No provider request/native prompt/public mutation",
+    "No live UI or channel response acceptance claim",
+    "No historical 13/98-second speed attribution",
+    "No native build/copy/new environment/source overlay",
+    "Fresh native binding/start/compaction/recovery admission remains intact"
+  ],
+  "none_disposition": "No domain None-state added. Optional custody remains original resource presence; absent sequence remains original ACP/scheduled contract.",
+  "evidence_sha256": {
+    "SOURCE.md": "a617174fdc98b210f2bf99ce2240f5c7d5267ae983e8bb85675dc050a4ba3f38",
+    "after.json": "f6c084cc25ac54e22159d3e06c11d39aaf88f638bef164bda5b55922532d5c83",
+    "before.json": "0c0de592ffc79b5695434564477cc8af9fca8099a354824c57557d6e8ed17978",
+    "install.log": "f8a37cb08b23f7bfebf1eee934c02af6f2e278386be2225c765c871f787bf064",
+    "installed-controls.py": "8d3a160f349d3719d26b194421dc449cfb601b3b2cdd42449ae47b0cd7e0d0ed",
+    "installed-documents-proof02.json": "dcb31a18c053efe3ee2790cbbc1197f6bd1b0a13231e72a3cac6857bda11bf39",
+    "installed-source-proof.json": "dcb31a18c053efe3ee2790cbbc1197f6bd1b0a13231e72a3cac6857bda11bf39",
+    "installed01.log": "5671792659d949db5f130b4a7143eb60de0aa645c008e6f94873fb32f3d51fea",
+    "installed02.log": "0a863e588d640ed9ea2047b060a98751649dd80a3f4843c56d7a977ef18987f8",
+    "pipcheck.log": "e80b53ee5b0685fd0b94c4be566fb6516b8fdef24aac4222bb43d6126621ed33",
+    "wheel-proof.json": "d3b56fa17f2067ac2c89adb0cd35f41cd8956eae1afe9f9f1ccdb89b114e0641"
+  }
+}
