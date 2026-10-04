@@ -47,6 +47,17 @@ Candidate Core6565f1667 genuinely replaces the actual preimage Core1a58a;
 the full1470/69/390 original floor must be returned after terminal. This is
 authorization, not installed acceptance. The new painted-read fence finding
 belongs to a separate source successor and does not alter this frozen control.
+The actual441 attempt has since stopped with exit1 after7.671774s. Its first
+five trim/replacement/End/editor/resize checks passed; Mount cancellation,
+filter and late-read checks were unreached. The authored driver reread
+retired._task after MessagePump teardown cleared it, causing TypeError;
+App exception remained None. Parent traced every related late task read and
+sent the complete control lifetime correction to Heis, with no product patch.
+Whole1470/69/390 restoration and empty owned cleanup are recorded in441's
+code-handback.json; its final borrower receipt78ec09a6 has no refs/gaps.
+The holder and native086 purposes are handed back, with no successor run
+implied. Bohr is to independently close441 and advance the next W6 purpose
+after fresh actual-floor/origin/borrower clearance.
 
 On the preceding public436 cohort, corrected tail04 completed with terminal0,
 18 native checks true and owned cleanup empty. Channel opening/return, hidden
@@ -102,7 +113,12 @@ Bohr has now issued that sole661 execution-only purpose2e9939ef after fresh
 nonCore keepers. It authorizes one authored private canonical seed, unchanged
 writer refusals and actual inherited-FD/current-index checks. No package build
 or install, old-schema fabrication, native/provider input or public operation
-is authorized. Acceptance remains pending the actual terminal and handback.
+is authorized. Parent has since read the actual8.917682s terminal PASS,
+current-private inherited-FD/index rebuild and all original refusal assertions.
+Protected wire/registry/settings and original frozen audience stayed exact.
+The controller and nine child processes are independently absent, groups and
+sockets empty. The cross-version restart claim remains historical; final
+published evidence/head freeze and whole purpose closure are still pending.
 
 Arendt660 exactf06b004d has Debt37232065321 SUCCESS. Parent reviewed the shared
 observer's connection/request settlement, original Node completion notification,
