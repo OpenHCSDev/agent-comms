@@ -1,0 +1,60 @@
+{
+  "state": "SCOPED_CONFIGURED_COLD_RETAINED_NATIVE_INFO_PASS",
+  "proof": {
+    "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "core_head": "283dfc18f38b3ecb36356aca9e2c1845cbc0a015",
+    "package_files": 342,
+    "python_files": 311,
+    "wheel_sha256": "6cca54af6cf0bfc268baaa47e08ea9cd1b6c182d1ca56fcaae72280b46843573",
+    "native_manifest_sha256": "f3dd185eb4b1394e3edb12195b5805a8515d1bccad458d350a2e14c1498c0c72",
+    "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-f3dd185eb4b1394e/node_modules/@earendil-works/pi-coding-agent",
+    "direct_url": {
+      "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/cold-native606-wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "archive_info": {}
+    }
+  },
+  "root": "/home/ts/.cache/agent-scratch/mendel-cold-native606/configured01",
+  "public_inputs": 0,
+  "native_prompts": 0,
+  "provider_calls": 0,
+  "replays": 0,
+  "donor_source": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/cold-context595-configured02/native-forks/2026-10-03T16-01-21-766Z_01a1027f-a366-77f8-8b39-0d4999995f4d.jsonl",
+  "donor_bytes": 42376298,
+  "fork_source": "/home/ts/.cache/agent-scratch/mendel-cold-native606/configured01/forks/2026-10-03T22-41-34-739Z_01a103ee-0cef-73f1-b887-1d5ad50eecb9.jsonl",
+  "fork_sha256": "fb49b3ba3da594014cb30bab7649d5f9635eb975823a66c759a53ff10607c346",
+  "configured_model": "openai-codex/gpt-6.1-sol",
+  "configured_thinking": "high",
+  "cold_info": {
+    "thread": "cold606",
+    "model": "openai-codex/gpt-6.1-sol",
+    "session_name": null,
+    "context_used": 91746,
+    "context_size": 272000,
+    "ts": 1791067303.5787592
+  },
+  "retained_info": {
+    "thread": "cold606",
+    "model": "openai-codex/gpt-6.1-sol",
+    "session_name": null,
+    "context_used": 91746,
+    "context_size": 272000,
+    "ts": 1791067304.4159527
+  },
+  "same_child": true,
+  "native_process": {
+    "pid": 2769690,
+    "start_time": 54293946
+  },
+  "current_context_segments": 4,
+  "usage_update_count": 2,
+  "original_hashes": {
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/cold-context595-configured02/native-forks/2026-10-03T16-01-21-766Z_01a1027f-a366-77f8-8b39-0d4999995f4d.jsonl": "659a4f3af42b124bac4a50ee2d44b1ef2c58dcf9f7d82def9426781d855a5002",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-50-21-634Z_01a0f85f-c742-756b-9a21-4f02f7bea72e.jsonl": "b733f5ddbd17d7524f18a872ecfd061fa31d790f2eee5a89eeb9cb41020457f4",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/cold-context595-configured02/terminal-receipt.json": "9b54427c7d980c82bb2016d310bb6a369864c8ba3797e06870e840da86df666b",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-50-21-634Z_01a0f85f-c742-756b-9a21-4f02f7bea72e.jsonl.input-proof": "32707674eccab4be3745e9c939e42877325a76a6a84a0df004f04ba51ea4d901"
+  },
+  "native_child_retired": true,
+  "native_child_exited": true,
+  "original_hashes_unchanged": true,
+  "elapsed_seconds": 19.65082814800553
+}

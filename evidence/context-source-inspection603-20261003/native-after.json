@@ -1,0 +1,280 @@
+{
+  "revision": "b0e5b57be2b3d78bc3b2fb2f960c78aabfa84a5c",
+  "parser": "existing Node built-in acorn 8.18.0",
+  "roots": [
+    "stack/*.mjs",
+    "tests/*.mjs"
+  ],
+  "parsed": 47,
+  "omissions": [],
+  "declarations": [
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 49,
+      "class": "InputContribution",
+      "base": null,
+      "methods": [
+        "constructor",
+        "capture",
+        "preserved",
+        "observe"
+      ]
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 75,
+      "class": "NativeInputClaim",
+      "base": null,
+      "methods": [
+        "constructor",
+        "capture",
+        "observe"
+      ]
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 99,
+      "class": "ContextSegment",
+      "base": null,
+      "methods": [
+        "constructor",
+        "manifest",
+        "full",
+        "publicationValues",
+        "matches",
+        "matchingValues"
+      ]
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 125,
+      "class": "NativeMessages",
+      "base": "ContextSegment",
+      "methods": [
+        "constructor",
+        "tokens",
+        "payload",
+        "render",
+        "publicationValues",
+        "matchingValues"
+      ]
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 155,
+      "class": "TurnContext",
+      "base": null,
+      "methods": [
+        "constructor",
+        "capture",
+        "next",
+        "project",
+        "fullSource",
+        "recordedSegment",
+        "recentSource",
+        "render",
+        "manifest",
+        "observation",
+        "full"
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "file": "stack/native-request-input.mjs",
+      "line": 8,
+      "call": "candidate.matches"
+    },
+    {
+      "file": "stack/native-request-observation.mjs",
+      "line": 36,
+      "call": "this.observe"
+    },
+    {
+      "file": "stack/native-request-observation.mjs",
+      "line": 44,
+      "call": "this.observe"
+    },
+    {
+      "file": "stack/native-request-observation.mjs",
+      "line": 62,
+      "call": "this.observe"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 27,
+      "call": "this.matches"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 56,
+      "call": "InputByteRange.capture"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 59,
+      "call": "InputImages.capture"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 62,
+      "call": "this.range.matches"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 79,
+      "call": "InputContribution.capture"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 93,
+      "call": "transformed.manifest"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 95,
+      "call": "source.observe"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 112,
+      "call": "this.manifest"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 113,
+      "call": "this.full"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 115,
+      "call": "this.manifest"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 118,
+      "call": "this.matches"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 135,
+      "call": "segment.full"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 137,
+      "call": "super.matchingValues"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 141,
+      "call": "original.matches"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 201,
+      "call": "observation.manifest"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 211,
+      "call": "this.capture"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 223,
+      "call": "this.capture"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 229,
+      "call": "this.project"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 234,
+      "call": "this.project"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 235,
+      "call": "segment.matchingValues"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 244,
+      "call": "this.project"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 253,
+      "call": "segment.manifest"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 257,
+      "call": "this.manifest"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 258,
+      "call": "segment.publicationValues"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 260,
+      "call": "segment.full"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 46,
+      "call": "TurnContext.capture"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 47,
+      "call": "captured.full"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 56,
+      "call": "NativeInputClaim.capture"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 60,
+      "call": "claim.observe"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 65,
+      "call": "NativeInputClaim.capture"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 66,
+      "call": "claim.observe"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 70,
+      "call": "claim.observe"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 79,
+      "call": "captured.manifest"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 27,
+      "call": "view.full"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 68,
+      "call": "TurnContext.capture"
+    }
+  ],
+  "limits": "Lexical calls; SDK session/context conversion and dynamic class constructors read semantically. TypeScript declarations and Python-generated patches separately read at producers."
+}

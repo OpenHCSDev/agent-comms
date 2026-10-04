@@ -1,0 +1,152 @@
+{
+  "result": "READY for source review and paired installation; not public/default physical readiness",
+  "core_head": "046faa37781cc421c4d738a794ed8041d2deb5fb",
+  "toad_head": "6f6253c03b22773e54b65105cfcbc7db61d46404",
+  "tested_core_source": "057be79fff8c830101e46d978b57818f2ee2ab7c",
+  "tested_toad_source": "fa9eec596dd3fd6895f47aa7853c633704829de7",
+  "tested_fixture": "534f9bf3347bc55cc0a91eff632898e230e23fc5",
+  "main_integration": {
+    "core": "0e28f21cd41e6af8391b2940bf6ae51cdab6b5e3",
+    "toad": "12198e663795d6b8f754599e9e13255cac9fa054",
+    "menus_delta": "Current main changes no target catalog/channel/tool or frontend menu/slash implementations. Core ContextCliCommand adopts the separately qualified603 context API; menu schema/operation paths unchanged. Toad joined412 body changes outside this family. No native/provider repeat for unrelated accepted source."
+  },
+  "production_delta": {
+    "core": {
+      "added": 371,
+      "deleted": 46,
+      "files": [
+        {
+          "added": "38",
+          "deleted": "27",
+          "path": "src/agent_comms/channel_management.py"
+        },
+        {
+          "added": "325",
+          "deleted": "2",
+          "path": "src/agent_comms/cli_commands.py"
+        },
+        {
+          "added": "8",
+          "deleted": "17",
+          "path": "src/agent_comms/tools.py"
+        }
+      ]
+    },
+    "toad": {
+      "added": 248,
+      "deleted": 517,
+      "files": [
+        {
+          "added": "35",
+          "deleted": "20",
+          "path": "src/toad/command_catalog.py"
+        },
+        {
+          "added": "2",
+          "deleted": "1",
+          "path": "src/toad/conversation_submission.py"
+        },
+        {
+          "added": "4",
+          "deleted": "4",
+          "path": "src/toad/navigation_target.py"
+        },
+        {
+          "added": "0",
+          "deleted": "2",
+          "path": "src/toad/screens/main.py"
+        },
+        {
+          "added": "2",
+          "deleted": "2",
+          "path": "src/toad/slash_command.py"
+        },
+        {
+          "added": "55",
+          "deleted": "214",
+          "path": "src/toad/target_commands.py"
+        },
+        {
+          "added": "50",
+          "deleted": "173",
+          "path": "src/toad/thread_actions.py"
+        },
+        {
+          "added": "7",
+          "deleted": "5",
+          "path": "src/toad/widgets/comms_chat.py"
+        },
+        {
+          "added": "58",
+          "deleted": "0",
+          "path": "src/toad/widgets/comms_command_dialog.py"
+        },
+        {
+          "added": "0",
+          "deleted": "78",
+          "path": "src/toad/widgets/comms_fork_dialog.py"
+        },
+        {
+          "added": "35",
+          "deleted": "18",
+          "path": "src/toad/widgets/conversation.py"
+        }
+      ]
+    }
+  },
+  "installed": {
+    "result": "PASS",
+    "seconds": 25.585601437021978,
+    "checks": [
+      "native-right-click-thread-tags-original-membership",
+      "native-right-click-rename-observed-current-sidebar",
+      "builtin-applicability-owned-by-backend",
+      "native-reviewable-delete-original-tags-updated",
+      "native-saved-view-delete-original-catalog",
+      "slash-single-acquisition-refresh-and-native-enter-execution",
+      "same-private-bus-cli-change-visible-in-open-native-app",
+      "hidden-backend-change-original-tab-return-fresh-slash-execution",
+      "save-reopen-original-registry-tags-no-frontend-copy",
+      "all-observed-catalog-reads-off-ui-loop"
+    ],
+    "provider_calls": 0,
+    "native_inputs": 0,
+    "driver": "actual installed ToadApp, native widgets and LinuxDriver; Pilot click/key delivery, same-root real CLI",
+    "physical_pixels": "NEGATIVE: raw st PNGs show blank terminal/cursor. Exported App SVG and native widget/state operations pass; no readable physical terminal or ordinary-default claim.",
+    "remaining_delivery": "Parent-reviewed paired source pin/normal stage and actual ordinary terminal menu acceptance; no package/public changes authorized to this worker."
+  },
+  "sanity": {
+    "passed": 24,
+    "failed": 2,
+    "seconds": 2.36,
+    "inherited_failures": [
+      "test_all_implicit_tag_introduction_paths_honor_name_reservations: existing configured native command validation rejects historical fake command",
+      "test_thread_presentation_owns_lifecycle_precedence: old Activity fixture has no readiness contract"
+    ],
+    "new_family_control": "TestDeclaredTargetActions passed"
+  },
+  "negative_runs": {
+    "01": "fixture retired WireLog.read_metadata API before native App; corrected to original private initialization root identity",
+    "02": "actual sidebar menu product NoMatches: shared sidebar has no SessionView ancestor; fixed captured app.selected_session + borrowed observation fence",
+    "03": "menu/CLI positives; returned original chat assertion failed",
+    "04": "original trace no CommsChatView on session-1: fixture Escape navigated back when slash completion not open; corrected complete command plus space then actual Enter",
+    "05": "functional App/CLI PASS; physical st PNG blank retained"
+  },
+  "package_custody": {
+    "restored": true,
+    "actual_original_assets": {
+      "agent_comms": 342,
+      "toad": 319,
+      "textual": 266,
+      "textual_diff_view": 3
+    },
+    "packages": 69,
+    "origins": "original Core dbcf and Toad union975 normal local filewheels; no fake Git URL",
+    "activation_text_native": "unchanged",
+    "owned_fixture_handle": 17863,
+    "owned_fixture_terminal": 0,
+    "readable_command_references": 0,
+    "scope_limit": "unreadable environment/maps not asserted"
+  },
+  "source_evidence": "owner-consumers-after.json uses existing refactor-audit Package across full Core/Toad Python roots; no parse omissions; retired named classes have zero lexical references, dynamic MRO/framework ambiguity explicit."
+}

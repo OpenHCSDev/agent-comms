@@ -1,0 +1,292 @@
+# Original public context inspection
+
+Owner: Arendt backend; parent/Einstein #406 frontend. Reuses the existing checkout.
+Mendel owns lifecycle/SessionContext; Sch owns reviewed native artifacts.
+
+The existing TurnContext owns current Core contributors. CLI and context RPC must
+consume that same assembly; frontend renders its values and sources. Native base
+preview remains distinct from Core contributors and from a recorded request.
+
+Actual SDK request values belong to AgentSession.onContextReady after
+_commitNativeContext. Its existing TurnContextObserved/ContextManifest publication now captures
+nonrecoverable public values and preserves verified native/input/journal/file
+references. Recoverable native history is not copied wholesale into the wire.
+The matching SDK capture/read and the one actual configured model onContextReady
+publication are now qualified, with distinct receipts below.
+
+An original reference may supply text only when the original bytes can be
+verified. Current files/previews cannot replace historical missing values.
+Existing indexed wire sources remain the publication/read owner: no second
+store, cache, replay, arbitrary file reader or frontend prompt reconstruction.
+Native89 and receiving404 remain immutable. Source/callers first, coherent
+implementation, then one affected installed inspection path.
+
+#602 merged at 25a45aed: one fresh configured original summary,
+recorded SDK fork, actual bounded input and distinct answer. Its private source
+and originals are preserved; no additional provider input is required here.
+
+## Implemented source contract
+
+`TurnContext.for_inspection` assembles current Core contributors. The context
+RPC returns them as `NativeContextData.contributors`; CLI consumes that result.
+`with_current_contributors` can refresh a borrowed native preview in the original
+source-read worker without reopening its SDK history. `observation()` returns the
+original SDK PreviewProvenance; it never computes another digest.
+
+Provenance leaves own `public_description()` and source reading. `context_source`
+requires the original preview observation, selected segment position, and source
+membership. `context_reference` selects an indexed original turn/request and
+segment; historical missing request IDs fail through `require_request_id()`.
+Both return FieldCodec's `ContextSourceText(description, text)`. Files require
+original hashes, wire references use original seq/id readers, and input sources
+delegate to `require_original`. Coordinates without exact text remain unavailable.
+
+The existing native capture publishes system/tool values and messages lacking
+exact journal correspondence. Core projects them through the original public
+message decoder before the sealed wire append; private reasoning is omitted.
+Logical input contribution ranges retain their originally verified instruction
+text. Ordinary transcript values retain individual SDK manifests and original
+journal references. `context_recorded_segment` consumes the recorded manifest;
+the original SDK conversion must match its original kind, digest, and byte size.
+A changed converter/value or another selected session refuses the read.
+
+NativeCustody's inspection algorithm now accepts the existing NativeQuery.
+Empty, retained, and active borrowed custody keep their existing acquisition and
+single receiver. No admission, goal, cancel, SessionContext, policy, or provider
+adapter behavior changes. Mendel599 has the shared inspection-method contract.
+
+The native producer/typed receiver change requires one matching compiled package
+and paired owners/clients. Sch owns that build after source freeze. Original
+native89, receiving404, all602 captures, and UNKNOWN inputs are untouched. This
+was the original source checkpoint. Matching d5 authored SDK capture and
+installed root/mixed/child reads are now qualified; see the final receipt below.
+
+
+## Published source and qualification
+
+Functional head: `b0e5b57be2b3d78bc3b2fb2f960c78aabfa84a5c`.
+Normal whole-head integration includes merged599 `3e5c97f9`. The sole conflict
+was ContextRuntimeRequest: its common inspection method retains599's joined
+registry read, then joins the original contributor assembly. Original request
+binding, preparation, leases, cancellation and settlement remain599's methods.
+
+This source with immutable native89 supports the current instruction UI:
+`inspection_segments`, `observation`, `with_current_contributors`, owner
+`public_text`, and authenticated `context_source`/`context_reference`. Native
+provider message records use the existing `PiMessage.from_wire` boundary;
+canonical Core responses still use FieldCodec. No alternate codec was added.
+
+The new `context_recorded_segment` requires a matching reviewed native artifact.
+Its coordinates are original `turn`, `request_id`, root `segment`, and optional
+`contributors: tuple[int, ...]`. ContextManifest/SegmentManifest select only that
+original descendant. SDK resolution receives its original session identity,
+journal entries and measured value; root text cannot substitute for a child.
+Nonrecoverable original system/tool/transformed values are captured at the
+existing onContextReady producer. Large recoverable history remains entry
+references. Public text excludes private thinking. The CLI derives completeness
+from captured manifest values; reference-only historical values remain honest.
+These are recorded SDK values, not proof of final HTTP body bytes or later
+provider transformations. Historical missing values are never today's preview.
+
+Source validation: 11 focused controls, plus the changed CLI completeness
+consumer control, passed using existing dependency resources. These check stale
+preview/file refusal, source membership, current contributor refresh without SDK
+reread, public-only capture, original child/request selection, and sealed wire
+observation indexing without changing public message sequence. Initial external
+decoder negatives are recorded in SOURCE-CHECKPOINT.json. No provider, native
+launch, public mutation or original input replay was used for these controls.
+
+The original b0 source checkpoint preceded qualification. #603 is now Ready
+for SDK-authored capture and installed authenticated reader scope. Parent406
+current-instruction physical gates retain native89 scope; they do not qualify
+the new command. Sch supplied matching d5; the installed reader receipt below
+qualifies that artifact. The final configured model publication has its own
+39.747-second receipt; it is not inferred from the SDK-authored gate.
+
+## Owner and consumer closure
+
+Existing refactor-audit Package parsed original and changed Python source/tests/
+patch roots: 686/687 modules, no omissions. Existing Node Acorn parsed47 native
+source/test modules at both revisions, no omissions. Outputs are in
+`evidence/context-source-inspection603-20261003/`. They list declarations, bases,
+methods and lexical consumers. Dynamic family dispatch/MRO was read at its
+original owners; lexical AST evidence alone does not prove receiver identity.
+
+* TurnContext owns Core contributor assembly. CLI's duplicate assembly was
+  deleted; RPC, CLI and frontend's borrowed-resource refresh consume this owner.
+* ContextSegment and its existing native/message leaves own public rendering and
+  contributor metadata. Provenance leaves own descriptions and verified original
+  source reads; every source read first checks selected observation membership.
+* InputProvenance delegates its existing require_original; a copied check and
+  second lookup were deleted. File, wire and input reads retain their original
+  byte/hash/reference checks. Coordinates without recoverable wording refuse.
+* The existing native TurnContext capture, Pi event decoder and sealed
+  ContextManifest publication own actual request observations. Ephemeral SDK
+  values become public-only captured values at that publication; no second store.
+* NativeCustody's existing Empty/Borrowed/Retained members share query inspection.
+  Current and recorded readers use one original receiver and saved-session fence;
+  the replaced hardwired current-query methods were deleted.
+
+At the functional head the batch changes12 production files, adds460 lines and
+deletes35. These counts describe source/API expansion plus replaced decisions;
+they do not claim all architecture debt is eliminated or full request/HTTP proof.
+
+## Recorded root read follow-up
+
+Functional head `4ab53277ad3075978c36d75bbd010de5df169d00` closes serialized
+per-message SDK reads. A root opens one original SDK projection; a fully captured
+message group renders without one. Exact descendant reads keep original child
+coordinates. Mixed groups combine original captured public values with verified
+original journal parts from that single result.
+
+The existing NativeMessages mixin declares which contributor observations
+partition the complete value. ContextSegment defaults to annotations only;
+SegmentManifest delegates through the existing declared family. System/source
+range annotations cannot reconstruct missing complete bodies. The original
+NativeQuery sends only uncaptured complete parts. Native resolution does not
+repeat partition decisions: its recursive recordedMembers route/owner map was
+deleted. One acquired projection provides a temporary value lookup, never a
+retained cache or another source authority.
+
+Against39f89 this changes five production files,92 additions/29 deletions;
+compiled manifest pin changes are separately the immutable2121 artifact witness.
+Existing refactor-audit Package parsed311 production modules at both heads with
+zero omissions; narrowed declaration/caller results are in
+`evidence/context-source-inspection603-root-batch/owner-consumers.json`.
+Lexical resolution does not establish dynamic MRO; the existing NativeMessages
+and ContextSegment hooks were read together. Python query factory, TurnRunner
+reader, NativeContextData verification, SDK request adapter and group resolution
+all consume the same original parts contract.
+
+Final source sanity:13 controls passed, one installed callback control excluded;
+existing Node syntax checks passed. Controls cover one read for1000 original
+messages, no reader for complete captures, mixed original values, strict missing
+bytes/foreign values, annotation incompleteness, child selection and typed query
+roundtrip. No provider or public mutation occurred. Installed SDK root/mixed
+controls are added to the existing native_turn_context_contract driver; they
+passed with matching d5 in the installed journey below. Sch'sf3/39 compiled package is preserved
+but does not qualify the newly required query.parts payload. No native89 claim.
+Pre-existing capture provenance.some(JSON.stringify) work is a separate source
+relationship; this follow-up does not claim to remove or time it.
+
+Mendel606 owns RetainedNative.inspect/inspect_acquired and EmptyNative.inspect:
+required original preparation and stats publication, then one acquired query.
+BorrowedNative retains its active receiver. Whole606 was normally integrated
+at bf294eab; its required preparation/stats methods were not duplicated.
+
+## Installed reader construction
+
+The existing `native_turn_context_contract.mjs --recorded-readers` creates two
+original SDK message parts and checks one projection for root, mixed resolution,
+and exact child, rejecting missing bytes, another session, and a root read with
+only child coordinates. Its original observation is exported from TurnContext's
+existing observation producer. Ordinary S4 seed callers omit that flag and keep
+their original source construction/contract scope.
+
+The existing cold `test_native_context_inspection` fixture has one recorded-read
+case. It leases and publishes the SDK contract's original authored observation
+through NativeContextManifestData.record, retires that fixture lease normally,
+and reads the recorded root and exact child through RuntimeConnection and the
+indexed manifest membership API. Both reads use installed Core and the matching
+compiled SDK. Original native bytes and original user rows must remain unchanged;
+provider posts and new inputs must remain zero. Owner shutdown closes the child.
+No public root, original input, unknown attempt or configured model is changed.
+
+This is an authored SDK capture/installed read check, not an assertion that an
+onContextReady model request occurred. Current preview/authenticated file gates
+40603/05 retain their demonstrated native89 scope; they do not qualify future
+recorded request capture. The original f3/39 witness is also unchanged.
+
+The granted thin540 keeps its existing runtime dependencies; no pytest was
+installed. The original fixture acquisition and reader now live in shared
+modules. Both pytest and the standalone installed runner call those owners.
+The final reader uses the same completed SDK capture:
+
+```sh
+PI_COMPACTION_TEST_PACKAGE=/matching/d5/native/package \
+  /leased/thin540/bin/python tests/native_context_reader_journey.py \
+  /owned/capture02 --sdk-source /owned/capture/original-recorded-sdk-source.json
+```
+
+The exact package paths, wheel/source hashes, original refusal, and corrected
+6.1119-second terminal are retained in
+`evidence/context-source603-installed-root-20261003/`. No rerun is requested.
+Compiled production remains the accepted4ab source with d5 pin.
+
+The qualified mixed-reader case comes from an actual second SDK capture with
+one authored transformed message, rather than a fabricated root digest. The
+original publisher captures that nonrecoverable part, retains the other part's
+journal reference, and the same installed indexed RPC must recover the complete
+mixed public text. This remains an authored SDK construction, not observed model
+recall or onContextReady provider admission. Production still equals4ab53277.
+
+
+## Installed root/mixed/child reader, reused thin540
+
+The explicit package-only lease allowed a normal Core filewheel in the existing
+thin540. Its ten dependencies remain unchanged; it has no pytest dependency.
+`NativeBackendFixture` and the original context reader now live in shared fixture
+modules, with pytest delegating to them. No setup/cleanup or read algorithm is
+copied into a second runner. Simulated-model helpers load their pytest imports
+only when their own simulated consumer requests them.
+
+The first installed RPC correctly refused the authored SDK observation because
+`PreviewProvenance` did not expose its observed session identity to the shared
+read relation. The existing provenance member now supplies that identity for
+read corroboration. It does not acquire request generation, native input proof
+or admission authority. Original manifest membership, identity, journal entry
+coordinates, kind, SHA and byte checks remain in the existing owners. The raw
+4.11-second refusal is preserved.
+
+The corrected run borrows the SAME completed SDK capture, without recreating it:
+
+```sh
+PI_COMPACTION_TEST_PACKAGE=/matching/d5/native/package \
+  /leased/thin540/bin/python tests/native_context_reader_journey.py \
+  /owned/capture02 --sdk-source /owned/capture/original-recorded-sdk-source.json
+```
+
+Installed RPC acceptance passed in 6.1119 seconds: exact root, distinct original
+child, and mixed captured/transformed plus journal-backed text. Three original
+SDK user rows and native bytes were preserved, provider posts/new inputs zero,
+child exited. This is authored SDK capture and installed authenticated read
+acceptance; no model onContextReady request, HTTP body, recall or physical UI
+claim. Native d5 compiled source is unchanged. Evidence includes the original
+negative and corrected terminal/read receipts.
+
+
+## Actual configured publication
+
+Main605 was normally merged at40f557d4 before input. RegistryDocument,
+RegistryNames/Presence, Registration and ThreadView exactly match determining
+main db620680; no snapshot/default rollback remains. The same thin540 received
+only a normal Core wheel, with unchanged dependencies and matching d5 native.
+
+The existing configured journey forked the original idle architecture-memory
+42,662,475-byte source through SDKFork/RetainedOwnerLaunch, preserving actual
+Sol6.1/HIGH/model/auth configuration. It sent ONE distinct terse input through
+actual stdioACP and RuntimeServer, with no replay or forced compaction.
+
+Actual AgentSession.onContextReady → TurnContextObserved → PiEvent decoder →
+TurnProgress leased sealed ContextManifest publication produced original request
+`f948ca63-c6b5-4ca5-a4d5-f7c624762478`. Its generation/digest match the committed
+native input proof. No direct observed.record or fixture SQL seeding occurs in
+this configured mode. Original root/system/exact-child RPC reads matched the
+original manifest and returned through the same native child. System public text
+20,816 bytes, transcript root363,603 bytes. The selected original childb3f9408e
+is ThinkingContent+ToolCallContent, so canonical public text is exactly empty;
+this is not unavailable data. The SDK-authored gate separately covers distinct
+nonempty child and mixed captures. No hidden content was copied to results.
+
+The configured journey passed39.7472s; prompt through return19.7830s is not pure
+provider time. Four actual ACP usage updates arrived. Original source SHA stayed
+1bdd97fd57551edb2986a3289b33bc781cde45b98b4e1e591f79e7804ced7258.
+Original native user/reply, Started disposition, terminal lease, waiter release,
+query-byte preservation, ACP exit and native child retirement are retained.
+No claim of finalHTTP bytes, recall or physical recorded UI is made.
+
+Source/runtime were frozen throughout execution; final driver observation uses
+the original typed StartedInput directly. Receipt fields are projections only.
+No additional provider run is requested. Raw private receipt and saved source
+remain in the owned fixture; sanitized original IDs/hashes and cleanup are in
+`evidence/context-source603-configured-publication-20261003/`.

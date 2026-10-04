@@ -1,0 +1,230 @@
+{
+  "parser": "existing audit.findings.Package",
+  "roots": [
+    "src"
+  ],
+  "limitations": [
+    "Lexical calls do not resolve dynamic declared family/MRO; original hooks and consumers read semantically."
+  ],
+  "revisions": [
+    {
+      "revision": "39f89a7c614e5e0c27009a1cbad6fce0efc96467",
+      "parsed": 311,
+      "omissions": [],
+      "sites": [
+        {
+          "file": "src/agent_comms/native_turn_context.py",
+          "line": 82,
+          "declaration": "recorded_public_text"
+        },
+        {
+          "file": "src/agent_comms/pi_commands.py",
+          "line": 481,
+          "declaration": "AgentCommsInspectContextSegment"
+        },
+        {
+          "file": "src/agent_comms/pi_commands.py",
+          "line": 488,
+          "declaration": "for_manifest"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 166,
+          "declaration": "SegmentManifest"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 243,
+          "declaration": "ContextSegment"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 364,
+          "declaration": "NativeMessages"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 32,
+          "declaration": "public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 63,
+          "declaration": "public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 86,
+          "declaration": "public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 228,
+          "declaration": "public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 259,
+          "declaration": "public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 356,
+          "declaration": "public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 375,
+          "declaration": "public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_runner.py",
+          "line": 206,
+          "call": "context.recorded_public_text"
+        }
+      ]
+    },
+    {
+      "revision": "4ab53277ad3075978c36d75bbd010de5df169d00",
+      "parsed": 311,
+      "omissions": [],
+      "sites": [
+        {
+          "file": "src/agent_comms/native_turn_context.py",
+          "line": 82,
+          "declaration": "recorded_public_text"
+        },
+        {
+          "file": "src/agent_comms/native_turn_context.py",
+          "line": 93,
+          "call": "expected.recorded_public_text"
+        },
+        {
+          "file": "src/agent_comms/pi_commands.py",
+          "line": 481,
+          "declaration": "AgentCommsInspectContextSegment"
+        },
+        {
+          "file": "src/agent_comms/pi_commands.py",
+          "line": 489,
+          "declaration": "for_manifest"
+        },
+        {
+          "file": "src/agent_comms/pi_commands.py",
+          "line": 491,
+          "call": "expected.requested_parts"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 166,
+          "declaration": "SegmentManifest"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 271,
+          "declaration": "ContextSegment"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 401,
+          "declaration": "NativeMessages"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 32,
+          "declaration": "public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 63,
+          "declaration": "public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 86,
+          "declaration": "public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 228,
+          "declaration": "public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 233,
+          "declaration": "recorded_parts"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 236,
+          "declaration": "requested_parts"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 239,
+          "declaration": "recorded_public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 288,
+          "declaration": "recorded_parts"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 292,
+          "declaration": "public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 393,
+          "declaration": "public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 410,
+          "declaration": "recorded_parts"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 420,
+          "declaration": "public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 234,
+          "call": "ContextSegment.decode(self.kind).recorded_parts"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 251,
+          "call": "self.recorded_parts"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 266,
+          "call": "self.recorded_parts"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 230,
+          "call": "self.recorded_public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 237,
+          "call": "self.recorded_parts"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 253,
+          "call": "child.recorded_public_text"
+        },
+        {
+          "file": "src/agent_comms/turn_runner.py",
+          "line": 206,
+          "call": "context.recorded_public_text"
+        }
+      ]
+    }
+  ]
+}
