@@ -1,0 +1,434 @@
+{
+  "revision": "e1c399d7a1a93411e8eba14b62c1b7ebce17dcf0",
+  "python": {
+    "src": {
+      "modules": 311,
+      "references": [
+        {
+          "file": "src/agent_comms/cli_commands.py",
+          "line": 913,
+          "node": "Name",
+          "name": "NativeContextData"
+        },
+        {
+          "file": "src/agent_comms/native_turn_context.py",
+          "line": 42,
+          "node": "ClassDef",
+          "name": "NativeContextData"
+        },
+        {
+          "file": "src/agent_comms/pi_commands.py",
+          "line": 477,
+          "node": "Name",
+          "name": "NativeContextData"
+        },
+        {
+          "file": "src/agent_comms/pi_commands.py",
+          "line": 482,
+          "node": "Name",
+          "name": "NativeContextData"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 405,
+          "node": "ClassDef",
+          "name": "NativeMessages"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 434,
+          "node": "Name",
+          "name": "NativeMessages"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 439,
+          "node": "Name",
+          "name": "NativeMessages"
+        },
+        {
+          "file": "src/agent_comms/turn_context.py",
+          "line": 444,
+          "node": "Name",
+          "name": "NativeMessages"
+        }
+      ]
+    },
+    "tests": {
+      "modules": 365,
+      "references": [
+        {
+          "file": "tests/compaction_retention_fixture.py",
+          "line": 39,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/compaction_retention_fixture.py",
+          "line": 40,
+          "node": "Name",
+          "name": "RecordedNativeCheckpoint"
+        },
+        {
+          "file": "tests/compaction_retention_fixture.py",
+          "line": 609,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/compaction_retention_fixture.py",
+          "line": 876,
+          "node": "Name",
+          "name": "RecordedNativeCheckpoint"
+        },
+        {
+          "file": "tests/compaction_retention_fixture.py",
+          "line": 879,
+          "node": "Name",
+          "name": "RecordedNativeCheckpoint"
+        },
+        {
+          "file": "tests/compaction_retention_fixture.py",
+          "line": 82,
+          "node": "Name",
+          "name": "RecordedNativeCheckpoint"
+        },
+        {
+          "file": "tests/native_context_reader_journey.py",
+          "line": 76,
+          "node": "Name",
+          "name": "NativeContextData"
+        },
+        {
+          "file": "tests/native_context_reader_journey.py",
+          "line": 80,
+          "node": "Name",
+          "name": "NativeContextData"
+        },
+        {
+          "file": "tests/native_context_reader_journey.py",
+          "line": 110,
+          "node": "Name",
+          "name": "NativeContextData"
+        },
+        {
+          "file": "tests/native_context_reader_journey.py",
+          "line": 123,
+          "node": "Name",
+          "name": "NativeContextData"
+        },
+        {
+          "file": "tests/retained_native_fixture.py",
+          "line": 95,
+          "node": "ClassDef",
+          "name": "RecordedNativeCheckpoint"
+        },
+        {
+          "file": "tests/retained_native_fixture.py",
+          "line": 419,
+          "node": "ClassDef",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/retained_native_fixture.py",
+          "line": 469,
+          "node": "FunctionDef",
+          "name": "applied_condition"
+        },
+        {
+          "file": "tests/retained_native_fixture.py",
+          "line": 569,
+          "node": "FunctionDef",
+          "name": "serialized_construction"
+        },
+        {
+          "file": "tests/retained_native_fixture.py",
+          "line": 427,
+          "node": "Name",
+          "name": "RecordedNativeCheckpoint"
+        },
+        {
+          "file": "tests/retained_native_fixture.py",
+          "line": 814,
+          "node": "Attribute",
+          "name": "serialized_construction"
+        },
+        {
+          "file": "tests/retained_native_fixture.py",
+          "line": 290,
+          "node": "Name",
+          "name": "RecordedNativeCheckpoint"
+        },
+        {
+          "file": "tests/retained_native_fixture.py",
+          "line": 509,
+          "node": "Name",
+          "name": "RecordedNativeCheckpoint"
+        },
+        {
+          "file": "tests/retained_native_fixture.py",
+          "line": 542,
+          "node": "Name",
+          "name": "NativeContextData"
+        },
+        {
+          "file": "tests/retained_native_fixture.py",
+          "line": 558,
+          "node": "Name",
+          "name": "RecordedNativeCheckpoint"
+        },
+        {
+          "file": "tests/retained_native_fixture.py",
+          "line": 626,
+          "node": "Name",
+          "name": "RecordedNativeCheckpoint"
+        },
+        {
+          "file": "tests/retained_native_fixture.py",
+          "line": 737,
+          "node": "Attribute",
+          "name": "applied_condition"
+        },
+        {
+          "file": "tests/retained_native_fixture.py",
+          "line": 542,
+          "node": "Name",
+          "name": "RecordedNativeCheckpoint"
+        },
+        {
+          "file": "tests/retained_native_fixture.py",
+          "line": 581,
+          "node": "Name",
+          "name": "RecordedNativeCheckpoint"
+        },
+        {
+          "file": "tests/test_compaction_retention_fixture.py",
+          "line": 212,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/test_compaction_retention_fixture.py",
+          "line": 213,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 70,
+          "node": "Name",
+          "name": "NativeContextData"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 119,
+          "node": "Name",
+          "name": "NativeContextData"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 157,
+          "node": "Name",
+          "name": "NativeContextData"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 192,
+          "node": "Name",
+          "name": "NativeContextData"
+        },
+        {
+          "file": "tests/test_context_source_inspection.py",
+          "line": 47,
+          "node": "Name",
+          "name": "NativeContextData"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 54,
+          "node": "Name",
+          "name": "RecordedNativeCheckpoint"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 70,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 129,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 193,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 341,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 423,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 474,
+          "node": "Name",
+          "name": "NativeContextData"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 478,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 484,
+          "node": "Attribute",
+          "name": "serialized_construction"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 495,
+          "node": "Attribute",
+          "name": "serialized_construction"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 112,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 267,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 305,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 312,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 501,
+          "node": "Attribute",
+          "name": "serialized_construction"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 504,
+          "node": "Attribute",
+          "name": "serialized_construction"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 455,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 271,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 272,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/test_recorded_retention_measurements.py",
+          "line": 218,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/test_selected_summary_failure_native.py",
+          "line": 308,
+          "node": "Name",
+          "name": "RecordedNativeCheckpoint"
+        },
+        {
+          "file": "tests/three_cut_retention_configured_journey.py",
+          "line": 244,
+          "node": "Name",
+          "name": "RecordedNativeCheckpoint"
+        },
+        {
+          "file": "tests/three_cut_retention_configured_journey.py",
+          "line": 269,
+          "node": "Name",
+          "name": "RecordedNativeCheckpoint"
+        },
+        {
+          "file": "tests/three_cut_retention_configured_journey.py",
+          "line": 279,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/three_cut_retention_configured_journey.py",
+          "line": 219,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/three_cut_retention_configured_journey.py",
+          "line": 274,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/three_cut_retention_configured_journey.py",
+          "line": 140,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/three_cut_retention_configured_journey.py",
+          "line": 395,
+          "node": "Name",
+          "name": "RecordedNativeProbe"
+        },
+        {
+          "file": "tests/three_cut_retention_configured_journey.py",
+          "line": 95,
+          "node": "Name",
+          "name": "RecordedNativeCheckpoint"
+        },
+        {
+          "file": "tests/three_cut_retention_configured_journey.py",
+          "line": 384,
+          "node": "Name",
+          "name": "RecordedNativeCheckpoint"
+        }
+      ]
+    },
+    "tools": {
+      "modules": 53,
+      "references": []
+    }
+  },
+  "limits": "Lexical references; SDK callback installation and original JS converter read separately. No dynamic-resolution assertion."
+}

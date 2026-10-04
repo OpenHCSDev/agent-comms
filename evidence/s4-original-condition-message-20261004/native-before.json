@@ -1,0 +1,271 @@
+{
+  "modules": 47,
+  "omissions": [],
+  "sites": [
+    {
+      "file": "stack/native-compaction-policy.mjs",
+      "line": 6,
+      "node": "Identifier",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "stack/native-compaction-policy.mjs",
+      "line": 6,
+      "node": "Identifier",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "stack/native-compaction-policy.mjs",
+      "line": 141,
+      "node": "Identifier",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "stack/native-compaction-policy.mjs",
+      "line": 144,
+      "node": "Identifier",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "stack/native-compaction-policy.mjs",
+      "line": 147,
+      "node": "Identifier",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "stack/native-compaction-source.mjs",
+      "line": 5,
+      "node": "Identifier",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "stack/native-compaction-source.mjs",
+      "line": 5,
+      "node": "Identifier",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "stack/native-compaction-source.mjs",
+      "line": 107,
+      "node": "Identifier",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "stack/native-session-context.mjs",
+      "line": 4,
+      "node": "Identifier",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "stack/native-session-context.mjs",
+      "line": 4,
+      "node": "Identifier",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "stack/native-session-context.mjs",
+      "line": 29,
+      "node": "Identifier",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "stack/native-session-context.mjs",
+      "line": 41,
+      "node": "MemberExpression",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "stack/native-session-context.mjs",
+      "line": 41,
+      "node": "Identifier",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 213,
+      "node": "MemberExpression",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 213,
+      "node": "Identifier",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 237,
+      "node": "MemberExpression",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 237,
+      "node": "Identifier",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 9,
+      "node": "Identifier",
+      "name": "transformBoundedNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 9,
+      "node": "Identifier",
+      "name": "transformBoundedNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 9,
+      "node": "Identifier",
+      "name": "armBoundedNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 9,
+      "node": "Identifier",
+      "name": "armBoundedNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 69,
+      "node": "MemberExpression",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 69,
+      "node": "Identifier",
+      "name": "convertToLlm"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 285,
+      "node": "Identifier",
+      "name": "transformBoundedNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 289,
+      "node": "Identifier",
+      "name": "transformBoundedNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 292,
+      "node": "Identifier",
+      "name": "armBoundedNativeCondition"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 293,
+      "node": "Identifier",
+      "name": "transformBoundedNativeCondition"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 34,
+      "node": "FunctionDeclaration",
+      "name": "boundedMessages"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 34,
+      "node": "Identifier",
+      "name": "boundedMessages"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 63,
+      "node": "Identifier",
+      "name": "boundedMessages"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 79,
+      "node": "FunctionDeclaration",
+      "name": "transformBoundedNativeCondition"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 79,
+      "node": "Identifier",
+      "name": "transformBoundedNativeCondition"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 83,
+      "node": "Identifier",
+      "name": "boundedMessages"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 90,
+      "node": "FunctionDeclaration",
+      "name": "armBoundedNativeCondition"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 90,
+      "node": "Identifier",
+      "name": "armBoundedNativeCondition"
+    },
+    {
+      "file": "tests/summary_prefix_native_observer.mjs",
+      "line": 94,
+      "node": "Identifier",
+      "name": "armBoundedNativeCondition"
+    },
+    {
+      "file": "tests/summary_prefix_native_observer.mjs",
+      "line": 94,
+      "node": "Identifier",
+      "name": "armBoundedNativeCondition"
+    },
+    {
+      "file": "tests/summary_prefix_native_observer.mjs",
+      "line": 94,
+      "node": "Identifier",
+      "name": "boundedMessages"
+    },
+    {
+      "file": "tests/summary_prefix_native_observer.mjs",
+      "line": 94,
+      "node": "Identifier",
+      "name": "boundedMessages"
+    },
+    {
+      "file": "tests/summary_prefix_native_observer.mjs",
+      "line": 94,
+      "node": "Identifier",
+      "name": "transformBoundedNativeCondition"
+    },
+    {
+      "file": "tests/summary_prefix_native_observer.mjs",
+      "line": 94,
+      "node": "Identifier",
+      "name": "transformBoundedNativeCondition"
+    },
+    {
+      "file": "tests/summary_prefix_native_observer.mjs",
+      "line": 106,
+      "node": "Identifier",
+      "name": "boundedMessages"
+    },
+    {
+      "file": "tests/summary_prefix_native_observer.mjs",
+      "line": 107,
+      "node": "Identifier",
+      "name": "transformBoundedNativeCondition"
+    },
+    {
+      "file": "tests/summary_prefix_native_observer.mjs",
+      "line": 108,
+      "node": "Identifier",
+      "name": "armBoundedNativeCondition"
+    }
+  ],
+  "limits": "Lexical callback references; original runtime hook semantics read directly."
+}
