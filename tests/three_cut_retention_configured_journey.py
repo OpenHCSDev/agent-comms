@@ -108,12 +108,14 @@ async def condition_application(stage,package,original_python,selected_condition
                 construction=measured['construction']
                 installed=construction['condition_installation']
                 assert installed['evaluated']
-                assert all(item.condition==selected_condition.value for item in installed['installations'])
+                for item in installed['installations']:
+                    item.require_condition(selected_condition.value)
                 assert construction['request_budget']['evaluated']
                 assert construction['request_completion']['evaluated']
                 assert service.registry.require(owner.name).active_turn is None
                 receipt.update(complete=True,original_cut_correlated=True,
                     SDK_child_binding=True,installed_source_in_actual_SDK_request=True,
+                    installed_narrative_source_evaluated=installed['narrative_source']['evaluated'],
                     canonical_request_budget_and_terminal=True,distinct_answer=True,new_original_inputs=1,
                     model_steps=len(measured['model_steps']),model_recall_evaluated=False,
                     final_HTTP_bytes_evaluated=False)

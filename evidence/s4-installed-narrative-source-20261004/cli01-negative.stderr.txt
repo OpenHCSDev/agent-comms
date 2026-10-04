@@ -1,0 +1,17 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/tests/compaction_retention_fixture.py", line 1417, in <module>
+    main()
+    ~~~~^^
+  File "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/tests/compaction_retention_fixture.py", line 1393, in main
+    result = scenario.compare_native_pairs(condition, pairs, baseline_condition)
+  File "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/tests/compaction_retention_fixture.py", line 1172, in compare_native_pairs
+    comparisons = tuple(self.compare_native(condition, candidate, baseline_condition, control)
+                  ^^^^^
+  File "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/tests/compaction_retention_fixture.py", line 1172, in <genexpr>
+    comparisons = tuple(self.compare_native(condition, candidate, baseline_condition, control)
+                        ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/tests/compaction_retention_fixture.py", line 1144, in compare_native
+    raise ValueError("A comparison requires distinct declared conditions")
+ValueError: A comparison requires distinct declared conditions

@@ -140,6 +140,7 @@ export function armInstalledNativeCondition(session,construction,output,inputId)
         return {messages:transformed,observation:{condition:construction.condition,
             source_witness:construction.source_witness,
             entry_selection:construction.entry_selection,
+            narrative_source:construction.narrative_source,
             construction_context_sha256:construction.context_sha256,
             source_prefix_count:count,source_prefix_sha256:sourcePrefix,
             source_message_count:messages.length}};
