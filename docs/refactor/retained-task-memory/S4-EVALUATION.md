@@ -74,7 +74,7 @@ Only the history/probe operands belong in the configured execution fixture;
 the complete plan includes private oracle metadata and is not a provider prompt.
 
 `--recorded-run` uses the existing RecordedNativeProbes input with `rounds` and
-unprobed `checkpoints` maps. It validates distinct ancestor cuts in frozen round
+unprobed `checkpoints` maps, plus optional original `stimuli` references. It validates distinct ancestor cuts in frozen round
 order through one borrowed original native source. Per-probe checkpoint,
 `sdk_context` and `context_manifest` references belong on RecordedNativeProbe.
 Checkpoint `registry_scope` references an original RegistryDocument capture;
@@ -93,6 +93,18 @@ counters retain the codec's omitted-field representation. The former final-only
 `answer_usage` projection is removed. The original
 answer record still retains its own usage. These are journaled completions, not
 a transport-attempt/retry count, actual billed spend or provider-wait duration.
+
+Recorded source inputs reuse `RecordedNativeProbe` in the run's `stimuli` map.
+The existing scenario construction owner supplies exact new-history `source_text`;
+the acquired original user/terminal must precede its cut or probe. An inherited
+probe also needs the original SDK prefix relationship. All stimulus/probe sources
+are borrowed in one reader group; missing original references remain unavailable.
+`source_inputs` reports their model steps separately. `recorded_workflow` requires
+those steps as well as the original summary/recall groups; `combined` retains the
+summary/recall scope. Shared source preparation is not independent arm cost.
+These measurements do not prove a condition installation, complete-history
+capacity, preregistration or a matched study. See
+[original stimulus binding](../../checkpoints/s4-original-stimulus-20261004.md).
 
 ## Required next infrastructure and owner boundaries
 

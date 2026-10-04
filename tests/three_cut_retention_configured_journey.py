@@ -282,7 +282,7 @@ def completed_continuation(stage):
                 record(stage / f'{round_.identity}-original-manifest.private.json', manifest),
                 submitted_inputs=submitted)
     resumed = RecordedNativeProbes(probes)
-    resumed.observe(scenario.rounds)
+    resumed.observe(scenario)
     record(stage / 'continuation-original-run.private.json', resumed)
     return resumed
 
