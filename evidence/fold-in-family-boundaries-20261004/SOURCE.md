@@ -193,3 +193,33 @@ Paired425 still needs decoded current-contributor and recorded-child labels and
 actual saved application on an explicitly released full holder. Package-only
 thin540 handback follows this terminal receipt; fixture/source/history/UNKNOWN
 outputs remain protected.
+
+## Final joined paired acceptance
+
+Source497352d04ce698f43b7f2e9d8921c204aa08ade7 normally joins F2/main35b
+and current F1 source9301, preserving the already qualified F4 method bytes.
+The paired Toad425 production11e138357982af03f4f20cf18d571d3665958a38
+adds the complete remaining HistoricalSessions handling event consumer to the
+existing CoreEventReceiver. Current and recorded ManifestNode descriptions use
+the original typed segment owner. Owned Toad production totals now delete60 /
+add72 lines; Core remains delete145 / add229. Inherited F0/F1/F2/422 source
+changes, fixtures and evidence are excluded.
+
+Actual saved App06 passed16.512s under plain st / isolated Xvfb / LinuxDriver.
+Original configured599 saved SDK history renders21events; current contributor
+and sealed recorded children have human labels/detail. Whole App closes, native
+child retires and original process identities are absent. The saved source,
+wire/input/native binding/journal proofs stay exact. No provider request, prompt,
+new fork, replay, public write or film. Installed342Core/319Toad/266Textual/10audit
+assets remain exact Git source. The 0.51s installed current/recorded node control
+and original handler selection sanity prevent the two demonstrated stale
+consumer failures; the old App01..05 negatives remain failed. No417 export/state,
+whole performance, public live or historical latency claim.
+
+Detailed compact receipts, PNG, AST before/after and SHA256SUMS are published in
+paired425 docs/refactor/f4-paired-installed-20261004. Textual is c1c1ebe5,
+Diff8fa7d4d0, original NRA9a98d72e; immutable native086 remains unchanged.
+The granted existing style22 now has exact original Core611/Toad9138/Texta52/
+NRA d392 bytes, all69 versions/origins, archive-member readback and pip check.
+Whole package/import/execution and native READ claims are returned. No further
+Core control/App/provider run is needed for this unchanged source milestone.
