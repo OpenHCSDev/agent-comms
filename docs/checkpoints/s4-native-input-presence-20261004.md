@@ -1,0 +1,5 @@
+# Captured native probe input presence
+
+The original reader authenticates SDK source/serialized bytes and the submitted/native input, but does not measure whether the captured provider-message view contains its rendered probe. Extend RecordedNativeProbe through existing NativeMessages/PiMessage/UserMessage.matches_input; decode each captured message once, retain original segment/message coordinates, and distinguish exact public text presence from original input-ID corroboration. Unknown/opaque content and missing request bytes cannot supply inferred presence. This is SDK public-text measurement, never HTTP submission, complete-request capture, intervention or model recall. Existing construction/scorer/frozen-round/paired/CLI consumers borrow the same acquired observation; no runtime/native producer change.
+
+Same reused checkout. Existing AST/source before implementation; batched affected private checks last. No original replay/read, SDK/provider/model, package/environment/holder operation or study. Implementation pending; full S4 and 30-pair/USD75 study remain unfinished/unapproved.
