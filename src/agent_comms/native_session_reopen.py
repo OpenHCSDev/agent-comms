@@ -7,10 +7,14 @@ import os
 import stat
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .native_package import verify_native_package
 from .pi_helper import PiHelper, SessionHelperRequest
 from .private_path import FileRevision
+
+if TYPE_CHECKING:
+    from .native_entries import NativeEvidenceRead
 
 
 class NativeReopenError(ValueError):
@@ -46,6 +50,25 @@ class NativeSessionIdentity:
     def require_session(self, canonical: str) -> None:
         if self.session_file != canonical:
             raise ValueError("Native identity differs from owner's canonical session")
+
+    def covers(self, evidence: NativeEvidenceRead, revision: FileRevision,
+               *other_revisions: FileRevision) -> bool:
+        """Corroborate this session and its recorded positions in a held source.
+
+        Revisions are the original prepared/returned observations, not freshly
+        reconstructed positions. Later appends are allowed; original bytes and
+        ancestry remain under the acquired evidence reader's validation. This
+        relation grants neither enrollment nor permission to replay an input.
+        """
+        source = evidence.source
+        return (
+            self.path == source.path
+            and self.session_id == evidence.entries[0].require_entry_id()
+            and all(
+                source.identity == revision.identity and source.size >= revision.size
+                for revision in (revision, *other_revisions)
+            )
+        )
 
     @staticmethod
     def locate(package: Path, session_file: str) -> NativeSessionIdentity:

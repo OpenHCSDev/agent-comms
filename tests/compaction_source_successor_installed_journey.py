@@ -17,6 +17,10 @@ from pathlib import Path
 import sys
 import subprocess
 import time
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from publish_retained_summary import InstalledSource, ReviewedArtifact
 
 from acp.agent.router import build_agent_router
 from agent_comms.acp import CommsAgent
@@ -56,14 +60,16 @@ def ordinary_source():
 @asynccontextmanager
 async def configured_saved_agent(stage, package, source_file, receiver, receipt, *,
                                  capture_source=ordinary_source, observe_launch=unchanged_launch,
-                                 continuation=None):
+                                 continuation=None, core_source: InstalledSource | None = None,
+                                 core_artifacts: tuple[ReviewedArtifact, ...] = ()):
     """Acquire one configured saved fork and close its original child on every exit."""
     import agent_comms
     installed = Path(agent_comms.__file__).resolve().parent
     checkout = Path(__file__).resolve().parents[1]
     assert installed.is_relative_to(Path(sys.prefix))
     direct = json.loads(distribution('agent-comms').read_text('direct_url.json'))
-    revision = direct['vcs_info']['commit_id']
+    revision = (direct['vcs_info']['commit_id'] if core_source is None else
+                core_source.require_package('agent_comms', installed, direct, core_artifacts))
     # The installed Core source and the current private fixture have different
     # release identities. Verify the former against its original Git declaration,
     # never an overlay or a mutable current-checkout approximation.
@@ -162,7 +168,9 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
 
 async def run(stage, package, source_file, *, capture_source=ordinary_source,
               observe_launch=unchanged_launch,
-              probe_marker='SOURCE529_DISTINCT_AFTER_COMMIT'):
+              probe_marker='SOURCE529_DISTINCT_AFTER_COMMIT',
+              core_source: InstalledSource | None = None,
+              core_artifacts: tuple[ReviewedArtifact, ...] = ()):
     receipt = {'complete': False, 'public_inputs': 0, 'input_replays': 0,
                'installed_UI': False, 'acceptance_scope': 'configured SDK/ACP/native saved-source compaction and distinct input'}
     peer_publications = []
@@ -179,7 +187,8 @@ async def run(stage, package, source_file, *, capture_source=ordinary_source,
             if update.session_update=='agent_message_chunk' and update.content.type=='text':
                 text_chunks.append(update.content.text)
     async with configured_saved_agent(stage,package,source_file,Receiver(),receipt,
-            capture_source=capture_source,observe_launch=observe_launch) as (agent,owner,fork):
+            capture_source=capture_source,observe_launch=observe_launch,
+            core_source=core_source,core_artifacts=core_artifacts) as (agent,owner,fork):
         service=agent._comms
         router = build_agent_router(agent)
         print('CONFIGURED_SAVED_COMPACTION_STARTED', flush=True)
