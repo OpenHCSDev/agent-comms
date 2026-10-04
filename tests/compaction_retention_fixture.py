@@ -644,6 +644,8 @@ class ScoredScenario(ScoreView):
                         for identity, installation in installations.items()}
         entry_selections = {identity: installation['entry_selection']
                             for identity, installation in installations.items()}
+        narratives = {identity: installation['narrative_source']
+                      for identity, installation in installations.items()}
         admissions = {identity: original['construction']['request_budget']
                       for identity, original in evidence.items()}
         capacity = {identity: original['construction']['source_coverage']['full_context_capacity']
@@ -656,6 +658,7 @@ class ScoredScenario(ScoreView):
                 'recorded_constructor_selection': group({identity: {'evaluated': bool(originals)}
                     for identity, originals in constructors.items()}),
                 'sdk_entry_selection': group(entry_selections),
+                'installed_narrative_source': group(narratives),
                 'native_request_admission': group(admissions),
                 'sdk_probe_input_presence': {**group(inputs),
                     'present_rounds': tuple(identity for identity in identities
