@@ -1074,13 +1074,6 @@ class ContextCliCommand(CliCommand):
                             help="Original imported instruction references, not current context")
 
     def apply(self, ctx: Comms) -> Any:
-        import asyncio
-        from .private_nk_entrypoint import PrivateNkLaunch
-        from .context_tokens import NativeTokenCounter
-        from .field_codec import FieldCodec
-        from .native_turn_context import NativeContextData
-        from .runtime import RuntimeConnection, socket_path
-        from .turn_context import NextContextTurn
         from .importing import ImportedSessionMetadata
 
         if self.imported:
@@ -1101,6 +1094,14 @@ class ContextCliCommand(CliCommand):
                 return selected[-1].changed_from_history(manifests)
             return {"manifests": selected,
                     "text_recorded": all(manifest.public_text_recorded for manifest in selected)}
+        import asyncio
+        from .private_nk_entrypoint import PrivateNkLaunch
+        from .context_tokens import NativeTokenCounter
+        from .field_codec import FieldCodec
+        from .native_turn_context import NativeContextData
+        from .runtime import RuntimeConnection, socket_path
+        from .turn_context import NextContextTurn
+
         owner = ctx.registry.require(self.thread)
         launch = PrivateNkLaunch.from_environment(
             ctx.root, ctx.owners.restart_environment(os.environ)

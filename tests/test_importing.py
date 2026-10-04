@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import stat
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -11,11 +12,12 @@ from agent_comms.cli import main
 from agent_comms.comms import wire
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.field_codec import FieldCodec
-from agent_comms.importing import ImportReceipt
+from agent_comms.importing import ImportReceipt, ImportedSessionMetadata
+from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
 from agent_comms.turn_context import CodexRolloutProvenance
 
 
-def test_codex_instructions_are_authenticated_historical_references_not_current_messages(tmp_path):
+def test_codex_instructions_are_authenticated_historical_references_not_current_messages(tmp_path, capsys):
     source = tmp_path / "historical.jsonl"
     instructions = [
         {"type": "message", "role": "system", "content": "Historical base π.\n"},
@@ -44,6 +46,26 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
     metadata = next(record["data"] for record in saved if record["type"] == "custom")
     assert FieldCodec.decode(tuple[CodexRolloutProvenance, ...],
                              metadata["historical_instructions"]) == refs
+    original_owner = comms.registry.require("historical")
+    assert ImportedSessionMetadata.sources_for_owner(comms.registry, original_owner) == refs
+    entry = NativeEntry.from_wire(saved[1])
+    assert isinstance(entry, ImportedMetadataEntry)
+    assert entry.to_wire() == saved[1]
+    assert ImportedSessionMetadata.public_source_text(
+        comms.registry, original_owner, refs[1], comms).text == "Historical developer λ.\n"
+    with pytest.raises(ValueError, match="outside the original imported snapshot"):
+        ImportedSessionMetadata.public_source_text(
+            comms.registry, original_owner, replace(refs[1], instruction=999), comms)
+    with pytest.raises(ValueError, match="incarnation changed"):
+        ImportedSessionMetadata.sources_for_owner(
+            comms.registry, replace(original_owner, created_at=original_owner.created_at + 1))
+    with pytest.raises(ValueError, match="selected session changed"):
+        ImportedSessionMetadata.sources_for_owner(
+            comms.registry, replace(original_owner, session_file=str(tmp_path / "other.jsonl")))
+    assert main(["--root", str(comms.root), "context", "historical", "--imported"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert FieldCodec.decode(tuple[CodexRolloutProvenance, ...], result["sources"]) == refs
+    assert result["scope"].startswith("historical-imported-instructions")
     messages = json.dumps([record for record in saved if record["type"] == "message"], ensure_ascii=False)
     assert "Historical base π." not in messages and "Historical developer λ." not in messages
     assert "Private guardian wording" not in Path(receipt.session_file).read_text()
