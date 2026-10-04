@@ -556,13 +556,15 @@ class ScoredScenario(ScoreView):
 
     def public_native(self, checkpoints, evidence, stimuli) -> dict:
         result = self.public()
+        source_delivery = {item.identity: stimuli[item.identity]['source_delivery']
+            if item.identity in stimuli else {'evaluated': False,
+                'reason': 'Original authored-history stimulus not captured'}
+            for item in self.source.rounds}
         return FieldCodec.encode(dict(result, native_probes=evidence,
                     answer_origin="recorded-native",
                     recorded_resources=self.recorded_resources(checkpoints, evidence, stimuli),
-                    source_delivery={item.identity: stimuli[item.identity]['source_delivery']
-                        if item.identity in stimuli else {'evaluated': False,
-                            'reason': 'Original authored-history stimulus not captured'}
-                        for item in self.source.rounds},
+                    source_delivery=source_delivery,
+                    condition_construction=self.condition_construction(evidence, source_delivery),
                     original_stimuli=stimuli,
                     quality_denominators=self.support_totals(evidence),
                     proposed_actions=self.proposed_actions(evidence),
@@ -587,6 +589,35 @@ class ScoredScenario(ScoreView):
                     answer_support={identity: original["answer_support"]
                                     for identity, original in evidence.items()},
                     recall_scope="Original recorded answers; tool-assisted answers are task quality, not unassisted recall. Authored answers are scorer controls"))
+
+    def condition_construction(self, evidence, source_delivery):
+        """Keep submitted SDK evidence distinct from labels and previews.
+
+        The probe owns transform/source/refusal checks. This view only groups
+        its acquired observations against the frozen rounds. It cannot infer
+        an intended experimental arm or complete-history eligibility.
+        """
+        identities = tuple(item.identity for item in self.source.rounds)
+
+        def group(values):
+            unavailable = tuple(identity for identity in identities
+                if identity not in values or not values[identity]['evaluated'])
+            return {'evaluated': not unavailable, 'expected_rounds': identities,
+                    'observed_rounds': tuple(identity for identity in identities if identity in values),
+                    'unavailable_rounds': unavailable}
+
+        applications = {identity: original['construction']['condition_application']
+                        for identity, original in evidence.items()}
+        capacity = {identity: original['construction']['source_coverage']['full_context_capacity']
+                    for identity, original in evidence.items()}
+        return {'evaluated': False, 'declared_condition': self.condition,
+                'bounded_sdk_application': group(applications),
+                'source_delivery': group(source_delivery),
+                'full_history_capacity': group(capacity),
+                'reason': 'Original condition selection and complete-history eligibility are not supplied by a label or SDK preview',
+                'scope': 'Frozen-round availability of original source/transform/request observations; '
+                         'details remain in source_delivery and native_probes; '
+                         'not verified matched interventions, HTTP bytes, registration or study acceptance'}
 
     def recorded_resources(self, checkpoints, evidence, stimuli):
         """Total acquired original completions, never estimates or billing.
@@ -990,12 +1021,15 @@ class RecallScenario:
         score, cuts, original, stimuli = self.score_observed(condition, observed)
         control, baseline_cuts, baseline_original, baseline_stimuli = self.score_observed(baseline_condition, baseline_observed)
         alignment = probes.alignment(baseline, original, baseline_original, self.rounds)
-        return {"candidate": score.public_native(cuts, original, stimuli),
-                "baseline": control.public_native(baseline_cuts, baseline_original, baseline_stimuli),
+        candidate = score.public_native(cuts, original, stimuli)
+        baseline_result = control.public_native(baseline_cuts, baseline_original, baseline_stimuli)
+        constructions = candidate["condition_construction"], baseline_result["condition_construction"]
+        return {"candidate": candidate, "baseline": baseline_result,
                 "alignment": alignment,
                 "paired_quality": score.paired_quality(control, original, baseline_original, alignment),
-                "condition_construction": {"evaluated": False,
-                    "reason": "Condition-specific construction/complete-history eligibility is not supplied by labels"},
+                "condition_construction": {"evaluated": all(item['evaluated'] for item in constructions),
+                    "candidate": constructions[0], "baseline": constructions[1],
+                    "scope": "Matched construction requires both original arm relations; partial SDK evidence is not full eligibility"},
                 "study_acceptance": {"evaluated": False,
                     "reason": "One recorded sample is not a registered comparative study or margin result"}}
 

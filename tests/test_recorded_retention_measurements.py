@@ -910,6 +910,14 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertEqual(result['missing'], 21)
         self.assertEqual(result['original_checkpoint_count'], 0)
         self.assertFalse(result['three_original_cuts_observed'])
+        self.assertFalse(result['condition_construction']['evaluated'])
+        for name in ('bounded_sdk_application', 'source_delivery', 'full_history_capacity'):
+            self.assertEqual(result['condition_construction'][name]['unavailable_rounds'], ['r1', 'r2', 'r3'])
+        paired = scenario.compare_native(Condition.TASK_MEMORY, RecordedNativeProbes({}),
+                                        Condition.BOUNDED, RecordedNativeProbes({}))
+        self.assertFalse(paired['condition_construction']['evaluated'])
+        self.assertIs(paired['condition_construction']['candidate'], paired['candidate']['condition_construction'])
+        self.assertIs(paired['condition_construction']['baseline'], paired['baseline']['condition_construction'])
         self.assertTrue(all(not item['evaluated'] for item in result['canonical_availability'].values()))
         repeated = RecordedNativeProbes(
             {'r1': RecordedNativeProbe(self.identity, 'a' * 32, 'answer', self.checkpoint)},
@@ -968,6 +976,95 @@ class RecordedMeasurementTests(unittest.TestCase):
         Path(probe.sdk_context.path).write_text('{}')
         with self.assertRaisesRegex(ValueError, 'artifact changed'):
             probe.read_sdk_context()
+
+    def test_submitted_condition_keeps_partial_transform_without_claiming_request_binding(self):
+        # Detect a completed transform being promoted to a submitted SDK
+        # request when its converter is absent. Only the upstream fork-source
+        # acquisition is a plumbing stub here; real file/SHA/frame checks run.
+        owner = Thread('fixture-owner', frozenset(), str(self.root))
+        manifest = ContextManifest(owner.incarnation,
+            RecordedContextTurn(TurnId('turn'), TurnIdentity(owner.incarnation, 1)),
+            (), 'counter', request_id='original-request')
+        source = {'evaluated': True, 'summary': 'Original λ narrative',
+            'source': FieldCodec.encode(self.artifact('narrative.json', 'Original λ narrative')),
+            'session': FieldCodec.encode(self.identity),
+            'checkpoint_session': FieldCodec.encode(self.identity), 'native_entry_id': 'commit'}
+        probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer', self.checkpoint,
+                                    fork_journal=self.checkpoint.journal)
+        applied = {'stage': 'bounded-transform-applied', 'input_id': probe.input_id,
+            'session': source['session'], 'checkpoint_session': source['checkpoint_session'],
+            'native_entry_id': source['native_entry_id'], 'narrative_source': source['source'],
+            'agent_messages_sha256': 'c' * 64}
+        retired = {'stage': 'bounded-transform-restored', 'input_id': probe.input_id}
+        conversion = {'stage': 'bounded-conversion-observed', 'request_id': manifest.request_id,
+            'session_id': self.identity.session_id, 'input_id': probe.input_id,
+            'agent_messages_sha256': applied['agent_messages_sha256'],
+            'provider_messages_sha256': 'd' * 64}
+        serialized = {'evaluated': True, 'provider_messages_sha256': conversion['provider_messages_sha256']}
+        texts = (json.dumps(source['summary'], ensure_ascii=False),)
+
+        def captured(name, rows):
+            path = self.root / name
+            path.write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows))
+            return replace(probe, condition_observation=FileProvenance(str(path),
+                hashlib.sha256(path.read_bytes()).hexdigest()))
+
+        with patch.object(RecordedNativeCheckpoint, 'fork_condition_acquired', return_value=source):
+            partial = captured('partial.jsonl', (applied, retired)).applied_condition(
+                object(), object(), texts, serialized, manifest)
+            self.assertFalse(partial['evaluated'])
+            self.assertTrue(partial['transform']['evaluated'])
+            self.assertFalse(partial['message_binding']['evaluated'])
+            selected = captured('complete.jsonl', (applied, conversion, retired))
+            complete = selected.applied_condition(object(), object(), texts, serialized, manifest)
+            self.assertTrue(complete['evaluated'])
+            self.assertEqual(complete['transform']['narrative_source'], source['source'])
+            self.assertEqual(complete['message_binding']['request_id'], manifest.request_id)
+            self.assertIs(complete['observation'], selected.condition_observation)
+            with self.assertRaisesRegex(ValueError, 'has not retired'):
+                captured('unretired.jsonl', (applied, conversion)).applied_condition(
+                    object(), object(), texts, serialized, manifest)
+            Path(selected.condition_observation.path).write_text('{}')
+            with self.assertRaisesRegex(ValueError, 'artifact changed'):
+                selected.applied_condition(object(), object(), texts, serialized, manifest)
+
+    def test_condition_groups_preserve_frozen_rounds_and_do_not_promote_labels(self):
+        # Keep independent source, transform and complete-history questions;
+        # no preview/label or missing round may become a matched intervention.
+        scenario = coding_scenario()
+        scored = scenario.score(Condition.BOUNDED, RecordedAnswers({}))
+        identities = tuple(item.identity for item in scenario.rounds)
+        unavailable = {identity: {'evaluated': False} for identity in identities}
+        original = {'construction': {'condition_application': {'evaluated': True},
+            'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
+        partial = scored.condition_construction({identities[0]: original}, unavailable)
+        self.assertFalse(partial['evaluated'])
+        self.assertEqual(partial['bounded_sdk_application']['observed_rounds'], identities[:1])
+        self.assertEqual(partial['bounded_sdk_application']['unavailable_rounds'], identities[1:])
+        self.assertEqual(partial['source_delivery']['unavailable_rounds'], identities)
+        self.assertEqual(partial['full_history_capacity']['unavailable_rounds'], identities)
+        evidence = {identity: original for identity in identities}
+        delivered = {identity: {'evaluated': True} for identity in identities}
+        observed = scored.condition_construction(evidence, delivered)
+        self.assertTrue(observed['bounded_sdk_application']['evaluated'])
+        self.assertTrue(observed['source_delivery']['evaluated'])
+        self.assertFalse(observed['full_history_capacity']['evaluated'])
+        self.assertFalse(observed['evaluated'])
+        for condition in Condition:
+            labelled = replace(scored, condition=condition).condition_construction(evidence, delivered)
+            self.assertEqual(labelled['declared_condition'], condition)
+            self.assertFalse(labelled['evaluated'])
+        partial_application = {'construction': {'condition_application': {
+            'evaluated': False, 'transform': {'evaluated': True}},
+            'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
+        self.assertEqual(scored.condition_construction(
+            {**evidence, identities[0]: partial_application}, delivered)
+            ['bounded_sdk_application']['unavailable_rounds'], identities[:1])
+        # Even an authored available capacity observation cannot authenticate
+        # a supplied experimental label or its intended source selection.
+        original['construction']['source_coverage']['full_context_capacity'] = {'evaluated': True}
+        self.assertTrue(scored.condition_construction(evidence, delivered)['full_history_capacity']['evaluated'])
+        self.assertFalse(scored.condition_construction(evidence, delivered)['evaluated'])
 
     def test_condition_binding_uses_complete_original_messages_and_request(self):
         # A narrative in system/tools or one matching message cannot establish
