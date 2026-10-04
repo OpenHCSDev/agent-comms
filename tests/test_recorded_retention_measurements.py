@@ -251,16 +251,37 @@ class RecordedMeasurementTests(unittest.TestCase):
         revised = replace(observed, requested_output_tokens=20, admitted_output_tokens=10)
         selected = capture(({'acquisition': {}}, publication(replace(observed, request_id='other')),
                             publication(observed), publication(revised)))
-        result = selected.request_budget(manifest)
+        observations = selected.observed_request(manifest)
+        result = selected.request_budget(observations)
         self.assertTrue(result['evaluated'])
         self.assertEqual(result['observations'], (observed, revised))
-        self.assertFalse(selected.request_budget(replace(manifest, request_id=None))['evaluated'])
-        self.assertFalse(probe.request_budget(manifest)['evaluated'])
+        self.assertFalse(selected.request_budget(selected.observed_request(replace(manifest, request_id=None)))['evaluated'])
+        self.assertFalse(probe.request_budget(probe.observed_request(manifest))['evaluated'])
         for changed in (replace(observed, session_id='other'), replace(observed, input_id='b' * 32)):
             with self.assertRaises(ValueError):
-                capture((publication(changed),)).request_budget(manifest)
+                capture((publication(changed),)).observed_request(manifest)
         with self.assertRaises(ValueError):
-            capture((publication(observed, replace(lease, turn_id='other')),)).request_budget(manifest)
+            capture((publication(observed, replace(lease, turn_id='other')),)).observed_request(manifest)
+
+        # Timing and budget borrow the same acquisition. Different stages and
+        # real zero callback counters must not be lost or become whole-turn time.
+        headers = replace(observed, stage='headers', elapsed_ms=35, observed_at_ms=36)
+        first = replace(observed, stage='first_event', elapsed_ms=40, observed_at_ms=41)
+        end = replace(observed, stage='stream_end', elapsed_ms=60, observed_at_ms=61,
+                      callback_ms=3, callback_count=2, callback_max_ms=2)
+        selected = capture(tuple(publication(point) for point in (observed, headers, first, end)))
+        with patch.object(RecordedNativeCheckpoint, 'read_json_lines',
+                          wraps=RecordedNativeCheckpoint.read_json_lines) as reads:
+            acquired = selected.observed_request(manifest)
+            timing = selected.request_timing(acquired)
+            budget = selected.request_budget(acquired)
+        self.assertEqual(reads.call_count, 1)
+        self.assertEqual(timing['observations'], (observed, headers, first, end))
+        self.assertEqual(budget['observations'], (observed,))
+        self.assertIs(budget['observations'][0], timing['observations'][0])
+        self.assertEqual(timing['observations'][0].callback_ms, 0)
+        self.assertFalse(timing['whole_turn_evaluated'])
+        self.assertFalse(selected.request_timing(())['evaluated'])
 
     def test_model_steps_keep_tool_step_usage_and_distinguish_missing_from_zero(self):
         # Prevent final-answer-only accounting from hiding earlier tool-step
