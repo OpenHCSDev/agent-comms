@@ -1,0 +1,14 @@
+{
+  "scope": "Installed authenticated reads of an original authored SDK capture",
+  "model_request_capture": false,
+  "provider_calls": 0,
+  "new_native_inputs": 0,
+  "original_user_rows": 3,
+  "original_request": "authored-sdk-source-request",
+  "root_text": "Original kept question \u03c0 \ud83d\ude42\nDistinct recorded child.",
+  "child_text": "Original kept question \u03c0 \ud83d\ude42",
+  "mixed_text": "Original kept question \u03c0 \ud83d\ude42\nAuthored transformed SDK part.",
+  "mixed_request": "authored-sdk-mixed-request",
+  "root_and_child_differ": true,
+  "original_native_bytes_unchanged": true
+}

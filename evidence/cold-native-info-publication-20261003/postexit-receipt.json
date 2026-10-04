@@ -1,0 +1,16 @@
+{
+  "scope": "same installed configured01 post-exit custody",
+  "controller": {
+    "pid": 2769286,
+    "start_time": 54292286
+  },
+  "native": {
+    "pid": 2769690,
+    "start_time": 54293946
+  },
+  "controller_birth_absent": true,
+  "native_birth_absent": true,
+  "original_runtime_socket_absent": true,
+  "owned_processes_remaining": [],
+  "original_disposition_rows": 0
+}

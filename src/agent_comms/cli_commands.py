@@ -884,7 +884,7 @@ class ContextCliCommand(CliCommand):
         from .field_codec import FieldCodec
         from .native_turn_context import NativeContextData
         from .runtime import RuntimeConnection, socket_path
-        from .turn_context import TurnContext, NextContextTurn
+        from .turn_context import NextContextTurn
 
         if self.turn is not None or self.diff:
             manifests = ctx.bus.log.context_manifests(self.thread, ctx.registry)
@@ -896,20 +896,15 @@ class ContextCliCommand(CliCommand):
                 raise ValueError("No original context manifest exists for the requested turn")
             if self.diff:
                 return selected[-1].changed_from_history(manifests)
-            return {"manifests": FieldCodec.encode(selected), "text_recorded": False}
+            return {"manifests": FieldCodec.encode(selected),
+                    "text_recorded": all(manifest.public_text_recorded for manifest in selected)}
         owner = ctx.registry.require(self.thread)
-        context = TurnContext.for_owner(owner, NextContextTurn(), "", ctx.views.thread_views())
-        for segment in owner.context_goal_segments():
-            context = context.prepend(segment)
-        for segment in ctx.bus.awareness_segments(owner):
-            context = context.append(segment)
         launch = PrivateNkLaunch.from_environment(
             ctx.root, ctx.owners.restart_environment(os.environ)
         )
         if launch is None:
             raise ValueError("Context inspection requires this root's configured native package")
         counter = NativeTokenCounter(launch.native_package)
-        counts = counter.measure(tuple(segment.text() for segment in context.segments))
         connection = RuntimeConnection(ctx, owner.name, socket_path(ctx.root, owner.require_process().pid))
 
         async def inspect_native():
@@ -922,6 +917,8 @@ class ContextCliCommand(CliCommand):
                 await connection.close()
 
         native = asyncio.run(inspect_native())
+        context = native.contributor_context(owner, NextContextTurn())
+        counts = counter.measure(tuple(segment.text() for segment in context.segments))
         native_context = native.for_turn(owner, NextContextTurn())
         return {
             "scope": "next-native-base-and-core-contributors; before future input and provider hooks",

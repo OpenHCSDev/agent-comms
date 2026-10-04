@@ -1,0 +1,1203 @@
+{
+  "roots": [
+    "src/agent_comms",
+    "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad"
+  ],
+  "parsed_modules": 600,
+  "omissions": [],
+  "rows": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 479,
+      "call": "AcpEventConsumer"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 212,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 249,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 161,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/active_route.py",
+      "line": 291,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 268,
+      "call": "self._path.open"
+    },
+    {
+      "path": "src/agent_comms/activity_checkpoint.py",
+      "line": 30,
+      "call": "log.open"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 104,
+      "fact": "self.runtime_info",
+      "access": "Store"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 104,
+      "call": "RuntimeInfoStore"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 218,
+      "fact": "self.runtime_info",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 230,
+      "fact": "self.runtime_info",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 40,
+      "class": "AcpEventConsumer",
+      "bases": [
+        "MroDispatch"
+      ],
+      "members": [
+        "__init__",
+        "goal_changed",
+        "text",
+        "on_tool_start",
+        "on_tool_progress",
+        "on_tool_end",
+        "on_thinking",
+        "on_mcp_live_status",
+        "on_agent_info",
+        "on_compaction",
+        "on_error",
+        "on_cancelled",
+        "on_done"
+      ]
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 154,
+      "fact": "event.context_used",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 155,
+      "fact": "event.context_size",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 313,
+      "class": "AgentInfo",
+      "bases": [
+        "AgentEvent"
+      ],
+      "members": []
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 361,
+      "class": "AgentEventConsumer",
+      "bases": [
+        "MroDispatch"
+      ],
+      "members": [
+        "__init__",
+        "comms",
+        "thread_name",
+        "before_agent_info",
+        "after_agent_info",
+        "record_agent_info"
+      ]
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 392,
+      "fact": "event.context_used",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 393,
+      "fact": "event.context_size",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 95,
+      "call": "EmptyNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 128,
+      "call": "RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 333,
+      "call": "StatsRequest"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 334,
+      "call": "UsageAccount"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 114,
+      "call": "BorrowedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 117,
+      "call": "BorrowedNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 699,
+      "call": "self.context_info"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 117,
+      "call": "EmptyNative"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 526,
+      "call": "self.native_session.open"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 577,
+      "call": "self.input_ready"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 236,
+      "call": "EmptyNative"
+    },
+    {
+      "path": "src/agent_comms/bus_display_index.py",
+      "line": 90,
+      "call": "self.bus_path.open"
+    },
+    {
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 110,
+      "call": "self.bus_path.open"
+    },
+    {
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 179,
+      "call": "self.bus_path.open"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 290,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 301,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 295,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 365,
+      "call": "boundary.inspect"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 248,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 131,
+      "call": "path.open"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 132,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 156,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 199,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 58,
+      "call": "path.open"
+    },
+    {
+      "path": "src/agent_comms/compaction_publication_lease.py",
+      "line": 28,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 41,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 138,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 208,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 528,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/fresh_private_session.py",
+      "line": 507,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/fresh_private_session.py",
+      "line": 340,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/fresh_private_session.py",
+      "line": 400,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 599,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 547,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 605,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/goal_history.py",
+      "line": 82,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/goal_history.py",
+      "line": 90,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/goal_history.py",
+      "line": 98,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 313,
+      "fact": "self.agents.runtime_info",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 490,
+      "fact": "self.agents.runtime_info",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/importing.py",
+      "line": 497,
+      "call": "source.open"
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "line": 137,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "line": 123,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 32,
+      "call": "runner.comms.agents.set_agent_info"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 37,
+      "fact": "info.context_size",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 77,
+      "call": "runner.prepare_selected_session"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 87,
+      "class": "NativeCustody",
+      "bases": [
+        "ABC"
+      ],
+      "members": [
+        "available",
+        "managed_launch",
+        "reuse",
+        "idle",
+        "inspect",
+        "expected",
+        "retire",
+        "closed",
+        "reopen"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 123,
+      "class": "EmptyNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "members": [
+        "inspect"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 193,
+      "class": "BorrowedNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "members": [
+        "inspect",
+        "retire",
+        "reopen"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 220,
+      "class": "RetainedNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "members": [
+        "current",
+        "idle",
+        "selected",
+        "reload",
+        "inspect",
+        "inspect_acquired",
+        "reuse",
+        "managed_launch",
+        "retire",
+        "reopen"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 131,
+      "call": "acquired.inspect_acquired"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 285,
+      "call": "acquired.inspect_acquired"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 316,
+      "call": "EmptyNative"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 120,
+      "call": "NativeEvidenceRead.open"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 126,
+      "call": "NativeInputEvidenceRead.open"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 222,
+      "call": "PrivateEvidenceRead.open"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 240,
+      "call": "cls.open"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 408,
+      "call": "NativeInputEvidenceRead.open"
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "line": 87,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 783,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 629,
+      "call": "PrivateEvidenceRead.open"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 653,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 240,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 27,
+      "class": "NativeSessionPreparation",
+      "bases": [
+        "backend.TurnSession"
+      ],
+      "members": [
+        "input_ready",
+        "finish_result",
+        "open"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 86,
+      "call": "preparation.context_info"
+    },
+    {
+      "path": "src/agent_comms/native_transcript.py",
+      "line": 20,
+      "call": "path.open"
+    },
+    {
+      "path": "src/agent_comms/native_transcript.py",
+      "line": 106,
+      "call": "self.path.open"
+    },
+    {
+      "path": "src/agent_comms/native_transcript.py",
+      "line": 125,
+      "call": "self.path.open"
+    },
+    {
+      "path": "src/agent_comms/native_transcript.py",
+      "line": 198,
+      "call": "self.path.open"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 382,
+      "call": "self.runner.prepare_selected_session"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 71,
+      "call": "OwnerCompactionCommit.open"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 72,
+      "call": "NativeEvidenceRead.open"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 63,
+      "call": "OwnerCompactionCommit.open"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 245,
+      "class": "GetState",
+      "bases": [
+        "SessionSnapshot",
+        "NativeQuery"
+      ],
+      "members": [
+        "on_response"
+      ]
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 270,
+      "class": "GetSessionStats",
+      "bases": [
+        "SessionSnapshot",
+        "PiCommand"
+      ],
+      "members": [
+        "on_response"
+      ]
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 284,
+      "call": "session.context_info"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 245,
+      "call": "session.context_info"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 310,
+      "call": "session.context_info"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 601,
+      "call": "session.context_info"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 41,
+      "call": "session.context_info"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 93,
+      "call": "session.context_info"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 44,
+      "call": "session.context_info"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 503,
+      "fact": "agents.runtime_info",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 553,
+      "fact": "self.runtime.context_used",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 554,
+      "fact": "self.runtime.context_size",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 502,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 573,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 587,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 678,
+      "call": "bus.path.open"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 874,
+      "call": "bus.path.open"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 795,
+      "call": "bus.path.open"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 814,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 845,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 592,
+      "call": "bus.path.open"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 830,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/private_path.py",
+      "line": 118,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/private_registry_guard.py",
+      "line": 39,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/private_registry_guard.py",
+      "line": 229,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/private_registry_guard.py",
+      "line": 136,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/private_registry_guard.py",
+      "line": 224,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/private_registry_guard.py",
+      "line": 234,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 115,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 127,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 149,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 271,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 281,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 120,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway.py",
+      "line": 116,
+      "call": "database.open"
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway.py",
+      "line": 218,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/recovery_projection.py",
+      "line": 320,
+      "call": "path.open"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 525,
+      "call": "path.open"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 308,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 144,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 138,
+      "call": "temporary.open"
+    },
+    {
+      "path": "src/agent_comms/runtime_info.py",
+      "line": 47,
+      "class": "RuntimeInfoStore",
+      "bases": [
+        "LockedStore[dict[str, AgentRuntimeInfo]]"
+      ],
+      "members": [
+        "record_type",
+        "empty",
+        "set",
+        "remove",
+        "rename_thread"
+      ]
+    },
+    {
+      "path": "src/agent_comms/runtime_info.py",
+      "line": 28,
+      "fact": "self.context_used",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/runtime_info.py",
+      "line": 28,
+      "fact": "self.context_used",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/runtime_info.py",
+      "line": 30,
+      "fact": "self.context_size",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/runtime_info.py",
+      "line": 30,
+      "fact": "self.context_size",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/runtime_info.py",
+      "line": 35,
+      "fact": "self.context_used",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/runtime_info.py",
+      "line": 35,
+      "fact": "self.context_size",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/runtime_info.py",
+      "line": 37,
+      "fact": "self.context_used",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/runtime_info.py",
+      "line": 37,
+      "fact": "self.context_size",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/runtime_info.py",
+      "line": 43,
+      "fact": "self.context_used",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/runtime_info.py",
+      "line": 43,
+      "fact": "self.context_size",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 361,
+      "call": "self.inspect"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 351,
+      "call": "self.inspect"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 228,
+      "call": "OwnerCompactionCommit.open"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 191,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 221,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 244,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 126,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 278,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 154,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 230,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/session_fence.py",
+      "line": 44,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 297,
+      "fact": "info.context_size",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 296,
+      "fact": "info.context_used",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 296,
+      "fact": "info.context_size",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 297,
+      "fact": "info.context_used",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 181,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 202,
+      "call": "path.open"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 424,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 409,
+      "fact": "self.agents.runtime_info",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 506,
+      "fact": "self.agents.runtime_info",
+      "access": "Load"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 138,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 185,
+      "call": "NativeSessionPreparation.open"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 218,
+      "call": "persistent.custody.inspect"
+    },
+    {
+      "path": "src/agent_comms/turn_stats.py",
+      "line": 21,
+      "class": "StatsRequest",
+      "bases": [],
+      "members": [
+        "requested",
+        "complete",
+        "failed",
+        "busy",
+        "request",
+        "settle"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_usage.py",
+      "line": 12,
+      "class": "UsageAccount",
+      "bases": [],
+      "members": [
+        "invalidate",
+        "charge_compaction",
+        "charge",
+        "observe",
+        "confirm",
+        "rollback"
+      ]
+    },
+    {
+      "path": "src/agent_comms/view_unread.py",
+      "line": 180,
+      "call": "path.open"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 347,
+      "call": "self.bus.log.path.open"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 404,
+      "call": "self.bus.log.path.open"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 501,
+      "call": "self.bus.log.path.open"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 314,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 331,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 291,
+      "call": "self.path.open"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 599,
+      "call": "os.open"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 422,
+      "call": "self.path.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/agents.py",
+      "line": 33,
+      "call": "file.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/app.py",
+      "line": 281,
+      "call": "ToadSettings.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/cli.py",
+      "line": 19,
+      "call": "os.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/clipboard_image.py",
+      "line": 59,
+      "call": "os.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/db.py",
+      "line": 96,
+      "call": "self.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/db.py",
+      "line": 112,
+      "call": "self.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/history.py",
+      "line": 120,
+      "call": "self.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/history.py",
+      "line": 136,
+      "call": "self.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/history.py",
+      "line": 69,
+      "call": "self.path.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/history.py",
+      "line": 113,
+      "call": "self.path.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/input_history.py",
+      "line": 37,
+      "call": "self.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/navigation_preparation.py",
+      "line": 83,
+      "call": "DirectTarget(self.thread.name).open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/navigation_preparation.py",
+      "line": 93,
+      "call": "super().open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/navigation_preparation.py",
+      "line": 182,
+      "call": "prepared.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/navigation_target.py",
+      "line": 40,
+      "call": "target.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/navigation_target.py",
+      "line": 87,
+      "call": "context.app.thread_navigation.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/session_navigation.py",
+      "line": 78,
+      "call": "app.tab_order.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/twitter.py",
+      "line": 37,
+      "call": "webbrowser.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/acp/agent.py",
+      "line": 152,
+      "call": "log_file_path.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/acp/context_measurement.py",
+      "line": 26,
+      "class": "ContextMeasurement",
+      "bases": [
+        "ABC"
+      ],
+      "members": [
+        "status",
+        "saved",
+        "live"
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/acp/log_records.py",
+      "line": 190,
+      "call": "path.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/prompt/resource.py",
+      "line": 58,
+      "call": "resource_path.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/screens/store.py",
+      "line": 426,
+      "call": "webbrowser.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/widgets/conversation.py",
+      "line": 2168,
+      "call": "webbrowser.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/widgets/project_panel.py",
+      "line": 149,
+      "call": "path.open"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/widgets/prompt.py",
+      "line": 64,
+      "class": "AgentInfo",
+      "bases": [
+        "Label"
+      ],
+      "members": []
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/widgets/prompt.py",
+      "line": 804,
+      "call": "AgentInfo"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/src/toad/widgets/prompt_popup.py",
+      "line": 42,
+      "call": "self.open"
+    }
+  ],
+  "scope": "existing NRA parser; AST attribute names are source leads, not dynamic resolution proof"
+}

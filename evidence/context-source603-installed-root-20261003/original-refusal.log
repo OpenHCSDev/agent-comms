@@ -1,0 +1,39 @@
+IdentityConflict exception in shielded future
+future: <Future finished exception=IdentityConflict('participant aggregate is not registered')>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py", line 57, in _run_owned
+    return operation(store)
+  File "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py", line 302, in _private_observation_revision
+    participant = store.participants.get(stable_thread_lookup(owner.thread.created_at))
+  File "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/participant_store.py", line 62, in get
+    raise IdentityConflict("participant aggregate is not registered")
+agent_comms.coordination_errors.IdentityConflict: participant aggregate is not registered
+{"python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python", "scope": "Authored SDK recorded root/mixed/child installed RPC reads", "model_request_capture": false, "new_native_inputs": 0, "state": "FAILED_NO_REPLAY", "error": "RuntimeError('Original segment has no unambiguous native source identity')", "elapsed_seconds": 4.112669826019555}
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/tests/native_context_reader_journey.py", line 172, in <module>
+    asyncio.run(run(args.root.resolve()))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/tests/native_context_reader_journey.py", line 156, in run
+    await read_original_context(fixture, recorded_readers=True)
+  File "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/tests/native_context_reader_journey.py", line 103, in read_original_context
+    await connection.request('context_recorded_segment', **params))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/runtime.py", line 372, in request
+    _raise_owner_error(data)
+    ~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/runtime.py", line 143, in _raise_owner_error
+    raise RuntimeError(data["error"])
+RuntimeError: Original segment has no unambiguous native source identity

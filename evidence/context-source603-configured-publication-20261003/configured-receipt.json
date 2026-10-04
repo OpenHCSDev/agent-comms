@@ -1,0 +1,87 @@
+{
+  "state": "CONFIGURED_MODEL_ON_CONTEXT_READY_PUBLISHED_AND_READ_PASS",
+  "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+  "core": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "fixture": "/home/ts/.cache/agent-scratch/c603p01",
+  "public_inputs": 0,
+  "original_inputs_retried": 0,
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "high",
+  "original_name": "openhcs-architecture-memory",
+  "original_worktree": "/home/ts/code/projects/openhcs",
+  "source_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-29T04-00-11-362Z_01a0eb51-f263-778e-b2f4-a2d3a9b65d01.jsonl",
+  "source_bytes": 42662475,
+  "original_process": {
+    "pid": 2816656,
+    "start_time": 54406169
+  },
+  "original_sha256": "1bdd97fd57551edb2986a3289b33bc781cde45b98b4e1e591f79e7804ced7258",
+  "acp_pid": 3110653,
+  "original_lease": {
+    "identity": {
+      "incarnation": {
+        "name": "configured-source",
+        "created_at": 1791070524.6744401
+      },
+      "generation": 1
+    },
+    "turn_id": "b2c6b72bbcb444b4979b42e821680cf3",
+    "admission_generation": 1
+  },
+  "terminal_state": {
+    "active": null,
+    "finished_turn_id": "b2c6b72bbcb444b4979b42e821680cf3"
+  },
+  "original_waiter_goal": "30cfe391a8614549a3650ce789aaee50",
+  "waiter_released": true,
+  "acp_response": {
+    "stopReason": "end_turn"
+  },
+  "native_process": {
+    "pid": 3114153,
+    "start_time": 54617237
+  },
+  "prompt_through_return_seconds": 19.783015509019606,
+  "acp_exited": true,
+  "original_native_user": "e38c1403",
+  "original_native_reply": "ddde4bfc",
+  "source_unchanged": true,
+  "private_root": "/home/ts/.cache/agent-scratch/c603p01/wire",
+  "fork_file": "/home/ts/.cache/agent-scratch/c603p01/native-forks/2026-10-03T23-35-19-597Z_01a1041f-412f-7603-9e0a-a11593894fcd.jsonl",
+  "model_onContextReady_publication": true,
+  "request_id": "f948ca63-c6b5-4ca5-a4d5-f7c624762478",
+  "native_request_generation": 1,
+  "actual_manifest_lease": true,
+  "captured_system_text_read": true,
+  "transcript_original_root_and_child_read": true,
+  "public_renderer_only": true,
+  "same_native_child": true,
+  "source_query_bytes_unchanged": true,
+  "captured_system_utf8_bytes": 20816,
+  "captured_system_sha256": "27d78422918da0057a38e1fc1a27fc1a1576416796793a2c203bd4d8b83ce1c3",
+  "recorded_root_utf8_bytes": 363603,
+  "recorded_child_utf8_bytes": 0,
+  "original_acp_usage_updates": 4,
+  "final_HTTP_evaluated": false,
+  "native_child_retired": true,
+  "native_child_exited": true,
+  "elapsed_seconds": 39.74722691089846,
+  "original_input": {
+    "kind": "started",
+    "key": "acp:93c92560df844e03a73dbb4db4592e18",
+    "sequence": null,
+    "owner": "configured-source",
+    "admission": 1,
+    "target": "configured-source",
+    "source_text": "Bounded acceptance only. Do not resume inherited tasks or goals, use tools, or change files. Reply exactly CONTEXT603_ORIGINAL_MODEL_PUBLICATION_ONCE, then stop.",
+    "turn_id": "b2c6b72bbcb444b4979b42e821680cf3",
+    "native_id": "692ef57327f7500d53976bfb837859c2",
+    "sent_text_sha256": "7146dc47e7a859171606840bfb52c4fbb517ea776b9bd49952acfe4192cfb42b"
+  },
+  "raw_receipt": "/home/ts/.cache/agent-scratch/c603p01/terminal-receipt.json",
+  "raw_receipt_sha256": "ec0845496de6c00e9ee785a37d6bf4114c8c61d34247b5ab5fdbd6b1dc7bff67",
+  "executed_driver_revision": "08d982edaa68eccc911a3ea4311954e00dc8470d",
+  "final_driver_observation_only": "7a41125a; typed input binding replaces receipt field lookup; production unchanged",
+  "installed_production_revision": "40f557d44fec3e7b7c97b47d8f498609af48a361",
+  "native_manifest_sha256": "d5efa0d56e7ad3962bf3efc009adf1569167a260f1ceb46824c9271a0e7542a2"
+}

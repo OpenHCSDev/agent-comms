@@ -159,17 +159,6 @@ class TurnProgress(events.AgentEventConsumer):
     async def provider_usage(self, event: events.ProviderUsage) -> None:
         await Coordination.run_worker(partial(self.goals.provider_usage, event))
 
-    @handles(events.CompactionStart, events.CompactionEnd)
-    async def invalidate_context(self, event: events.CompactionEvent) -> None:
-        info = self.comms.agents.agent_info_of(self.thread_name)
-        self.comms.agents.set_agent_info(
-            self.thread_name,
-            model=info.model if info else None,
-            session_name=info.session_name if info else None,
-            context_used=None,
-            context_size=info.context_size if info else None,
-        )
-
     @handles(events.Chunk)
     async def chunk(self, event: events.Chunk) -> None:
         if self.reply_targets:
