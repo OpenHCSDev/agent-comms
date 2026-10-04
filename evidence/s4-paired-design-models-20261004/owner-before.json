@@ -1,0 +1,464 @@
+{
+  "revision": "d48c777584f289697b3d0f16adf4754c81c36b32",
+  "modules": 734,
+  "parse_omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 431,
+      "syntax": "FunctionDef",
+      "name": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 62,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/owner_cutover.py",
+      "line": 33,
+      "syntax": "FunctionDef",
+      "name": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/owner_cutover.py",
+      "line": 104,
+      "syntax": "FunctionDef",
+      "name": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 47,
+      "syntax": "FunctionDef",
+      "name": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 233,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 234,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 791,
+      "syntax": "ClassDef",
+      "name": "ReportedModel"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 776,
+      "syntax": "FunctionDef",
+      "name": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 805,
+      "syntax": "FunctionDef",
+      "name": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 771,
+      "syntax": "Name",
+      "name": "ReportedModel"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 780,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 813,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 807,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 200,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 41,
+      "syntax": "ClassDef",
+      "name": "PairedRecallDesign"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 323,
+      "syntax": "FunctionDef",
+      "name": "request_alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 378,
+      "syntax": "FunctionDef",
+      "name": "completion_alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 827,
+      "syntax": "FunctionDef",
+      "name": "paired_inference"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 78,
+      "syntax": "Attribute",
+      "name": "paired_inference"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 827,
+      "syntax": "Name",
+      "name": "PairedRecallDesign"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1317,
+      "syntax": "Name",
+      "name": "PairedRecallDesign"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 304,
+      "syntax": "Attribute",
+      "name": "request_alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 305,
+      "syntax": "Attribute",
+      "name": "completion_alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 847,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 346,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 835,
+      "syntax": "FunctionDef",
+      "name": "input_request_measurements"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1004,
+      "syntax": "FunctionDef",
+      "name": "model_steps"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 996,
+      "syntax": "Attribute",
+      "name": "input_request_measurements"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1118,
+      "syntax": "Attribute",
+      "name": "model_steps"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 135,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 915,
+      "syntax": "FunctionDef",
+      "name": "require_selection"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 190,
+      "syntax": "FunctionDef",
+      "name": "require_selection"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 342,
+      "syntax": "FunctionDef",
+      "name": "require_selection"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 436,
+      "syntax": "FunctionDef",
+      "name": "require_selection"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 343,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "tests/test_owner_process.py",
+      "line": 437,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "tests/test_pi_payloads.py",
+      "line": 101,
+      "syntax": "Name",
+      "name": "ReportedModel"
+    },
+    {
+      "path": "tests/test_pi_payloads.py",
+      "line": 103,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "tests/test_pi_payloads.py",
+      "line": 96,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 94,
+      "syntax": "Name",
+      "name": "PairedRecallDesign"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 340,
+      "syntax": "Name",
+      "name": "PairedRecallDesign"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 357,
+      "syntax": "Attribute",
+      "name": "paired_inference"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 377,
+      "syntax": "Name",
+      "name": "PairedRecallDesign"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 520,
+      "syntax": "Attribute",
+      "name": "model_steps"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 870,
+      "syntax": "Attribute",
+      "name": "request_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 875,
+      "syntax": "Attribute",
+      "name": "request_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 900,
+      "syntax": "Attribute",
+      "name": "model_steps"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 907,
+      "syntax": "Attribute",
+      "name": "model_steps"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 913,
+      "syntax": "Attribute",
+      "name": "completion_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 363,
+      "syntax": "Attribute",
+      "name": "paired_inference"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 367,
+      "syntax": "Attribute",
+      "name": "paired_inference"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 369,
+      "syntax": "Attribute",
+      "name": "paired_inference"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 379,
+      "syntax": "Name",
+      "name": "PairedRecallDesign"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 477,
+      "syntax": "Attribute",
+      "name": "input_request_measurements"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 886,
+      "syntax": "Attribute",
+      "name": "request_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 888,
+      "syntax": "Attribute",
+      "name": "request_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 920,
+      "syntax": "Attribute",
+      "name": "completion_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 348,
+      "syntax": "Name",
+      "name": "ReportedModel"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 400,
+      "syntax": "Name",
+      "name": "ReportedModel"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 492,
+      "syntax": "Attribute",
+      "name": "input_request_measurements"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 854,
+      "syntax": "Name",
+      "name": "ReportedModel"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 884,
+      "syntax": "Attribute",
+      "name": "request_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 889,
+      "syntax": "Attribute",
+      "name": "request_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 917,
+      "syntax": "Attribute",
+      "name": "completion_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 801,
+      "syntax": "Name",
+      "name": "ReportedModel"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 227,
+      "syntax": "FunctionDef",
+      "name": "require_selection"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 375,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 307,
+      "syntax": "FunctionDef",
+      "name": "require_selection"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 319,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 453,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 38,
+      "syntax": "FunctionDef",
+      "name": "require_selection"
+    },
+    {
+      "path": "tools/cutover/retained_routing_cutover.py",
+      "line": 21,
+      "syntax": "FunctionDef",
+      "name": "require_selection"
+    },
+    {
+      "path": "tools/cutover/retained_routing_cutover.py",
+      "line": 22,
+      "syntax": "Attribute",
+      "name": "require_selection"
+    },
+    {
+      "path": "tools/cutover/retained_task_source_carry.py",
+      "line": 29,
+      "syntax": "FunctionDef",
+      "name": "require_selection"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 45,
+      "syntax": "FunctionDef",
+      "name": "require_selection"
+    }
+  ],
+  "scope": "Lexical declarations/references using existing audit.Package; not dynamic resolution proof"
+}

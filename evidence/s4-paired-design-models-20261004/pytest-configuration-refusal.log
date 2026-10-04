@@ -1,0 +1,5 @@
+ERROR: usage: python -m pytest [options] [file_or_dir] [file_or_dir] [...]
+python -m pytest: error: unrecognized arguments: -n --maxprocesses=8 --dist=worksteal
+  inifile: /home/ts/wt/comms-async-bus-read-publication-custody-20261002/pyproject.toml
+  rootdir: /home/ts/wt/comms-async-bus-read-publication-custody-20261002
+
