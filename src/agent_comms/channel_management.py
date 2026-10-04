@@ -70,35 +70,46 @@ class ChannelManagement:
         for tag in add | remove:
             Tag(tag)
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
-            self._require_available_new_tags(add)
+            return self._update_tags_locked(name, add=add, remove=remove)
+
+    def replace_tags(self, name: str, tags: frozenset[str]) -> Thread:
+        for tag in tags:
+            Tag(tag)
+        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
-            previous_channels = self.catalog.read().views(self.registry.all_threads())
-            updated = replace(thread, tags=(thread.tags | add) - remove)
-            self.registry.register(updated, self.registry.status(thread.name))
-            updated = self.registry.require(thread.name)
-            with self.catalog.editing() as document:
-                document.remember_tags(add, time.time())
-            if thread.role.executable and thread.tags != updated.tags:
-                channels = {
-                    **previous_channels,
-                    **self.catalog.read().views(self.registry.all_threads()),
-                }
-                for channel in channels.values():
-                    if channel.view is not None:
-                        continue
-                    before, after = channel.matches(thread.tags), channel.matches(updated.tags)
-                    if before != after:
-                        change = MembershipChange.JOINED if after else MembershipChange.LEFT
-                        self.bus.publisher.publish_ordinary(
-                            Message(
-                                thread.name,
-                                channel.name,
-                                f"{thread.name} {change.value} {channel.name}",
-                                MessageType.INFO,
-                                membership=change,
-                            )
+            return self._update_tags_locked(thread.name, add=tags - thread.tags,
+                                            remove=thread.tags - tags)
+
+    def _update_tags_locked(self, name, *, add, remove) -> Thread:
+        self._require_available_new_tags(add)
+        thread = self.registry.require(name)
+        previous_channels = self.catalog.read().views(self.registry.all_threads())
+        updated = replace(thread, tags=(thread.tags | add) - remove)
+        self.registry.register(updated, self.registry.status(thread.name))
+        updated = self.registry.require(thread.name)
+        with self.catalog.editing() as document:
+            document.remember_tags(add, time.time())
+        if thread.role.executable and thread.tags != updated.tags:
+            channels = {
+                **previous_channels,
+                **self.catalog.read().views(self.registry.all_threads()),
+            }
+            for channel in channels.values():
+                if channel.view is not None:
+                    continue
+                before, after = channel.matches(thread.tags), channel.matches(updated.tags)
+                if before != after:
+                    change = MembershipChange.JOINED if after else MembershipChange.LEFT
+                    self.bus.publisher.publish_ordinary(
+                        Message(
+                            thread.name,
+                            channel.name,
+                            f"{thread.name} {change.value} {channel.name}",
+                            MessageType.INFO,
+                            membership=change,
                         )
-            return updated
+                    )
+        return updated
 
     def set_saved_view(self, view: SavedView) -> SavedView:
         with _store_lock(self._wire_lock_path):

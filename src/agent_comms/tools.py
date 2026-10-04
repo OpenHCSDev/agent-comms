@@ -11,7 +11,7 @@ from .pi_vocabulary import ThinkingLevel
 from .channel_management import TagAction
 from .channel_targets import is_channel_target
 from .channels import SavedView, ViewKind, ViewMatch, ViewPredicate
-from .cli_commands import ArchiveCliCommand, RenameSelfCliCommand, StopCliCommand, ThreadsCliCommand
+from .cli_commands import (ArchiveCliCommand, RenameSelfCliCommand, StopCliCommand, ThreadsCliCommand, StartCliCommand, ForkCliCommand, DeleteViewCliCommand, PinChannelCliCommand, ChannelActivityCliCommand, PinThreadCliCommand)
 from .command import Command
 from .comms import Comms
 from .declared_family import DeclaredFamily
@@ -222,7 +222,7 @@ class CommsPinChannelTool(ToolRequest):
     pinned: bool = tool_field("True to pin; false to unpin")
 
     def apply(self, comms: Comms) -> JsonObject:
-        return comms.channels.set_channel_pinned(self.name, self.pinned).to_wire()
+        return PinChannelCliCommand(name=self.name, pinned=self.pinned).apply(comms)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -239,7 +239,7 @@ class CommsPinThreadTool(ToolRequest):
 
     def apply(self, comms: Comms) -> JsonObject:
         channel = self.channel
-        comms.channels.set_thread_pinned(channel, self.name, self.pinned)
+        PinThreadCliCommand(channel=channel, name=self.name, pinned=self.pinned).apply(comms)
         canonical = channel if channel.startswith("#") else f"#{channel}"
         return next(
             view.to_wire() for view in comms.views.channel_views() if view.channel.name == canonical
@@ -393,7 +393,7 @@ class CommsDeleteViewTool(ToolRequest):
     name: str = tool_field("Saved view name")
 
     def apply(self, comms: Comms) -> JsonObject:
-        comms.channels.delete_saved_view(self.name)
+        DeleteViewCliCommand(name=self.name).apply(comms)
         return CommsChannelsTool().apply(comms)
 
 
@@ -808,18 +808,9 @@ class CommsForkTool(NativeOwnerCommand, ToolRequest):
     prompt: str | None = tool_field("Initial prompt override", default=None)
 
     def apply(self, comms: Comms) -> JsonObject:
-        tags = _tag_set(self.tags) if self.tags is not None else None
-        prompt = self.prompt
-        child = comms.threads.fork(
-            ForkSpec(
-                name=self.name,
-                parent=self.parent,
-                task=self.task,
-                tags=tags,
-                prompt=prompt if prompt is not None else None,
-            )
-        )
-        return {"forked": child.name, "pid": child.pid}
+        return ForkCliCommand(name=self.name, parent=self.parent, task=self.task,
+                              tags=_tag_set(self.tags) if self.tags is not None else None,
+                              prompt=self.prompt).apply(comms)
 
 
 class OwnerLifecycleControl:
@@ -861,7 +852,7 @@ class CommsStartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
         return status.allows_owner_start(owner_pid=owner_pid)
 
     def apply(self, comms: Comms) -> JsonObject:
-        return asdict(comms.owners.start(self.name))
+        return StartCliCommand(name=self.name).apply(comms)
 
 
 @dataclass(frozen=True, kw_only=True)
