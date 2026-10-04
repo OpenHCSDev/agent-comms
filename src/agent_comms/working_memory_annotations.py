@@ -48,17 +48,32 @@ class WorkingMemoryAnnotations:
         evidence. Different question versions remain different recorded facts;
         reading a segment never substitutes today's question definition.
         """
+        return self.for_segments((segment,), classifier)
+
+    def for_context(self, manifests, classifier: ClassifierVersion) -> tuple[ModelLabel, ...]:
+        """Acquire one context's original answers through the segment reader.
+
+        Repeated observations can name the same stored answer. Keep that answer
+        once; matching text in another source does not supply its provenance.
+        """
+        return self.for_segments(tuple(segment for manifest in manifests
+            for root in manifest.segments for segment in root.original_values()), classifier)
+
+    def for_segments(self, segments, classifier) -> tuple[ModelLabel, ...]:
+        """One acquisition serves context and selected-segment readers alike."""
+        originals = {}
+        for segment in segments:
+            originals.setdefault(segment.sha256, []).append(segment)
         with self.session.read():
-            rows = SpanAnnotationsRow.select(self.session._connection, order_by=("id",),
-                segment_digest=segment.sha256, classifier=classifier.classifier,
-                classifier_pin=classifier.pin)
+            rows = SpanAnnotationsRow.for_digests(self.session._connection, tuple(originals), classifier)
             grouped = {}
             for row in rows:
                 label = row.label
-                key = tuple(self.address(label.span, label.question, label.classifier).values())
-                grouped.setdefault(key, []).append(row)
-            return tuple(SpanAnnotationsRow.effective(tuple(originals))
-                         for originals in grouped.values())
+                if any(segment.contains_span(label.span)
+                       for segment in originals[label.span.segment_sha256]):
+                    key = tuple(self.address(label.span, label.question, label.classifier).values())
+                    grouped.setdefault(key, []).append(row)
+            return tuple(SpanAnnotationsRow.effective(tuple(rows)) for rows in grouped.values())
 
     def reserve(self, request: DisclosureRequest, grant) -> AnnotationRequestsRow:
         key = self.address(request.span, request.question, request.classifier)

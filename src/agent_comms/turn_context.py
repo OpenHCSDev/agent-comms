@@ -204,6 +204,13 @@ class SegmentManifest:
     def public_description(self) -> str:
         return f"{self.kind.public_title()} · {self.tokens} estimated tokens"
 
+    def contains_span(self, span: ContextSpan) -> bool:
+        """An annotation retains its original source, not just matching prose."""
+        return (span.segment_sha256 == self.sha256
+                and span.coordinates.kind is self.kind
+                and all(source in self.source_membership()
+                        for source in span.coordinates.provenance))
+
     def selected_contributor(self, positions: tuple[int, ...]) -> SegmentManifest:
         selected = self
         for position in positions:

@@ -49,6 +49,15 @@ class SpanAnnotationsRow(CoordinatorTable, TypedTable):
             latest[type(row.label)] = row.label
         return SpanLabel.effective(tuple(latest.values()))
 
+    @classmethod
+    def for_digests(cls, db, digests, classifier):
+        if not digests:
+            return ()
+        return cls.select(db,
+            where='segment_digest IN (' + ','.join('?' for _ in digests) + ')',
+            parameters=tuple(digests), order_by=("id",),
+            classifier=classifier.classifier, classifier_pin=classifier.pin)
+
 
 @dataclass(frozen=True, kw_only=True)
 class AnnotationRequestsRow(CoordinatorTable, TypedTable):

@@ -98,6 +98,10 @@ class SpanQuestion(DeclaredFamily, affix="Question"):
     def instructions(self) -> str: ...
 
     @classmethod
+    def public_title(cls) -> str:
+        return cls.declared_name.replace("_", " ").title()
+
+    @classmethod
     def declaration(cls):
         return {"type": cls.primitive, "instructions": cls.instructions,
                 "criteria": {answer.declared_name: answer.criteria
