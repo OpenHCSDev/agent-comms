@@ -21,6 +21,7 @@ from agent_comms.queued_input import InitialInput
 from agent_comms.store_files import _store_lock
 from delivery_owner_fixture import canonical_agent
 from compaction_loopback import LoopbackProvider
+from native_proof_cases import read_proof_rows
 
 
 class NativeBackendFixture:
@@ -264,4 +265,12 @@ async def native_backend_fixture(tmp_path):
             for task in tuple(connections):
                 task.cancel()
             await asyncio.gather(*connections, return_exceptions=True)
-            assert all(not child.alive() for child in owner.children)
+            assert all(child.retired for child in owner.children)
+            print(json.dumps({
+                "saved_native_fixture": str(root),
+                "localhost_posts": provider.posts,
+                "native_input_proofs": len(read_proof_rows(session))
+                    if Path(str(session) + ".input-proof").is_file() else 0,
+                "children": [FieldCodec.encode(child.identity) for child in owner.children],
+                "children_retired": True,
+            }))
