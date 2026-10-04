@@ -1,0 +1,194 @@
+{
+  "revision": "4ae3c927b911168edae502acc8d1a12487a69eb6",
+  "parser": "original audit.findings.Package.load",
+  "parsed": 365,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "tests/test_acp.py",
+      "line": 211,
+      "expression": "agent.turns.turn_state"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 231,
+      "expression": "agent.turns.owns_turn"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 235,
+      "expression": "agent.turns.owns_turn"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 269,
+      "expression": "agent.turns.owns_turn"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1529,
+      "expression": "agent.turns.turn_state"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1530,
+      "expression": "states[-1].finished_turn_id"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1530,
+      "expression": "busy[0].managed_id"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 207,
+      "expression": "agent.turns.turn_state"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 219,
+      "expression": "TurnChangedUpdate"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 220,
+      "expression": "state.managed_id"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 222,
+      "expression": "agent.turns.turn_state"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 236,
+      "expression": "agent.turns.turn_state"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1526,
+      "expression": "TurnChangedUpdate"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1556,
+      "expression": "agent.turns.turn_state"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 219,
+      "expression": "TurnChangedUpdate"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 270,
+      "expression": "agent.turns.turn_state"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1528,
+      "expression": "state.managed_id"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1544,
+      "expression": "agent.turns.turn_state"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 62,
+      "expression": "owner.turns.turn_state"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 141,
+      "expression": "owner.turns.turn_state"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 587,
+      "expression": "agent.turns.owns_turn"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 595,
+      "expression": "agent.turns.turn_state"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 218,
+      "expression": "owner.turns.owns_turn"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 125,
+      "expression": "owner.turns.turn_state"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 166,
+      "expression": "owner.turns.turn_state"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 233,
+      "expression": "owner.turns.turn_state"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 58,
+      "expression": "owner.turns.owns_turn"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 80,
+      "expression": "owner.turns.owns_turn"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 85,
+      "expression": "owner.turns.turn_state"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 84,
+      "expression": "owner.turns.turn_state"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 56,
+      "expression": "owner.turns.owns_turn"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 94,
+      "expression": "owner.turns.turn_state"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 110,
+      "expression": "owner.turns.turn_state"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 172,
+      "expression": "owner.turns.turn_state"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 223,
+      "expression": "owner.turns.turn_state"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 258,
+      "expression": "owner.turns.turn_state"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 60,
+      "expression": "owner.turns.turn_state"
+    }
+  ],
+  "dynamic_scope": "No dynamic event callback resolution claim"
+}
