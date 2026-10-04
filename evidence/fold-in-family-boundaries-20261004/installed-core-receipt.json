@@ -1,0 +1,56 @@
+{
+  "scope": "Installed Core-only F4 owner/boundary controls; not native or paired saved UI acceptance",
+  "production_checkpoint": "3b3855305c7f1f3aa0cefee25110a4791633a42e",
+  "test_source_before_fixture_completion": "0633f10c2f795b8b5a92c824adf28e47677925c4",
+  "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+  "package_grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-MendelF4-622-Core-only-package-execution-grant.json",
+  "original_batch": {
+    "passed": 15,
+    "failed": 2,
+    "seconds": 6.86,
+    "failure_disposition": [
+      "Missing original Messaging private protocol initialization in both owner-pause fixtures",
+      "Experimental refusal subclass omitted the existing richer RefusedCompactionResult capability"
+    ]
+  },
+  "changed_fixture_batch": {
+    "passed": 3,
+    "failed": 0,
+    "seconds": 1.08
+  },
+  "unchanged_checks_repeated": false,
+  "native_processes": 0,
+  "provider_inputs": 0,
+  "public_writes": 0,
+  "owned_execution_handles_terminal": [
+    13147,
+    9589
+  ],
+  "wheel_sha256": "6043867ce1d713a8e63f28ca2a9aee186bd74f7219d6928cfcabde2c444f5615",
+  "installed_core_members_unchanged": 311,
+  "installed_original_audit_members_unchanged": 10,
+  "package_replacements": [
+    "agent-comms",
+    "nominal-refactor-audit"
+  ],
+  "dependencies": {
+    "pydantic_core": "2.46.5",
+    "typing-inspection": "0.4.4",
+    "metaclass-registry": "0.2.1",
+    "annotated-types": "0.8.0",
+    "typing_extensions": "4.15.0",
+    "pydantic": "2.13.5",
+    "packaging": "26.2",
+    "agent-comms": "0.1.0",
+    "nominal-refactor-audit": "0.1.0",
+    "agent-client-protocol": "0.12.1"
+  },
+  "remaining": "Paired425 actual saved application and decoded contributor/recorded child label check on a separately granted full holder. Source-only F2 normal main join after this frozen run.",
+  "evidence": {
+    "installed-core-pipcheck.log": "5125c9571ec942408cb9ee4b38b856ddbc4ebcdf5d325cdb0a3273303e4b48ee",
+    "installed-core-source-proof.json": "aec1b63b160a6032682a51b232add1b06b935fb695530a4e7b184defdaf6d64e",
+    "installed-core-wheel-proof.json": "62b9aa6cd75f1febbf98f5488866c352ed4fe79ed03a28b87a1db2a663e6045b",
+    "installed-core01-negative.log": "d23c4e375cfb6ca84ea649b952a1fcbdba08870922dc9b7caa7663dfb7b3f51b",
+    "installed-core02-corrected-fixtures.log": "945d74f889178198cba36dd969a21dabea4826468412d7c88fed7b967c685880"
+  }
+}

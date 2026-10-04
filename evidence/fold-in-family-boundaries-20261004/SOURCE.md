@@ -162,3 +162,34 @@ encoder calls, declaration-owned controls and the per-file measure adapter.
 Drafts remain unqualified pending the changed installed boundary/UI batch on a
 released existing holder. Native/input/goal histories and uncertain attempts are
 untouched; there is no provider or latency claim.
+
+## Installed Core-only boundary closure
+
+The granted existing thin540 imports the normal Core3b385530 file wheel (all311
+Python members) and the original NRA9a98 file wheel (all10 members). Both direct
+URLs name those actual file wheels. No source overlay, new environment, native
+execution, provider/prompt or public write. uv pip check accepts the same10
+installed distribution names/versions; Core and original audit were replaced,
+eight distributions were untouched. The original audit is not a scanner clone.
+
+The first batch passed15 and failed2 in6.86s. Raw failure and private output are
+preserved. Source reading identified two incomplete old fixture consumers:
+owner-pause views lacked Messaging.initialize_private_initial_protocol, and the
+experimental refusal subclass duplicated two behaviors while omitting the
+richer compaction contract. Both original owner-pause producers now initialize
+through Messaging; the new result member inherits RefusedCompactionResult and
+checks its original adaptive refusal, prepared-context refusal and ACP error.
+No production behavior or assertions were weakened. Changed3 controls pass1.08s;
+the other15 were not repeated. Context fixture result serialization uses the
+existing CliCommand.encode_result, as the actual CLI does.
+
+Qualified boundaries: real Git per-file/no-facade ratchet, original typed SQL
+class/DDL and scalar transition CAS, candidate SQL projection, context wire and
+CLI retained inspection/export, goal request JSON/CAS and attributable pause,
+and compaction result/late outcome invalidation. Terminal proof rechecks all321
+installed Core/audit members unchanged. See installed-core-receipt.json and the
+original raw negative/corrected logs. This is not native/full UI/latency proof.
+Paired425 still needs decoded current-contributor and recorded-child labels and
+actual saved application on an explicitly released full holder. Package-only
+thin540 handback follows this terminal receipt; fixture/source/history/UNKNOWN
+outputs remain protected.
