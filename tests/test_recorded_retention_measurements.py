@@ -1250,6 +1250,64 @@ class RecordedMeasurementTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'artifact changed'):
             probe.read_sdk_context()
 
+    def test_sdk_probe_presence_uses_exact_user_text_and_original_coordinates(self):
+        # Prevent instruction/tool/assistant echoes or cross-message fragments
+        # becoming input presence. Original IDs and public text are separate.
+        probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
+        text = 'Rendered\nλ/path'
+        user = MessageEntry(id='input', message=UserMessage(content=text, input_id=probe.input_id))
+        owner = Thread('original', frozenset(), str(self.root))
+        turn = RecordedContextTurn(TurnId('turn'), TurnIdentity(owner.incarnation, 1))
+
+        def acquired(messages):
+            values = (text, [{'name': 'read', 'description': text}], messages)
+            originals = tuple(json.dumps(value, ensure_ascii=False, separators=(',', ':')) for value in values)
+            metadata = tuple(dict(tokens=1, utf8_bytes=len(raw.encode()),
+                sha256=hashlib.sha256(raw.encode()).hexdigest(),
+                provenance=(NativeProvenance(self.identity, 1, 'b' * 64),)) for raw in originals)
+            segments = (SystemLayerSegment(content=text, **metadata[0]),
+                ToolCatalogSegment(tools=tuple(values[1]), **metadata[1]),
+                TranscriptSegment(messages=tuple(messages), **metadata[2]))
+            data = NativeContextData('counter', self.identity, segments)
+            manifest = ContextManifest(owner.incarnation, turn,
+                tuple(segment.measured_manifest() for segment in segments), data.counter)
+            selected = replace(probe, sdk_segment_bytes=self.artifact('segments.json', originals))
+            _, captured = selected.serialized_construction(data, manifest)
+            with patch.object(PiMessage, 'from_wire', wraps=PiMessage.from_wire) as decoded:
+                result = selected.probe_input_presence(data, user, captured)
+            self.assertEqual(decoded.call_count, len(messages))
+            return data, manifest, selected, captured, result
+
+        messages = [{'role': 'assistant', 'content': [{'type': 'text', 'text': text}]},
+                    {'role': 'user', 'content': text, 'inputId': 'b' * 32},
+                    {'role': 'user', 'content': [{'type': 'text', 'text': 'Rendered'},
+                        {'type': 'text', 'text': 'λ/path'}], 'inputId': probe.input_id}]
+        data, manifest, selected, captured, result = acquired(messages)
+        self.assertTrue(result['evaluated'])
+        self.assertTrue(result['present'])
+        self.assertEqual(result['matching_user_messages'], ((2, 1), (2, 2)))
+        self.assertEqual(result['matching_native_input_messages'], ((2, 2),))
+        # Authenticated raw bytes cannot authenticate different decoded values.
+        changed = replace(data, segments=(*data.segments[:2],
+            replace(data.segments[2], messages=({'role': 'user', 'content': 'Changed'},))))
+        with self.assertRaisesRegex(ValueError, 'segment value differs'):
+            selected.serialized_construction(changed, manifest)
+        for messages in ([], [{'role': 'assistant', 'content': [{'type': 'text', 'text': text}]}],
+                         [{'role': 'user', 'content': 'Rendered'}, {'role': 'user', 'content': 'λ/path'}]):
+            with self.subTest(messages=messages):
+                self.assertFalse(acquired(messages)[-1]['present'])
+        unknown = {'role': 'custom-provider-role', 'content': text}
+        unobserved = acquired([unknown])[-1]
+        self.assertFalse(unobserved['evaluated'])
+        self.assertNotIn('present', unobserved)
+        self.assertEqual(unobserved['opaque_messages'], ((2, 0),))
+        unknown_part = {'role': 'user', 'content': [{'type': 'opaque-provider-part', 'value': text}]}
+        self.assertFalse(acquired([unknown_part])[-1]['evaluated'])
+        observed = acquired([unknown, {'role': 'user', 'content': text}])[-1]
+        self.assertTrue(observed['present'])
+        self.assertEqual(observed['matching_native_input_messages'], ())
+        self.assertFalse(probe.probe_input_presence(None, user, {'evaluated': False})['evaluated'])
+
     def test_public_manifest_uses_original_event_projection_without_reconstructing_values(self):
         # Prevent a valid public projection from failing raw metadata equality,
         # and prevent absent/tampered event evidence from granting that projection.
@@ -1428,6 +1486,7 @@ class RecordedMeasurementTests(unittest.TestCase):
                 return {'r1': {'model_steps': (),
                     'answer_support': {'unassisted_recall': False},
                     'provider_prompt_presence': {'evaluated': False},
+                    'probe_input_presence': {'evaluated': False},
                     'construction': {'condition_application': {'evaluated': False},
                     'condition_installation': installation, 'request_budget': {'evaluated': False},
                     'source_coverage': {'full_context_capacity': {'evaluated': False}}}}}
@@ -1477,7 +1536,8 @@ class RecordedMeasurementTests(unittest.TestCase):
         scored = scenario.score(Condition.BOUNDED, RecordedAnswers({}))
         identities = tuple(item.identity for item in scenario.rounds)
         unavailable = {identity: {'evaluated': False} for identity in identities}
-        original = {'construction': {'condition_application': {'evaluated': True},
+        original = {'probe_input_presence': {'evaluated': False},
+            'construction': {'condition_application': {'evaluated': True},
             'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}},
             'request_budget': {'evaluated': True},
             'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
@@ -1499,11 +1559,20 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertEqual(partial['native_request_admission']['unavailable_rounds'], identities[1:])
         self.assertFalse(observed['full_history_capacity']['evaluated'])
         self.assertFalse(observed['evaluated'])
+        self.assertEqual(observed['sdk_probe_input_presence']['unavailable_rounds'], identities)
+        present = dict(original, probe_input_presence={'evaluated': True, 'present': True})
+        absent = dict(original, probe_input_presence={'evaluated': True, 'present': False})
+        input_observed = scored.condition_construction(
+            {identities[0]: present, identities[1]: absent}, delivered)['sdk_probe_input_presence']
+        self.assertEqual(input_observed['present_rounds'], identities[:1])
+        self.assertEqual(input_observed['absent_rounds'], identities[1:2])
+        self.assertEqual(input_observed['unavailable_rounds'], identities[2:])
         for condition in Condition:
             labelled = replace(scored, condition=condition).condition_construction(evidence, delivered)
             self.assertEqual(labelled['declared_condition'], condition)
             self.assertFalse(labelled['evaluated'])
-        partial_application = {'construction': {'condition_application': {
+        partial_application = {'probe_input_presence': {'evaluated': False},
+            'construction': {'condition_application': {
             'evaluated': False, 'transform': {'evaluated': True}},
             'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}},
             'request_budget': {'evaluated': True},
