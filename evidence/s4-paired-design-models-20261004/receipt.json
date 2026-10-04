@@ -35,5 +35,11 @@
     "billing",
     "interventions",
     "study or full S4"
+  ],
+  "published_projection": {
+    "cli-inference.json": "fa7e91cd4109bfa543f8482af8b64ed6ebd17900bb62bcabde2bb9b057f96e37"
+  },
+  "raw_only": [
+    "cli.stdout.json"
   ]
 }
