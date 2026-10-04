@@ -23,7 +23,7 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData
 from agent_comms.native_tools import ReadTool, WriteTool
 from agent_comms.pi_summary_payloads import SummaryCost, SummaryUsage
-from agent_comms.pi_payloads import AssistantMessage, PiUsage, ToolCallContent, ToolResultMessage, UserMessage
+from agent_comms.pi_payloads import AssistantMessage, PiCost, PiUsage, ToolCallContent, ToolResultMessage, UserMessage
 from agent_comms.request_progress import RequestProgress
 from agent_comms.private_path import FileRevision
 from agent_comms.text_digest import TextDigest
@@ -37,7 +37,7 @@ from agent_comms.turn_context import (
     ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, RecordedContextTurn,
     SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment,
 )
-from compaction_retention_fixture import Condition, Measurement, Question, RecordedAnswers, RecordedNativeProbes, coding_scenario
+from compaction_retention_fixture import Condition, Measurement, Question, RecordedAnswers, RecordedNativeProbes, ScoredScenario, coding_scenario
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 from selected_summary_cases import manual_summary_record
 from test_task_decisions import admit
@@ -112,12 +112,49 @@ class RecordedMeasurementTests(unittest.TestCase):
         steps = RecordedNativeProbe.model_steps(branch)
         self.assertEqual(tuple(step['entry_id'] for step in steps),
                          ('tool-step', 'missing', 'answer'))
-        self.assertEqual(steps[0]['usage']['value']['totalTokens'], 16)
+        self.assertIs(steps[0]['usage']['value'], branch[1].message.usage)
+        self.assertEqual(steps[0]['usage']['value'].total_tokens, 16)
         self.assertEqual(steps[0]['timestamp'], branch[1].timestamp)
         self.assertEqual(steps[1]['usage'], {'evaluated': False, 'value': None})
         self.assertTrue(steps[2]['usage']['evaluated'])
-        self.assertEqual(steps[2]['usage']['value']['totalTokens'], 0)
-        self.assertNotIn('cacheRead', steps[2]['usage']['value'])
+        self.assertEqual(steps[2]['usage']['value'].total_tokens, 0)
+        self.assertNotIn('cacheRead', FieldCodec.encode(steps[2]['usage']['value']))
+
+    def test_resource_totals_use_original_summary_and_all_assistant_usage(self):
+        # Detect omitted tool steps, double-added reasoning and normalized cost
+        # confused with actual billing. Each record remains its original type.
+        summary = SummaryUsage(input=20, output=8, cache_read=0, cache_write=0,
+            total_tokens=28, reasoning=3, cost=SummaryCost(0, 0, 0, 0, 0))
+        assistant = PiUsage(input=4, output=6, total_tokens=10, reasoning=2,
+            cost=PiCost(total=0.25))
+        zero = PiUsage(input=0, output=0, total_tokens=0, reasoning=0,
+            cost=PiCost(total=0))
+        cuts = {'cut': {'summary_usage': {'evaluated': True, 'usage': summary}}}
+        evidence = {'cut': {'model_steps': tuple({'usage': {'value': usage}}
+                                             for usage in (assistant, zero))}}
+        observed = ScoredScenario.recorded_resources(cuts, evidence)
+        combined = observed['combined']
+        self.assertEqual(combined['records'], 3)
+        self.assertEqual(combined['reported_total_tokens']['value'], 38)
+        self.assertEqual(combined['output_tokens']['value'], 14)
+        self.assertEqual(combined['reasoning_tokens']['value'], 5)
+        self.assertEqual(combined['normalized_cost']['value'], 0.25)
+        self.assertFalse(combined['cache_read_tokens']['evaluated'])
+        self.assertIsNone(combined['cache_read_tokens']['value'])
+        self.assertEqual(observed['assistants']['records'], 2)
+
+    def test_resource_totals_keep_unreported_and_empty_denominators(self):
+        # Detect a perfect zero inferred from absent summary/usage/fields.
+        cuts = {'cut': {'summary_usage': {'evaluated': False}}}
+        evidence = {'cut': {'model_steps': ({'usage': {'value': None}},)}}
+        unavailable = ScoredScenario.recorded_resources(cuts, evidence)['combined']
+        self.assertEqual(unavailable['records'], 2)
+        self.assertEqual(unavailable['usage_records'], 0)
+        self.assertFalse(unavailable['normalized_cost']['evaluated'])
+        self.assertIsNone(unavailable['normalized_cost']['value'])
+        empty = ScoredScenario.recorded_resources({}, {})['combined']
+        self.assertEqual(empty['records'], 0)
+        self.assertFalse(empty['reported_total_tokens']['evaluated'])
 
     def test_original_tool_pair_does_not_award_proposal_or_constraint_credit(self):
         # Prevent invented action success from an answer, an unrelated SDK
@@ -461,7 +498,8 @@ class RecordedMeasurementTests(unittest.TestCase):
                              cost=SummaryCost(0, 0, 0, 0, 0))
         observed = self.checkpoint.summary_usage(NativeSummaryPayload(summary='summary', tokens_before=12, usage=usage))
         self.assertTrue(observed['evaluated'])
-        self.assertEqual(observed['usage']['cacheRead'], 0)
+        self.assertIs(observed['usage'], usage)
+        self.assertEqual(observed['usage'].cache_read, 0)
 
     def test_sdk_presence_requires_original_request_and_unchanged_bytes(self):
         owner = Thread('fixture-owner', frozenset(), str(self.root))

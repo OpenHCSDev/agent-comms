@@ -420,6 +420,7 @@ class ScoredScenario(ScoreView):
         result = self.public()
         return FieldCodec.encode(dict(result, native_probes=evidence,
                     answer_origin="recorded-native",
+                    recorded_resources=self.recorded_resources(checkpoints, evidence),
                     quality_denominators=self.support_totals(evidence),
                     proposed_actions=self.proposed_actions(evidence),
                     scope="recorded original native probes; condition label is not construction proof",
@@ -443,6 +444,46 @@ class ScoredScenario(ScoreView):
                     answer_support={identity: original["answer_support"]
                                     for identity, original in evidence.items()},
                     recall_scope="Original recorded answers; tool-assisted answers are task quality, not unassisted recall. Authored answers are scorer controls"))
+
+    @staticmethod
+    def recorded_resources(checkpoints, evidence):
+        """Total acquired original completions, never estimates or billing.
+
+        A missing usage/counter leaves that metric unavailable. Summary and
+        assistant records remain separate so shared cuts cannot be hidden in a
+        paired cost comparison. Output already includes reported reasoning;
+        neither tokens nor cost is reconstructed from component counters.
+        """
+        summaries = tuple(report['summary_usage']['usage']
+            if report['summary_usage']['evaluated'] else None
+            for report in checkpoints.values())
+        assistants = tuple(step['usage']['value'] for original in evidence.values()
+            for step in original['model_steps'])
+
+        def metric(values, expected):
+            supplied = tuple(value for value in values if value is not None)
+            complete = expected > 0 and len(supplied) == expected
+            return {'evaluated': complete, 'value': sum(supplied) if complete else None,
+                    'observed_records': len(supplied), 'expected_records': expected}
+
+        def total(records):
+            available = tuple(record for record in records if record is not None)
+            return {'records': len(records),
+                'usage_records': len(available),
+                'input_tokens': metric((usage.input for usage in available), len(records)),
+                'output_tokens': metric((usage.output for usage in available), len(records)),
+                'cache_read_tokens': metric((usage.cache_read for usage in available), len(records)),
+                'cache_write_tokens': metric((usage.cache_write for usage in available), len(records)),
+                'reported_total_tokens': metric((usage.total_tokens for usage in available), len(records)),
+                'reasoning_tokens': metric((usage.reasoning for usage in available), len(records)),
+                'normalized_cost': metric((usage.cost.total for usage in available
+                                           if usage.cost is not None), len(records))}
+
+        return {'summaries': total(summaries), 'assistants': total(assistants),
+                'combined': total((*summaries, *assistants)),
+                'scope': 'Original journaled summary and assistant completions only; '
+                         'SDK-normalized cost is not billed spend; no unjournaled retries, '
+                         'cache-saving comparison, HTTP accounting or end-to-end timing'}
 
     def paired_quality(self, baseline, evidence, baseline_evidence, alignment):
         """Original alignment owns pairing; every frozen question stays visible."""
