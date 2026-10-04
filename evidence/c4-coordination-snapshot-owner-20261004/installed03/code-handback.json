@@ -1,0 +1,21 @@
+{
+  "state": "WHOLE Parent654 remaining03 purpose CLOSED; actual436 restored; no future package/build/import/read/execution claim",
+  "prefix": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002",
+  "members": 1470,
+  "all_bytes_modes_links_equal": true,
+  "packages": 69,
+  "protected": 390,
+  "all_protected_equal": true,
+  "result": "PASS actual registered App and whole shutdown; source unchanged; native_runtime_input0",
+  "seconds": 8.24997500097379,
+  "borrowers": {
+    "processes": 241,
+    "refs": 0,
+    "gaps": 0,
+    "sha256": "4283d8f71c43557320d5df955bc4071b5d33717c0608868bcd299e6552ede251"
+  },
+  "scratch_removed_after_keeper_capture": true,
+  "owned_controller_absent": true,
+  "original_BoundedRun_cleanup_joined": true,
+  "issued_grant_sha256": "e691912d7dd7add88a15f6d7d801592253309896dc39a2a89aa542b2d8898dec"
+}

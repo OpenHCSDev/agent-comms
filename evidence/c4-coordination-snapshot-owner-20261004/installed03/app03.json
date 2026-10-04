@@ -1,0 +1,17 @@
+{
+  "state": "affected installed App complete",
+  "seconds": 6.239540282986127,
+  "checks": [
+    "full original snapshot value equality",
+    "original bounded reference notification windows",
+    "human display acknowledgement leaves actor delivery pending",
+    "real mounted sidebar consumes default captured cohort",
+    "real sidebar filtered cohorts agree with original registry status",
+    "whole original App close; source unchanged; no native input"
+  ],
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "physical_or_performance_claim": false,
+  "core": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms",
+  "toad": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad"
+}
