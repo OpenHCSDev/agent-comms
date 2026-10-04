@@ -51,3 +51,15 @@ All recorded process identities/groups retired; Bohr independently closed540
 with253 all-UID processes/zero borrowers/zero gaps; immutable086 lease returned.
 No next loan or publication permission is inferred. Parent normal merge order
 is #638 then #640 then #633, requiring exact-head Debt ratchet success.
+
+## Main-base delivery checkpoint
+
+#638 was actually merged at f430feb0dea1749579f802b5c3dbb45d1b0d46da
+from qualified c1334db609e6dcf28611cc417f494ee2a7308f8e. #640 now
+targets main, permitting the original automatic main-PR Debt ratchet.
+This checkpoint changes only this evidence document: production, tests,
+stack, .pi, and pyproject.toml remain identical to fd6dba4e and to the
+qualified owned production in #633 1a05c7e9. The three-file production
+scope remains31 added/9 deleted. No SDK, package, App, or native run is
+repeated; all prior loans remain closed. Exact final-head ratchet success
+is required before parent merge.
