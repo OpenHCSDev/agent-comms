@@ -626,14 +626,15 @@ class RecordedNativeProbe:
                         reason='Original matching SDK request bytes unavailable')
         applications=tuple(FieldCodec.encode(original) for original in originals)
         binding=self.condition_message_binding(records,applications,serialized,manifest)
+        referenced=tuple(original for original in originals if original.narrative_source is not None)
         if (self.checkpoint is not None and self.fork_journal is not None and
-                all(original.narrative_source is not None for original in originals)):
+                referenced):
             source=self.checkpoint.fork_request_narrative(self.fork_journal,evidence,parent,texts)
             if source['evaluated']:
                 reference=FieldCodec.decode(FileProvenance,source['source'])
-                for original in originals:
+                for original in referenced:
                     original.require_narrative_source(reference)
-                narrative={'evaluated':binding['evaluated'], 'source':reference,
+                narrative={'evaluated':binding['evaluated'] and len(referenced)==len(originals), 'source':reference,
                     'checkpoint_session':source['checkpoint_session'], 'session':source['session'],
                     'native_entry_id':source['native_entry_id'],
                     'message_binding':binding,

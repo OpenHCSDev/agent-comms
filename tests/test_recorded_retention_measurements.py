@@ -1523,6 +1523,8 @@ for (const original of [source,undefined]) {
                               replace(reference, sha256='f' * 64)):
                     with self.subTest(reference=wrong), self.assertRaisesRegex(ValueError, 'another original narrative'):
                         observed((FieldCodec.encode(replace(installed, narrative_source=wrong)), conversion, restored))
+                    with self.subTest(partial_reference=wrong), self.assertRaisesRegex(ValueError, 'another original narrative'):
+                        observed((row, FieldCodec.encode(replace(installed, narrative_source=wrong)), conversion, restored))
                 with self.assertRaisesRegex(ValueError, 'does not contain'):
                     observed((source_row, conversion, restored), ('"Different narrative"',))
                 # Neither a constructor label nor a partial collection of
