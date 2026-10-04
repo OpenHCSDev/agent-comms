@@ -907,5 +907,66 @@
       },
       "scope": "Original installed historical3b dependency ABI and private file-custody/reset/FieldCodec controls; not main919 installed or public cutover acceptance"
     }
+  },
+  "current_main_union": {
+    "main": "c29425b9b6233625d51735319bf868c80c7c9187",
+    "merge": "14c654c2c2bf890897e785372ff57f1241d6973f",
+    "mechanism": "original audit.findings.Package/audit.repository.Repository",
+    "coverage": {
+      "main": {
+        "src/agent_comms": {
+          "parsed": 311,
+          "omitted": []
+        },
+        "tests": {
+          "parsed": 365,
+          "omitted": []
+        },
+        "tools": {
+          "parsed": 53,
+          "omitted": []
+        }
+      },
+      "parent": {
+        "src/agent_comms": {
+          "parsed": 311,
+          "omitted": []
+        },
+        "tests": {
+          "parsed": 366,
+          "omitted": []
+        },
+        "tools": {
+          "parsed": 54,
+          "omitted": []
+        }
+      }
+    },
+    "production_stack_metadata_delta": [],
+    "remaining_tool_family": {
+      "tests/tools/channel_recovery_physical_journey.py": {
+        "sha256": "5332803027e05203c8fd5b7c8bc40d5a82b0cdba4693c8b8ce6424e012470a3d",
+        "byte_equal_previous_qualified_source": true
+      },
+      "tools/cutover/global_extension_activation.py": {
+        "sha256": "3ecc6f94766f5db8bed564ca737b37dee363f5f64de780e60b8474b495da4efc",
+        "byte_equal_previous_qualified_source": true
+      },
+      "tools/cutover/publish_retained_summary.py": {
+        "sha256": "8356254221da4435eb58078355df6c7677238008b29c918ca1ff61f911037efb",
+        "byte_equal_previous_qualified_source": true
+      },
+      "tools/cutover/retained_index_writer.py": {
+        "sha256": "7b5ea337d2bc7e30933914c9f819a0015f283b076f8db699d1a6a35095c542d4",
+        "byte_equal_previous_qualified_source": true
+      },
+      "tools/cutover/retained_summary_reset_controls.py": {
+        "sha256": "9eacb251632d155f6db1c58999f311614781d566f10374d8b62698342b02a56a",
+        "byte_equal_previous_qualified_source": true
+      }
+    },
+    "original_reset_controls_repeated": false,
+    "source_relationship": "RetainedOwnerLaunch.capture observes each original process interpreter and validates process/incarnation/configuration before claims. ReviewedRetainedSummaryCohort no longer stores or reapplies a copied source interpreter. OwnerRestartRequest optional source_interpreter remains an explicit caller selection constraint, not the removed cohort observation.",
+    "scope": "Normal current-main integration; previous seven private reset controls retain their original scope. No installed package/public publisher/guard retry or full live cutover acceptance."
   }
 }
