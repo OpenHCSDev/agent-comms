@@ -55,9 +55,7 @@ class Registration:
         with _store_lock(self.store.path.parent / "wire", shared=True), self.store.editing() as edit:
             change = edit.document.prepare_native_source(original, session_file)
             self._commit_registration(edit, change)
-            return RegistryOwner(
-                thread=change.installed_thread, admission_generation=original.admission_generation
-            )
+            return replace(original, thread=change.installed_thread)
 
     def declare(self, thread: Thread, status: ThreadStatus = _RUNNING_STATUS) -> Thread:
         """Operational declaration and channel provenance use one locked current owner.
