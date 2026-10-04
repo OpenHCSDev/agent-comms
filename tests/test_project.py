@@ -19,6 +19,7 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.threads import Thread
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
 from agent_comms.tools import invoke_tool
+from native_backend_fixture import native_backend_fixture
 
 
 def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path, monkeypatch):
@@ -99,6 +100,76 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
         assert len(comms.registry.all_threads()) == 1
     finally:
         await resumed.shutdown()
+
+
+async def test_saved_native_identity_changes_publish_one_complete_update(tmp_path):
+    """Original saved owner, actual socket publication; no native input/provider."""
+    from agent_comms.runtime import RuntimeProxy, socket_path
+
+    class Client:
+        def __init__(self):
+            self.updates = []
+            self.fail = False
+
+        async def session_update(self, *, session_id, update):
+            if self.fail:
+                raise OSError("Identity publication transport failed")
+            self.updates.append(update)
+
+    async with native_backend_fixture(tmp_path) as native:
+        await native.author_history()
+        saved = native.session.read_bytes()
+        async with native.open_owner() as (agent, session_id):
+            await agent._runtime.start()
+            sender, receiver = Client(), Client()
+            agent.on_connect(sender)
+            attached = canonical_agent(agent._comms, auto_wake=False)
+            attached.on_connect(receiver)
+            proxy = RuntimeProxy(attached, session_id, socket_path(native.root, os.getpid()))
+            try:
+                await proxy.subscribe()
+                new = tmp_path / "new-project"
+                new.mkdir()
+                agent._comms.threads.set_project(session_id, str(new))
+                renamed = agent._comms.threads.rename_managed_thread(
+                    session_id, "Updated owner", owner_pid=os.getpid(),
+                ).current
+                before = (agent.sessions.titles.get(session_id),
+                          agent.sessions.display_titles.get(session_id),
+                          agent.sessions.worktrees.get(session_id))
+                sender.fail = True
+                with pytest.raises(OSError, match="transport failed"):
+                    await agent.sessions.sync_identity(session_id)
+                assert (agent.sessions.titles.get(session_id),
+                        agent.sessions.display_titles.get(session_id),
+                        agent.sessions.worktrees.get(session_id)) == before
+                sender.fail = False
+                assert await agent.sessions.sync_identity(session_id) == renamed
+                assert len(sender.updates) == 1
+                announcement = sender.updates[0]
+                assert announcement.title == "Updated owner"
+                projection, = (item for item in decode_updates(announcement.field_meta)
+                               if isinstance(item, CoordinationChangedUpdate))
+                assert projection.thread.name == renamed and projection.worktree == str(new)
+                async with asyncio.timeout(2):
+                    while not receiver.updates:
+                        await asyncio.sleep(0.01)
+                received, = (item for item in decode_updates(receiver.updates[-1].get("_meta"))
+                             if isinstance(item, CoordinationChangedUpdate))
+                assert received == projection
+                assert agent.sessions.titles[session_id] == renamed
+                assert agent.sessions.display_titles[session_id] == "Updated owner"
+                assert agent.sessions.worktrees[session_id] == str(new)
+                assert await agent.sessions.sync_identity(session_id) == renamed
+                assert len(sender.updates) == 1
+                assert agent._comms.registry.require(session_id).active_turn is None
+            finally:
+                await proxy.close()
+                await attached.shutdown()
+            assert native.session.read_bytes() == saved
+            assert native.provider.posts == 0 and native.starts == []
+    assert all(not child.alive() and not child.platform.group_members(child.identity)
+               for child in native.children)
 
 
 async def test_owner_automatically_continues_same_session_in_new_project(tmp_path, monkeypatch):
