@@ -69,7 +69,7 @@ class InputDrain(FutureInputQueue):
         self.runtime = runtime
         self.effects = effects
         self.drain_tasks: dict[str, asyncio.Task[None]] = {}
-        self.backend_inboxes: dict[str, asyncio.Queue[str | dict[str, Any]]] = {}
+        self.backend_inboxes: dict[str, asyncio.Queue[dict[str, Any]]] = {}
         self.queued_inputs: dict[str, dict[str, QueuedInput]] = {}
         self.restored_inputs: dict[str, dict[str, QueuedInput]] = {}
         self.queue_revisions: dict[str, int] = {}
@@ -417,7 +417,7 @@ class InputDrain(FutureInputQueue):
 
     def bind_native_turn(
         self, session_id: str, owner: Thread, admission: int, turn_id: str
-    ) -> asyncio.Queue[str | dict[str, Any]]:
+    ) -> asyncio.Queue[dict[str, Any]]:
         """Transfer existing live inputs to the new lease, never read them from disk."""
         inbox = self.backend_inboxes.setdefault(session_id, asyncio.Queue())
         for input_id, item in self.queued_inputs.get(session_id, {}).items():
@@ -531,15 +531,13 @@ class InputDrain(FutureInputQueue):
             return self.dispositions.settle_unbound(keys)
 
     async def finish_turn_inputs(
-        self, session_id: str, inbox: asyncio.Queue[str | dict[str, Any]]
+        self, session_id: str, inbox: asyncio.Queue[dict[str, Any]]
     ) -> None:
         """Retire this turn's live capabilities; retain UNKNOWN only as notices."""
         if self.backend_inboxes.get(session_id) is inbox:
             self.backend_inboxes.pop(session_id, None)
         while not inbox.empty():
-            pending = inbox.get_nowait()
-            if isinstance(pending, str):
-                self.pending_turns.setdefault(session_id, []).append(ScheduledTurn(pending))
+            inbox.get_nowait()
         try:
             original = self.original_sources.pop(session_id, None)
             if original is not None:
