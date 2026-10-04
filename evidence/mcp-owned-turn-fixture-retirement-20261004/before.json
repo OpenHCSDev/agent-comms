@@ -1,0 +1,492 @@
+{
+  "head": "d41601c16d74e9e3e4195b6527fb218b8fe14af9",
+  "method": "existing NRA/refactor-audit Package.load AST; lexical references and declaration/write contexts",
+  "roots": [
+    {
+      "root": "src",
+      "parsed": 311,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 364,
+      "omissions": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "omissions": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 387,
+      "kind": "Load",
+      "expression": "owner.turn_state"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 377,
+      "kind": "Load",
+      "expression": "owner.turn_state"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 122,
+      "kind": "Load",
+      "expression": "participant.turn_state"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 123,
+      "kind": "Load",
+      "expression": "participant.turn_state"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 135,
+      "kind": "declaration",
+      "name": "on_mcp_live_status"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 139,
+      "kind": "Load",
+      "expression": "self.agent.turns.owns_turn"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 86,
+      "kind": "Load",
+      "expression": "self.thread.turn_state"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 318,
+      "kind": "Load",
+      "expression": "self.effects.turns.turn_state"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 26,
+      "kind": "Load",
+      "expression": "runner.acquire_turn"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 154,
+      "kind": "Load",
+      "expression": "self.runner.acquire_turn"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 454,
+      "kind": "Load",
+      "expression": "self.runner.extension_ui_permission"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 373,
+      "kind": "Load",
+      "expression": "current.turn_state"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 278,
+      "kind": "Load",
+      "expression": "ctx.server.agent.turns.turn_state"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 81,
+      "kind": "declaration",
+      "name": "turn_state"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 149,
+      "kind": "declaration",
+      "name": "turn_state"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 153,
+      "kind": "declaration",
+      "name": "owns_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 370,
+      "kind": "declaration",
+      "name": "extension_ui_permission"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 431,
+      "kind": "declaration",
+      "name": "acquire_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 151,
+      "kind": "Load",
+      "expression": "self.comms.registry.require(name).turn_state"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 154,
+      "kind": "Load",
+      "expression": "self.turn_state"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 147,
+      "kind": "Load",
+      "expression": "self.turn_state"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 481,
+      "kind": "Load",
+      "expression": "self.turn_state"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 488,
+      "kind": "Load",
+      "expression": "self.turn_state"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 420,
+      "kind": "Load",
+      "expression": "self.owns_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 172,
+      "kind": "Load",
+      "expression": "thread.turn_state"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 382,
+      "kind": "Load",
+      "expression": "self.owns_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 277,
+      "kind": "Load",
+      "expression": "self.acquire_turn"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 82,
+      "kind": "declaration",
+      "name": "original_input"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 155,
+      "kind": "Load",
+      "expression": "thread.turn_state"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 223,
+      "kind": "Load",
+      "expression": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 234,
+      "kind": "Load",
+      "expression": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1593,
+      "kind": "Load",
+      "expression": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 115,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 585,
+      "kind": "Load",
+      "expression": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 588,
+      "kind": "Load",
+      "expression": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 299,
+      "kind": "Load",
+      "expression": "owner.turns.acquire_turn"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 38,
+      "kind": "Load",
+      "expression": "native.original_input"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 231,
+      "kind": "Load",
+      "expression": "native.original_input"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 250,
+      "kind": "Load",
+      "expression": "native.original_input"
+    },
+    {
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 438,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 448,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 460,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 469,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 152,
+      "kind": "Load",
+      "expression": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 185,
+      "kind": "Load",
+      "expression": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 188,
+      "kind": "Load",
+      "expression": "agent.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 45,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 54,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 182,
+      "kind": "Load",
+      "expression": "agent.turns.extension_ui_permission"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 52,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 163,
+      "kind": "Load",
+      "expression": "agent.turns.extension_ui_permission"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 166,
+      "kind": "Load",
+      "expression": "agent.turns.extension_ui_permission"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 169,
+      "kind": "Load",
+      "expression": "agent.turns.extension_ui_permission"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 347,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 197,
+      "kind": "Load",
+      "expression": "agent.turns.extension_ui_permission"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 349,
+      "kind": "Load",
+      "expression": "owner.turns.extension_ui_permission"
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "line": 353,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_message_notifications.py",
+      "line": 51,
+      "kind": "Load",
+      "expression": "comms.registry.require('beta').turn_state"
+    },
+    {
+      "path": "tests/test_message_notifications.py",
+      "line": 78,
+      "kind": "Load",
+      "expression": "comms.registry.require('renamed').turn_state"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 228,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 137,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 252,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 178,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 54,
+      "kind": "Load",
+      "expression": "comms.registry.require(session).turn_state"
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 120,
+      "kind": "Load",
+      "expression": "comms.registry.require(session).turn_state"
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 69,
+      "kind": "Load",
+      "expression": "comms.registry.require(session).turn_state"
+    },
+    {
+      "path": "tests/test_s10_boundary_guards.py",
+      "line": 129,
+      "kind": "Load",
+      "expression": "TurnRunner.extension_ui_permission"
+    },
+    {
+      "path": "tests/test_selected_execution_native.py",
+      "line": 103,
+      "kind": "Load",
+      "expression": "comms.registry.require('beta').turn_state"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 181,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 202,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 104,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 210,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 261,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 296,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 79,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 131,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 75,
+      "kind": "Load",
+      "expression": "owner.turns.active_turns"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 55,
+      "kind": "Load",
+      "expression": "service.registry.require(thread.name).turn_state"
+    }
+  ],
+  "limits": "Dynamic controller callbacks are read semantically, not proven by lexical resolution. Native dependency owner/cancellation inspected directly; no SDK code migration or new artifact."
+}
