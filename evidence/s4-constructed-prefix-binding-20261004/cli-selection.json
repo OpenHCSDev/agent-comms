@@ -1,0 +1,76 @@
+{
+  "pairs": [
+    {
+      "candidate": {
+        "evaluated": false,
+        "expected_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "available_rounds": [],
+        "unavailable_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "preserved_rounds": [],
+        "changed_rounds": []
+      },
+      "baseline": {
+        "evaluated": false,
+        "expected_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "available_rounds": [],
+        "unavailable_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "preserved_rounds": [],
+        "changed_rounds": []
+      }
+    },
+    {
+      "candidate": {
+        "evaluated": false,
+        "expected_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "available_rounds": [],
+        "unavailable_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "preserved_rounds": [],
+        "changed_rounds": []
+      },
+      "baseline": {
+        "evaluated": false,
+        "expected_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "available_rounds": [],
+        "unavailable_rounds": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "preserved_rounds": [],
+        "changed_rounds": []
+      }
+    }
+  ],
+  "study_acceptance": {
+    "evaluated": false,
+    "reason": "Recorded pairs do not supply a registered design, verified condition construction or complete cost/end-to-end journeys"
+  }
+}

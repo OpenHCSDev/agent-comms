@@ -24,7 +24,7 @@ export async function previewNativeCondition(session, packagePath, view) {
             ...(Number.isFinite(budget.available) ? {available_tokens:budget.available} : {})};
     }
     return {
-        context, manifest:view.full(),
+        context, identity:view.identity, manifest:view.manifest(),
         context_sha256:createHash('sha256').update(JSON.stringify(context)).digest('hex'),
         budget:admission,
         scope:'SDK context preview; not submitted input, serialized HTTP input, or provider usage',
@@ -141,6 +141,7 @@ export function armInstalledNativeCondition(session,construction,output,inputId)
             source_witness:construction.source_witness,
             entry_selection:construction.entry_selection,
             narrative_source:construction.narrative_source,
+            construction_manifest:construction.manifest,
             construction_context_sha256:construction.context_sha256,
             source_prefix_count:count,source_prefix_sha256:sourcePrefix,
             source_message_count:messages.length}};

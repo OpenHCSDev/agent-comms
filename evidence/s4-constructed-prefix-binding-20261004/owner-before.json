@@ -1,0 +1,704 @@
+{
+  "revision": "b1a91fb561cfac4ea99f9a7b23f3dae9bb772f56",
+  "modules": 736,
+  "parse_omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 26,
+      "name": "NativeContextManifestData",
+      "syntax": "alias"
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 62,
+      "name": "NativeContextManifestData",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 15,
+      "name": "NativeContextManifestData",
+      "syntax": "ClassDef"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 10,
+      "name": "SegmentManifest",
+      "syntax": "alias"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 18,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 82,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 25,
+      "name": "SegmentManifest",
+      "syntax": "alias"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 484,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 485,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 488,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 19,
+      "name": "NativeContextManifestData",
+      "syntax": "alias"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 328,
+      "name": "NativeContextManifestData",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 171,
+      "name": "SegmentManifest",
+      "syntax": "ClassDef"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 412,
+      "name": "NativeMessages",
+      "syntax": "ClassDef"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 238,
+      "name": "recorded_parts",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 299,
+      "name": "recorded_parts",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 421,
+      "name": "recorded_parts",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 441,
+      "name": "NativeMessages",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 446,
+      "name": "NativeMessages",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 451,
+      "name": "NativeMessages",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 194,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 202,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 309,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 663,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 177,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 239,
+      "name": "recorded_parts",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 238,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 241,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 256,
+      "name": "recorded_parts",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 271,
+      "name": "recorded_parts",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 295,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 299,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 299,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 311,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 362,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 375,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 378,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 390,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 421,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 421,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 648,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 242,
+      "name": "recorded_parts",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 621,
+      "name": "condition_construction",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 595,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/native_context_reader_journey.py",
+      "line": 89,
+      "name": "NativeContextManifestData",
+      "syntax": "alias"
+    },
+    {
+      "path": "tests/native_context_reader_journey.py",
+      "line": 92,
+      "name": "NativeContextManifestData",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/native_context_reader_journey.py",
+      "line": 93,
+      "name": "NativeContextManifestData",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/native_context_reader_journey.py",
+      "line": 128,
+      "name": "recorded_parts",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 436,
+      "name": "RecordedConditionInstallation",
+      "syntax": "ClassDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 33,
+      "name": "NativeContextManifestData",
+      "syntax": "alias"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 41,
+      "name": "NativeMessages",
+      "syntax": "alias"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 604,
+      "name": "installed_condition",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 651,
+      "name": "condition_message_binding",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 798,
+      "name": "serialized_construction",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 594,
+      "name": "condition_message_binding",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 628,
+      "name": "condition_message_binding",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1174,
+      "name": "serialized_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 830,
+      "name": "NativeMessages",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1096,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 606,
+      "name": "RecordedConditionInstallation",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 779,
+      "name": "NativeContextManifestData",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 876,
+      "name": "NativeMessages",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 11,
+      "name": "NativeContextManifestData",
+      "syntax": "alias"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 16,
+      "name": "SegmentManifest",
+      "syntax": "alias"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 90,
+      "name": "NativeContextManifestData",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 29,
+      "name": "NativeContextManifestData",
+      "syntax": "alias"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 45,
+      "name": "SegmentManifest",
+      "syntax": "alias"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 48,
+      "name": "RecordedConditionInstallation",
+      "syntax": "alias"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1227,
+      "name": "serialized_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1238,
+      "name": "serialized_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1324,
+      "name": "NativeContextManifestData",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1473,
+      "name": "RecordedConditionInstallation",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1630,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1640,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1702,
+      "name": "serialized_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1710,
+      "name": "condition_message_binding",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1077,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1244,
+      "name": "serialized_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1247,
+      "name": "serialized_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1276,
+      "name": "serialized_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1295,
+      "name": "serialized_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1476,
+      "name": "RecordedConditionInstallation",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1486,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1489,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1612,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1652,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1658,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1724,
+      "name": "condition_message_binding",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1442,
+      "name": "RecordedConditionInstallation",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1508,
+      "name": "RecordedConditionInstallation",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1548,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1556,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1580,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1595,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1599,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1610,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1678,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1713,
+      "name": "condition_message_binding",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1714,
+      "name": "condition_message_binding",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1716,
+      "name": "condition_message_binding",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1722,
+      "name": "condition_message_binding",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 937,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1511,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1547,
+      "name": "RecordedConditionInstallation",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1591,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1667,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1673,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1676,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1677,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1607,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1615,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1537,
+      "name": "installed_condition",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 10,
+      "name": "SegmentManifest",
+      "syntax": "alias"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 48,
+      "name": "NativeContextManifestData",
+      "syntax": "alias"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 22,
+      "name": "SegmentManifest",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 67,
+      "name": "NativeContextManifestData",
+      "syntax": "Name"
+    }
+  ],
+  "limits": "Python lexical sites only. Existing private JS constructor/observer and original stack TurnContext/ContextSegment source read directly; not dynamic resolution proof."
+}
