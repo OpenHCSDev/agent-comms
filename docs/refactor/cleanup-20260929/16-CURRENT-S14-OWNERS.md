@@ -20,9 +20,11 @@ public-owner references remain preserved. No private purpose follows from closur
 
 Toad442 exact2a844fa3 is Ready and source/tests/tools/dependencies equal the
 installed031 checkpoint. Its main retarget produced no automatic check.
-The owner is normally joining actual merged441 main to trigger the existing
-required ratchet; no manual fleet, product change or App rerun is needed.
-Parent will merge that exact qualified successor after its required result.
+The owner normally joined actual merged441 main and published b5ca0f80;
+parent independently verified source/tests/tools/dependencies equal installed031.
+Original required ratchet37236476663 is queued on that exact head. No manual
+fleet, product change or App rerun is needed. Parent will merge that exact
+qualified successor after its required result.
 
 NRA restoration attribution correction: direct original ZIP read verifies wheel
 8d489731 contains measures.py SHA8f6127cb, exactly matching the original e6f
@@ -36,7 +38,16 @@ actual installed byte readback before acceptance. Public334 remains untouched.
 W6 historical04 now has distinct issued purpose b8895b60 and matching7a
 renewal. The corrected visibility control43d2 at dd15 uses retained ab640/13e2
 wheels, authored w6e04 and historical-installed04 output. Its actual bounded
-child784577/birth62503495 was reported admitted; no result is inferred here.
+child784577/birth62503495 exited1 in22.254975423s (pytest19.44s). App/ACP
+settlement, exact private binding and historical model acquisition reached;
+after native pointer dispatch the cursor was context root/None, not the
+historical node. Focus assertion short-circuited. Read/search/export remain
+unreached; no native defect or old90s cause is inferred. Einstein owns the
+complete pointer/style/label/layout/cursor source investigation. Owner whole
+handback reports1470/69/390/no extras/sockets and runner/groups retired;
+independent Bohr purpose closure remains required. Normal four-filewheel
+restoration without cache reuse succeeded, including raw NRA8d/8f61, without
+an archive-member write. No rerun or next holder purpose follows from failure.
 Scope is historical ReferenceNode focus/read/search/export plus separate local
 USER correction/defaultOFF/schema10. Authentic AnnotationNode GUI/ACP/effective
 HumanLabel refresh requires a separate original sealed-request purpose and
@@ -2020,3 +2031,14 @@ source difference rather than treating branch labels as source equivalence.
 Arendt now owns preparation of a separate next475 stopped-owner journal-reset
 operator through the existing installation/batch owners. Frozen479 remains
 unchanged and awaits normal client closure.
+
+### Next ordinary receiving source only
+
+Sch444 c769e212 prepares the qualified441442 successor using retained ToAd8acf,
+Core5f, Text73d, NRA8d and native086. Current Coread7e package/build inputs are
+byte-equal to the retained347-member Core wheel; its ordinary canonical tool
+change is retained_index_writer. This is not installed or public acceptance.
+Actual merged441442 source and full wheel metadata equality must be confirmed
+before stage. A fresh Bohr eligible-holder purpose follows W6 actual whole
+closure; no public334 loan, rebuilt wheel, global extension or unqualifiedW6
+product is inferred. Original440 operator remains consumed once.
