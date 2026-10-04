@@ -54,3 +54,12 @@ embedding. The inspector's dynamic frame binding was read directly, not inferred
 from lexical AST. No ContextSegment, W1, runtime/native or installed source edits.
 Changed-path validation remains pending at this source checkpoint; original635
 results are preserved and not reused as qualification of the new prompt hook.
+
+The first authored RPC control completed its original native answer and restored
+the hooks. Its driver joined Node before disconnecting the inspector; that raw
+timeout remains preserved, and the completed input was not sent again. The
+refusal and cancellation controls also restored their hooks through the original
+prompt. The real callback publishes `TurnContext.observation`, while the old
+inspector breakpoint watched only its delegating `manifest` consumer. The
+breakpoint now watches the shared `observation` producer for both paths. This is
+private capture plumbing, not a native/runtime change. No provider was called.

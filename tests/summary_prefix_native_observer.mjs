@@ -90,7 +90,7 @@ if (output && packageRoot) {
     const contextPoint = contexts && await post('Debugger.setBreakpointByUrl', {
         url: pathToFileURL(`${packageRoot}/dist/core/turn-context.js`).href,
         lineNumber: line(source.readFileSync(`${packageRoot}/dist/core/turn-context.js`, 'utf8').split('\n'),
-            "    manifest(requestId) {"),
+            "    observation(requestId) {"),
     });
     appendFileSync(output, JSON.stringify({ stage: 'observer-ready' }) + '\n', { mode: 0o600 });
     async function paused(params) {
