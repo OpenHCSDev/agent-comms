@@ -1,0 +1,55 @@
+{
+  "implementation": "dd209af5f49e41e6169fb3506607631933970526",
+  "integration": "5123b406790b978a2463af18b3f4cc66a711cf1a",
+  "base": "5c1103077e5a982365a6d801b98bcbdb1b03c547",
+  "raw_root": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-constructed-prefix-binding",
+  "raw_sha256": {
+    "owner-before.json": "fa994869df88f77bfe7c310ed0d43335b4555851ea850c4d02b76e7802c6c1d5",
+    "owner-after.json": "25a1108e6b4326a3d1a2425d83f599e71e933073f1edc56b04896221d268913b",
+    "owner-after-union.json": "e589252b10d3e4818863308f2f3b80119f86fe8ecb99a771ef6cc0083e9d5e72",
+    "main-union.json": "d26e4f1f3b83ecc20654aff1f474abae5ba798931086aac8aa45bf709073d323",
+    "focused01.log": "89f978b1a7f601d14ac9aa2fa39c93319dc32f07fbb8947a9fa435e8f49ede66",
+    "cli.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "cli.stdout.json": "6ba28b4b5e735405d4577e132bd0c5cfde552fe598da2135b0190775393c5b01",
+    "cli-selection.json": "103c2e70a785e0771fe656d5836f0698ddcd6c388ea5c12887b9dae23fc55ea0"
+  },
+  "raw_only": [
+    "cli.stdout.json"
+  ],
+  "private_source_sha256": {
+    "tests/compaction_retention_fixture.py": "fe63e857e8d7d2472bffb0633fd8033ae88f0d26bbe2d19523c79509ec4f71cb",
+    "tests/native_turn_context_contract.mjs": "7044ff3408fe5bd43605a7bd43501ee0ac3cb64c4909921a4520b9fd725c10db",
+    "tests/retained_native_conditions.mjs": "956eedac477675a223f896dc5b89e317470da1b9914c708c6d2475cdd47004e1",
+    "tests/retained_native_fixture.py": "8825f688bdd4d5acefb01b5379102d53eaba5deb30dab25cc3cebedf9622c830",
+    "tests/test_recorded_retention_measurements.py": "aac82bb327eee540dcfb3eceecae7baaad4f51ecf93d9aa245555da1390b06ac",
+    "tests/three_cut_retention_configured_journey.py": "3494cde43343a1a80c0ef079201505ed00ed8bcad21c542b0a39969faf356ec6"
+  },
+  "qualification": {
+    "focused": "5 passed,36 deselected in .51s; authored Node observer plus original reader/scorer controls",
+    "syntax": "node --check retained_native_conditions, native_turn_context_contract and summary_prefix_native_observer passed",
+    "CLI": "Two absent trajectories: 3 rounds both arms unavailable/preserved&changed empty, study false, stderr empty",
+    "AST": "736 modules, 0 omissions; Python lexical sites only; original JS/stack source read directly",
+    "integration": "Normal main656 join, six qualified private files byte-equal; no repeated SDK/read/provider/control"
+  },
+  "source_delta": {
+    "private_added": 170,
+    "private_deleted": 12,
+    "src": 0,
+    "stack": 0,
+    "tools": 0
+  },
+  "operations": {
+    "SDK": 0,
+    "provider": 0,
+    "native_processes": 0,
+    "original_session_reads": 0,
+    "artifacts_holders_envs_packages": 0
+  },
+  "limits": [
+    "Authored source plumbing, not executed installed SDK/configured constructor->transform->request proof",
+    "Ordered provider-message prefix kind/digest/byte-length relation, not raw AgentMessage identity or final HTTP input",
+    "Grouping changes are allowed; changed values and missing partitions remain distinct",
+    "No full-history capacity, model recall, registered comparison, independent matched arms, billing or full S4 acceptance",
+    "30-pair/USD75 study remains unapproved"
+  ]
+}
