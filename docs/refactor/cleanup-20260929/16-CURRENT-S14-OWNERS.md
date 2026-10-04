@@ -1,6 +1,48 @@
 ## Current: ordinary440 installed and display verified; full workflow remains — 2026-10-04
 
-### Latest closed purpose and next installed boundary
+### Latest integration and original-byte correction
+
+Toad441 exact ec9bc8f9 merged as b57d03e5 after its required Debt passed.
+Parent independently matched all17 frozen Ready keeper hashes. Source equals
+215d, while pyproject/uv contain the reviewed normal main440 Core1a→5c pin
+change; dependency equality with215d is not claimed. The combined installed
+App used genuine Core5c/5f1667 and the joined441442 product.
+
+The original joined App passed all22 checks in9.168665858s: logical resource
+commit before held Unmount, End/input/resize, remaining Mount cancellation,
+projection supersession and late-read fences, TranscriptState paint admission
+and whole close. This is not backend painted-cursor/ACK writer, physical motion
+or CPU-gain acceptance. Original44101 failure/five reached checks remain intact.
+Bohr lifecycle f892d9c0/readback a0761cc6 independently closed the purpose:
+1470 bytes/modes/links,69 origins,390 protected originals and actual NRA8f61
+restored, fresh249-process holder references/gaps zero. Shared immutable086
+public-owner references remain preserved. No private purpose follows from closure.
+
+Toad442 exact2a844fa3 is Ready and source/tests/tools/dependencies equal the
+installed031 checkpoint. Its main retarget produced no automatic check.
+The owner is normally joining actual merged441 main to trigger the existing
+required ratchet; no manual fleet, product change or App rerun is needed.
+Parent will merge that exact qualified successor after its required result.
+
+NRA restoration attribution correction: direct original ZIP read verifies wheel
+8d489731 contains measures.py SHA8f6127cb, exactly matching the original e6f
+floor. The reported fb6e bytes were stale installed extraction, not that raw
+wheel member. Earlier failures, atomic original-member restoration receipts,
+issued grants and frozen Ready keepers remain unchanged; this correction is
+an addendum. No NRA rebuild or expected-hash change is needed. Future issued
+restoration uses the existing normal installer without stale cache reuse and
+actual installed byte readback before acceptance. Public334 remains untouched.
+
+W6 historical04 now has distinct issued purpose b8895b60 and matching7a
+renewal. The corrected visibility control43d2 at dd15 uses retained ab640/13e2
+wheels, authored w6e04 and historical-installed04 output. Its actual bounded
+child784577/birth62503495 was reported admitted; no result is inferred here.
+Scope is historical ReferenceNode focus/read/search/export plus separate local
+USER correction/defaultOFF/schema10. Authentic AnnotationNode GUI/ACP/effective
+HumanLabel refresh requires a separate original sealed-request purpose and
+remains unfinished. Prior focus failure and90s unknown wait stay unchanged.
+
+### Historical closed-purpose observations
 
 W6 attachment03 exited1 in22.963988s (pytest20.04s). Registered App/ACP
 settlement, exact private root/incarnation and historical ReferenceNode cursor
@@ -12,9 +54,10 @@ established, and no rerun follows from the returned purpose.
 Parent matched Bohr lifecycle cd2fb3d3 and independent readback ddb84bdc.
 All1470 original file bytes/modes/links,69 origins and390 protected members are
 restored, with no extra W6 package assets or private sockets. Fresh254-process
-privileged census has zero references/gaps. The retained NRA wheel member did
+privileged census has zero references/gaps. The installed NRA extraction did
 not match the actual floor; the exact original e6f archive member was restored
-into a new inode, with the first restoration failure preserved. The issued058885
+into a new inode, with the first restoration failure preserved. The raw wheel
+attribution in the original relay is corrected by the ZIP evidence above. The issued058885
 grant remains unchanged and the package purpose is closed. Matching7a custody
 was returned; its immutable keeper remains retained under Sch's ownership.
 
