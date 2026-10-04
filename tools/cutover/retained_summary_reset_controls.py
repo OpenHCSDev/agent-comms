@@ -98,7 +98,7 @@ assert fds() == before
 checks.append('existing preimages refuse reuse of the original attempt')
 
 artifact = ReviewedArtifact(base / 'approved-artifact', '0' * 64)
-cohort = ReviewedRetainedSummaryCohort(base / 'future-target', Path(sys.executable),
+cohort = ReviewedRetainedSummaryCohort(base / 'future-target',
     base / 'current', ActiveRoute(base, 'f' * 32, base / 'native'), base / 'native',
     artifact, artifact, ())
 assert FieldCodec.decode(ReviewedRetainedSummaryCohort, FieldCodec.encode(cohort)) == cohort
