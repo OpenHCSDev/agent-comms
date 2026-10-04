@@ -64,3 +64,26 @@ Monkeypatched fault/delivery callbacks and external native JavaScript dispatch
 are dynamic boundaries: Python AST does not prove their runtime resolution.
 Relevant original SDK OpenAI reasoning and bash progress source was read; no
 JavaScript AST or installed-behavior claim is made by this source checkpoint.
+
+## Prepared installed batch (not executed)
+
+The retained Core421 filewheel `d96ab5bb53e360591d8cff8e1e7eb85559eb7ac985c3047f6ffaef80f0dba935`
+contains all **339** Git-owned package members (311 Python + 28 resources) and
+three forced assets equal to this source. `pyproject.toml`, README and LICENSE
+also equal its determining build commit. `retained-wheel-source.json` records
+that complete equality; no rebuild is needed. Native manifest is exact 086.
+
+`installed-controls.py` reuses the original #611 installed runner, changing only
+its wheel operand. It imports application code from the granted prefix first,
+then appends the existing system test runner and adds the test-helper directory;
+no production source overlay or dependency installation. `changed-nodes.txt`
+selects the replaced family only. Pass `-o addopts= -q --basetemp OWNED_NEW_OUTPUT`
+to disable project-default parallel/coverage options. This is one serial batch,
+not the whole ACP/private-delivery suite. Recheck headroom immediately before it.
+
+Both new Bohr540 package/execution and immutable086 read grants are required.
+The controlled native requests exercise actual input ACK/STARTED/UNKNOWN and
+retry settlement, so this batch must not be reported as zero native inputs.
+Only localhost controlled provider responses are used; no external provider or
+public input is authorized by this batch. Preserve failure originals and retain
+terminal/proof/cleanup receipt before handing the holder back.
