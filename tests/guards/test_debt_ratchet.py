@@ -165,6 +165,29 @@ def owner(name: str, lines: int, indent: str = "") -> str:
     )
 
 
+def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(repo: Repository):
+    from agent_comms.debt_ratchet import FamilyFlattened
+    from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
+
+    original = "def carry(value):\n    return (value.declared_name, value.family_name)\n"
+    base = repo.commit({"first.py": original, "second.py": "value = 1\n"})
+    head = repo.commit({"first.py": "def carry(value):\n    return value\n",
+                        "second.py": "def carry(value):\n    return value.declared_name\n"})
+    status, report = repo.compare(base, head)
+    assert status == 1
+    assert report["delta"][f"FamilyFlattened:{repo.root}/first.py"] == -2
+    assert report["delta"][f"FamilyFlattened:{repo.root}/second.py"] == 1
+    assert FamilyFlattened.occurrences(ast.parse(original).body[0].body[0]) == (
+        AuditFamilyFlattened.count(ast.parse(original).body[0].body[0])
+    )
+    moved = repo.commit({"second.py": "def carry(value):\n    return value\n",
+                         "another_codec.py": original, "field_codec.py": original})
+    status, report = repo.compare(head, moved)
+    assert status == 1
+    assert report["delta"][f"FamilyFlattened:{repo.root}/another_codec.py"] == 2
+    assert report["head"][f"FamilyFlattened:{repo.root}/field_codec.py"] == 0
+
+
 def test_small_owner_growth_and_exact_threshold_pass(repo: Repository) -> None:
     base = repo.commit({"owners.py": owner("Small", 2)})
     head = repo.commit({"owners.py": owner("Small", 500) + owner("New", 500)})

@@ -41,11 +41,12 @@ loader, plus the archived FamilyFlattened collector; no parse omissions. Caller
 fixtures migrated with their production owners. This is a source checkpoint;
 affected checks and installed acceptance follow the completed F4 batch.
 
-Pending package dependency: the authoritative .skill archive contains
-`audit.measures.FamilyFlattened` and BOUND-8; the declared audit package at d392c5e4
-does not. The original NRA owner has the publishing request through the existing
-human bus. F4 will import the published original collector and extend Core's
-PerFileOccurrenceMeasure; it will not copy the collector or add a dormant check.
+The original NRA publication now supplies `refactor_audit.measures.FamilyFlattened`
+at 9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10. Core's existing
+PerFileOccurrenceMeasure delegates node counting to that original collector;
+its existing Git collection/alignment enforces each file independently. No scanner
+copy or dormant check. The declared dependency pins that exact source head and
+`#subdirectory=skills/refactor-audit`.
 
 ## Wake and SQL projection batch
 
@@ -70,7 +71,7 @@ still in progress; this source batch does not claim installed acceptance.
 ## Candidate and goal carriers
 
 Candidate.wake_mode and selected-awareness tuples now carry WakePolicy declarations;
-TextStorage derives their original scalar representation through FieldCodec. The
+The existing FamilyClassStorage derives their scalar representation through FieldCodec. The
 SQLite column remains TEXT with identical existing constraints/nullable meaning.
 Original candidate producer and all comparison/render consumers migrate together;
 JSON is encoded only at the existing awareness rendering boundary.
@@ -119,6 +120,20 @@ SelectedSummaryAttempt.transition retains its exact scalar discriminator CAS
 predicate. FieldCodec encodes type(self.state), not the tagged state instance.
 JsonStorage still encodes the actual replacement state. Response/private/journal
 SQL names are emitted at their actual SQL boundaries; mixed domain modules are
-not exempted wholesale. True exemptions remain field_codec.py, typed_table.py,
-coordination_schema.py, coordinated_runtime_schema.py, pending original collector
-publication and final per-file integration.
+not exempted wholesale. Named mechanism exemptions are field_codec.py,
+typed_table.py, coordination_schema.py, coordinated_runtime_schema.py (Core),
+agent_schema.py and db.py (Toad). These are the actual codec/schema owners read
+in the source census, not suffix rules. The existing guard rejects moving an
+occurrence into another file or adding a differently named codec facade.
+
+The storage review also removed F4's extra TextStorage acceptance branch:
+FamilyClassStorage already owns declared-class TEXT storage. SqlStorage.for_type
+now selects that original owner instead of the earlier competing TextStorage
+branch. Scalar representation and generated column DDL stay unchanged.
+
+NRA #17's published receipt authenticates the original archival collector,
+BOUND-8, automatic registration and actual c4ce history growth (fragment 0 to 1;
+pi_events 4 to 5). Its original normal wheel is SHA
+8d489731728ebf9f7e0f90ef2b14e7e3b5d2f90ed82bd8b1482d735f82869886.
+Local installed F4 checks remain pending an actually released holder; thin540 is
+exclusively F2's loan. Source/pin changes do not claim installed acceptance.
