@@ -11,6 +11,32 @@ historical. Current public334/ordinary440 is unchanged; merge is not installatio
 or a second App run. Heis's next443 projection work is a separate Draft/source
 branch and must not be used as the frozen442 qualification source.
 
+Bohr independently closed442 lifecycle a5687788/readback865c545a. Parent matched
+both SHA values:1470 bytes/modes/readlinks,69 origins and390 protected originals
+are exact, fresh230-process holder references/gaps are zero, and19 shared native
+public-owner environment references remain preserved. No second launch or new
+holder purpose follows from closure.
+
+W6 authentic GUI source4341e0a61f6/productbee4062e is separately prepared.
+Parent read the complete controlaaf668c3 and matched operands3714dbe1/new ToAd
+wheel57bf33d9. It uses original open_owner once, explicit authored system-file
+loading and one localhost ACP input; actual sealed request/source spans and
+contains_span supply the two ranges. Original GUI USER corrections must traverse
+ACP, stored effective HumanLabel and section refresh. Controlled ModelLabel rows
+remain uncalibrated/defaultOFF. This is source approval for a future exact
+eligible-holder purpose plus matching7a custody, not an execution or historical
+ReferenceNode pass. Prior03/04/90s results remain unchanged. The new W6 wheel is
+not the corrected442 ordinary wheel; its newer normal-main merge still belongs
+to Einstein's eventual integration.
+
+Arendt662 published0ccac82b/source0ac59 and received distinct THIN540
+execution/import-only purpose1dcfe620. Parent matched the immutable issued hash
+and actual command: one terse selected Sol/HIGH task-memory input on an SDK fork
+of the existing completedcut3, with original InstalledSource/archive declaration.
+Public334's interpreter is only a snapshot decoder. No compaction, UNKNOWN replay,
+package change or30-pair/USD75 study is authorized. Sch086 renewal is required
+before native execution; no functional result is claimed from the grant.
+
 Parent retired its unused standalone channel_recovery_physical_journey wrapper.
 The original ToAd ChannelLifetimeJourney/review_channel_lifetime owns that
 navigation and completed the public440 ordinary18-check journey. No executable
