@@ -32,3 +32,22 @@ limits explicit. Final checks follow the complete source batch, using a fresh
 named execution lease on an existing holder, no environment/native build/copy,
 public writes or paid provider. Originals/UNKNOWN and previous611 negative data
 stay protected. Historical13/98s and physical04 EOF remain open, unattributed.
+
+## Working batch
+
+All MCP active_turns writes/reads are deleted from both callers. The three
+saved-owner controls acquire original native preparation and real turns through
+NativeBackendFixture; actual retirement and distinct successor acquisition
+replace dictionary mutation. Delayed permission uses an owned AsyncExitStack
+for cancellation/join even on control failure. Subscriber attachments use real
+canonical_agent/SessionLifecycle instead of SimpleNamespace session/transcript
+facades in both relay and native acceptance consumers. Native acceptance derives
+busy/id from TurnState; its actual model/tool execution remains unchanged.
+
+Only the old child-pipe protocol controls explicitly select native_rpc_fixture.
+The acquired-owner controls do not patch launch/attestation/native writer or
+trust. The subscriber dispatch supplies one bounded permission operation;
+RuntimePromptRequest still owns token selection, original socket permission
+request/response and denial on disconnection, while the operation acquires and
+settles the original reservation/lease. Zero native prompt/provider is the
+intended scope, not a simulated native tool execution claim.
