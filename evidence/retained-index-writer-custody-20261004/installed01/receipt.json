@@ -1,0 +1,213 @@
+{
+  "state": "PASS",
+  "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+  "application_origin": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "root": "/home/ts/.cache/agent-scratch/mendel-retained-index661-installed01-20261004/wire",
+  "controller": {
+    "pid": 40255,
+    "start_time": 62200674
+  },
+  "cross_version_writer_restart_qualified": false,
+  "results": {
+    "seed": {
+      "identity": {
+        "pid": 41320,
+        "start_time": 62200894
+      },
+      "returncode": 0
+    },
+    "same-schema-refusal": {
+      "identity": {
+        "pid": 41421,
+        "start_time": 62201036
+      },
+      "returncode": 1
+    },
+    "original-root-refusal": {
+      "identity": {
+        "pid": 41868,
+        "start_time": 62201215
+      },
+      "returncode": 1
+    },
+    "descriptor-refusal": {
+      "identity": {
+        "pid": 41909,
+        "start_time": 62201300
+      },
+      "returncode": 1
+    },
+    "installer-root-refusal": {
+      "identity": {
+        "pid": 42444,
+        "start_time": 62201384
+      },
+      "returncode": 1
+    },
+    "inherited-rebuild": {
+      "identity": {
+        "pid": 42809,
+        "start_time": 62201471
+      },
+      "returncode": 0
+    },
+    "seal-seed": {
+      "identity": {
+        "pid": 43057,
+        "start_time": 62201551
+      },
+      "returncode": 0
+    },
+    "seal-refusal": {
+      "identity": {
+        "pid": 43177,
+        "start_time": 62201657
+      },
+      "returncode": 1
+    },
+    "wrong-schema-refusal": {
+      "identity": {
+        "pid": 43199,
+        "start_time": 62201721
+      },
+      "returncode": 1
+    }
+  },
+  "original_files": {
+    ".bus.jsonl.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".bus_meta.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".catalog.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".compaction-publication-handoff.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".native_prompt_bindings.sqlite3.snapshot-lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".registry-owner-guard": "e716209c5458019e0dee750e3ed03116b9006115bd1eb7b398f7e5a1c4395319",
+    ".registry.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".wire.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bus.jsonl": "fc863965695bfe7dd6d1c1454a0caa5e025c98ee60230f2e9d1c729510a5815f",
+    "bus_meta.json": "83229bee8e4547c7d9ff8b3ce53607d4e1a689bb5a9c6aff550c7a7803da0b6c",
+    "catalog.json": "78ee2e8912d423198c10adceb0a9c10f1281da6a281458bf65c77f29c4d161db",
+    "coordination.sqlite3": "f2c68ce123e4f77fedb635e8092d08643d2041de73180c1105c68e1fcc22f235",
+    "native_prompt_bindings.sqlite3": "f2f41017e6a5a08cb28f54459497611aa4954df344e68412e47cb96603ba6c60",
+    "private_bus_checkpoint.sqlite3": "4bd18d511e8fbe3b88f6a43fdf31918ca9c95913182bd837d51c60b5ad767d2f",
+    "registry.json": "7a2fdb88a068f26ac0af7b57bb63c25b935ebfcd3f6c51471602831faaf32059"
+  },
+  "retained_files": {
+    ".bus.jsonl.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".bus_meta.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".catalog.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".compaction-publication-handoff.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".native_prompt_bindings.sqlite3.snapshot-lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".registry-owner-guard": "e716209c5458019e0dee750e3ed03116b9006115bd1eb7b398f7e5a1c4395319",
+    ".registry.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".wire.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bus.jsonl": "fc863965695bfe7dd6d1c1454a0caa5e025c98ee60230f2e9d1c729510a5815f",
+    "catalog.json": "78ee2e8912d423198c10adceb0a9c10f1281da6a281458bf65c77f29c4d161db",
+    "coordination.sqlite3": "f2c68ce123e4f77fedb635e8092d08643d2041de73180c1105c68e1fcc22f235",
+    "native_prompt_bindings.sqlite3": "f2f41017e6a5a08cb28f54459497611aa4954df344e68412e47cb96603ba6c60",
+    "registry.json": "7a2fdb88a068f26ac0af7b57bb63c25b935ebfcd3f6c51471602831faaf32059"
+  },
+  "rebuilt_files": {
+    ".bus.jsonl.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".bus_meta.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".catalog.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".compaction-publication-handoff.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".native_prompt_bindings.sqlite3.snapshot-lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".registry-owner-guard": "e716209c5458019e0dee750e3ed03116b9006115bd1eb7b398f7e5a1c4395319",
+    ".registry.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".wire.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bus.jsonl": "fc863965695bfe7dd6d1c1454a0caa5e025c98ee60230f2e9d1c729510a5815f",
+    "bus_meta.json": "1708f8cd87b596b9497f6c6fa586929cd5fa76226454c4257692b385e7bd5f66",
+    "catalog.json": "78ee2e8912d423198c10adceb0a9c10f1281da6a281458bf65c77f29c4d161db",
+    "coordination.sqlite3": "f2c68ce123e4f77fedb635e8092d08643d2041de73180c1105c68e1fcc22f235",
+    "native_prompt_bindings.sqlite3": "f2f41017e6a5a08cb28f54459497611aa4954df344e68412e47cb96603ba6c60",
+    "private_bus_checkpoint.sqlite3": "0e6e563a3c8e2a9792d949c1a9aef84a5cdccc595676e2c12edd356d4d37563b",
+    "registry.json": "7a2fdb88a068f26ac0af7b57bb63c25b935ebfcd3f6c51471602831faaf32059"
+  },
+  "rejected_derived_files": {
+    ".bus.jsonl.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".bus_meta.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".catalog.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".compaction-publication-handoff.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".native_prompt_bindings.sqlite3.snapshot-lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".registry-owner-guard": "e716209c5458019e0dee750e3ed03116b9006115bd1eb7b398f7e5a1c4395319",
+    ".registry.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".wire.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bus.jsonl": "fc863965695bfe7dd6d1c1454a0caa5e025c98ee60230f2e9d1c729510a5815f",
+    "bus_meta.json": "1708f8cd87b596b9497f6c6fa586929cd5fa76226454c4257692b385e7bd5f66",
+    "catalog.json": "78ee2e8912d423198c10adceb0a9c10f1281da6a281458bf65c77f29c4d161db",
+    "coordination.sqlite3": "f2c68ce123e4f77fedb635e8092d08643d2041de73180c1105c68e1fcc22f235",
+    "native_prompt_bindings.sqlite3": "f2f41017e6a5a08cb28f54459497611aa4954df344e68412e47cb96603ba6c60",
+    "private_bus_checkpoint.sqlite3": "0042ec421ff9519d0699fcedacfc8a82e1326a5dd084c250c6bac5770be7b233",
+    "registry.json": "7a2fdb88a068f26ac0af7b57bb63c25b935ebfcd3f6c51471602831faaf32059"
+  },
+  "installed": {
+    "root_id": "c08630e7fc7a4f628c21ed93c67d09ff",
+    "through_seq": 1,
+    "retained_writer_descriptor_verified": true
+  },
+  "missing_seal_files": {
+    ".bus.jsonl.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".bus_meta.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".catalog.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".compaction-publication-handoff.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".native_prompt_bindings.sqlite3.snapshot-lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".registry-owner-guard": "83aa8b42d97b5aec2583410a5d344a3e417240f3bfd16fa79a4c6beda503dd29",
+    ".registry.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".wire.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bus.jsonl": "81c331af292f33787f5d031cc9b99fcb94e1d4fe1312da58afc7312cb6004018",
+    "bus_meta.json": "80acda6fb2c59c6c10eaa7f1c5a1377f82206ce52cd141b7b8f0aa93bcaa2150",
+    "catalog.json": "89b18dc2f0d720f7af50cff279b998ad244601daaf0fde49a3e728ce92f1a3db",
+    "coordination.sqlite3": "10c57c11a446448bacc9d36d2256cda98ebaef6f813a9a8b1a395b331f4223d5",
+    "native_prompt_bindings.sqlite3": "f2f41017e6a5a08cb28f54459497611aa4954df344e68412e47cb96603ba6c60",
+    "private_bus_checkpoint.sqlite3": "4f7904c2feb743b86043f6f51e53839095713cf1037ca014cb9a97161b8d9865",
+    "registry.json": "68bbfdb1052bc9c282661e50ecf4d932f4882809c5d5bccc1852146fc28bb1bd"
+  },
+  "frozen_original_and_audience_unchanged": true,
+  "original_marker_identity_and_admission_unchanged": true,
+  "original_wire_registry_settings_unchanged": true,
+  "native_inputs": 0,
+  "provider_calls": 0,
+  "public_operations": 0,
+  "original_input_replays": 0,
+  "elapsed_seconds": 8.917681585997343,
+  "children": [
+    {
+      "pid": 41320,
+      "start_time": 62200894
+    },
+    {
+      "pid": 41421,
+      "start_time": 62201036
+    },
+    {
+      "pid": 41868,
+      "start_time": 62201215
+    },
+    {
+      "pid": 41909,
+      "start_time": 62201300
+    },
+    {
+      "pid": 42444,
+      "start_time": 62201384
+    },
+    {
+      "pid": 42809,
+      "start_time": 62201471
+    },
+    {
+      "pid": 43057,
+      "start_time": 62201551
+    },
+    {
+      "pid": 43177,
+      "start_time": 62201657
+    },
+    {
+      "pid": 43199,
+      "start_time": 62201721
+    }
+  ],
+  "alive_children": [],
+  "groups": [],
+  "sockets": []
+}

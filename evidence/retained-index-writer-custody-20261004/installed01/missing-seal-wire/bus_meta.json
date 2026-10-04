@@ -1,0 +1,10 @@
+{
+  "last_seq": 1,
+  "admission_after_seq": 0,
+  "access": {
+    "kind": "writable"
+  },
+  "writer_protocol_version": 1,
+  "wire_root_id": "631aa4b6980d4cb8a314c66421400ee9",
+  "claim_envelopes_version": 1
+}

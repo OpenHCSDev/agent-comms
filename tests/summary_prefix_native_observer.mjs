@@ -22,28 +22,60 @@ if (output && packageRoot) {
     }
     if (!endpoint) throw new Error('Owned debugger did not open');
     const observer = new WebSocket(endpoint);
-    await new Promise((resolve, reject) => {
+    // Install closure before opening/setup: every protocol request belongs to
+    // this connection and must settle even if the peer exits mid-observation.
+    const pending = new Map();
+    const observations = new Set();
+    const disconnected = new Promise(resolve => observer.addEventListener('close', () => {
+        for (const request of pending.values())
+            request.reject(new Error('Original debugger disconnected before its response'));
+        pending.clear();
+        resolve();
+    }, {once:true}));
+    const disconnect = () => observer.close();
+    const failed = error => {
+        appendFileSync(output, JSON.stringify({observerFailed:error.message})+'\n', {mode:0o600});
+        process.exitCode = 1;
+    };
+    process.once('SIGTERM', disconnect);
+    try {
+    await Promise.race([new Promise((resolve, reject) => {
         observer.addEventListener('open', resolve, { once: true });
         observer.addEventListener('error', reject, { once: true });
-    });
+    }), disconnected.then(() => {throw new Error('Original debugger closed before opening');})]);
     let sequence = 0;
-    const pending = new Map();
     const post = (method, params = {}) => new Promise((resolve, reject) => {
+        if (observer.readyState !== WebSocket.OPEN) {
+            reject(new Error('Original debugger connection is not open'));
+            return;
+        }
         const id = ++sequence;
         pending.set(id, { resolve, reject });
-        observer.send(JSON.stringify({ id, method, params }));
+        try {observer.send(JSON.stringify({ id, method, params }));}
+        catch (error) {pending.delete(id); reject(error);}
     });
     observer.addEventListener('message', ({ data }) => {
+        try {
         const message = JSON.parse(data);
         if (message.id) {
             const request = pending.get(message.id);
+            if (!request) return;
             pending.delete(message.id);
             if (message.error) request.reject(new Error(message.error.message));
             else request.resolve(message.result);
         } else if (message.method === 'Debugger.paused') {
-            void paused(message.params);
+            const observation = paused(message.params).catch(failed);
+            observations.add(observation);
+            void observation.then(() => observations.delete(observation));
+        } else if (message.method === 'NodeRuntime.waitingForDisconnect') {
+            // Node owns this notification: all execution has finished and the
+            // remaining exit dependency is this debugger, not SDK stdout text.
+            appendFileSync(output, JSON.stringify({stage:'observer-runtime-complete'})+'\n', {mode:0o600});
+            disconnect();
         }
+        } catch (error) {failed(error); disconnect();}
     });
+    await post('NodeRuntime.notifyWhenWaitingForDisconnect', {enabled:true});
     await post('Debugger.enable');
     const rpc = `${packageRoot}/dist/modes/rpc/rpc-mode.js`;
     const api = `${packageRoot}/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js`;
@@ -91,6 +123,10 @@ if (output && packageRoot) {
         url: pathToFileURL(`${packageRoot}/dist/core/turn-context.js`).href,
         lineNumber: line(source.readFileSync(`${packageRoot}/dist/core/turn-context.js`, 'utf8').split('\n'),
             "    observation(requestId) {"),
+        // A constructor now uses the same manifest owner for a legitimate
+        // preview. This reader observes only the original request publication,
+        // selected by that owner's request ID, not every preview acquisition.
+        condition: 'requestId !== undefined',
     });
     // Borrow the actual emitted event after observation() has returned. This
     // preserves its selected publication values without calling the producer
@@ -109,7 +145,10 @@ if (output && packageRoot) {
             if (publicationPoint && params.hitBreakpoints.includes(publicationPoint.breakpointId)) {
                 const original = await post('Debugger.evaluateOnCallFrame', {
                     callFrameId:frame.callFrameId,
-                    expression:"event.context",
+                    // Capture the emitter's JSON boundary in the child. CDP's
+                    // direct by-value projection turns callbacks into {}, which
+                    // would invent tool fields absent from the emitted event.
+                    expression:"JSON.parse(JSON.stringify(event.context))",
                     returnByValue:true,
                 });
                 if (original.exceptionDetails) throw new Error('Original SDK emitted observation unavailable');
@@ -207,7 +246,10 @@ if (output && packageRoot) {
                 // Do not ask for a later preview or reconstruct provider context.
                 const original = await post('Debugger.evaluateOnCallFrame', {
                     callFrameId: frame.callFrameId,
-                    expression: '({context:this.full(), serialized:this.segments.map(segment=>JSON.stringify(segment.value))})',
+                    // Inspector return-by-value expands SDK tool callbacks
+                    // into objects; they are not provider JSON. Cross the
+                    // original JSON publication boundary before inspection.
+                    expression: '({context:JSON.parse(JSON.stringify(this.full())), serialized:this.segments.map(segment=>JSON.stringify(segment.value))})',
                     returnByValue: true,
                 });
                 if (original.exceptionDetails) throw new Error('Original SDK capture unavailable');
@@ -255,11 +297,21 @@ if (output && packageRoot) {
                     appendFileSync(output, JSON.stringify({ unqualifiedRouteCancelledBeforeRequest: true }) + '\n');
                 }
         } catch (error) {
-            appendFileSync(output, JSON.stringify({ observerFailed: error.message }) + '\n', { mode: 0o600 });
+            failed(error);
         } finally {
             await post('Debugger.resume');
         }
     }
     await post('Runtime.runIfWaitingForDebugger');
-    await new Promise(resolve => observer.addEventListener('close', resolve, { once: true }));
+    await disconnected;
+    await Promise.all([...observations]);
+    } catch (error) {
+        failed(error);
+        throw error;
+    } finally {
+        process.removeListener('SIGTERM', disconnect);
+        disconnect();
+        await disconnected;
+        await Promise.all([...observations]);
+    }
 }

@@ -652,6 +652,8 @@ class ScoredScenario(ScoreView):
                       for identity, original in evidence.items()}
         capacity = {identity: original['construction']['source_coverage']['full_context_capacity']
                     for identity, original in evidence.items()}
+        full_admissions = {identity: original['construction']['full_history_sdk_admission']
+                           for identity, original in evidence.items()}
         inputs = {identity: original['probe_input_presence']
                   for identity, original in evidence.items()}
         return {'evaluated': False, 'declared_condition': self.condition,
@@ -674,6 +676,13 @@ class ScoredScenario(ScoreView):
                         if identity in inputs and inputs[identity]['evaluated'] and not inputs[identity]['present'])},
                 'source_delivery': group(source_delivery),
                 'full_history_capacity': group(capacity),
+                'full_history_sdk_admission': {**group(full_admissions),
+                    'admitted_rounds': tuple(identity for identity in identities
+                        if identity in full_admissions and full_admissions[identity]['evaluated']
+                        and full_admissions[identity]['admitted_full_history']),
+                    'not_full_history_rounds': tuple(identity for identity in identities
+                        if identity in full_admissions and full_admissions[identity]['evaluated']
+                        and not full_admissions[identity]['admitted_full_history'])},
                 'reason': 'Original condition selection and complete-history eligibility are not supplied by a label or SDK preview',
                 'scope': 'Frozen-round availability of original source/transform/request observations; '
                          'details remain in source_delivery and native_probes; '

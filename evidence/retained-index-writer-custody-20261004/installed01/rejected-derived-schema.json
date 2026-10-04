@@ -1,0 +1,11 @@
+{
+  "response_keys": "CREATE TABLE \"response_keys\" (\"key\" TEXT NOT NULL, PRIMARY KEY (\"key\")) STRICT",
+  "delivery_sources": "CREATE TABLE \"delivery_sources\" (\"offset\" INTEGER NOT NULL CHECK (offset>=0), \"length\" INTEGER NOT NULL CHECK (length>0), \"seq\" INTEGER NOT NULL CHECK (seq>0), \"message_id\" TEXT NOT NULL, \"sender_lookup\" TEXT NOT NULL, PRIMARY KEY (\"seq\")) STRICT",
+  "delivery_sources_0_idx": "CREATE INDEX \"delivery_sources_0_idx\" ON \"delivery_sources\" (\"sender_lookup\", \"seq\")",
+  "context_manifest_sources": "CREATE TABLE \"context_manifest_sources\" (\"offset\" INTEGER NOT NULL CHECK (offset>=0), \"length\" INTEGER NOT NULL CHECK (length>0), \"thread\" TEXT NOT NULL) STRICT",
+  "context_manifest_sources_0_idx": "CREATE INDEX \"context_manifest_sources_0_idx\" ON \"context_manifest_sources\" (\"thread\", \"offset\")",
+  "context_manifest_sources_1_idx": "CREATE UNIQUE INDEX \"context_manifest_sources_1_idx\" ON \"context_manifest_sources\" (\"offset\")",
+  "addressed": "CREATE TABLE \"addressed\" (\"lookup\" TEXT NOT NULL, \"seq\" INTEGER NOT NULL REFERENCES \"delivery_sources\" (\"seq\"), PRIMARY KEY (\"lookup\", \"seq\")) STRICT",
+  "prefix_certificate": "CREATE TABLE \"prefix_certificate\" (\"singleton\" INTEGER NOT NULL CHECK (\"singleton\" IN (1)), \"version\" INTEGER NOT NULL CHECK (\"version\" IN (2)), \"root_id\" TEXT NOT NULL, \"device\" INTEGER NOT NULL, \"inode\" INTEGER NOT NULL, \"offset\" INTEGER NOT NULL, \"through_seq\" INTEGER NOT NULL, \"digest\" TEXT NOT NULL, \"tail\" TEXT NOT NULL, \"mtime_ns\" INTEGER NOT NULL, \"ctime_ns\" INTEGER NOT NULL, PRIMARY KEY (\"singleton\")) STRICT",
+  "unexpected_sidecar_member": "CREATE TABLE unexpected_sidecar_member(value TEXT)"
+}
