@@ -18,8 +18,10 @@ if (process.argv.includes('--system-source-builder-child')) {
     const {buildSystemPrompt}=await import(pathToFileURL(join(pkg,'dist/core/system-prompt.js')));
     let input=''; for await (const bytes of process.stdin) input+=bytes;
     const cases=JSON.parse(input);
-    process.stdout.write(JSON.stringify(cases.map(item=>({name:item.name,
-        prompt:buildSystemPrompt(item.options)})))+'\n');
+    const output=JSON.stringify(cases.map(item=>({name:item.name,
+        prompt:buildSystemPrompt(item.options)})))+'\n';
+    await new Promise((resolve,reject)=>process.stdout.write(output,
+        error=>error ? reject(error) : resolve()));
     process.exit(0);
 }
 if (process.argv.includes('--system-source-spans')) process.env.PI_PACKAGE_DIR=resolve(pkg);
@@ -570,8 +572,11 @@ async function systemSourceSpans() {
             const system=captured.full().segments.find(segment=>segment.kind==='system_layer');
             const bytes=Buffer.from(system.content);
             assert.equal(system.content,session.systemPrompt);
-            assert.equal(system.sha256,hash(bytes));
-            assert.equal(system.utf8_bytes,bytes.length);
+            // Whole manifests measure the original JSON representation;
+            // contribution coordinates address the emitted raw UTF8 text.
+            const encoded=JSON.stringify(system.content);
+            assert.equal(system.sha256,hash(encoded));
+            assert.equal(system.utf8_bytes,Buffer.byteLength(encoded));
             let offset=0;
             for (const span of system.source_spans) {
                 assert.equal(span.kind,'system_layer');

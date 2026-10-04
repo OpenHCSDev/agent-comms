@@ -174,3 +174,10 @@ Invocation: node tests/native_turn_context_contract.mjs MATCHED_PACKAGE
 PRIVATE_ROOT --system-source-spans --comparison-package ORIGINAL_PACKAGE.
 Syntax and whitespace checks passed; matching SDK execution remains pending
 Sch's assembly. No new artifact, package, provider call or installed holder.
+
+Sch's pre-execution source review corrected two driver assumptions: whole
+segment measurements retain the SDK's JSON-encoded-string representation,
+while contribution offsets/digests use emitted raw UTF8. The comparison child
+now awaits its original stdout completion callback before exit. These are
+driver-only corrections; no SDK run occurred at the incorrect driver head and
+the three frozen producer files remain unchanged.
