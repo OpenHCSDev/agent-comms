@@ -85,3 +85,21 @@ checks has run for656 yet; final bounded installed batch remains required.
 
 No full C4 live/latency claim from AST or source size. Parent's current
 HistoryViews/presentation/diagnostics scopes remain disjoint.
+
+## Normal main654 union and last strict caller
+
+Normally joined actual merged mainb1a91fb5 (654) at218c48f0. All four reviewed
+656 production files remain byteexactc98; activity/history_views/presentation
+match mergedmain exactly. The original scheduled reservation acknowledgement
+loss control expected the retired per-caller error text; migrate ONLY its
+phrase to the shared strict owner. Exception type, original acknowledgement
+loss/NotSent/unchanged-byte assertions remain intact. No tests run as design.
+
+Final proposed batch: original publication-ack loss/scheduled duplicate;
+three original captured-dispatch refusal/failure/transfer-cancel cases; exact
+foreign origin refusal; one savedSDK source/OwnedTurn acquisition-release
+control via migrated NativeBackendFixture; one real native steer (initial +
+following reservation, samelease, terminal/socket/childcleanup). These prevent
+concrete changed-family failures. No unchanged655 queue projection matrix or
+new provider reproduction. Sch656086 grant remains conditional on fresh
+Bohr656540 issued purpose; no previous holder/SDK grant reused.
