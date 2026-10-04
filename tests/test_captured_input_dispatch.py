@@ -1,11 +1,15 @@
 """Captured admissions survive only their exact live owner; dispatch failures stay uncertain."""
 
+import asyncio
+from contextlib import asynccontextmanager
+
 from agent_comms.queued_input import InitialInput
 import pytest
 
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, decode_updates
 from agent_comms.errors import RelationViolationError
 from agent_comms.queued_input import InputHandoffRefused
+from agent_comms.input_attempt import NotSentInput
 from test_acp_queue_contract import _owner
 
 
@@ -57,5 +61,34 @@ async def test_postdispatch_failure_is_not_reclassified_as_admission_refusal(tmp
         assert caught.value is failure and not isinstance(caught.value, InputHandoffRefused)
         assert len(entered) == 1
         assert len(agent.inputs.dispositions.read().rows) == 1
+    finally:
+        await agent.shutdown()
+
+
+async def test_initial_transfer_cancellation_retires_original_before_dispatch(tmp_path, monkeypatch):
+    comms, agent, _, _ = _owner(tmp_path)
+    reserve = InitialInput.reserve
+
+    @asynccontextmanager
+    async def cancelled_exit(*args, **kwargs):
+        async with reserve(*args, **kwargs) as captured:
+            yield captured
+            # The caller transferred reservation custody, but original async
+            # scope exit has not completed. No dispatcher/native input ran.
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(InitialInput, "reserve", cancelled_exit)
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await InitialInput.run(agent.inputs, "beta", "beta", "Never dispatched")
+        rows = comms.root / "input_dispositions.json"
+        assert rows.is_file()
+        document = agent.inputs.dispositions.read()
+        assert len(document.rows) == 1
+        row = next(iter(document.rows.values()))
+        assert isinstance(row, NotSentInput) and row.source_text == "Never dispatched"
+        assert not row.has_native_binding
+        assert not agent.inputs.queued_inputs["beta"]
+        assert not agent.turns.turn_tasks
     finally:
         await agent.shutdown()
