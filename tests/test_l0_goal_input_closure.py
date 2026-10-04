@@ -2,6 +2,7 @@
 
 import os
 import sqlite3
+from contextlib import ExitStack
 from dataclasses import replace
 from pathlib import Path
 
@@ -25,7 +26,9 @@ from agent_comms.goal_states import BlockedGoal, GoalState, UnrecordedBlockGoal
 from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.queued_input import QueuedInput
 from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 
 
@@ -181,15 +184,17 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
     try:
         ledger = owner.inputs.dispositions
         admission = comms.registry.snapshot().admission_generations[session]
-        for name in ("queued", "uncertain"):
-            ledger.record(
-                f"acp:{name}",
-                seq=None,
-                owner=session,
-                admission=admission,
-                target=session,
-                text=name,
+        with _store_lock(comms._wire_lock_path), ExitStack() as custody:
+            queued, _ = QueuedInput.capture(
+                owner.inputs, session, text="queued", prompt="queued", echo=True,
+                images=(), controller=None, custody=custody,
             )
+            owner.inputs.following_sources[session] = {queued.input_id: queued.source()}
+            custody.pop_all()
+        ledger.record(
+            "acp:uncertain", seq=None, owner=session, admission=admission,
+            target=session, text="uncertain",
+        )
         ledger.bind(
             "acp:uncertain",
             admission=admission,
@@ -197,10 +202,9 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
             native_id="b" * 32,
             text="uncertain",
         )
-        owner.inputs.turn_input_keys[session] = {"acp:queued"}
         before = ledger.read().rows
         current = await proxy.request("input_dispositions")
-        assert [row["inputId"] for row in current["inputs"]] == ["queued"]
+        assert [row["inputId"] for row in current["inputs"]] == [queued.input_id]
         assert current["historicalCount"] == 1
         cleared = await proxy.request("dismiss_historical_inputs")
         assert cleared["dismissedHistoricalCount"] == 1 and cleared["inputs"] == current["inputs"]

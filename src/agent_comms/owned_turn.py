@@ -303,9 +303,6 @@ class OwnedTurn:
         )
         if self.controller is UNBOUND_CONTROLLER:
             self.controller = None  # Autonomous/channel/goal turns have no controller.
-        self.runner.inputs.turn_input_keys.setdefault(self.session_id, set()).update(
-            self.original_keys
-        )
         self.runner.inputs.original_sources[self.session_id] = self.original
         self.input_custody.pop_all()
         origin_claims = ExitStack()
