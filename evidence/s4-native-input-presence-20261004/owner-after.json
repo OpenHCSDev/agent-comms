@@ -1,0 +1,332 @@
+{
+  "revision": "cd3961218f10a82855adfb666246707eb06a2ba7",
+  "modules": 734,
+  "parse_omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 382,
+      "name": "matches_input",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 384,
+      "name": "PiMessage",
+      "syntax": "ClassDef"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 568,
+      "name": "UserMessage",
+      "syntax": "ClassDef"
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 571,
+      "name": "matches_input",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 412,
+      "name": "NativeMessages",
+      "syntax": "ClassDef"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 621,
+      "name": "condition_construction",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 595,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 519,
+      "name": "capture_input",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 648,
+      "name": "submitted_prompt",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 765,
+      "name": "serialized_construction",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 812,
+      "name": "prompt_presence",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 830,
+      "name": "probe_input_presence",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1140,
+      "name": "serialized_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1149,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1192,
+      "name": "prompt_presence",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1193,
+      "name": "probe_input_presence",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 851,
+      "name": "matches_input",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 853,
+      "name": "matches_input",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 106,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 109,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1226,
+      "name": "serialized_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1227,
+      "name": "prompt_presence",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1237,
+      "name": "serialized_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1544,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1553,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1615,
+      "name": "serialized_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 92,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 99,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 101,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 105,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 115,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 119,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 143,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1240,
+      "name": "prompt_presence",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1243,
+      "name": "serialized_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1246,
+      "name": "serialized_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1275,
+      "name": "serialized_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1294,
+      "name": "serialized_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1565,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1571,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1234,
+      "name": "prompt_presence",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1235,
+      "name": "prompt_presence",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1277,
+      "name": "probe_input_presence",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1309,
+      "name": "probe_input_presence",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1494,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1591,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1580,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1586,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1589,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1590,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1529,
+      "name": "condition_construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 184,
+      "name": "capture_input",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 103,
+      "name": "capture_input",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 360,
+      "name": "capture_input",
+      "syntax": "Attribute"
+    }
+  ],
+  "scope": "Python src/tests/tools lexical references; no JS or dynamic dispatch claim"
+}

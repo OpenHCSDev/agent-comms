@@ -27,7 +27,7 @@ from agent_comms.backend import PersistentPiSession
 from agent_comms.native_attestation import ObservedAttestation
 from agent_comms.native_custody import PiSessionChild
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.pi_payloads import StateData, ToolResultMessage
+from agent_comms.pi_payloads import PiMessage, StateData, ToolResultMessage
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_rpc import unique_fields
 from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
@@ -782,6 +782,12 @@ class RecordedNativeProbe:
             if (len(raw) != segment.utf8_bytes
                     or hashlib.sha256(raw).hexdigest() != segment.sha256):
                 raise ValueError("Recorded SDK segment bytes differ from measured source")
+            # Compare external JSON values, preserving boolean/number kinds;
+            # Python container equality alone equates true and 1. This is not
+            # a replacement for the original serialized-byte digest above.
+            value = json.loads(text, object_pairs_hook=unique_fields)
+            if json.dumps(value, sort_keys=True) != json.dumps(segment.provider_value(), sort_keys=True):
+                raise ValueError("Recorded SDK segment value differs from its original captured bytes")
         # NativeMessages owns which SDK segments carry provider messages. Join
         # their ORIGINAL JSON array interiors in order: Python reserialization
         # can change Unicode, number and opaque-provider-field representation.
@@ -820,6 +826,43 @@ class RecordedNativeProbe:
                 "required": len(retained.facts),
                 "present": len(retained.facts) if present else 0,
                 "exact_envelope_present": present}
+
+    def probe_input_presence(self, data, user, captured):
+        """Measure rendered probe text in the acquired original SDK request.
+
+        PiMessage owns public text and UserMessage owns input matching. No
+        concatenated root, instruction/tool text or assistant echo can supply
+        a user-message match. Opaque content prevents an inferred absence;
+        positive exact public text remains observable beside opaque siblings.
+        This never establishes complete content, HTTP or provider receipt.
+        """
+        if not captured['evaluated']:
+            return {'evaluated': False, 'reason': 'Original matching SDK request bytes unavailable'}
+        matches, bound, opaque = [], [], []
+        for position, segment in enumerate(data.segments):
+            if not isinstance(segment, NativeMessages):
+                continue
+            for index, raw in enumerate(segment.messages):
+                message = PiMessage.from_wire(raw)
+                coordinate = (position, index)
+                if message.opaque or (message.user and any(part.opaque for part in message.parts)):
+                    opaque.append(coordinate)
+                if message.user:
+                    if message.matches_input(user.message.text, self.input_id, require_id=False):
+                        matches.append(coordinate)
+                    if message.matches_input(user.message.text, self.input_id, require_id=True):
+                        bound.append(coordinate)
+        observation = {'matching_user_messages': tuple(matches),
+                'matching_native_input_messages': tuple(bound),
+                'opaque_messages': tuple(opaque),
+                'context_digest': captured['context_digest'],
+                'scope': 'Exact rendered native user public text in original serialized SDK messages; '
+                         'input-ID matches require the original ID too; no complete-content, '
+                         'HTTP submission, provider receipt, intervention or recall claim'}
+        if not matches and opaque:
+            return dict(observation, evaluated=False,
+                        reason='Opaque SDK message content prevents determining rendered input absence')
+        return dict(observation, evaluated=True, present=bool(matches))
 
     def observed_requests(self, manifest, submitted: InputAttempt) -> dict[str, tuple[RequestProgress, ...]]:
         """Acquire this fenced input's original diagnostic values once.
@@ -1147,6 +1190,7 @@ class RecordedNativeProbe:
             "checkpoint": checkpoint,
             "canonical_availability": checkpoint["canonical_availability"],
             "provider_prompt_presence": self.prompt_presence(retained, texts, serialized),
+            "probe_input_presence": self.probe_input_presence(data, user, serialized),
             "prompt_scope": "original native user and assembled-context proof, not final provider payload",
         }
 

@@ -1,0 +1,47 @@
+{
+  "implementation": "cd3961218f10a82855adfb666246707eb06a2ba7",
+  "base": "62b0f706891ad4517fa2fbe466902ebec15823d4",
+  "raw_root": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-native-input-presence",
+  "raw_sha256": {
+    "owner-before.json": "2a6b43df0a4d3378a9d80044f9b8eef9683f4e10c71aebd77dbca03125d2dfb3",
+    "owner-after.json": "9ab37aa763e6a92ee8d28b26fcb823da48f2a01803a39f3c897b2d026b8dec80",
+    "focused01-negative.log": "ca77a7d8fff1c2a0e650296fd4d52d0d09229198f961cc918e85668e32b8b70e",
+    "focused.log": "3d19f9a5d8d4418c134fbd6e49a55703779cd2065c39b395798cd6220d33edc0",
+    "missing-pairs.json": "524d41df47358c2d0b7cc61e93521da474196f9a9c685386cef462f4cf8d4ce3",
+    "cli.stdout.json": "8fdde4f75bf16aa94c29224977587b082e09f1815d16bb38cd67680658c730ba",
+    "cli.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "cli-selection.json": "5e1815a7443f47270c75fe040d2e56c32bc27e46811146fcf62451704a2fc731"
+  },
+  "raw_only": [
+    "cli.stdout.json"
+  ],
+  "private_source_sha256": {
+    "tests/retained_native_fixture.py": "f5cc0df7df0002a70a5b5a756788b6843a176c0df655fcf8edcfeace8e1113ad",
+    "tests/compaction_retention_fixture.py": "1394907ee4ba68867e4cb827f6c7205131c801ecc89f33316a34db77bba05659",
+    "tests/test_recorded_retention_measurements.py": "5b37c54de750164af2f3395babe82bae33c44bd6f171f9d5519312d442363467"
+  },
+  "qualification": {
+    "focused": "5 passed, 35 deselected in 0.35s",
+    "negative": "Original first batch3PASS/1FAIL: new control lacked PiMessage import; raw preserved, import corrected",
+    "CLI": "Existing recorded-pairs CLI, two missing trajectories, all3 rounds unavailable/both arms; study false, stderr empty",
+    "AST": "734 Python src/tests/tools modules, 0 omissions; lexical evidence, not JavaScript/dynamic resolution"
+  },
+  "source_delta": {
+    "private_added": 124,
+    "private_deleted": 4,
+    "src": 0,
+    "stack": 0,
+    "tools": 0
+  },
+  "original_session_reads": 0,
+  "SDK_calls": 0,
+  "provider_calls": 0,
+  "native_processes": 0,
+  "packages_envs_loans": 0,
+  "limits": [
+    "Exact SDK public-text presence is not fresh input identity when ID absent",
+    "Opaque message/content prevents inferred absence; positive public-text matches stay visible",
+    "No images/complete transformed-content, HTTP delivery, provider receipt, capacity/intervention/model recall/billing or full S4 acceptance",
+    "No paid study launch or approval"
+  ]
+}
