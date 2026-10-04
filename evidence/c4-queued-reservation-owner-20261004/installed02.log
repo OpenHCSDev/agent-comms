@@ -1,0 +1,18 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0 -- /home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python
+cachedir: .pytest_cache
+rootdir: /home/ts/wt/comms-goal-ledger-schema-carry-20261002
+configfile: pyproject.toml
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 1 item
+
+tests/test_captured_input_dispatch.py::test_initial_capture_rejects_owner_readmission_during_acceptance_notice PASSED
+
+=============================== warnings summary ===============================
+../../../../usr/lib/python3.14/site-packages/_pytest/config/__init__.py:864
+  /usr/lib/python3.14/site-packages/_pytest/config/__init__.py:864: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; pytest_asyncio.plugin
+    self.import_plugin(arg, consider_entry_points=True)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: /home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/installed02.xml -
+========================= 1 passed, 1 warning in 0.88s =========================
