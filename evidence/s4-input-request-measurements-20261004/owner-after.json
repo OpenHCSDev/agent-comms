@@ -1,0 +1,775 @@
+{
+  "src": {
+    "modules": 316,
+    "omissions": [],
+    "sites": [
+      {
+        "path": "src/agent_comms/backend.py",
+        "line": 363,
+        "name": "record_request_progress",
+        "syntax": "FunctionDef"
+      },
+      {
+        "path": "src/agent_comms/backend.py",
+        "line": 353,
+        "name": "record_request_progress",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "src/agent_comms/backend.py",
+        "line": 363,
+        "name": "RequestProgress",
+        "syntax": "Name"
+      },
+      {
+        "path": "src/agent_comms/backend.py",
+        "line": 214,
+        "name": "RequestProgress",
+        "syntax": "Name"
+      },
+      {
+        "path": "src/agent_comms/backend.py",
+        "line": 301,
+        "name": "RequestProgress",
+        "syntax": "Name"
+      },
+      {
+        "path": "src/agent_comms/diagnostics.py",
+        "line": 96,
+        "name": "record_request_progress",
+        "syntax": "FunctionDef"
+      },
+      {
+        "path": "src/agent_comms/owned_turn.py",
+        "line": 455,
+        "name": "record_request_progress",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_commit.py",
+        "line": 118,
+        "name": "record_request_progress",
+        "syntax": "Name"
+      },
+      {
+        "path": "src/agent_comms/pi_events.py",
+        "line": 89,
+        "name": "RequestProgress",
+        "syntax": "Name"
+      },
+      {
+        "path": "src/agent_comms/pi_events.py",
+        "line": 152,
+        "name": "RequestProgress",
+        "syntax": "Name"
+      },
+      {
+        "path": "src/agent_comms/private_send_admission.py",
+        "line": 175,
+        "name": "record_request_progress",
+        "syntax": "Name"
+      },
+      {
+        "path": "src/agent_comms/request_progress.py",
+        "line": 8,
+        "name": "RequestProgress",
+        "syntax": "ClassDef"
+      },
+      {
+        "path": "src/agent_comms/selected_pi_summary_rpc.py",
+        "line": 73,
+        "name": "RequestProgress",
+        "syntax": "Name"
+      },
+      {
+        "path": "src/agent_comms/tracked_turn.py",
+        "line": 199,
+        "name": "RequestProgress",
+        "syntax": "Name"
+      },
+      {
+        "path": "src/agent_comms/turn_progress.py",
+        "line": 250,
+        "name": "record_request_progress",
+        "syntax": "FunctionDef"
+      },
+      {
+        "path": "src/agent_comms/turn_progress.py",
+        "line": 251,
+        "name": "record_request_progress",
+        "syntax": "Name"
+      }
+    ]
+  },
+  "tests": {
+    "modules": 365,
+    "omissions": [],
+    "sites": [
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 103,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 105,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 1018,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 214,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 485,
+        "name": "RecordedNativeProbe",
+        "syntax": "ClassDef"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 806,
+        "name": "observed_requests",
+        "syntax": "FunctionDef"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 835,
+        "name": "input_request_measurements",
+        "syntax": "FunctionDef"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 854,
+        "name": "request_budget",
+        "syntax": "FunctionDef"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 866,
+        "name": "request_timing",
+        "syntax": "FunctionDef"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 882,
+        "name": "request_completion",
+        "syntax": "FunctionDef"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 927,
+        "name": "construction",
+        "syntax": "FunctionDef"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 979,
+        "name": "observed_requests",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 980,
+        "name": "observed_request",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 979,
+        "name": "observed_requests",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 981,
+        "name": "request_budget",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 981,
+        "name": "observed_request",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 995,
+        "name": "request_timing",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 995,
+        "name": "observed_request",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 996,
+        "name": "input_request_measurements",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 996,
+        "name": "observed_requests",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 997,
+        "name": "request_completion",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 1120,
+        "name": "construction",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 822,
+        "name": "RequestProgress",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 806,
+        "name": "RequestProgress",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 854,
+        "name": "RequestProgress",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 866,
+        "name": "RequestProgress",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 980,
+        "name": "observed_requests",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 845,
+        "name": "request_budget",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 845,
+        "name": "request_timing",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_compaction_retention_fixture.py",
+        "line": 212,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_compaction_retention_fixture.py",
+        "line": 213,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 129,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 162,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 188,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 256,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 271,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 286,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 347,
+        "name": "RequestProgress",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 397,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 398,
+        "name": "RequestProgress",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 416,
+        "name": "observed_requests",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 418,
+        "name": "request_budget",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 460,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 461,
+        "name": "RequestProgress",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 587,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 724,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 788,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 852,
+        "name": "RequestProgress",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 862,
+        "name": "request_completion",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 936,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1019,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1083,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1089,
+        "name": "construction",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1090,
+        "name": "construction",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1131,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1171,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1231,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1376,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 210,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 211,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 217,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 421,
+        "name": "observed_requests",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 422,
+        "name": "observed_requests",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 429,
+        "name": "observed_requests",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 440,
+        "name": "observed_requests",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 442,
+        "name": "request_timing",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 443,
+        "name": "request_budget",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 476,
+        "name": "observed_requests",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 477,
+        "name": "input_request_measurements",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 478,
+        "name": "request_budget",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 503,
+        "name": "observed_requests",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 506,
+        "name": "observed_requests",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 520,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 799,
+        "name": "RequestProgress",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 862,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 900,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 907,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1093,
+        "name": "construction",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1094,
+        "name": "construction",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1095,
+        "name": "construction",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1096,
+        "name": "construction",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1135,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 227,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 244,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 427,
+        "name": "observed_requests",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 450,
+        "name": "request_timing",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 492,
+        "name": "input_request_measurements",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 866,
+        "name": "request_completion",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 867,
+        "name": "request_completion",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 945,
+        "name": "construction",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 950,
+        "name": "construction",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1059,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1097,
+        "name": "construction",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1098,
+        "name": "construction",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 275,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 813,
+        "name": "request_completion",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 866,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 867,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 957,
+        "name": "construction",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 813,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 958,
+        "name": "construction",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 108,
+        "name": "construction",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 244,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 109,
+        "name": "construction",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 184,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 239,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 103,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 112,
+        "name": "construction",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 113,
+        "name": "construction",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "line": 360,
+        "name": "RecordedNativeProbe",
+        "syntax": "Name"
+      }
+    ]
+  },
+  "tools": {
+    "modules": 53,
+    "omissions": [],
+    "sites": []
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "implementation": "2f7f8116306028a502ff7e9f813ec6bd6beadcb9",
+  "base": "02f26ce4398d8c0dc4f7542d70dd0b4b0de255fd",
+  "raw_root": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-input-requests643",
+  "raw_sha256": {
+    "owner-before.json": "ba4bab6d3d6ad11d10b612c2bc5f056588705a55f5b1f17c84ae2c2a8da0b07f",
+    "owner-after.json": "6aa47ed08b1441ddf8b715aca43733c90bee087e4607b95c7ed6771c0ffe0a2e",
+    "focused.log": "29f6fbafa2ba46101b745d8c3ed50625f4dccf27f37380b654874fd5c0b6d875"
+  },
+  "source_delta": {
+    "src": 0,
+    "stack": 0,
+    "tools": 0,
+    "private_fixture_and_control": true
+  },
+  "qualification": {
+    "focused": "4 passed, 33 deselected, 0.37s",
+    "scope": "Authored original JSONL/FieldCodec request reader, exact turn/session/input joins, selected-request alignment retained",
+    "requests": "earlier tool/final/partial, interleaved order and retry observations; missing budgets unavailable",
+    "capture": "One acquired diagnostic source for budget/timing; foreign inputs ignored, wrong original turn/mutation refused",
+    "AST": {
+      "modules": 734,
+      "parse_omissions": 0,
+      "removed_singular_method_definitions_or_calls": 0,
+      "retained_singular_local_names": [
+        {
+          "path": "tests/retained_native_fixture.py",
+          "line": 980,
+          "name": "observed_request",
+          "syntax": "Name"
+        },
+        {
+          "path": "tests/retained_native_fixture.py",
+          "line": 981,
+          "name": "observed_request",
+          "syntax": "Name"
+        },
+        {
+          "path": "tests/retained_native_fixture.py",
+          "line": 995,
+          "name": "observed_request",
+          "syntax": "Name"
+        }
+      ],
+      "scope": "lexical source evidence, not dynamic resolution proof"
+    }
+  },
+  "original_session_reads": 0,
+  "SDK_calls": 0,
+  "provider_calls": 0,
+  "native_processes": 0,
+  "packages_envs_loans": 0,
+  "not_qualified": [
+    "actual multi-request configured capture",
+    "complete diagnostic capture",
+    "earlier per-request SDK/HTTP binding",
+    "whole-turn timing",
+    "capacity",
+    "study"
+  ]
+}
