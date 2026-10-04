@@ -1,0 +1,2916 @@
+{
+  "head": "fa222810dbff56e221433a7a7d9f23aed1a08102",
+  "method": "existing NRA/refactor-audit Package.load AST; lexical declarations/imports/writes/decisions/calls, not dynamic resolution",
+  "roots": [
+    {
+      "root": "src",
+      "parsed": 311,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 364,
+      "omissions": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "omissions": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 212,
+      "kind": "Load",
+      "expression": "events.PromptCancelled"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 191,
+      "kind": "Load",
+      "expression": "document.shared_state"
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 79,
+      "kind": "declaration",
+      "name": "PromptCancelled"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 13,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/channel_input_batch.py",
+      "line": 40,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 393,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 462,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 862,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 465,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 396,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 465,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 866,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 396,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 866,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 15,
+      "kind": "import",
+      "expression": "from .input_disposition import FutureInputQueue, InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 32,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/compaction_operations.py",
+      "line": 20,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_operations.py",
+      "line": 31,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 30,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions, InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 276,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 83,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 262,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 213,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 214,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 29,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 72,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 268,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 303,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 26,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 115,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 29,
+      "kind": "import",
+      "expression": "from .input_disposition import FutureInputQueue, InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 162,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 101,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 163,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 102,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 14,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDocument"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 30,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 228,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 231,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 231,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 43,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 62,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 79,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 96,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 115,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 131,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 84,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 115,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 48,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 68,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 84,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 48,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 68,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 103,
+      "kind": "declaration",
+      "name": "finish_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 270,
+      "kind": "declaration",
+      "name": "finish_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 63,
+      "kind": "declaration",
+      "name": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 213,
+      "kind": "declaration",
+      "name": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 163,
+      "kind": "declaration",
+      "name": "shared_state"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 307,
+      "kind": "declaration",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 39,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 74,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 213,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 221,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 219,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 218,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 235,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 252,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 265,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 287,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 311,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 336,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 362,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 38,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 222,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 235,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 252,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 256,
+      "kind": "Load",
+      "expression": "self.settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 265,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 287,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 311,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 336,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 362,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 238,
+      "kind": "Load",
+      "expression": "self.settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 315,
+      "kind": "Load",
+      "expression": "document.lookup(key).finish_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 44,
+      "kind": "import",
+      "expression": "from .input_disposition import FutureInputQueue, InputDispositions, InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 86,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 377,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 559,
+      "kind": "Load",
+      "expression": "self.dispositions.settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 86,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 631,
+      "kind": "Load",
+      "expression": "self.dispositions.settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 53,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 55,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 55,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 484,
+      "kind": "declaration",
+      "name": "settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 160,
+      "kind": "Load",
+      "expression": "self.settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 487,
+      "kind": "Load",
+      "expression": "self.runner.inputs.dispositions.settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 488,
+      "kind": "Load",
+      "expression": "self.runner.inputs.dispositions.read().shared_state"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 500,
+      "kind": "Load",
+      "expression": "self.settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 506,
+      "kind": "Load",
+      "expression": "self.settle_unbound"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 502,
+      "kind": "Load",
+      "expression": "events.PromptCancelled"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 26,
+      "kind": "import",
+      "expression": "from .input_disposition import FutureInputQueue, InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 52,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 52,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 27,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDocument"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 246,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 19,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDocument"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 127,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 143,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "line": 234,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/selected_summary_admission.py",
+      "line": 30,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/selected_summary_admission.py",
+      "line": 126,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 19,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDocument"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 547,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 208,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 538,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 550,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 550,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 30,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 558,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 558,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 208,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 230,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 230,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 511,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 514,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 514,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/turn_input_binding.py",
+      "line": 18,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/turn_input_binding.py",
+      "line": 26,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 18,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 47,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 132,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 150,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 207,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 185,
+      "kind": "import",
+      "expression": "from .input_disposition import InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 192,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 192,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "line": 30,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "line": 178,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "line": 182,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "line": 178,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "line": 182,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 81,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDocument"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 82,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 32,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 98,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 205,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 98,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 195,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 205,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 195,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/native_request_wait_installed_journey.py",
+      "line": 16,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/native_request_wait_installed_journey.py",
+      "line": 194,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/native_request_wait_installed_journey.py",
+      "line": 194,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 20,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 193,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 175,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 193,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 175,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 16,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDocument, InputDispositions"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 539,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 464,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 464,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 19,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 89,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 89,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 66,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 67,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 169,
+      "kind": "Load",
+      "expression": "bridge.inputs.settle_unbound"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 67,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 26,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 149,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 215,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 149,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 215,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_goal_original_input.py",
+      "line": 18,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_goal_original_input.py",
+      "line": 131,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_goal_original_input.py",
+      "line": 131,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 22,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 236,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 236,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 172,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 184,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 16,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDocument"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 37,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "tests/test_canonical_manual_compaction.py",
+      "line": 138,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 10,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 22,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 22,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 21,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 54,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 150,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 177,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 197,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 230,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 252,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 289,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 317,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 338,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 354,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 76,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 84,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 103,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 140,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 160,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 166,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 186,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 344,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 54,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 150,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 177,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 197,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 230,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 252,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 289,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 317,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 338,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 354,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 76,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 84,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 103,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 140,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 160,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 166,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 186,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_journal.py",
+      "line": 344,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 19,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 76,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 112,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 76,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 112,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 23,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 49,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 49,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 15,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 32,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 64,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 78,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 32,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 64,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 78,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 18,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 48,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 79,
+      "kind": "Load",
+      "expression": "inputs.settle_unbound"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 48,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 17,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 92,
+      "kind": "Load",
+      "expression": "inputs.settle_unbound"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 75,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 93,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 17,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 40,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 40,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 100,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 190,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 190,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_delivery_history.py",
+      "line": 10,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_input_delivery_history.py",
+      "line": 17,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_delivery_history.py",
+      "line": 77,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_delivery_history.py",
+      "line": 17,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_delivery_history.py",
+      "line": 77,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 8,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 12,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 35,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 46,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 60,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 99,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 12,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 35,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 46,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 60,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 99,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 78,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 64,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 78,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_disposition.py",
+      "line": 64,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 19,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions, InputDocument"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 39,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 91,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 161,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 170,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 185,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 198,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 217,
+      "kind": "Load",
+      "expression": "store.settle_unbound"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 231,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 239,
+      "kind": "Load",
+      "expression": "store.settle_unbound"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 269,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 281,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 290,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 308,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 313,
+      "kind": "Load",
+      "expression": "store.settle_unbound"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 375,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 225,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 252,
+      "kind": "Load",
+      "expression": "store.settle_unbound"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 275,
+      "kind": "Load",
+      "expression": "store.settle_unbound"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 337,
+      "kind": "Load",
+      "expression": "reserved.finish_unbound"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 39,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 91,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 161,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 170,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 198,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 231,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 269,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 281,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 290,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 308,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 375,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 27,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 235,
+      "kind": "Load",
+      "expression": "turn.settle_unbound"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 73,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 73,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_routing_repair.py",
+      "line": 7,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_input_routing_repair.py",
+      "line": 19,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_routing_repair.py",
+      "line": 138,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_routing_repair.py",
+      "line": 19,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_input_routing_repair.py",
+      "line": 138,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 27,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 120,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 120,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 20,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 215,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 215,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 306,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 306,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 11,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import FutureInputQueue, InputDispositions"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 87,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 87,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 26,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 277,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 277,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 30,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 441,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 467,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 494,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 551,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 441,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 467,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 494,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 536,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 551,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 536,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 812,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 813,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 4,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDocument"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 37,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 25,
+      "kind": "Load",
+      "expression": "reserved.finish_unbound"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 27,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 39,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 28,
+      "kind": "Load",
+      "expression": "document.shared_state"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 29,
+      "kind": "Load",
+      "expression": "document.shared_state"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 30,
+      "kind": "Load",
+      "expression": "document.shared_state"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 31,
+      "kind": "Load",
+      "expression": "document.shared_state"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 51,
+      "kind": "Load",
+      "expression": "store.settle_unbound"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 39,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 56,
+      "kind": "Load",
+      "expression": "after.shared_state"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 11,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions, InputDocument"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 77,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 189,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 77,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 189,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "line": 166,
+      "kind": "Load",
+      "expression": "InputDocument"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 19,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 37,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 37,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_retained_fork_first_input.py",
+      "line": 17,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_retained_fork_first_input.py",
+      "line": 108,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_retained_fork_first_input.py",
+      "line": 108,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 29,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 263,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 263,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 267,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 310,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 310,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 24,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 187,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 458,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 187,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 458,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 1053,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 25,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 62,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 62,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 434,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_admission.py",
+      "line": 434,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 19,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 176,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 24,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 316,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 330,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 435,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 554,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 59,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 346,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 450,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 484,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 530,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 316,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 330,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 426,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 435,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 554,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 59,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 346,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 450,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 484,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 530,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_journal.py",
+      "line": 426,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 19,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 140,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 140,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_stack_inbox_output.py",
+      "line": 19,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_stack_native_compaction.py",
+      "line": 24,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_stack_native_compaction.py",
+      "line": 420,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_stack_native_compaction.py",
+      "line": 420,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 11,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 25,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 29,
+      "kind": "Load",
+      "expression": "inputs.settle_unbound"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 150,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 182,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 197,
+      "kind": "Load",
+      "expression": "inputs.settle_unbound"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 43,
+      "kind": "Load",
+      "expression": "inputs.settle_unbound"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 103,
+      "kind": "Load",
+      "expression": "inputs.settle_unbound"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 150,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_summary_failure_recovery.py",
+      "line": 182,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 406,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import FutureInputQueue, InputDispositions"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 457,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import FutureInputQueue, InputDispositions"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 421,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 487,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 421,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 487,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 14,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 21,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 133,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 232,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 21,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 133,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/test_tool_output.py",
+      "line": 232,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 22,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 259,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 324,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 216,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 259,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 324,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 136,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 216,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 102,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 136,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 102,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 177,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 358,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 367,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 367,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 313,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 254,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 313,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 341,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 254,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 293,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 341,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 293,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 26,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 255,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 266,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 236,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 236,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 24,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 317,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 310,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 310,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset_controls.py",
+      "line": 12,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset_controls.py",
+      "line": 45,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset_controls.py",
+      "line": 45,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/seed_retained_routing_fixture.py",
+      "line": 12,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tools/cutover/seed_retained_routing_fixture.py",
+      "line": 50,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/seed_retained_routing_fixture.py",
+      "line": 50,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 20,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 75,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 149,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 75,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 149,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 24,
+      "kind": "import",
+      "expression": "from agent_comms.input_disposition import InputDispositions"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 105,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 148,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 148,
+      "kind": "Load",
+      "expression": "InputDispositions"
+    }
+  ],
+  "ambiguity": "Name resolution remains source read: separate row transitions, store publication, worker results and subscriber display. No changes to compaction/nativebinding interfaces or SDK."
+}

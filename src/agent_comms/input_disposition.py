@@ -88,6 +88,15 @@ class InputDocument:
         """Source proofs reference originals without copying mutable disposition data."""
         return tuple(row.context_provenance() for row in self.originals(keys))
 
+    def settle_unbound(self, keys: tuple[str, ...]) -> InputDocument:
+        """Original members decide retirement; bound/started evidence stays intact."""
+        successors = {
+            key: successor
+            for key in keys
+            if (successor := self.lookup(key).finish_unbound()) is not None
+        }
+        return replace(self, rows={**self.rows, **successors}) if successors else self
+
     def require_compaction_ready(
         self, owner: ThreadIncarnation, pending_input_keys: tuple[str, ...]
     ) -> None:
@@ -304,22 +313,9 @@ class InputDispositions(LockedStore[InputDocument]):
             key, lambda row: row.started(turn_id=turn_id, native_id=native_id, text=text)
         )
 
-    def settle_unbound(self, keys: tuple[str, ...]) -> bool:
-        """Terminal caller holds wire; settle one complete batch atomically."""
-        changed = False
-
-        def settle(document: InputDocument) -> InputDocument:
-            nonlocal changed
-            rows = dict(document.rows)
-            for key in keys:
-                next_row = document.lookup(key).finish_unbound()
-                if next_row is not None:
-                    changed = True
-                    rows[key] = next_row
-            return replace(document, rows=rows) if changed else document
-
-        self.update(settle)
-        return changed
+    def settle_unbound(self, keys: tuple[str, ...]) -> InputDocument:
+        """Publish one complete retirement and return that exact document cut."""
+        return self.update(lambda document: document.settle_unbound(keys))
 
     def review_for_goal(
         self,
