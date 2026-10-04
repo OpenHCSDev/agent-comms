@@ -8,7 +8,6 @@ later. No public input, original replay, policy activation or comparative study.
 from __future__ import annotations
 
 import asyncio
-from contextlib import ExitStack
 from dataclasses import replace
 import json
 from pathlib import Path
@@ -78,51 +77,47 @@ async def condition_application(stage,package,original_python,selected_condition
     receipt={'complete':False,'public_inputs':0,'input_replays':0,'paid_comparison':False,
         'installed_UI':False,'acceptance_scope':'original completed cut/capture/SDK fork/installed SDK input and distinct answer',
         'selected_condition':selected_condition}
-    with ExitStack() as observations:
-        launch=observations.enter_context(observe_native_requests(package,observer_output,
-            contexts=contexts,condition_source=condition_file,condition=selected_condition))
+    with observe_native_requests(package,observer_output,
+            contexts=contexts,condition_source=condition_file,condition=selected_condition) as launch:
         async with configured_saved_agent(application_stage,package,captured_source,Receiver(),receipt,
                 capture_source=capture_source,observe_launch=launch) as (agent,owner,fork):
-            try:
-                contexts.mkdir(mode=0o700)
-                service=agent._comms
-                condition=checkpoint.fork_condition_source(
-                    service.root/'compaction-commits.sqlite3',Path(fork.session_file))
-                record(condition_file,condition)
-                chunks.clear()
-                marker='ORIGINAL_INSTALLED_S4_APPLICATION_VERIFIED'
-                text=f'New distinct isolated verification input. Do not use tools or resume inherited work. Reply exactly {marker}.'
-                print('CONFIGURED_FORK_INSTALLED_DISTINCT_INPUT',flush=True)
-                result=await build_agent_router(agent)('session/prompt',{'sessionId':owner.name,
-                    'prompt':[{'type':'text','text':text}]},False)
-                assert result.stop_reason=='end_turn' and marker in ''.join(chunks)
-                document=InputDispositions(service.root/InputDispositions.filename).read()
-                row,=document.rows.values()
-                assert row.has_started and row.source_text==text
-                session=NativeSessionIdentity(fork.session_id,fork.session_file)
-                probe=RecordedNativeProbe.capture_input(service,owner,session,row,contexts,
-                    application_stage,checkpoint,observer_output)
-                record(application_stage/'recorded-probe.private.json',probe)
-                measured=probe.observe()
-                record(application_stage/'recorded-application.private.json',measured)
-                construction=measured['construction']
-                installed=construction['condition_installation']
-                assert installed['evaluated']
-                for item in installed['installations']:
-                    item.require_condition(selected_condition.value)
-                assert construction['request_budget']['evaluated']
-                assert construction['request_completion']['evaluated']
-                assert service.registry.require(owner.name).active_turn is None
-                receipt.update(complete=True,original_cut_correlated=True,
-                    SDK_child_binding=True,installed_source_in_actual_SDK_request=True,
-                    installed_narrative_source_evaluated=installed['narrative_source']['evaluated'],
-                    constructed_source_prefix=installed['constructed_prefix'],
-                    full_history_sdk_admission=construction['full_history_sdk_admission'],
-                    canonical_request_budget_and_terminal=True,distinct_answer=True,new_original_inputs=1,
-                    model_steps=len(measured['model_steps']),model_recall_evaluated=False,
-                    final_HTTP_bytes_evaluated=False)
-            finally:
-                observations.close()
+            contexts.mkdir(mode=0o700)
+            service=agent._comms
+            condition=checkpoint.fork_condition_source(
+                service.root/'compaction-commits.sqlite3',Path(fork.session_file))
+            record(condition_file,condition)
+            chunks.clear()
+            marker='ORIGINAL_INSTALLED_S4_APPLICATION_VERIFIED'
+            text=f'New distinct isolated verification input. Do not use tools or resume inherited work. Reply exactly {marker}.'
+            print('CONFIGURED_FORK_INSTALLED_DISTINCT_INPUT',flush=True)
+            result=await build_agent_router(agent)('session/prompt',{'sessionId':owner.name,
+                'prompt':[{'type':'text','text':text}]},False)
+            assert result.stop_reason=='end_turn' and marker in ''.join(chunks)
+            document=InputDispositions(service.root/InputDispositions.filename).read()
+            row,=document.rows.values()
+            assert row.has_started and row.source_text==text
+            session=NativeSessionIdentity(fork.session_id,fork.session_file)
+            probe=RecordedNativeProbe.capture_input(service,owner,session,row,contexts,
+                application_stage,checkpoint,observer_output)
+            record(application_stage/'recorded-probe.private.json',probe)
+            measured=probe.observe()
+            record(application_stage/'recorded-application.private.json',measured)
+            construction=measured['construction']
+            installed=construction['condition_installation']
+            assert installed['evaluated']
+            for item in installed['installations']:
+                item.require_condition(selected_condition.value)
+            assert construction['request_budget']['evaluated']
+            assert construction['request_completion']['evaluated']
+            assert service.registry.require(owner.name).active_turn is None
+            receipt.update(complete=True,original_cut_correlated=True,
+                SDK_child_binding=True,installed_source_in_actual_SDK_request=True,
+                installed_narrative_source_evaluated=installed['narrative_source']['evaluated'],
+                constructed_source_prefix=installed['constructed_prefix'],
+                full_history_sdk_admission=construction['full_history_sdk_admission'],
+                canonical_request_budget_and_terminal=True,distinct_answer=True,new_original_inputs=1,
+                model_steps=len(measured['model_steps']),model_recall_evaluated=False,
+                final_HTTP_bytes_evaluated=False)
 
 
 def frozen_scenario(root_reference):

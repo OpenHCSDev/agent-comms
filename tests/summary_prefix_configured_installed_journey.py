@@ -4,13 +4,12 @@ One functional private fork, original route/provider, no comparative experiment.
 The original installer captures live launch custody; credentials remain in RAM.
 """
 import asyncio
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 import hashlib
 import json
 import os
 from pathlib import Path
 import socket
-import subprocess
 import sys
 from unittest.mock import patch
 
@@ -18,6 +17,7 @@ from compaction_retention_fixture import Condition
 from original_owner_capture import CurrentTypedCapture
 from compaction_source_successor_installed_journey import run
 from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.child_process import ParentedProcess
 
 
 @contextmanager
@@ -27,7 +27,8 @@ def observe_native_requests(package, observation, *, contexts=None, summaries=No
     if condition_source is not None and condition is None:
         raise ValueError('Original narrative source requires an explicit SDK condition selection')
     observer = Path(__file__).with_name('summary_prefix_native_observer.mjs').resolve()
-    observers = []
+    resources = ExitStack()
+    observers = 0
 
     def observe_launch(environment):
         environment['AC_PREFIX_PACKAGE'] = str(package)
@@ -38,30 +39,28 @@ def observe_native_requests(package, observation, *, contexts=None, summaries=No
     bootstrap = NativePiRpcLaunch.bootstrap
 
     def observed_bootstrap(cls, cli, arguments, cwd, environment, configuration):
+        nonlocal observers
         argv, environment = bootstrap(cli, arguments, cwd, environment, configuration)
         if environment.get('AC_PREFIX_OBSERVATION'):
             with socket.socket() as reservation:
                 reservation.bind(('127.0.0.1', 0))
                 port = reservation.getsockname()[1]
-            observers.append(subprocess.Popen(
-                ['node', str(observer), str(port), str(package), str(observation),
+            observers += 1
+            log = resources.enter_context(Path(observation).with_name(
+                f'{Path(observation).name}.inspector-{observers}.log').open('wb'))
+            resources.enter_context(ParentedProcess.launch(
+                ('node', str(observer), str(port), str(package), str(observation),
                  str(contexts) if contexts is not None else '',
                  str(summaries) if summaries is not None else '',
                  str(condition_source) if condition_source is not None else '',
-                 condition.value if condition is not None else ''],
-                env={'PATH': os.defpath}, stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL))
+                 condition.value if condition is not None else ''),
+                env={'PATH': os.defpath}, output=log))
             argv = (argv[0], f'--inspect-brk=127.0.0.1:{port}', *argv[1:])
         return argv, environment
 
-    try:
+    with resources:
         with patch.object(NativePiRpcLaunch, 'bootstrap', classmethod(observed_bootstrap)):
             yield observe_launch
-    finally:
-        for process in observers:
-            if process.poll() is None:
-                process.terminate()
-            process.wait(timeout=10)
 
 
 async def main(stage, package, original_python):
