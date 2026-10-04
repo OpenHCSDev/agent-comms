@@ -1,0 +1,5 @@
+# Original narrative source through installed condition observation
+
+The existing bounded SDK constructor retains narrative_source; armInstalledNativeCondition drops it. RecordedNativeProbe.applied_condition therefore cannot use this configured installed path's original narrative reference. Preserve the existing FileProvenance in RecordedConditionInstallation, validate it through the original checkpoint/fork acquisition, and join both genuine bounded-transform and installed observations through the existing condition_message_binding. No new summary/context/source store, native or provider policy. Missing historical observation stays unavailable; a constructor label cannot supply its source.
+
+Same checkout. Existing Python AST/source and original private JS constructor/observer first; coherent producer/reader/scorer caller migration, batched private validation last. No original/SDK/provider replay or package/env/holder request. Full S4 and30-pair/USD75 study remain unfinished/unapproved.
