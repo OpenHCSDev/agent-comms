@@ -1,0 +1,29 @@
+{
+  "actual_registered_acp_app": true,
+  "current_preview_decoded": true,
+  "ordinary_sidebar_mounted": true,
+  "contributors": [
+    "coordination",
+    "user_input"
+  ],
+  "native_segments": [
+    "system_layer",
+    "compaction_summary",
+    "transcript",
+    "tool_catalog"
+  ],
+  "tree_labels": [
+    "Request 1 \u00b7 b2c6b72bbcb4",
+    "Coordination",
+    "User Input",
+    "System Layer \u00b7 5491 estimated tokens",
+    "Compaction Summary \u00b7 49621 estimated tokens",
+    "Transcript \u00b7 91732 estimated tokens",
+    "Tool Catalog \u00b7 7213 estimated tokens"
+  ],
+  "awareness_loaded_by_ordinary_app_import": false,
+  "discovery_module_acquired": true,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "physical_capture": false
+}
