@@ -28,7 +28,7 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
 from agent_comms.native_tools import ReadTool, WriteTool
 from agent_comms.pi_summary_payloads import SummaryCost, SummaryUsage
-from agent_comms.pi_payloads import AssistantMessage, PiCost, PiUsage, ToolCallContent, ToolResultMessage, UserMessage
+from agent_comms.pi_payloads import AssistantMessage, PiCost, PiMessage, PiUsage, ToolCallContent, ToolResultMessage, UserMessage
 from agent_comms.request_progress import RequestProgress
 from agent_comms.private_path import FileRevision
 from agent_comms.owner_compaction_prepare import NativeWitness
