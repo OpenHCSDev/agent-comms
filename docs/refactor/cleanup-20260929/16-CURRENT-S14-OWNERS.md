@@ -101,15 +101,14 @@ timeout and whole tool/system refusal remain failures, with no stream rerun.
 Arendt continues the original debugger/controller completion family source pass;
 provider capacity, matched arms and the30-pair/USD75 study remain unqualified.
 
-Parent tracking branch normally joined merged659. Production/src/stack/pins
-equal main, but an older parent-only retained_index_writer.py change remains:
-direct original WireLog custody instead of constructing Comms while rebuilding
-an old checkpoint. Parent owns its source/receipt reconciliation; it is not
-silently called merged, installed, or admitted by current440 canonical tools.
-Mendel is now the active contributor closing that exact tool and its existing
-RetainedIndexCutover/recovery consumers in his reused checkout. Original reset
-file-custody controls are not writer-path acceptance. No package rebuild, old
-consumed cutover replay or current public-store mutation follows from this work.
+Parent tracking branch normally joined merged659 and now661. The older
+retained_index_writer.py change is merged through its existing WireLog owner,
+instead of constructing Comms while rebuilding an old checkpoint. No parent-only
+production/src/stack/tools/pin delta remains against actual maina8ed3aa3.
+Current440 canonical tools have not been republished; no installed product
+update, package rebuild, old consumed cutover replay or public-store mutation
+follows from this tool-only source merge. Mendel closed its complete existing
+RetainedIndexCutover/recovery consumer review and actual private boundary.
 His separate draft661 exactb1b59241 has Debt37232366132 SUCCESS. Installed
 current-private inherited-FD/index and refusal acceptance remains pending a
 specific execution-only THIN540 purpose. The historical old-schema installed
@@ -123,8 +122,11 @@ is authorized. Parent has since read the actual8.917682s terminal PASS,
 current-private inherited-FD/index rebuild and all original refusal assertions.
 Protected wire/registry/settings and original frozen audience stayed exact.
 The controller and nine child processes are independently absent, groups and
-sockets empty. The cross-version restart claim remains historical; final
-published evidence/head freeze and whole purpose closure are still pending.
+sockets empty. Parent matched all29 compact keeper hashes plus receipt/source
+proof/grant, and final tools/tests/product equal qualified84cb. Finale14a2380
+Debt37233384375 passed; parent exact-head guarded merged661 asa8ed3aa3.
+The cross-version restart claim remains historical. Whole handback is published;
+Bohr independently closes only its separate lifecycle after fresh readback.
 
 Arendt660 exactf06b004d has Debt37232065321 SUCCESS. Parent reviewed the shared
 observer's connection/request settlement, original Node completion notification,
