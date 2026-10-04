@@ -97,3 +97,27 @@ Exact evidence head da759b77 passed the automatic required Debt ratchet
 required job and changed installed acceptance are reported independently.
 Fresh 540 purpose requested from Bohr; separate immutable086 read/execution
 requested from its original Sch owner. No prior loan is reused implicitly.
+
+## Granted installed source, SDK batch not started
+
+Original issued540 grant f0618386 read and verified before any package/import
+work. It remains immutable and active. Bohr independently verified current
+4cc945ef filewheel, all347 installed assets and all92 original nonCore/bin/env
+keeper entries, and recorded final7d47/c265 same-purpose source delta without
+new archive or successor purpose. The nine nonCore distributions, SDK12.1,
+protected auditfb6 and prior fixtures/originals remain unchanged.
+
+One normal cached-Hatch wheel is retained under
+.artifacts/c4-input-drain655-wheel-20261004/. All344 tracked package members
+and3 forced native resources match Git, checkout, ZIP and actual installed
+files. Wheel4cc945ef50015570953ff934252976d08e62d416f22acfda56403a0acffceab6.
+Original source/installed/module-origin proofs are committed here. Actual uv
+filewheel direct_url has the correct URL and empty archive_info; no metadata
+hash is invented. uv pip check passed10 distributions. Package imports resolve
+to actual540; no source PYTHONPATH overlay is used.
+
+Fresh host observation: warning only, home10.2GiB/root6.6GiB free,
+RAMavailable12.4GiB/swap9.8GiB. The planned batch is serial and bounded on the
+existing holder. No arbitrary memory cap or fleet is introduced. Actual native
+execution remains unstarted pending Sch's separate immutable086 read/execution
+grant. The540 grant itself authorizes no artifact read or SDK job.
