@@ -1,4 +1,29 @@
-## Current: combined receiving staged; publisher receipt ownership correction — 2026-10-04
+## Current: ingress, retry and fixture closure merged; one receiving successor — 2026-10-04
+
+Core64383943d merged9df after exact Debt37204617540 passed. ReviewedRetainedSummaryCohort checks the typed target, source proof and authentic artifacts; the redundant activation-storage-location predicate is deleted. Original route, five default links, native trust, schemas, owner audience and client admission remain required.
+
+Core638c133 mergedf430, Core6406b8edafa merged02f and Core633b421 merged1a520 after their exact Debt checks passed. Native send admission acquires existing shared ingress asynchronously, protects original delegate checks/stdin.write, then releases before drain/ACK. Informational source attachment validates the same admitted lease and preserves current goal/status/phase; fresh input/goal checks stay strict. Nine final fixture files equal installed8c; all19 retired active_turns accesses are deleted. Installed acceptance is cumulative: earlier11 controls; then16 passed/four obsolete fixture failures; only four changed cases then2 passed/two obsolete attributes; only those final two passed16.623s. No accepted matrix or UNKNOWN input was replayed. Localhost/native inputs were real, external/public spending zero; broader CI failures remain visible.
+
+Toad433b878 mergedb522 after exact Debt37205203352 passed. Parent matched all114 frozen artifact hashes, all51 tools to actual Core9df Git, all22 original gate files, and reviewed the typed target, preserve/schema/route/once-only operation. The prior installed readback matched942 source assets plus3 forced native assets, four wheels and all159 old originals. Its prefix/operands remain immutable; publisher receipt/preimages are absent and no public operation has run.
+
+Parent selected one NEW receiving successor including qualified638/640/633 before public cutover. Draft43615270a6a uses Core1a520 and the same319 Toad assets. Old Core637190ace differs in exactly seven runtime assets. Mendel built one normal merged Core wheel58a11a61 and verified all344 tracked assets plus3 forced assets against Git/worktree/wheel. It is byte-identical to the retained combined2b wheel: that combined source already contained final637, although the earlier standalone640 branch did not. No further Core build is justified. Sch retains Toad5002/Text73d/NRA8d/native086 after asset comparison. Bohr must archive the ACTUAL433 floor and issue its specific sequential purpose before package changes. No unchanged SDK, App, provider or movie qualification is repeated. Old userPID1240175 is absent in one read-only snapshot; this does not replace the original fresh whole-client/audience guard at publication.
+
+Core64295275 and Core644489e2965 merged e3da and d48c at exact green ratchets. Private measurement readers preserve missing/zero paired totals and acquire input diagnostics once, retaining earlier request identities while the final manifest authenticates only its selected request. Parent read the owner/caller changes and original proof hashes. Configured multi-request capture, whole-turn timing, capacity, billed spend and study remain unfinished.
+
+Disk recovery changed actual state: Parent moved610MB superseded preimages and old PR77 synthetic data to verified HDD custody; Bohr87/88 reclaimed1,366,392,832 exclusive HOME bytes. Other agents' recovery is not counted twice. The existing pressure timer had no next firing and its service last ran27September; replacing that stale schedule with the existing two-minute persistent calendar schedule restored actual firings/current state. Rollouts are excluded and owned by Tristan's separate agent. Historical1.433GB UV copies are now absent; current640 roots total14MB required Started/UNKNOWN/proofs and stay preserved. Heis owns completed media retirement, Sch current builder/staging producers, and Einstein the outer saved-fork fixture lifecycle. No invented cleanup patch removes required native evidence.
+
+| Owner | Remaining work |
+| --- | --- |
+| Sch /436 | Retained merged Core58a and other original wheels; actual433 archive/grant; installed source/origin/native/cohort proof and new frozen once-only operation. |
+| Bohr | Closed generated-output retirement, current producer attribution, actual433 floor/archive and specific sequential receiving purpose. |
+| Heis /Toad432 | Affected message-style/history publication App after receiving purpose handback; structural/performance continuation active. |
+| Einstein /627+434 | Working-memory consumers and historical instruction boundaries remain Draft; matching W1 artifact/schema and W6 acceptance unfinished. |
+| Arendt /S4 | Configured matched arms, complete capacity/timing/accounting/study unfinished;30pairs/USD75 unapproved. |
+| Parent | Review the final combined candidate, original fresh client/idle audience guards, once-only publication and ordinary default UI/native/history acceptance. |
+
+The full integration goal remains active. No public installation or performance completion is claimed.
+
+## Historical: combined receiving staged; publisher receipt ownership correction — 2026-10-04
 
 Sch433 published f5e0cb77 and built one combined Toad wheel from19f882815: SHA5002977f, all319 Git/package assets equal. Parent independently read every wheel entry and matched the published source/pins. The inventory commitment94f12a is the sorted JSON object encoding, not the pretty-printed file bytes2c9e152c; no artifact mismatch or rebuild follows. Retained Core637190ace, Text5973d4 and NRA9a8d489 wheels remain unchanged, with immutable native086.
 
