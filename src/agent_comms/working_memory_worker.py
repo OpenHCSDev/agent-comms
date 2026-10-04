@@ -9,12 +9,12 @@ from acp.schema import SessionInfoUpdate
 
 from .acp_extension import ContextAnnotatedUpdate, encode_updates
 from .coordinator import Coordination
-from .working_memory_annotations import AnnotationBudgetExhausted, PreviouslyRequestedAnnotation
+from .working_memory_annotations import PreviouslyRequestedAnnotation
 from .working_memory_disclosure import DisclosureState
 from .working_memory_labels import QuestionVersion
 from .working_memory_policy import AnnotationPolicy
 from .working_memory_questions import KindQuestion
-from .working_memory_requests import DisclosureRequest, FailedAnnotationOutcome
+from .working_memory_requests import AnnotationBudgetExhausted, DisclosureRequest, FailedAnnotationOutcome
 
 
 class AnnotationWorker:
@@ -60,13 +60,13 @@ class AnnotationWorker:
 
             return SpanAnnotationsRow.effective(rows)
         state = DisclosureState.capture(segment, span, question, rules)
-        request = DisclosureRequest.capture(span, grant.classifier, question, state)
+        request = DisclosureRequest.capture(span, grant.classifier, question, state, policy.source)
         api_key = os.environ.get("OPENROUTER_API_KEY", "")
         if not api_key:
             raise ValueError("Approved annotation route has no configured credential")
         # Reservation is durable before the first external byte. Cancellation
         # or process loss leaves Submitted intact; no subsequent run resends it.
-        original = await self.store(lambda owner: owner.reserve(request, grant.per_hour))
+        original = await self.store(lambda owner: owner.reserve(request, grant))
         try:
             response, label = await grant.classifier.classifier.classify(request, api_key)
         except Exception as error:

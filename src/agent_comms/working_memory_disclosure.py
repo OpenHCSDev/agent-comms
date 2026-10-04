@@ -39,7 +39,7 @@ class PublicInstructionDisclosure(DisclosurePolicy):
 @dataclass(frozen=True)
 class DisclosureState:
     span: str
-    segment_kind: str
+    segment_kind: type[ContextSegment]
     source: str
     neighbor: str
     owner_rules: tuple[str, ...] = field(default=(), metadata={"wire_omit_default": True})
@@ -58,7 +58,7 @@ class DisclosureState:
         # escape through adjacency to an allowed agent message.
         if index:
             neighbor = segment.disclosure_for(original[index - 1]).require_text(neighbor)
-        return cls(policy.require_text(span.public_text(segment)), segment.declared_name,
+        return cls(policy.require_text(span.public_text(segment)), type(segment),
                    policy.require_text("; ".join(source.public_description()
                                                 for source in span.coordinates.provenance)),
                    neighbor, question.disclosed_owner_rules(owner_rules))

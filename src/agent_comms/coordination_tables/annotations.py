@@ -5,7 +5,10 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 
 from agent_comms.coordination_schema import CoordinatorTable
-from agent_comms.typed_table import Column, Index, TypedTable
+from agent_comms.typed_table import Column, Index, TypedTable, sql_literal
+from agent_comms.working_memory_questions import SpanQuestion
+from agent_comms.message_reference import MessageReference
+from agent_comms.field_codec import FieldCodec
 from agent_comms.working_memory_labels import ModelLabel, SpanLabel
 from agent_comms.working_memory_requests import AnnotationOutcome, DisclosureRequest
 
@@ -22,18 +25,18 @@ class SpanAnnotationsRow(CoordinatorTable, TypedTable):
         generated="json_extract(label, '$.span.coordinates.offset')")})
     length: int = field(init=False, compare=False, metadata={"sql": Column(
         generated="json_extract(label, '$.span.coordinates.length')")})
-    question: str = field(init=False, compare=False, metadata={"sql": Column(
+    question: type[SpanQuestion] = field(init=False, compare=False, metadata={"sql": Column(
         generated="json_extract(label, '$.question.question')")})
     question_version: str = field(init=False, compare=False, metadata={"sql": Column(
         generated="json_extract(label, '$.question.sha256')")})
     classifier_pin: str = field(init=False, compare=False, metadata={"sql": Column(
         generated="json_extract(label, '$.classifier.pin')")})
-    label_kind: str = field(init=False, compare=False, metadata={"sql": Column(
+    label_kind: type[SpanLabel] = field(init=False, compare=False, metadata={"sql": Column(
         generated="json_extract(label, '$.kind')")})
 
     address: ClassVar[tuple[str, ...]] = (
         "segment_digest", "offset", "length", "question", "question_version", "classifier_pin")
-    indexes = (Index(address, unique=True, where="label_kind='model'"), Index(address))
+    indexes = (Index(address, unique=True, where=f"label_kind={sql_literal(ModelLabel)}"), Index(address))
 
     @classmethod
     def effective(cls, rows: tuple[SpanAnnotationsRow, ...]):
@@ -57,12 +60,23 @@ class AnnotationRequestsRow(CoordinatorTable, TypedTable):
         generated="json_extract(request, '$.span.coordinates.offset')")})
     length: int = field(init=False, compare=False, metadata={"sql": Column(
         generated="json_extract(request, '$.span.coordinates.length')")})
-    question: str = field(init=False, compare=False, metadata={"sql": Column(
+    question: type[SpanQuestion] = field(init=False, compare=False, metadata={"sql": Column(
         generated="json_extract(request, '$.question.question')")})
     question_version: str = field(init=False, compare=False, metadata={"sql": Column(
         generated="json_extract(request, '$.question.sha256')")})
     classifier_pin: str = field(init=False, compare=False, metadata={"sql": Column(
         generated="json_extract(request, '$.classifier.pin')")})
 
+    grant_reference: MessageReference = field(init=False, compare=False, metadata={"sql": Column(
+        generated="json_extract(request, '$.grant')")})
+
     unique = (SpanAnnotationsRow.address,)
-    indexes = (Index(("created_at_ms",)),)
+    indexes = (Index(("grant_reference", "created_at_ms")),)
+
+    @classmethod
+    def requests_since(cls, db, reference: MessageReference, since: int) -> int:
+        # The row declaration owns SQLite binding, including the reference DTO.
+        grant_field = next(item for item in cls._fields() if item.name == "grant_reference")
+        return FieldCodec.decode(int, db.execute(
+            f'SELECT COUNT(*) FROM "{cls.declared_name}" WHERE created_at_ms>? AND grant_reference=?',
+            (since, grant_field.encode(reference))).fetchone()[0])

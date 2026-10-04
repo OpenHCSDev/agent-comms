@@ -634,8 +634,10 @@ class AnnotationDisclosureGrant(HumanConstraintPin):
 
     def __post_init__(self):
         super().__post_init__()
-        if type(self.per_hour) is not int or self.per_hour < 1 or not self.segments:
-            raise ValueError("Disclosure grant requires permitted segment kinds and a positive hourly budget")
+        if self.per_hour < 1:
+            raise ValueError("Disclosure grant requires a positive hourly request budget")
+        if not self.segments:
+            raise ValueError("Disclosure grant requires permitted segment kinds")
 
     def require_annotation_grant(self):
         return self
@@ -649,3 +651,11 @@ class AnnotationDisclosureGrant(HumanConstraintPin):
             raise RelationViolationError("Human grant does not disclose this segment kind")
 
 
+    def window_start(self, now: int) -> int:
+        return now - 3_600_000
+
+    def require_budget(self, submitted: int) -> None:
+        from .working_memory_requests import AnnotationBudgetExhausted
+
+        if submitted >= self.per_hour:
+            raise AnnotationBudgetExhausted("Original disclosure grant's hourly request budget is exhausted")

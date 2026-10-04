@@ -33,3 +33,24 @@ The runtime worker now borrows original captured values after durable ContextObs
 The policy defaults to disabled. An explicit configured reference selects a current original AnnotationDisclosureGrant, which inherits human pin publication, scope, recipient and supersession behavior. Only its named segment kinds and budget are admitted; an API key alone does nothing. Correction uses the original human identity and role owner. No consent, external API call, package activation or paid calibration has occurred. Native source matching, Codex capture, W6 UI, empirical calibration and sentinel remain unfinished.
 
 Official adapter source rechecked: https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-request and https://openrouter.ai/docs/guides/community/jev. Existing NRA Package worker census parsed317 modules with zero omissions; lexical resolution limits remain explicit.
+
+## Typed classifier members and disclosure budget owner
+
+Question addresses now retain SpanQuestion members through the original typed
+row/FieldCodec SQLite boundary. TypedTable.select borrows its existing typed
+key binding from one(); labels/corrections no longer build a second string
+predicate/parameter conversion. Generated question and label-kind columns are
+nominal member fields; their SQL names remain external storage encoding.
+DisclosureState likewise retains type[ContextSegment]; the external Jev
+payload owns the eventual name encoding.
+
+AnnotationDisclosureGrant owns positive hourly configuration, window and
+admission. The storage owner counts original submissions and supplies that
+fact, rather than independently validating a primitive and deciding the same
+budget. Requests retain their actual human grant MessageReference and count
+that grant's rolling-hour submissions. The typed row owns its JSON binding.
+Submitted/unknown outcomes remain durable and never automatically resent.
+Primitive integer validation remains the existing FieldCodec ingress, not a
+second exact-type check in consumers. This is source implementation, not
+installed/paid acceptance. Existing native assembly and full feature
+qualification/calibration remain unfinished; external annotations are OFF.

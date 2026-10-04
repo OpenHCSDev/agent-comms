@@ -478,7 +478,14 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
         where: str = "1",
         parameters: tuple = (),
         order_by: tuple[str, ...] = (),
+        **key: object,
     ) -> list[Self]:
+        cls._column_list(tuple(key))
+        selected = tuple(item for item in cls._fields() if item.name in key)
+        if selected:
+            where = "(" + where + ") AND " + " AND ".join(
+                f"{_identifier(item.name)} IS ?" for item in selected)
+            parameters = (*parameters, *(item.encode(key[item.name]) for item in selected))
         return cls.read(
             db.execute(
                 f"SELECT {cls._column_list(cls.columns())} FROM {_identifier(cls.declared_name)} "
@@ -489,13 +496,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
 
     @classmethod
     def one(cls, db: sqlite3.Connection, **key: object) -> Self | None:
-        cls._column_list(tuple(key))
-        selected = tuple(item for item in cls._fields() if item.name in key)
-        rows = cls.select(
-            db,
-            where=" AND ".join(f"{_identifier(item.name)} IS ?" for item in selected),
-            parameters=tuple(item.encode(key[item.name]) for item in selected),
-        )
+        rows = cls.select(db, **key)
         if len(rows) > 1:
             raise ValueError(f"Expected one {cls.declared_name} for {tuple(key)}")
         return next(iter(rows), None)
