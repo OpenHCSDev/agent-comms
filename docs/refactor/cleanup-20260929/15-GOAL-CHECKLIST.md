@@ -1637,6 +1637,62 @@ cutover path stays in production. All original durable/UNKNOWN history retained.
 
 # Full goal checklist and evidence boundaries
 
+## Current integration checkpoint — 2026-10-04
+
+This section supersedes the historical default, owner and goal-status entries below.
+The persistent goal is active. Main-source merges, installed private acceptance
+and public delivery remain separate requirements.
+
+| Requirement | Current evidence | Remaining action and owner |
+| --- | --- | --- |
+| Original named T2/T3/T4/commands/events/rendering/ACP/compaction/browser scope | Original PR dispositions and retained receipts remain in the historical checklist below. Recent qualified changes are normally merged; no old implementation is being restarted. | Parent must verify the continuous affected default workflow after the reviewed public publication. Historical merge or browser-only acceptance cannot replace it. |
+| Snapshot, notification and registered sidebar owner closure | Core654 exact e3882fd1 merged b1a91fb5 after exact automatic Debt37224532187 success. Fifteen distinct affected source controls qualified. Actual registered App passed6.239540s, whole process8.249975s, including complete snapshot equality, bounded reference notification, actor-vs-human read distinction, mounted channel filtering and whole shutdown. | Parent retains installed/public scope distinctions. Combined main655+654 union was not installed in that App; each original qualifier remains separately scoped. |
+| Input/queue/turn source custody | Core638/640/633 and655 are merged and retain actual saved SDK/socket/UNKNOWN/cancellation evidence. Core655's eight changed cases passed9.36s; whole540/native loan returned and independently closed. | Mendel owns draft656 c98ba956: InputDrain547→486 through existing reservation and original-only retirement owners, not a size mixin. One affected installed strict-reservation/cancel/refusal/saved-SDK/OwnedTurn cleanup batch is still required. Line count and source review do not qualify it. |
+| Structural UI lifetime and publication | Toad426/429/430/432 and439 plus native55/58/59 are merged at their recorded scoped strengths. Toad439 exact c639578e merged af692dc6; its original App03 passed all11 changed assertions, whole19.621976s. Original01/02 failures remain retained. | Heisenberg owns full performance and remaining actual continuous motion/cold-width/reader journey; Kepler owns native dependencies. No144Hz, CPU gain, smoothness or all-stalls claim follows from the scoped Apps. |
+| Historical/working-memory source and annotations | Draft Core627713c1c57 and Toad43418290c96 retain original355/319-asset filewheel proofs. Matching native7a2e has the original six-case SDK preview acceptance; no rebuild is needed. | Einstein owns W6 installed acceptance and the concrete TypedTable.select optional-empty-filter defect. W6 installed01 ended7.428s,3PASS/2FAIL before App/native launch; whole holder restored. Fix the owner contract, then obtain the changed successor purpose. Historical instruction sources stay separate from current prompts; disclosure stays OFF. |
+| S4 retained-context research | All currently Ready private reader/scorer checkpoints through Core653 are merged, with missing evidence still unavailable. Original source/probe/request/constructor/narrative boundaries remain recorded. | Arendt owns full source-partition/construction/capture/capacity/HTTP/billing/intervention/recall closure. The proposed30-pair/USD75 study remains unapproved and unstarted. |
+| Public usable delivery | Frozen receiving4364e0d3d9a, Ready8796ce30,115 operands and canonical Core1a operators remain protected. Original guard01 passed cohort/19-owner idle checks but refused the unretired user client. No publisher, public preimage, restart, reset or replay has occurred. | Parent alone may run the original once-only guarded publisher after the actual client closes and private purposes return. Preserve runtime when the original schemas qualify; perform actual default continuous acceptance and delivered-build notification afterward. Do not poll guards or force client retirement. |
+| Resource and private-holder cleanup | Parent654's three purposes independently closed after1470 bytes/modes/readlinks,69 origins and390 protected files were restored. W6 reports the same exact floor and229-process zero-borrower/gap handback; Bohr owns independent lifecycle closure. | Bohr retains sole cleanup/lifecycle ownership. Actual Codex rollouts are excluded. Preserve immutable issued grants, originals, UNKNOWN, source and current native keepers; reclaim only closed disposable outputs through the existing retention owners. |
+
+Current Core main b1a91fb5 includes the normal654/655 union. This tracking branch
+normally joins that main; src/stack/pyproject/uv are byte-identical to main.
+This documentation update performs no package write, App/SDK/provider run,
+public guard retry or publication. Full goal completion remains unproven.
+
+### Immediate owner work
+
+- Parent: keep the qualified public receiving operation concrete and frozen;
+  review newly qualified source, then deliver and exercise the actual default
+  continuous saved-history/channel/tab/fork/first-message/reply/handling/queue
+  journey when original admission permits it. Preserve draft, undo and reader
+  position; do not replay UNKNOWN.
+- Mendel: finish656 through actual changed reservation/retirement acceptance and
+  exact final hosted Debt before merge. No repeating accepted655 as a substitute.
+- Einstein: fix the empty optional-filter contract at TypedTable and finish the
+  registered W6 historical read/search/export/local USER correction/default-OFF
+  worker/fresh private9→10 journey. No actual Codex or public carry/reset.
+- Heisenberg/Kepler: continue the structural performance workflow beyond accepted
+  scoped resource fixes; physical/motion and causal performance claims need their
+  actual matching runtime evidence.
+- Arendt: continue original retained-condition source/capture/accounting closure;
+  no separate paid study is authorized.
+- Schrodinger: retain original receiving operators and matching native keepers;
+  no duplicate build/restage or newer product substituted into frozen436.
+- Bohr: independently close returned loans and trace actual heavy producers;
+  never count attempted moves or hardlinked totals as reclaimed space.
+
+Evidence for the new654 acceptance is
+`evidence/c4-coordination-snapshot-owner-20261004/SCOPED-READY.json` and its
+`installed01`, `installed02`, `installed03` directories. Original653 and655
+source/receipts live in their existing evidence directories. Parent review of
+frozen436 remains `receiving436-parent-review-20261004.json`.
+
+## Historical checklist and observations
+
+The following sections retain their original dates and evidence. Their old
+"current" labels, owners and goal dispositions are historical, not instructions
+to repeat those operations or create competing implementations.
+
 Parent owns integration in Core432. This checklist preserves the complete
 persistent objective. A source merge, historical receipt or staged launch does
 not establish current live usability. Checked PR dispositions below were fetched

@@ -1,4 +1,54 @@
-## Current: exclusive source publication and recorded input presence merged — 2026-10-04
+## Current: snapshot/sidebar merged; reservation and W6 closure continue — 2026-10-04
+
+Parent654 exacte3882fd11ffc264bbbb9da55add6791ee6752eb4 merged
+b1a91fb561cfac4ea99f9a7b23f3dae9bb772f56 after exact automatic
+Debt37224532187/job111501340061 passed. Original registered App03 passed
+6.239540s inside/8.249975s whole, all six snapshot/notification/read/sidebar/
+shutdown checks. Both original pre-App/private-launch failures remain recorded.
+The three owned production files and control stayed byte-equal to their installed
+qualification through the normal main655 join. Entire combined main was not
+installed in that App. Parent holds no package/read/import/execution purpose.
+All1470 actual436 members,69 origins and390 protected files were restored;
+Bohr independently closed all three Parent purposes, with the last independent
+231-process zero-borrower/gap census kept separate from owner's241-process one.
+
+Core65582f62ef2 merged7cca965a after exact Debt37222386256 passed. Its actual
+saved SDK/OwnedTurn/socket eight-case batch passed9.36s; controlled localhost
+native inputs were used, while external/public/replay remained zero. Whole540
+and native086 were returned; Bohr independently closed the purpose. Mendel's
+next draft656c98ba956 moves repeated wire/reservation/rollback and original-only
+retirement to existing QueuedInput/InputDispositions/InitialInput owners.
+InputDrain547→486; full316/365 AST has zero omissions. Parent's source review
+found no new counterexample in the complete four-production/fixture/cancellation
+family. Actual changed installed acceptance remains required; size and prior655
+receipts do not prove it. Parent654/activity/snapshot family is disjoint.
+
+Einstein's W6 purpose used the retained matching627/434 wheels and immutable7a2e
+native keeper, then ended terminal1/7.428s with3PASS/2FAIL before App/native launch.
+TypedTable.select now sends optional empty filter fields to a SQL column-list
+renderer which correctly requires a nonempty SQL list; ordinary no-key select
+calls must remain valid. Einstein owns that whole source/caller repair. No
+provider/input/fork/native child ran. Owner reports whole1470/69/390 restoration
+and229-process zero-borrower/gap handback; Bohr owns independent readback and
+lifecycle closure. No new successor loan or rerun is inferred. Matching7a2e is
+not baseline086 and remains held unchanged; no SDK rebuild/repetition is needed.
+
+Toad439c639578e mergedaf692dc6 after exact Debt37219739454 success. Actual
+App03 passed all11 original changed checks through archived/live sequence overlap,
+real pending Mount cancellation, source/receipt/bounds/current input/resize/order
+and whole shutdown; inside15.964876s/whole19.621976s. Original01/02 failures stay
+failed. Core65384723271 merged36bd80ed after exact Debt37219208179 success;
+its original FileProvenance/narrative/scorer reader scope remains narrower than
+complete declared-prefix construction or full S4. No acceptance run was repeated
+for either review. Heisenberg and Arendt retain their unfinished full workflows.
+
+Frozen436115 operands/Ready8796ce30/canonical Core1a and all old274 keepers stay
+unchanged. No public operation or fresh guard retry occurred. The original
+unretired user client remains the named admission dependency, not a reason to
+stop independent source and private acceptance. The persistent goal is active.
+The current checklist in15-GOAL-CHECKLIST.md supersedes older status entries.
+
+## Historical: exclusive source publication and recorded input presence merged — 2026-10-04
 
 Core652 exact9f07c724 merged a6567176 after automatic Debt37216136367 passed. GlobalSourceInstall now delegates physical publication to its existing operation type. CreateGlobalSource uses the existing exclusive original writer, refusing a destination created after early admission; ReplaceGlobalSource preserves original bytes in an exclusive preimage. Replacement publication retains original modes and exact UTF8 bytes, including BOM and CRLF. Parent traced original owners/callers with Package/Repository across316 production,365 tests and54 tools, zero parse omissions. One real private filesystem batch passed eight checks: exact bytes/modes, late file and dangling-alias refusal, original preimage protection and unchanged source/recovery checks. All115 frozen436 hashes and Ready stayed unchanged. This does not claim a new public activation or stopped-owner restart; the original operation still owns those boundaries.
 
