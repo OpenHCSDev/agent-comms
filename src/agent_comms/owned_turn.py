@@ -179,17 +179,17 @@ class OwnedTurn:
                             origin.reference,
                         ),
                     )
-        self.batch = InputBatch.capture(
+        batch = InputBatch.capture(
             self.origins,
             self.original_keys,
             self.task,
             self.thread,
             self.runner.inputs.dispositions,
         )
-        self.prepare_prompt()
-        self.reserve_input()
+        self.prepare_prompt(batch)
+        self.reserve_input(batch)
 
-    def prepare_prompt(self):
+    def prepare_prompt(self, batch: InputBatch):
         self.worktree = (
             self.thread.worktree if Path(self.thread.worktree).is_dir() else str(Path.cwd())
         )
@@ -205,14 +205,13 @@ class OwnedTurn:
             RecordedContextTurn,
         )
 
-        input_rows = self.runner.inputs.dispositions.read().rows
         self.context = TurnContext.for_owner(
             self.thread,
             RecordedContextTurn(TurnId(self.turn_id), self.turn_lease.identity),
             self.task,
             self.runner.comms.views.thread_views(),
             tuple(origin.reference for origin in self.origins),
-            tuple(input_rows[key] for key in self.original_keys),
+            batch.originals,
         )
         if self.goal_permit is not None:
             for segment in self.thread.context_goal_segments():
@@ -241,7 +240,7 @@ class OwnedTurn:
                 )
             )
 
-    def reserve_input(self):
+    def reserve_input(self, batch: InputBatch):
         """Acquire the original durable input before opening loop capabilities."""
         if self.original_owner_input:
             permission = OwnerGoalPermission(self.thread.goal)
@@ -268,7 +267,7 @@ class OwnedTurn:
                 if self.dependency_wait_id is not None
                 else NoInputDependency()
             ),
-            batch=self.batch,
+            batch=batch,
         )
         with _store_lock(self.runner.comms._wire_lock_path), ExitStack() as reservation:
             self.original = original.reserve(
