@@ -328,6 +328,8 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return ''
 
     def with_confirmation(self, confirmed: bool) -> Self:
+        if self.confirmation() and not confirmed:
+            raise ValueError(self.confirmation())
         return self
 
     def edited(self, arguments: dict[str, object]) -> Self:
@@ -346,8 +348,6 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             raise ValueError('This action is no longer available for the target')
         bound, = bindings
         edited = bound.edited(arguments)
-        if edited.confirmation() and not confirmed:
-            raise ValueError(edited.confirmation())
         return edited.with_confirmation(confirmed).apply(comms)
 
     @classmethod
@@ -1176,6 +1176,7 @@ class DeleteTagCliCommand(ExactTagCliCommand, declared_name='delete-tag'):
         return self.disposition.confirmation(self.name)
 
     def with_confirmation(self, confirmed: bool) -> Self:
+        super().with_confirmation(confirmed)
         return replace(self, confirmed=confirmed)
 
     def apply(self, ctx: Comms) -> TagChangeResult:
