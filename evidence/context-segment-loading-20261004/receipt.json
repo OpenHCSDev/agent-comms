@@ -1,0 +1,27 @@
+{
+  "source_checkpoint": "6865713f1a8b70d01962e9d017a674f83bfff6a9",
+  "final_scope": "SOURCE_CODEC_DECLARATION_LOADING_QUALIFIED_INSTALLED_PREVIEW_PENDING",
+  "initial_batch": {
+    "passed": 64,
+    "failed": 9,
+    "seconds": 24.06,
+    "raw": "final-batch.txt"
+  },
+  "final_cold_boundary": {
+    "passed": 1,
+    "seconds": 1.01,
+    "raw": "cold-client-owner-encoded.txt",
+    "producer_encoded_original_DTO": true,
+    "client_no_producer_import": true,
+    "current_unavailable_decoded": true,
+    "all8_external_leaf_kinds_resolved": true,
+    "unknown_kind_still_refused": true
+  },
+  "before": "before.json",
+  "after": "after.json",
+  "package_writes": 0,
+  "native_builds": 0,
+  "provider_calls": 0,
+  "ui_launches": 0,
+  "working_memory627_changed": false
+}

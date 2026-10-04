@@ -1,0 +1,922 @@
+{
+  "revision": "HEAD",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 316,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 365,
+      "omissions": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "omissions": []
+    }
+  ],
+  "declarations": [
+    {
+      "path": "src/agent_comms/context_segments/awareness.py",
+      "line": 11,
+      "name": "AwarenessSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": [
+        "bus: str",
+        "root_id: str",
+        "sources: tuple[DeliverySources, ...]"
+      ]
+    },
+    {
+      "path": "src/agent_comms/context_segments/awareness.py",
+      "line": 33,
+      "name": "UnavailableAwarenessSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 181,
+      "name": "CompleteAwareness",
+      "bases": [
+        "ContextSegment",
+        "OptionalAwarenessResult"
+      ],
+      "annotations": [
+        "recipient_lookup: str",
+        "through_seq: int",
+        "selected: tuple[_SelectedDecision, ...]",
+        "open_obligations: tuple[_OpenObligation, ...]",
+        "omitted_count: int",
+        "instruction: InstructionFile",
+        "content_instruction: InstructionFile"
+      ]
+    },
+    {
+      "path": "src/agent_comms/context_segments/response.py",
+      "line": 9,
+      "name": "SelectedResponseSegment",
+      "bases": [
+        "ReplyRouteSegment"
+      ],
+      "annotations": [
+        "sender: str",
+        "example: InstructionFile"
+      ]
+    },
+    {
+      "path": "src/agent_comms/context_segments/retained.py",
+      "line": 12,
+      "name": "RetainedSegment",
+      "bases": [
+        "ContextSegment"
+      ],
+      "annotations": [
+        "retained: RetainedTaskFacts",
+        "scope: AuthoredSourceScope",
+        "boundary: WireExportBoundary"
+      ]
+    },
+    {
+      "path": "src/agent_comms/context_segments/selected.py",
+      "line": 9,
+      "name": "SelectedTriageSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": [
+        "participant: SelectedParticipant",
+        "output: InstructionFile"
+      ]
+    },
+    {
+      "path": "src/agent_comms/context_segments/selected.py",
+      "line": 32,
+      "name": "SelectedWorkSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": [
+        "participant: SelectedParticipant",
+        "action_instructions: tuple[InstructionFile, ...]"
+      ]
+    },
+    {
+      "path": "src/agent_comms/context_segments/wake.py",
+      "line": 29,
+      "name": "SelectedWakeSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": [
+        "sources: tuple[tuple[CommittedDelivery, WakeAssignment], ...]",
+        "owner: Thread",
+        "obligations: tuple[ResponseObligation, ...]",
+        "relevance: InstructionFile"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 276,
+      "name": "ContextSegment",
+      "bases": [
+        "DeclaredFamily"
+      ],
+      "annotations": [
+        "provenance: tuple[Provenance, ...]"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 352,
+      "name": "UserInputSegment",
+      "bases": [
+        "SuppliedSegment",
+        "ContextSegment"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 358,
+      "name": "MeasuredNativeSegment",
+      "bases": [
+        "ContextSegment"
+      ],
+      "annotations": [
+        "tokens: int",
+        "contributors: tuple[SegmentManifest, ...] = ()"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 395,
+      "name": "SystemLayerSegment",
+      "bases": [
+        "MeasuredNativeSegment"
+      ],
+      "annotations": [
+        "content: str",
+        "tokens: int",
+        "sha256: str",
+        "utf8_bytes: int"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 441,
+      "name": "TranscriptSegment",
+      "bases": [
+        "NativeMessages",
+        "MeasuredNativeSegment"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 446,
+      "name": "CompactionSummarySegment",
+      "bases": [
+        "NativeMessages",
+        "MeasuredNativeSegment"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 451,
+      "name": "InjectionMessageSegment",
+      "bases": [
+        "NativeMessages",
+        "MeasuredNativeSegment"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 456,
+      "name": "ToolCatalogSegment",
+      "bases": [
+        "MeasuredNativeSegment"
+      ],
+      "annotations": [
+        "tools: tuple[dict[str, Any], ...]",
+        "tokens: int",
+        "sha256: str",
+        "utf8_bytes: int"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 470,
+      "name": "InstructionSegment",
+      "bases": [
+        "ContextSegment"
+      ],
+      "annotations": [
+        "instruction: InstructionFile"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 481,
+      "name": "UserFollowupSegment",
+      "bases": [
+        "InstructionSegment",
+        "UserInputSegment"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 511,
+      "name": "CoordinationSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": [
+        "response_instruction: InstructionFile",
+        "owner: ThreadIncarnation",
+        "parent: str | None",
+        "project: str",
+        "peers: tuple[PeerState, ...]"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 562,
+      "name": "GoalSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": [
+        "goal: Goal"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 579,
+      "name": "AutomaticTitleSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": []
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 585,
+      "name": "ReplyRouteSegment",
+      "bases": [
+        "InstructionSegment"
+      ],
+      "annotations": [
+        "targets: tuple[str, ...]"
+      ]
+    }
+  ],
+  "consumers": [
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 62,
+      "expression": "from .context_segments.retained import RetainedSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 69,
+      "expression": "RetainedSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 60,
+      "expression": "from .turn_context import CoordinationSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 64,
+      "expression": "CoordinationSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/awareness.py",
+      "line": 7,
+      "expression": "from ..turn_context import InstructionFile, InstructionSegment, WireProvenance",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/context_segments/awareness.py",
+      "line": 11,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/awareness.py",
+      "line": 33,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 23,
+      "expression": "from ..turn_context import ContextSegment, InstructionFile, TurnContext",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 181,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 161,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/response.py",
+      "line": 6,
+      "expression": "from ..turn_context import InstructionFile, ReplyRouteSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/context_segments/response.py",
+      "line": 9,
+      "expression": "ReplyRouteSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/retained.py",
+      "line": 9,
+      "expression": "from ..turn_context import ContextSegment, OwnerProvenance, WireProvenance",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/context_segments/retained.py",
+      "line": 12,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/selected.py",
+      "line": 6,
+      "expression": "from ..turn_context import InstructionFile, InstructionSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/context_segments/selected.py",
+      "line": 9,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/selected.py",
+      "line": 32,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/context_segments/wake.py",
+      "line": 18,
+      "expression": "from ..turn_context import InstructionFile, InstructionSegment, OwnerProvenance, NextContextTurn, WireProvenance",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/context_segments/wake.py",
+      "line": 29,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 58,
+      "expression": "from .turn_context import TurnContext, UserFollowupSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 404,
+      "expression": "UserFollowupSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 304,
+      "expression": "from .context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 316,
+      "expression": "AwarenessSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 313,
+      "expression": "UnavailableAwarenessSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 8,
+      "expression": "from .turn_context import ContextManifest, ContextSegment, ContextSourceText, MeasuredNativeSegment, PreviewProvenance, Provenance, SegmentManifest, TurnContext",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 20,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 46,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 47,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 55,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 56,
+      "expression": "from .turn_context import ContextSegment, InstructionFile, ResourceProvenance, WireProvenance",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 58,
+      "expression": "from .context_segments.optional_awareness import _SelectedDecision, _OpenObligation, OptionalAwarenessResult, OmittedAwareness, CompleteAwareness",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 138,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 275,
+      "expression": "CompleteAwareness",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 205,
+      "expression": "from .turn_context import TurnContext, AutomaticTitleSegment, ReplyRouteSegment, InstructionFile, OwnerProvenance, RecordedContextTurn",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 228,
+      "expression": "AutomaticTitleSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 239,
+      "expression": "ReplyRouteSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/retained_context.py",
+      "line": 9,
+      "expression": "from .context_segments.retained import RetainedSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/retained_context.py",
+      "line": 16,
+      "expression": "RetainedSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_source_batch.py",
+      "line": 16,
+      "expression": "from .context_segments.response import SelectedResponseSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/selected_source_batch.py",
+      "line": 95,
+      "expression": "SelectedResponseSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 28,
+      "expression": "from .context_segments.wake import SelectedWakeSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 29,
+      "expression": "from .context_segments.selected import SelectedTriageSegment, SelectedWorkSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 50,
+      "expression": "SelectedWakeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 60,
+      "expression": "SelectedWakeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 55,
+      "expression": "SelectedTriageSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 83,
+      "expression": "SelectedWorkSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 232,
+      "expression": "from .turn_context import GoalSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "line": 235,
+      "expression": "GoalSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 352,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 358,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 395,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 441,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 446,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 451,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 456,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 470,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 481,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 481,
+      "expression": "UserInputSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 511,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 562,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 579,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 585,
+      "expression": "InstructionSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 483,
+      "expression": "UserFollowupSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 519,
+      "expression": "CoordinationSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 566,
+      "expression": "GoalSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 172,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 333,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 214,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 721,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 766,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 769,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 202,
+      "expression": "MeasuredNativeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 762,
+      "expression": "UserInputSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 776,
+      "expression": "ContextSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 761,
+      "expression": "CoordinationSegment",
+      "node": "Name"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 203,
+      "expression": "from .context_segments.retained import RetainedSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 208,
+      "expression": "RetainedSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 31,
+      "expression": "from agent_comms.turn_context import FileProvenance, JournalProvenance, ToolCatalogSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 296,
+      "expression": "ToolCatalogSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 16,
+      "expression": "from agent_comms.turn_context import UserInputSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 67,
+      "expression": "UserInputSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 106,
+      "expression": "UserInputSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 14,
+      "expression": "from agent_comms.turn_context import ContextManifest, ContextSourceText, FileProvenance, JournalProvenance, NativeProvenance, PreviewProvenance, RecordedContextTurn, SegmentManifest, SystemLayerSegment, TranscriptSegment, TurnContext",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 24,
+      "expression": "SystemLayerSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 88,
+      "expression": "TranscriptSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 148,
+      "expression": "TranscriptSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 186,
+      "expression": "TranscriptSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 69,
+      "expression": "from agent_comms.context_segments.wake import SelectedWakeSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 444,
+      "expression": "SelectedWakeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 432,
+      "expression": "SelectedWakeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 435,
+      "expression": "SelectedWakeSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 39,
+      "expression": "from agent_comms.turn_context import ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, RecordedContextTurn, SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment, ToolCatalogSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 942,
+      "expression": "SystemLayerSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 805,
+      "expression": "TranscriptSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1151,
+      "expression": "SystemLayerSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1152,
+      "expression": "TranscriptSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1153,
+      "expression": "InjectionMessageSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 675,
+      "expression": "ToolCatalogSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 9,
+      "expression": "from agent_comms.context_segments.retained import RetainedSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 114,
+      "expression": "RetainedSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 207,
+      "expression": "RetainedSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 10,
+      "expression": "from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 323,
+      "expression": "from agent_comms.turn_context import CoordinationSegment, InstructionFile",
+      "node": "ImportFrom"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 22,
+      "expression": "TranscriptSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 329,
+      "expression": "CoordinationSegment",
+      "node": "Name"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 314,
+      "expression": "UserInputSegment",
+      "node": "Name"
+    }
+  ],
+  "limits": "Lexical AST and transitive named bases; dynamic imports/runtime resolution require semantic reading and final fresh-process boundary checks."
+}
