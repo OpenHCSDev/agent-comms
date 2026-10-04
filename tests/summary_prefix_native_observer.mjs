@@ -77,6 +77,13 @@ if (output && packageRoot) {
         lineNumber:line(source.readFileSync(`${packageRoot}/dist/core/agent-session.js`,'utf8').split('\n'),
             '        await this.storedContext.beforeInput(this);'),
     });
+    // Observe the existing converter's result, not a second conversion. The
+    // original request ID joins this frame to the later sealed manifest.
+    const conversionPoint = conditionSource && await post('Debugger.setBreakpointByUrl', {
+        url:pathToFileURL(`${packageRoot}/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js`).href,
+        lineNumber:line(source.readFileSync(`${packageRoot}/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js`,'utf8').split('\n'),
+            '    await config.onContextReady?.(llmContext, request.requestId);'),
+    });
     // Inspector correlation within this one private selected operation. It does
     // not select a native source or grant a request, commit or retry.
     let originalSummaryRequest;
@@ -90,6 +97,22 @@ if (output && packageRoot) {
         try {
             if (!params.hitBreakpoints.length) return;
             const frame = params.callFrames[0];
+            if (conversionPoint && params.hitBreakpoints.includes(conversionPoint.breakpointId)) {
+                const original = await post('Debugger.evaluateOnCallFrame', {
+                    callFrameId:frame.callFrameId,
+                    expression:`(() => {
+                        const hash=value=>process.getBuiltinModule('node:crypto').createHash('sha256')
+                            .update(JSON.stringify(value)).digest('hex');
+                        return {stage:'bounded-conversion-observed',request_id:request.requestId,
+                            session_id:request.sessionId,input_id:request.inputId,
+                            agent_messages_sha256:hash(messages),
+                            provider_messages_sha256:hash(llmContext.messages)};
+                    })()`,returnByValue:true,
+                });
+                if (original.exceptionDetails) throw new Error('Original SDK conversion observation unavailable');
+                appendFileSync(output,JSON.stringify(original.result.value)+'\n',{mode:0o600});
+                return;
+            }
             if (conditionPoint && params.hitBreakpoints.includes(conditionPoint.breakpointId)) {
                 const {armBoundedNativeCondition,boundedMessages,transformBoundedNativeCondition}
                     =await import('./retained_native_conditions.mjs');
