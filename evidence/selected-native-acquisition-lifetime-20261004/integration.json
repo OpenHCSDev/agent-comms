@@ -1,0 +1,23 @@
+{
+  "integrated_head": "b1cc38f7f0ecf9a5c559074b6207f9ed775a5c7a",
+  "joined_main": "33851e9da7d56f62ffee4873bee3a26e6ce678f1",
+  "qualified_production_head": "1006822310e6618c70504227783d80cf129164b9",
+  "files": [
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "sha256": "fca8279de2bbd9fb7f28ba62a956385212ba9cf1acb5193bba9040e32db5af89",
+      "qualified_bytes_equal": true
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "sha256": "f66df09c50b83aefd310fd26439f87f5779965e0ca06e26101e159f9e013406b",
+      "qualified_bytes_equal": true
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "sha256": "a2a1799115bdf23a063400737cffcb1e6b65a772db8d1e8da37efae21b363ca1",
+      "qualified_bytes_equal": true
+    }
+  ],
+  "scope": "Normal main integration preserves all three qualified609 production files byte-for-byte. Other accepted main source/native pins remain separate from the unchanged native89 installed gate. No union rebuild or repeated gate claimed."
+}

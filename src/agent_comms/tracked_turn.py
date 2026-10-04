@@ -210,7 +210,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         measurements = (acquisition_measurements if acquisition_measurements is not None
                         else PublicationMeasurements())
         # Independent execution acquires a fresh artifact. A selected stage
-        # derives from its execution's actual acquired launch; source/config and
+        # derives from its execution's original pre-claim factory; source/config and
         # child admission remain fresh. Join the whole construction before custody.
         with measurements.operation("native_launch_selection"):
             launch = await Coordination.run_worker(partial(
@@ -417,7 +417,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             self.evidence = self.custody.enter_context(
                 NativeEntry.open_input_evidence(self.active_session_file)
             )
-            await asyncio.to_thread(self.evidence.observe)
+            await Coordination.run_worker(self.evidence.observe)
 
     @handles(pi.ContextCommitted)
     async def committed_context(self, event: pi.ContextCommitted) -> None:

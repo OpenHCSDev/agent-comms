@@ -24,15 +24,18 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
     """Actual SDK fork/two fresh children; lend artifact, never input readiness."""
     import hashlib
     import os
+    import threading
+    from contextlib import AsyncExitStack
     from functools import partial
     from pathlib import Path
 
     from agent_comms import native_pi
-    from agent_comms import coordinated_runtime
     from agent_comms.coordinated_runtime import SelectedExecution
+    from agent_comms.coordination_errors import IdentityConflict
     from agent_comms.coordinator import Coordination
     from agent_comms.native_custody import PiSessionChild
     from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+    from agent_comms.native_entries import NativeEntry
     from agent_comms.native_session_reopen import NativeSessionIdentity
     from agent_comms.selected_session import SavedSelectedSession
 
@@ -60,7 +63,6 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
         return verify(artifact)
 
     monkeypatch.setattr(native_pi, "_trusted_package", observed)
-    monkeypatch.setattr(coordinated_runtime, "_trusted_package", observed)
     await Coordination.run_worker(execution.validate)
     launches, children = [], []
     for stage in range(2):
@@ -84,12 +86,12 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
         finally:
             await child.close()
         assert child.proc.retired and await child.stderr_task == ""
-    assert len(verifications) == 2  # pre-claim plus first fresh acquired launch
+    assert len(verifications) == 1  # both stages consume the pre-claim acquisition
     assert launches[0][1] != launches[1][1]
     assert children[0].proc.identity != children[1].proc.identity
-    with pytest.raises(native_pi.NativePiUnavailable, match="differs from its acquired"):
-        await Coordination.run_worker(partial(NativePiRpcLaunch.tracked,
-            package.parent, acquired_launch=launches[0][0],
+    with pytest.raises(IdentityConflict, match="differs from its execution package"):
+        await Coordination.run_worker(partial(execution.tracked_launch,
+            package.parent,
             worktree=native.project, session=session,
             provider="response-local", model="fixture"))
     malformed = native.project / "malformed.jsonl"
@@ -104,12 +106,55 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
     await Coordination.run_worker(partial(NativePiRpcLaunch.tracked,
         package, worktree=native.project, session=session,
         provider="response-local", model="fixture"))
-    assert len(verifications) == 3 and native.provider.posts == 0
+    assert len(verifications) == 2 and native.provider.posts == 0
+
+    # The same installed worker joins a borrowed, actual SDK-source descriptor.
+    # This checks read custody, not a synthetic input or provider commitment.
+    entered, release = threading.Event(), threading.Event()
+    readers = []
+
+    async def observe_saved_source():
+        async with AsyncExitStack() as custody:
+            evidence = custody.enter_context(NativeEntry.open_input_evidence(session.path))
+            readers.append(evidence)
+
+            def observe():
+                evidence.observe()
+                entered.set()
+                assert release.wait(5), "Original read was not released"
+                assert not evidence.source.stream.closed
+
+            await Coordination.run_worker(observe)
+
+    observing = asyncio.create_task(observe_saved_source())
+    try:
+        assert await asyncio.to_thread(entered.wait, 5)
+        for _ in range(2):
+            observing.cancel()
+            await asyncio.sleep(0)
+            assert not observing.done() and not readers[0].source.stream.closed
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await observing
+        assert readers[0].source.stream.closed and not readers[0].entries
+    finally:
+        release.set()
+        if not observing.done():
+            observing.cancel()
+        await asyncio.gather(observing, return_exceptions=True)
+
     assert hashlib.sha256(source.read_bytes()).hexdigest() == before
     print("actual_selected_launch_custody", json.dumps({
-        "preclaim_and_first_verifications": 2, "borrowed_verifications": 0,
+        "preclaim_and_first_verifications": 1, "borrowed_verifications": 0,
         "independent_verifications": 1, "auth_changed": True,
         "children_retired": [child.proc.retired for child in children],
+        "children": [{"identity": {"pid": child.proc.identity.pid,
+                                     "start_time": child.proc.identity.start_time},
+                      "alive": child.proc.alive(),
+                      "group_members": [member.pid for member in
+                          child.proc.platform.group_members(child.proc.identity)]}
+                     for child in children],
+        "cancelled_saved_read_joined": readers[0].source.stream.closed,
         "source_bytes": source.stat().st_size, "source_sha256": before,
         "provider_requests": native.provider.posts,
     }), flush=True)
