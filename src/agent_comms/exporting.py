@@ -32,7 +32,7 @@ class WireExportFormat(DeclaredFamily, affix="Format"):
     importable: ClassVar[bool] = False
 
     def __str__(self) -> str:
-        return self.declared_name
+        return FieldCodec.encode(type(self))
 
     @abstractmethod
     def header(self, metadata: Mapping[str, object]) -> bytes:

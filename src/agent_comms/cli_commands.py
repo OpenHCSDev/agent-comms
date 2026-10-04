@@ -352,7 +352,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
 
     @classmethod
     def add_parser(cls, subparsers: Any) -> None:
-        parser = subparsers.add_parser(cls.declared_name, help=cls.help)
+        parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
         groups: dict[str, Any] = {}
         hints = get_type_hints(cls)
         for declared in fields(cls):
@@ -794,7 +794,7 @@ class RegisterCliCommand(CliCommand):
     task: str | None = option("--task", default=None)
     pid: int = option("--pid", default=0)
     execution: type[ThreadExecution] = option("--execution", default=ExternalThreadExecution,
-                                            parser_default=ExternalThreadExecution.declared_name)
+                                            parser_default=FieldCodec.encode(ExternalThreadExecution))
 
     def apply(self, ctx: Comms) -> Any:
         from .threads import Thread
@@ -994,16 +994,23 @@ class CompactionStatusCliCommand(CliCommand, declared_name="compaction-status"):
     thread: str = option("--thread")
 
     def apply(self, ctx: Comms) -> Any:
-        from .compaction_boundary import CompactionBoundary
+        from functools import partial
+        from .compaction_journal import CompactionJournal
         from .compaction_records import SelectedSummaryAttempt
-        from .input_disposition import InputDispositions
 
         owner = ctx.registry.require(self.thread)
-        history = CompactionBoundary(ctx.registry,
-            InputDispositions(ctx.root / InputDispositions.filename)).retained_history(owner)
+        try:
+            session_file = owner.require_saved_session()
+        except ValueError:
+            return dict(thread=owner.name, attempts=[])
+        attempts = CompactionJournal.observe_readonly(
+            ctx.root / "compaction-commits.sqlite3",
+            partial(SelectedSummaryAttempt.for_session, canonical=session_file),
+            absent=(),
+        )
         return dict(thread=owner.name, attempts=[
-            dict(operation_id=row["operation_id"], state=row["state"])
-            for row in history.get("tables", {}).get(SelectedSummaryAttempt.declared_name, ())
+            dict(operation_id=row.operation_id, state=row.state)
+            for row in attempts
         ])
 
 
@@ -1033,7 +1040,7 @@ class ContextCliCommand(CliCommand):
                 raise ValueError("No original context manifest exists for the requested turn")
             if self.diff:
                 return selected[-1].changed_from_history(manifests)
-            return {"manifests": FieldCodec.encode(selected),
+            return {"manifests": selected,
                     "text_recorded": all(manifest.public_text_recorded for manifest in selected)}
         owner = ctx.registry.require(self.thread)
         launch = PrivateNkLaunch.from_environment(
@@ -1060,13 +1067,13 @@ class ContextCliCommand(CliCommand):
         return {
             "scope": "next-native-base-and-core-contributors; before future input and provider hooks",
             "input_supplied": False,
-            "native_manifest": FieldCodec.encode(native_context.segments),
-            "manifest": FieldCodec.encode(context.manifest(counts.counts, counter=counts.counter)),
+            "native_manifest": native_context.segments,
+            "manifest": context.manifest(counts.counts, counter=counts.counter),
             "native_provider_context": native_context.render().provider,
             "segments": [
                 dict(
-                    kind=segment.declared_name,
-                    provenance=FieldCodec.encode(segment.provenance),
+                    kind=type(segment),
+                    provenance=segment.provenance,
                     tokens=count,
                     text=segment.text(),
                 )

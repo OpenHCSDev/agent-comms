@@ -256,7 +256,7 @@ class ProviderTransportStage(PiPayload, DeclaredFamily, affix="Stage"):
         return member()
 
     def to_text(self) -> str:
-        return self.declared_name
+        return FieldCodec.encode(type(self))
 
     @property
     @abstractmethod
@@ -425,7 +425,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     @classmethod
     def normalize_field(cls, target, key, value, record):
         if key == "stopReason":
-            return PiStopReason.from_external(value).declared_name
+            return FieldCodec.encode(PiStopReason.from_external(value))
         return super().normalize_field(target, key, value, record)
 
     @property

@@ -81,6 +81,5 @@ async def compact_manual_owner(
             owner, generation, persistent, source, selected, settings,
             instructions=instructions.strip() if instructions else None,
             on_event=lambda event: runner.effects._emit_event(session_id, event),
-            reason="manual",
             purpose=ManualCompactionReason,
         )

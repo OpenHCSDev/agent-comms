@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 from agent_comms.goal_attempts import ProviderUsageTotal
+from agent_comms.goal_actions import ActiveGoalAction, PausedGoalAction
 from pathlib import Path
 
 import pytest
@@ -1189,12 +1190,12 @@ class TestAgentTurn:
             reservation = store.reserve(goal.id, 1)
             store.claim_launch(reservation)
             reservation.fail(store, "Interrupted by owner")
-        paused = await agent.turns.goals.update_goal("proj", "paused", goal.id, goal.revision)
+        paused = await agent.turns.goals.update_goal("proj", PausedGoalAction, goal.id, goal.revision)
         updates.clear()
         try:
             if failed:
                 with pytest.raises(ValueError, match="use Retry"):
-                    await agent.turns.goals.update_goal("proj", "active", goal.id, paused.revision)
+                    await agent.turns.goals.update_goal("proj", ActiveGoalAction, goal.id, paused.revision)
                 blocked = wired.registry.require("proj").goal
                 assert blocked.state.declared_name == "blocked"
                 assert store.snapshot(goal.id).lifecycle == BlockedGeneration()
@@ -1210,7 +1211,7 @@ class TestAgentTurn:
                 await agent.turns.goals.retry_goal("proj", goal.id, blocked.revision)
                 assert store.snapshot(goal.id).number == 2
             else:
-                await agent.turns.goals.update_goal("proj", "active", goal.id, paused.revision)
+                await agent.turns.goals.update_goal("proj", ActiveGoalAction, goal.id, paused.revision)
                 assert store.snapshot(goal.id).number == 1
             assert wired.registry.require("proj").goal.state.declared_name == "active"
             assert store.snapshot(goal.id).lifecycle == ReadyGeneration()

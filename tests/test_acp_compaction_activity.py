@@ -6,6 +6,7 @@ from agent_comms import agent_events as ae
 from delivery_owner_fixture import canonical_agent
 from agent_comms.activity import ActivityState
 from agent_comms.comms import wire
+from agent_comms.pi_vocabulary import ThresholdCompactionReason
 
 
 @pytest.mark.asyncio
@@ -29,7 +30,7 @@ async def test_compaction_activity_survives_tool_updates_and_restores_latest_sta
     async def events(*args, **kwargs):
         yield ae.ToolStart(id="old-tool", name="read", title="Read project")
         activity(ActivityState.WORKING, "Read project")
-        yield ae.CompactionStart(reason="threshold")
+        yield ae.CompactionStart(reason=ThresholdCompactionReason)
         activity(ActivityState.WORKING, "Compacting context")
         yield ae.CompactionProgress(chunk_index=2)
         activity(ActivityState.WORKING, "Compacting context")
@@ -62,7 +63,7 @@ async def test_compaction_eof_still_finishes_activity(tmp_path, monkeypatch):
     await agent.new_session(str(tmp_path / "project"))
 
     async def events(*args, **kwargs):
-        yield ae.CompactionStart(reason="threshold")
+        yield ae.CompactionStart(reason=ThresholdCompactionReason)
         assert comms.agents.activity_of("project").detail == "Compacting context"
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)

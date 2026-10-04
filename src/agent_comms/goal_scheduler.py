@@ -203,10 +203,9 @@ class GoalScheduler:
         return edited
 
     async def update_goal(
-        self, session_id: str, status: str, goal_id: str, expected_revision: int
+        self, session_id: str, action: type[GoalAction], goal_id: str, expected_revision: int
     ) -> Goal | None:
         """Apply an explicit UI pause, resume, or clear through the current owner."""
-        action = GoalAction.decode(status)
         if not issubclass(action, OwnerControlInvocable):
             raise ValueError("Goal updates support only active, paused, or clear.")
         name = self.sessions.require(session_id)

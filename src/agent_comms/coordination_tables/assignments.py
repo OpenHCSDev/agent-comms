@@ -144,11 +144,11 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
 
     @projected(view="snapshot", name="disposition")
     def snapshot_disposition(self):
-        return self.lifecycle.declared_name
+        return type(self.lifecycle)
 
     @projected(view="snapshot", name="wake_mode")
     def snapshot_wake_mode(self):
-        return self.lifecycle.mode.declared_name
+        return type(self.lifecycle.mode)
 
     @projected(view="snapshot", name="triage_verdict")
     def snapshot_triage_verdict(self):

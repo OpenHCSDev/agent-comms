@@ -276,7 +276,7 @@ class Todo(TypedTable):
                 check=(
                     '"state" IN ('
                     + ", ".join(
-                        sql_literal(member.declared_name)
+                        sql_literal(member)
                         for member in TodoState.members_with(TodoState)
                     )
                     + ")"
@@ -294,7 +294,7 @@ class Todo(TypedTable):
                 check=(
                     '"last_transition" IN ('
                     + ", ".join(
-                        sql_literal(member.declared_name)
+                        sql_literal(member)
                         for member in AssignmentChange.members_with(AssignmentChange)
                     )
                     + ")"
@@ -401,7 +401,7 @@ class TodoStore:
             )
             if not tables:
                 Todo.create(db)
-            elif tables != [_TodoTable(Todo.declared_name)]:
+            elif tables != [_TodoTable(FieldCodec.encode(Todo))]:
                 raise TodoError("Todo storage requires the one-shot durable migration.")
             # Decode exactly the current declared columns; no runtime converters.
             Todo.select(db, where="0")

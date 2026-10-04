@@ -17,10 +17,12 @@ from .declared_family import DeclaredFamily
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .pi_payloads import McpLiveReceipt, PiDiagnostic, PiUsage
+from .pi_vocabulary import CompactionReason, ManualCompactionReason, UnknownCompactionReason
 from .tool_results import ToolDiff
 from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
+    from .pi_commands import PiCommand
     from .native_turn_context import NativeContextManifestData
     from .comms import Comms
     from .goal_presentation import GoalExecution
@@ -153,7 +155,7 @@ class ToolEnd(ToolEvent):
 
 @dataclass(frozen=True)
 class CompactionEvent(AgentEvent, DeclaredFamily, affix="Event"):
-    reason: str = "unknown"
+    reason: type[CompactionReason] = UnknownCompactionReason
 
     @property
     @abstractmethod
@@ -238,7 +240,7 @@ class CompactionSkipped(CompactionEnd):
 class ManualCompactionEnd(CompactionEnd):
     """An explicit manual result includes its safe failure explanation."""
 
-    reason: str = "manual"
+    reason: type[CompactionReason] = ManualCompactionReason
 
     @property
     def publication_summary(self) -> str | None:
@@ -304,8 +306,7 @@ class Notice(AgentEvent):
 class Error(AgentEvent):
     text: str
     reason_code: str | None = None
-    command: str | None = None
-    id: str | None = None
+    command: PiCommand | None = None
     diagnostics: tuple[PiDiagnostic, ...] = ()
 
 

@@ -15,6 +15,7 @@ from .message_reference import MessageReference
 from .goals import Goal
 from .native_session_reopen import NativeSessionIdentity
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
+from .thread_status import ThreadStatus
 
 if TYPE_CHECKING:
     from .input_attempt import StoredInput
@@ -168,7 +169,7 @@ class InstructionFile:
 
 @dataclass(frozen=True)
 class SegmentManifest:
-    kind: str
+    kind: type[ContextSegment]
     provenance: tuple[Provenance, ...]
     sha256: str
     utf8_bytes: int
@@ -188,7 +189,7 @@ class SegmentManifest:
             yield from contributor.source_membership()
 
     def public_description(self) -> str:
-        return f"{self.kind.replace('_', ' ').title()} · {self.tokens} estimated tokens"
+        return f"{self.kind.public_title()} · {self.tokens} estimated tokens"
 
     def selected_contributor(self, positions: tuple[int, ...]) -> SegmentManifest:
         selected = self
@@ -235,7 +236,7 @@ class SegmentManifest:
         return await read_reference(self)
 
     def recorded_parts(self) -> tuple[SegmentManifest, ...]:
-        return ContextSegment.decode(self.kind).recorded_parts(self)
+        return self.kind.recorded_parts(self)
 
     def requested_parts(self) -> tuple[SegmentManifest, ...]:
         return tuple(part for part in self.recorded_parts() if not part.public_text_recorded)
@@ -282,8 +283,12 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
     @abstractmethod
     def text(self) -> str: ...
 
+    @classmethod
+    def public_title(cls) -> str:
+        return cls.declared_name.replace("_", " ").title()
+
     def public_description(self) -> str:
-        return self.declared_name.replace("_", " ").title()
+        return self.public_title()
 
     def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
         return ()
@@ -302,7 +307,7 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
     def manifest(self, tokens: int) -> SegmentManifest:
         raw = self.text().encode()
         return SegmentManifest(
-            self.declared_name, self.provenance, hashlib.sha256(raw).hexdigest(), len(raw), tokens
+            type(self), self.provenance, hashlib.sha256(raw).hexdigest(), len(raw), tokens
         )
 
     def source_membership(self):
@@ -315,7 +320,7 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
 
     def contribution(self, offset: int, text: str, images=()) -> InputContributionCoordinates:
         raw = text.encode()
-        return InputContributionCoordinates(self.declared_name, self.provenance, offset,
+        return InputContributionCoordinates(type(self), self.provenance, offset,
                                  len(raw), hashlib.sha256(raw).hexdigest())
 
 
@@ -323,7 +328,7 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
 class InputContributionCoordinates:
     """Coordinates in the original rendered input, never another input copy."""
 
-    kind: str
+    kind: type[ContextSegment]
     provenance: tuple[Provenance, ...]
     offset: int
     length: int
@@ -365,11 +370,11 @@ class MeasuredNativeSegment(ContextSegment):
 
     def measured_manifest(self):
         # The SDK measures/hashes its exact original JSON representation.
-        return SegmentManifest(self.declared_name, self.provenance,
+        return SegmentManifest(type(self), self.provenance,
                                self.sha256, self.utf8_bytes, self.tokens, self.contributors)
 
     def matches_recorded(self, original: SegmentManifest) -> bool:
-        return (self.declared_name == original.kind and self.sha256 == original.sha256
+        return (self.__class__ is original.kind and self.sha256 == original.sha256
                 and self.utf8_bytes == original.utf8_bytes)
 
     def source_membership(self):
@@ -414,7 +419,7 @@ class NativeMessages:
     def recorded_parts(cls, original: SegmentManifest) -> tuple[SegmentManifest, ...]:
         # SDK capture emits one same-kind child per provider message. A single
         # message's logical input-range annotations have other declared kinds.
-        if all(part.kind == cls.declared_name for part in original.contributors):
+        if all(part.kind is cls for part in original.contributors):
             return original.contributors
         return ()
 
@@ -486,7 +491,7 @@ class PeerState:
     """A projection of original roster declarations, not copied presence state."""
 
     name: str
-    status: str
+    status: type[ThreadStatus]
     activity: str
     activity_detail: str
 
@@ -494,7 +499,7 @@ class PeerState:
     def from_view(cls, view: ThreadView) -> PeerState:
         return cls(
             view.thread.name,
-            view.status.declared_name,
+            type(view.status),
             view.activity.state.value,
             view.activity.detail,
         )

@@ -96,7 +96,7 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
 
     @classmethod
     def mode_expression(cls, expression: str) -> str:
-        return sql_literal(cls().mode.declared_name)
+        return sql_literal(type(cls().mode))
 
     @classmethod
     def verdict_expression(cls, expression: str) -> str:
@@ -267,7 +267,7 @@ class AssignmentDecision:
     @classmethod
     def binding_expression(cls) -> str:
         active = ",".join(
-            sql_literal(member.declared_name)
+            sql_literal(member)
             for member in WakePolicy.members_with(WakePolicy)
             if member.active
         )

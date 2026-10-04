@@ -467,7 +467,9 @@ def test_publication_uncertain_and_recursive_privacy(tmp_path: Path):
         )
     result = view(path)
     assert isinstance(result, AvailableRecoveryProjection)
-    assert result.current is not None and result.current.publication == "uncertain"
+    from agent_comms.obligation_states import PublishingResponse
+
+    assert result.current is not None and result.current.publications == (PublishingResponse,)
     rendered = json.dumps(FieldCodec.encode(result), sort_keys=True)
     for secret in (
         "private-target",

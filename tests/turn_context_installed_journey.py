@@ -410,11 +410,13 @@ def complete_goal_controls(root):
             raise AssertionError('Standby accepted a completed, non-active dependency')
         durable = dispositions.read()
         assert all(durable.lookup(item.key) == item for item in originals)
-        difference = ContextCliCommand(thread=source.name, diff=True).apply(service)
+        compare = ContextCliCommand(thread=source.name, diff=True)
+        difference = compare.encode_result(compare.apply(service))
         manifests = service.bus.log.context_manifests(source.name, service.registry)
         assert difference['turn'] != difference['previous_turn']
-        recorded = ContextCliCommand(thread=source.name,
-            turn=manifests[-1].turn.occurrence.generation).apply(service)
+        command = ContextCliCommand(thread=source.name,
+            turn=manifests[-1].turn.occurrence.generation)
+        recorded = command.encode_result(command.apply(service))
         assert recorded['text_recorded'] is False
         assert recorded['manifests'] == FieldCodec.encode(tuple(item for item in manifests
             if item.turn.matches_generation(manifests[-1].turn.occurrence.generation)))

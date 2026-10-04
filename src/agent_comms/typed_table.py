@@ -278,9 +278,10 @@ class _Field:
         )
 
 
-def sql_literal(value: str | None) -> str:
+def sql_literal(value: str | None | type[DeclaredFamily]) -> str:
     """Quote a declaration-owned SQL constant, never a query parameter."""
-    return "NULL" if value is None else "'" + value.replace("'", "''") + "'"
+    text = FieldCodec.decode(str | None, FieldCodec.encode(value))
+    return "NULL" if text is None else "'" + text.replace("'", "''") + "'"
 
 
 class TypedRow:

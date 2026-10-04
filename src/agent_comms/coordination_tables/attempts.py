@@ -123,7 +123,7 @@ class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
 
     @projected(view="snapshot", name="phase")
     def snapshot_phase(self):
-        return self.lifecycle.declared_name
+        return type(self.lifecycle)
 
     @projected(view="snapshot", name="lease_expires_at_ms")
     def snapshot_lease_expires_at_ms(self):

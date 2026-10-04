@@ -16,6 +16,8 @@ from agent_comms.compaction_progress import CompactionSourceProgress
 from agent_comms.image_inputs import ImageInput
 from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.pi_commands import PiCommand
+from agent_comms.pi_vocabulary import ThresholdCompactionReason
 
 pytestmark = [
     pytest.mark.usefixtures("native_rpc_fixture"),
@@ -1080,10 +1082,10 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
         assert [e.text for e in events if isinstance(e, ae.Chunk)] == ["A-before ", "A-after"]
         assert [type(e) for e in events].count(ae.ToolEnd) == 1
         assert [
-            (e.command, e.id)
+            e.command
             for e in events
             if isinstance(e, ae.Error) and e.reason_code == "steering_command_rejected"
-        ] == [(mutation_type, "rejected-1")]
+        ] == [PiCommand.decode(mutation_type)(id="rejected-1")]
         assert [type(e) for e in events].count(ae.Done) == 1
         assert events[-1] == ae.Done(ok=True, text="A-before A-after", diagnostic={"exit_code": 0})
         assert process is not None and process.returncode == 0
@@ -1635,7 +1637,7 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
         ]
         progress = [e for e in events if isinstance(e, ae.CompactionProgress)]
         assert progress[0] == ae.CompactionProgress(
-            reason="threshold", operation_id="auto-native", chunk_index=0,
+            reason=ThresholdCompactionReason, operation_id="auto-native", chunk_index=0,
             source=CompactionSourceProgress(0, 1000, "history", 1000, 1250)
         )
         assert progress[1].source.source_bytes_done == 500
@@ -3046,8 +3048,8 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
         )
         start = next(event for event in events if isinstance(event, ae.CompactionStart))
         end = next(event for event in events if isinstance(event, ae.CompactionEnd))
-        assert start.reason == "threshold"
-        assert end.reason == "threshold"
+        assert start.reason is ThresholdCompactionReason
+        assert end.reason is ThresholdCompactionReason
         assert end.aborted is aborted
         assert end.context_used is None
         assert end.summary == (None if aborted else summary)

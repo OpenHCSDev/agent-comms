@@ -75,7 +75,7 @@ class CompactionBoundary:
         return dict(segment.inspection(),
                     observations=dict(
                         scope="current certified wire/registry/input read; durable owner inputs and pinned originals including queued and UNKNOWN; not a compaction admission",
-                        facts=FieldCodec.encode(observed),
+                        facts=observed,
                     ),
                     compaction=self.retained_history(owner),
                     native_source_contract=(

@@ -30,6 +30,7 @@ from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .typed_table import Column, Index, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
 from .wake import NoWakeDecision, WakeDecision
+from .wake_policy import WakePolicy
 
 _MAX_ROW = 8 * 1024 * 1024
 _TIMEOUT = 0.05  # Busy readers/writers must not stall a wake for seconds.
@@ -85,7 +86,7 @@ class Candidate(CandidateTable, TypedTable):
     recipient_lookup: str = field(metadata={"sql": Column(primary_key=True)})
     sender: str
     target: str
-    wake_mode: str | None  # None means a delivery-only/no-wake member.
+    wake_mode: type[WakePolicy] | None  # None means a delivery-only/no-wake member.
     without_rowid = True
     indexes = (
         Index(("recipient_lookup", "source_seq"), where="wake_mode IS NOT NULL"),
@@ -246,7 +247,7 @@ class WakeCandidateIndex:
                         recipient.recipient_lookup,
                         message.sender,
                         message.target,
-                        decision.wake_mode.declared_name
+                        type(decision.wake_mode)
                         if type(decision) is WakeDecision
                         else None,
                     )

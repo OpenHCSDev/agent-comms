@@ -21,6 +21,7 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .display_order import ThreadSort
 from .errors import UnregisteredThreadError
+from .goals import GoalMentionBinding
 from .locked_store import LockedStore
 from .wire_record import WireRecord
 from .messages import Message
@@ -145,7 +146,7 @@ class GoalMentionDiagnostic:
     goal_id: str
     text_revision: int
     token: str
-    reason: str
+    reason: type[GoalMentionBinding] | Literal["stale_incarnation"]
 
 
 @dataclass(frozen=True, slots=True)

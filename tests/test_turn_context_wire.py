@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.thread_identity import TurnId, TurnIdentity
-from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext
+from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment
 from agent_comms.pi_commands import Prompt
 from agent_comms.image_inputs import ImageInput
 from agent_comms.wire_record import WireRecord, ObservationWireRecord, ContextManifestWireObservation
@@ -19,7 +19,7 @@ from agent_comms.bus_publication import stable_thread_lookup
 
 def manifest(owner, generation=1):
     source=OwnerProvenance(owner.incarnation, 'original-input-source')
-    segment=SegmentManifest('transcript',(source,),hashlib.sha256(b'PRIVATE INPUT').hexdigest(),13,4)
+    segment=SegmentManifest(TranscriptSegment,(source,),hashlib.sha256(b'PRIVATE INPUT').hexdigest(),13,4)
     return ContextManifest(owner.incarnation,RecordedContextTurn(TurnId('original-turn'),TurnIdentity(owner.incarnation,generation)),(segment,),'pi.estimateTokens')
 
 
@@ -199,8 +199,10 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     recent, limited = reopened.relationships._recent_messages()
     assert recent == (first, second) and not limited
     assert reopened.bus.pending_counts_all(['Alice','Bob'])['Alice']==2
-    assert len(ContextCliCommand(thread='Alice',turn=1).apply(reopened)['manifests'])==1
-    assert ContextCliCommand(thread='Alice',diff=True).apply(reopened)['turn']['occurrence']['generation']==2
+    recorded = ContextCliCommand(thread='Alice',turn=1)
+    assert len(recorded.encode_result(recorded.apply(reopened))['manifests'])==1
+    difference = ContextCliCommand(thread='Alice',diff=True)
+    assert difference.encode_result(difference.apply(reopened))['turn']['occurrence']['generation']==2
 
 
 def test_observation_family_rejects_message_fields_and_preview(tmp_path):
@@ -233,11 +235,14 @@ def test_recorded_context_history_retains_rename_and_original_predecessor(tmp_pa
     history = reopened.bus.log.context_manifests('Alice', reopened.registry)
     assert history == (original, second, same_turn, future)
     assert reopened.bus.log.context_manifests('Renamed-Alice', reopened.registry) == history
-    assert ContextCliCommand(thread='Renamed-Alice', turn=1).apply(reopened)['manifests'] == FieldCodec.encode((original,))
-    difference = ContextCliCommand(thread='Alice', turn=2, diff=True).apply(reopened)
+    recorded = ContextCliCommand(thread='Renamed-Alice', turn=1)
+    assert recorded.encode_result(recorded.apply(reopened))['manifests'] == FieldCodec.encode((original,))
+    compare = ContextCliCommand(thread='Alice', turn=2, diff=True)
+    difference = compare.encode_result(compare.apply(reopened))
     assert difference['previous_turn'] == FieldCodec.encode(original.turn)
     assert difference['turn'] == FieldCodec.encode(same_turn.turn)
-    assert ContextCliCommand(thread='Renamed-Alice', diff=True).apply(reopened)['previous_turn'] == FieldCodec.encode(same_turn.turn)
+    latest = ContextCliCommand(thread='Renamed-Alice', diff=True)
+    assert latest.encode_result(latest.apply(reopened))['previous_turn'] == FieldCodec.encode(same_turn.turn)
     with pytest.raises(ValueError, match='No preceding recorded turn'):
         ContextCliCommand(thread='Alice', turn=1, diff=True).apply(reopened)
     with pytest.raises(ValueError, match='outside the original history'):
@@ -306,7 +311,7 @@ def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp
     for source in rendered.contributions:
         assert hashlib.sha256(raw[source.offset:source.offset+source.length]).hexdigest() == source.sha256
     assert sum(source.length for source in rendered.contributions) == len(raw)
-    assert next(source for source in rendered.contributions if source.kind == 'user_input').images == (0,)
+    assert next(source for source in rendered.contributions if source.kind is UserInputSegment).images == (0,)
     command = Prompt(input_id='a'*32, message=rendered.text, images=images,
                      context_contributions=rendered.contributions)
     decoded = Prompt.from_wire(command.to_rpc())

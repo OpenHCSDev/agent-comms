@@ -165,6 +165,21 @@ def test_cas_rejects_aba_and_unknown_payload_without_effects(owner):
     assert comms.goals.goal_changed("worker", previous).goal == current
 
 
+def test_original_proxy_decodes_typed_goal_control_at_json_boundary():
+    from agent_comms.runtime_requests import RuntimeRequest, UpdateGoalRuntimeRequest
+
+    payload = UpdateGoalRuntimeRequest.proxy_payload("worker", None, {
+        "status": PausedGoalAction, "goal_id": "original-goal", "expected_revision": 7,
+    })
+    assert payload == {"action": "update_goal", "thread": "worker", "status": "paused",
+                       "goal_id": "original-goal", "expected_revision": 7}
+    request = RuntimeRequest.from_wire(json.loads(json.dumps(payload)))
+    assert request == UpdateGoalRuntimeRequest(thread="worker", status=PausedGoalAction,
+        goal_id="original-goal", expected_revision=7)
+    with pytest.raises(ValueError):
+        RuntimeRequest.from_wire({**payload, "status": "unrecorded"})
+
+
 def test_fresh_cli_tool_process_preserves_owner_pause(owner):
     import os
     import subprocess

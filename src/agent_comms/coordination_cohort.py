@@ -380,7 +380,7 @@ def sealed_cohort_assignments(
         db = store.session._connection
         assert_cohort_schema(db)
         states = ",".join(
-            sql_literal(member.declared_name)
+            sql_literal(member)
             for member in AssignmentState.members_with(state_capability)
         )
         return tuple(

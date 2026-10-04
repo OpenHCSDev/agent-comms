@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Self
 from .command import Command
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
+from .goal_actions import GoalAction
 from .thread_presentation import LiveThreadOwnerBinding
 from .turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn
 
@@ -61,7 +62,8 @@ class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
         cls, thread: str, controller_token: str | None, parameters: dict[str, Any]
     ) -> dict[str, Any]:
         # The owner decodes once; proxies preserve the owner's error envelope.
-        return {"action": cls.declared_name, "thread": thread, **parameters}
+        return {"action": FieldCodec.encode(cls), "thread": thread,
+                **FieldCodec.encode(parameters)}
 
     def require_owner(self, snapshot):
         owner = snapshot.require(self.thread)
@@ -313,7 +315,7 @@ class EditGoalRuntimeRequest(
 
 @dataclass(frozen=True, kw_only=True)
 class UpdateGoalRuntimeRequest(GoalRevisionRuntimeRequest, GoalSnapshotResultRuntimeRequest):
-    status: str | None = None
+    status: type[GoalAction]
 
     async def change(self, ctx: RuntimeRequestContext) -> None:
         await ctx.server.agent.turns.goals.update_goal(

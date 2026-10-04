@@ -445,7 +445,7 @@ class PrefixCertificate(CheckpointTable, TypedTable):
         archive retains this same certificate and its original sealed sidecar.
         """
         actual = SQLiteSchemaObject.read(db.execute(
-            "SELECT name,sql FROM sqlite_master WHERE name=?", (cls.declared_name,),
+            "SELECT name,sql FROM sqlite_master WHERE name=?", (FieldCodec.encode(cls),),
         ))
         if {row.name: row.sql for row in actual} != cls.schema_objects():
             raise RelationViolationError("Private bus prefix certificate schema is unavailable.")
