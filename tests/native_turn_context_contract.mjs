@@ -70,7 +70,9 @@ try {
         tools:session.agent.state.tools};
     const captured=await TurnContext.capture(session,provider);
     const full=captured.full();
-    if ((process.argv.includes('--condition-agent-loop') || process.argv.includes('--installed-condition-loop'))) {
+    if (process.argv.includes('--configured-condition-rpc')) {
+        await observeConfiguredPrompt(session,pkg,root,compaction);
+    } else if ((process.argv.includes('--condition-agent-loop') || process.argv.includes('--installed-condition-loop'))) {
         console.log(JSON.stringify(await observeConditionLoop(session,pkg,root,compaction,before)));
     } else {
     // End validation for capture ownership: compare the unchanged public
@@ -360,6 +362,62 @@ try {
         condition_construction_scope:conditions ? 'Authored SDK four-condition installation and canonical restore; no input or captured model baseline' : undefined}));
     }
 } finally {session.dispose();manager.entryStore.close();}
+
+async function observeConfiguredPrompt(session,pkg,root,compaction) {
+    // This authored SDK host runs the original stdin RPC, prompt, input claim,
+    // persistence and onContextReady publication. Only the transport is controlled;
+    // it does not qualify a configured provider, user lease or study arm.
+    const {AgentSessionRuntime}=await import(pathToFileURL(join(pkg,'dist/core/agent-session-runtime.js')));
+    const {runRpcMode}=await import(pathToFileURL(join(pkg,'dist/modes/rpc/rpc-mode.js')));
+    const {AssistantMessageEventStream}=await import(pathToFileURL(join(pkg,
+        'node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js')));
+    assert(session.model,'Original SDK selection required');
+    const identity={sessionId:session.sessionId,sessionFile:session.sessionFile};
+    writeFileSync(join(root,'condition-source.json'),JSON.stringify({evaluated:true,
+        session:identity,checkpoint_session:identity,native_entry_id:compaction,
+        summary:'Authored uncombined narrative only.',source:{kind:'file',
+            path:new URL(import.meta.url).pathname,sha256:hashFile(new URL(import.meta.url))}}),{mode:0o600});
+    const promptDescriptor=Object.getOwnPropertyDescriptor(session,'prompt');
+    const beforeContext=session.storedContext;
+    const beforeDescriptor=Object.getOwnPropertyDescriptor(beforeContext,'beforeInput');
+    const transform=session.agent.transformContext;
+    let streams=0;
+    if (!process.argv.includes('--preflight-refusal'))
+        await session.modelRuntime.setRuntimeApiKey(session.model.provider,'authored-unused-transport-key');
+    session.agent.streamFunction=(model,context,options)=>{
+        streams++;
+        const stream=new AssistantMessageEventStream();
+        const message={role:'assistant',content:[{type:'text',text:'Authored RPC terminal.'}],
+            api:model.api,provider:model.provider,model:model.id,timestamp:Date.now(),
+            stopReason:'stop',usage:{input:0,output:0,cacheRead:0,cacheWrite:0,
+                totalTokens:0,cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}};
+        if (process.argv.includes('--abort-stream')) {
+            options.signal.addEventListener('abort',()=>stream.push({type:'error',reason:'aborted',
+                error:{...message,stopReason:'aborted'}}),{once:true});
+        } else stream.push({type:'done',reason:'stop',message});
+        return stream;
+    };
+    const host=new AgentSessionRuntime(session,{cwd:session.sessionManager.getCwd(),
+        agentDir:join(root,'config')},async()=>{
+            throw new Error('This authored prompt control does not replace sessions');
+        });
+    session.subscribe(event=>{
+        if(event.type==='agent_settled') {
+            assert.deepEqual(Object.getOwnPropertyDescriptor(session,'prompt'),promptDescriptor);
+            assert.deepEqual(Object.getOwnPropertyDescriptor(beforeContext,'beforeInput'),beforeDescriptor);
+            assert.equal(session.agent.transformContext,transform);
+        }
+    });
+    process.on('exit',()=>{
+        assert.deepEqual(Object.getOwnPropertyDescriptor(session,'prompt'),promptDescriptor);
+        assert.deepEqual(Object.getOwnPropertyDescriptor(beforeContext,'beforeInput'),beforeDescriptor);
+        assert.equal(session.agent.transformContext,transform);
+        writeFileSync(join(root,'prompt-exit.json'),JSON.stringify({provider_calls:0,
+            authored_RPC_prompts:true,controlled_streams:streams,hook_restored:true,
+            native_identity:identity}),{mode:0o600});
+    });
+    await runRpcMode(host);
+}
 
 async function observeConditionLoop(session,pkg,root,compaction,before) {
     // Authored plumbing control: the original loop/SDK/inspector execute, while
