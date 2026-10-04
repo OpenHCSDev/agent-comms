@@ -45,7 +45,8 @@ def record(path, value):
 
 
 async def condition_application(stage,package,original_python,selected_condition: Condition,
-                                checkpoint: RecordedNativeCheckpoint):
+                                checkpoint: RecordedNativeCheckpoint, *, core_source,
+                                core_artifacts=()):
     """Install one selection on an original SDK fork, then submit distinct input.
 
     Borrow the existing completed cut/capture. This path neither repeats its
@@ -80,7 +81,8 @@ async def condition_application(stage,package,original_python,selected_condition
     with observe_native_requests(package,observer_output,
             contexts=contexts,condition_source=condition_file,condition=selected_condition) as launch:
         async with configured_saved_agent(application_stage,package,captured_source,Receiver(),receipt,
-                capture_source=capture_source,observe_launch=launch) as (agent,owner,fork):
+                capture_source=capture_source,observe_launch=launch,
+                core_source=core_source,core_artifacts=core_artifacts) as (agent,owner,fork):
             contexts.mkdir(mode=0o700)
             service=agent._comms
             condition=checkpoint.fork_condition_source(
@@ -136,7 +138,7 @@ def frozen_scenario(root_reference):
     return RecallScenario('configured-original-three-cut', tuple(rounds))
 
 
-async def request_construction(stage, package, original_python):
+async def request_construction(stage, package, original_python, *, core_source, core_artifacts=()):
     """One distinct configured input qualifies observation, not a new study.
 
     The existing saved-agent owner makes the isolated fork. The native SDK
@@ -166,7 +168,8 @@ async def request_construction(stage, package, original_python):
     with observe_native_requests(package, stage / 'request-observation.jsonl',
                                  contexts=contexts, summaries=summaries) as observe_launch:
         async with configured_saved_agent(stage, package, source, Receiver(), receipt,
-                capture_source=capture_source, observe_launch=observe_launch) as (agent, owner, fork):
+                capture_source=capture_source, observe_launch=observe_launch,
+                core_source=core_source,core_artifacts=core_artifacts) as (agent, owner, fork):
             contexts.mkdir(mode=0o700)
             summaries.mkdir(mode=0o700)
             marker = f'REQUEST_CONSTRUCTION_{stage.name.upper().replace("-", "_")}'
@@ -250,7 +253,7 @@ def completed_continuation(stage):
     return resumed
 
 
-async def run(stage, package, original_python, *, continuation=None):
+async def run(stage, package, original_python, *, core_source, core_artifacts=(), continuation=None):
     captured = CurrentTypedCapture(Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'),
                                    original_python).read('openhcs-architecture-memory')
     original = captured.require_current()
@@ -277,7 +280,8 @@ async def run(stage, package, original_python, *, continuation=None):
                                  summaries=summaries) as observe_launch:
         async with configured_saved_agent(stage, package, source_file, Receiver(), receipt,
                 capture_source=capture_source, observe_launch=observe_launch,
-                continuation=continuation) as (agent, owner, creation):
+                continuation=continuation,core_source=core_source,
+                core_artifacts=core_artifacts) as (agent, owner, creation):
             contexts.mkdir(mode=0o700, exist_ok=continuation is not None)
             summaries.mkdir(mode=0o700, exist_ok=continuation is not None)
             session = NativeSessionIdentity(creation.session_id, creation.session_file)
@@ -385,16 +389,23 @@ async def run(stage, package, original_python, *, continuation=None):
 
 
 if __name__ == '__main__':
-    stage = Path(sys.argv[1]).absolute()
+    from publish_retained_summary import InstalledSource
+
+    source, artifacts, arguments = InstalledSource.command_arguments(sys.argv[1:])
+    stage = Path(arguments[0]).absolute()
+    package, original = Path(arguments[1]).resolve(), Path(arguments[2]).absolute()
     modes = {'--continue-committed': committed_checkpoint, '--continue-completed': completed_continuation}
-    if sys.argv[4:] == ['--request-construction']:
-        asyncio.run(request_construction(stage, Path(sys.argv[2]).resolve(), Path(sys.argv[3]).absolute()))
-    elif sys.argv[4:5]==['--condition-application']:
-        if len(sys.argv)!=7:
+    if arguments[3:] == ['--request-construction']:
+        asyncio.run(request_construction(stage, package, original,
+            core_source=source,core_artifacts=artifacts))
+    elif arguments[3:4]==['--condition-application']:
+        if len(arguments)!=6:
             raise ValueError('--condition-application requires Condition and original checkpoint file')
-        asyncio.run(condition_application(stage,Path(sys.argv[2]).resolve(),Path(sys.argv[3]).absolute(),
-            FieldCodec.decode(Condition,sys.argv[5]),
-            FieldCodec.decode(RecordedNativeCheckpoint,json.loads(Path(sys.argv[6]).read_text()))))
+        asyncio.run(condition_application(stage,package,original,
+            FieldCodec.decode(Condition,arguments[4]),
+            FieldCodec.decode(RecordedNativeCheckpoint,json.loads(Path(arguments[5]).read_text())),
+            core_source=source,core_artifacts=artifacts))
     else:
-        continuation = modes[sys.argv[4]](stage) if sys.argv[4:] else None
-        asyncio.run(run(stage, Path(sys.argv[2]).resolve(), Path(sys.argv[3]).absolute(), continuation=continuation))
+        continuation = modes[arguments[3]](stage) if arguments[3:] else None
+        asyncio.run(run(stage,package,original,continuation=continuation,
+            core_source=source,core_artifacts=artifacts))

@@ -140,6 +140,25 @@ class InstalledSource:
     direct_url: VcsPackageDirectUrl | ArchivePackageDirectUrl
     inventory_sha256: str
 
+    @classmethod
+    def command_arguments(cls, arguments: list[str]):
+        """Decode the declared installer source once at a private CLI boundary.
+
+        Commands forward this owner and its reviewed archives; they do not
+        infer a Git source revision from file-wheel metadata.
+        """
+        import argparse
+
+        parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+        parser.add_argument('--installed-source', type=Path, required=True)
+        parser.add_argument('--archive', nargs=2, action='append', default=[],
+                            metavar=('PATH', 'SHA256'))
+        supplied, remaining = parser.parse_known_args(arguments)
+        source = FieldCodec.decode(cls, json.loads(supplied.installed_source.read_text()))
+        artifacts = tuple(ReviewedArtifact(Path(path).absolute(), sha256)
+                          for path, sha256 in supplied.archive)
+        return source, artifacts, remaining
+
     def require_original(self, artifacts: tuple[ReviewedArtifact, ...] = ()):
         if not self.byte_equal:
             raise RuntimeError('Installed source bytes are not verified')
