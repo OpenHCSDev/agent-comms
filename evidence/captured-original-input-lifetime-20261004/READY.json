@@ -1,0 +1,76 @@
+{
+  "state": "READY_CAPTURED_ORIGINAL_SOURCE_SCOPE",
+  "source_head": "dc4042b7d6425d3b10ef998e8a84629bbac75dc1",
+  "base": "d7d61b12de2be0e730e9474efdaf48aac2692ba1",
+  "production_changes": [
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "deleted": 8,
+      "added": 7
+    }
+  ],
+  "test_changes": [
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "deleted": 0,
+      "added": 74
+    }
+  ],
+  "installed_python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+  "wheel_sha256": "1144272b728bf0069038efce0be6536a6e0e1d2d5bd92db1152fa5c54929fdb6",
+  "installed_members_equal": 342,
+  "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+  "manifest_sha256": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+  "native_tree_sha256": "dbc88ed9231d1275da3ce218aa8919a247e41ce1f010ce765e7ac0960193f4ac",
+  "gate": {
+    "log": "installed03.log",
+    "passed": 2,
+    "pytest_seconds": 5.01,
+    "session": 3054,
+    "terminal_exit": 0,
+    "scope": "Actual SDK-authored saved history, original ACP/native get_state/stats owner preparation, direct/channel/scheduled input capture and context provenance, reservation/NotSent retirement and cleanup. No native prompt/provider dispatch."
+  },
+  "preserved_negatives": [
+    {
+      "log": "installed01.log",
+      "exit": 4,
+      "scope": "Runner addopts requires unavailable xdist; precollection, no native/owner fixture launched."
+    },
+    {
+      "log": "installed02.log",
+      "exit": 1,
+      "scope": "Runner duplicated asyncio plugin registration; precollection, no fixture launched."
+    }
+  ],
+  "custody_assertions": [
+    "saved native history bytes unchanged",
+    "provider.posts == 0; native starts == []",
+    "four original inputs NotSent with no native binding",
+    "canonical original turn lease idle",
+    "original sources/backend inboxes released",
+    "all actual native children absent and original groups empty"
+  ],
+  "original_611_613_scope": "No unchanged controls rerun; evidence/private history/proofs preserved.",
+  "installed_not_live": true,
+  "public_effects": 0,
+  "native_build_or_copy": false,
+  "environment_created": false,
+  "speed_claim": false,
+  "readiness_limit": "No provider/dialog/UI/throughput/13s or 98s latency acceptance claimed. Fresh certainty checks remain separate current source observations.",
+  "evidence_sha256": {
+    "installed01.log": "f45c556e364cc7d36386359e69b8bd10f70bb766187783c5015466e9decc981f",
+    "SOURCE.md": "99f2c9ed0bd8a5edbafd8f86b093707801b72f374926da842704f6de1ba72049",
+    "installed-source-proof.json": "a2e3c97d71fb1176123e158c222f749051648096e433ed8cf4b8217ab4033cde",
+    "wheel-proof.json": "48b387bd73088d63b72eafe8c2c08a6655f5201fd4e8e9cf82d653290647209d",
+    "before.json": "34cd3534309e99c56a4f16416538b7c98b4752baf2b8857132b3f6a52859a139",
+    "installed02.log": "906c8438010444556f1eb6fab321369e0fcab9f00e074265b057c061fd28c638",
+    "build.log": "df9911a60f329d070b9953f86e90cab03b59dbd0854a4f38d828e6d95c82d819",
+    "pip-check.log": "7547270bbb1696aa29d1c0d0821614feb7278acdb9190c44b64cd56e2d267b63",
+    "installed-controls.py": "231b81512fa2b286bbc375983924174227e3547991e24e6c5d0ac95200c09abc",
+    "installed-source-proof02.json": "a2e3c97d71fb1176123e158c222f749051648096e433ed8cf4b8217ab4033cde",
+    "installed-source-proof03.json": "a2e3c97d71fb1176123e158c222f749051648096e433ed8cf4b8217ab4033cde",
+    "installed03.log": "b1ad14e1c73de190ee374c3add60af151408e11770ce8d67a8ecac306371d733",
+    "install.log": "d593e8dc39799fa07675c6ddf7cad2dd05d5db2b1b9d078e536c039b9aa94c99",
+    "after.json": "84f10fea57f93890bc97173bf929ee92547643e82f8e44eb3cac770796cf452a"
+  }
+}
