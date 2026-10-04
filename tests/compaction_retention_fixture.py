@@ -539,43 +539,57 @@ class ScoredScenario(ScoreView):
                                     for identity, original in evidence.items()},
                     recall_scope="Original recorded answers; tool-assisted answers are task quality, not unassisted recall. Authored answers are scorer controls"))
 
-    @staticmethod
-    def recorded_resources(checkpoints, evidence):
+    def recorded_resources(self, checkpoints, evidence):
         """Total acquired original completions, never estimates or billing.
 
         A missing usage/counter leaves that metric unavailable. Summary and
         assistant records remain separate so shared cuts cannot be hidden in a
-        paired cost comparison. Output already includes reported reasoning;
+        paired cost comparison. Frozen rounds own completeness, not the subset
+        of supplied records. Output already includes reported reasoning;
         neither tokens nor cost is reconstructed from component counters.
         """
-        summaries = tuple(report['summary_usage']['usage']
-            if report['summary_usage']['evaluated'] else None
-            for report in checkpoints.values())
-        assistants = tuple(step['usage']['value'] for original in evidence.values()
-            for step in original['model_steps'])
+        rounds = tuple(round_.identity for round_ in self.source.rounds)
+        summaries = {identity: (report['summary_usage']['usage']
+            if report['summary_usage']['evaluated'] else None,)
+            for identity, report in checkpoints.items()}
+        assistants = {identity: tuple(step['usage']['value']
+            for step in original['model_steps']) for identity, original in evidence.items()}
 
-        def metric(values, expected):
+        def metric(values, expected, complete_rounds):
             supplied = tuple(value for value in values if value is not None)
-            complete = expected > 0 and len(supplied) == expected
+            complete = complete_rounds and expected > 0 and len(supplied) == expected
             return {'evaluated': complete, 'value': sum(supplied) if complete else None,
-                    'observed_records': len(supplied), 'expected_records': expected}
+                    'observed_records': len(supplied),
+                    'expected_records': expected if complete_rounds else None,
+                    'observed_value': sum(supplied) if supplied else None}
 
-        def total(records):
+        def total(*groups):
+            records = tuple(chain.from_iterable(records for group in groups for records in group.values()))
+            observed_rounds = tuple(identity for identity in rounds
+                                    if all(group.get(identity) for group in groups))
+            missing_rounds = tuple(identity for identity in rounds if identity not in observed_rounds)
+            def measured(values):
+                return metric(values, len(records), not missing_rounds)
+
             available = tuple(record for record in records if record is not None)
             return {'records': len(records),
                 'usage_records': len(available),
-                'input_tokens': metric((usage.input for usage in available), len(records)),
-                'output_tokens': metric((usage.output for usage in available), len(records)),
-                'cache_read_tokens': metric((usage.cache_read for usage in available), len(records)),
-                'cache_write_tokens': metric((usage.cache_write for usage in available), len(records)),
-                'reported_total_tokens': metric((usage.total_tokens for usage in available), len(records)),
-                'reasoning_tokens': metric((usage.reasoning for usage in available), len(records)),
-                'normalized_cost': metric((usage.cost.total for usage in available
-                                           if usage.cost is not None), len(records))}
+                'expected_rounds': rounds, 'observed_rounds': observed_rounds,
+                'missing_rounds': missing_rounds,
+                'input_tokens': measured(usage.input for usage in available),
+                'output_tokens': measured(usage.output for usage in available),
+                'cache_read_tokens': measured(usage.cache_read for usage in available),
+                'cache_write_tokens': measured(usage.cache_write for usage in available),
+                'reported_total_tokens': measured(usage.total_tokens for usage in available),
+                'reasoning_tokens': measured(usage.reasoning for usage in available),
+                'normalized_cost': measured(usage.cost.total for usage in available
+                                           if usage.cost is not None)}
 
         return {'summaries': total(summaries), 'assistants': total(assistants),
-                'combined': total((*summaries, *assistants)),
+                'combined': total(summaries, assistants),
                 'scope': 'Original journaled summary and assistant completions only; '
+                         'complete totals require observations for every frozen round; '
+                         'observed subtotals do not estimate missing work or prove no summary work; '
                          'SDK-normalized cost is not billed spend; no unjournaled retries, '
                          'cache-saving comparison, HTTP accounting or end-to-end timing'}
 
