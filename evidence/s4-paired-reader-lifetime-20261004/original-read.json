@@ -1,0 +1,47 @@
+{
+  "scope": "Original reader/probe/scorer plumbing only; not model recall, matched intervention, HTTP or full S4",
+  "source_head": "1432fbad",
+  "source_probe_sha256": "fff818b493fe9a784d20dc318d386c7a14469948d4626e5dd53623693c63ca0d",
+  "original_files": 14,
+  "original_files_unchanged": true,
+  "elapsed_seconds": 4.623611353104934,
+  "acquisitions": [
+    "/home/ts/wt/a60201/application/forks/2026-10-03T20-17-09-000Z_01a10369-d188-767d-beb5-9e68c6054c3e.jsonl",
+    "/home/ts/wt/a60201/capture/forks/2026-10-03T20-14-38-769Z_01a10367-86b2-7448-ad34-7aebb5a095d5.jsonl"
+  ],
+  "original_commit": "671a057291324371bf0ded12fd5cc227",
+  "condition_application": {
+    "evaluated": true,
+    "narrative_source": {
+      "kind": "file",
+      "path": "/home/ts/wt/a60201/capture/summary-assemblies/summary-9388e6dde50c4bf591bbe430e578c765.json",
+      "sha256": "6030c74967d159eec73ba18c6e5671c8363ca48e784cc30986c4c8d4c3a9899b"
+    },
+    "checkpoint_session": {
+      "sessionId": "01a10367-86b2-7448-ad34-7aebb5a095d5",
+      "sessionFile": "/home/ts/wt/a60201/capture/forks/2026-10-03T20-14-38-769Z_01a10367-86b2-7448-ad34-7aebb5a095d5.jsonl"
+    },
+    "session": {
+      "sessionId": "01a10369-d188-767d-beb5-9e68c6054c3e",
+      "sessionFile": "/home/ts/wt/a60201/application/forks/2026-10-03T20-17-09-000Z_01a10369-d188-767d-beb5-9e68c6054c3e.jsonl"
+    },
+    "native_entry_id": "0094470d",
+    "message_binding": {
+      "evaluated": false,
+      "reason": "Original SDK conversion not captured"
+    },
+    "scope": "Original transform and narrative present in this recorded SDK input; not final HTTP bytes or comparative recall"
+  },
+  "native_model_processes": 0,
+  "provider_calls": 0,
+  "package_env_writes": 0,
+  "recall_study": false,
+  "success": true,
+  "raw_receipt_sha256": "1eee0709b2bab12cf6bccc9815f2f976fa8c096ae4b7d51c89c0380de6c82945",
+  "resource_controls": {
+    "initial_complete_group_controls": 4,
+    "final_changed_condition_and_source_caller_controls": 4,
+    "final_seconds": 0.15,
+    "warnings": "pytest-asyncio plugin not loaded; selected checks were synchronous"
+  }
+}
