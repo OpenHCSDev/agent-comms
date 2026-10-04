@@ -1,5 +1,38 @@
 ## Current: ordinary440 installed and display verified; full workflow remains — 2026-10-04
 
+### Latest closed purpose and next installed boundary
+
+W6 attachment03 exited1 in22.963988s (pytest20.04s). Registered App/ACP
+settlement, exact private root/incarnation and historical ReferenceNode cursor
+acquisition reached; focus was Button#context-correct before Enter. Historical
+read/search/export were unreached. Einstein owns the complete focus/custody
+source investigation; no native fault or explanation of the old90s timeout is
+established, and no rerun follows from the returned purpose.
+
+Parent matched Bohr lifecycle cd2fb3d3 and independent readback ddb84bdc.
+All1470 original file bytes/modes/links,69 origins and390 protected members are
+restored, with no extra W6 package assets or private sockets. Fresh254-process
+privileged census has zero references/gaps. The retained NRA wheel member did
+not match the actual floor; the exact original e6f archive member was restored
+into a new inode, with the first restoration failure preserved. The issued058885
+grant remains unchanged and the package purpose is closed. Matching7a custody
+was returned; its immutable keeper remains retained under Sch's ownership.
+
+The next authorized preparation is Heis's coherent441 task-custody correction
+plus442 TranscriptState painted-read fence. Parent reviewed the existing-state
+owner change: live tail/checkpoint and active Working fences remain, while
+revoked source projections carry no current paint obligation. Installed
+acceptance is pending exact combined source/control operands, fresh Bohr floor
+and borrower clearance, a new named purpose and separate Sch086 custody.
+No public334 package changes or private imports follow from this source review.
+
+Core661's execution-only purpose is also independently closed: lifecycle
+4ee018df/readback13ffdbe8, fresh255 processes with zero references/gaps,
+347 installed assets,94 keepers,69 metadata files/10 distributions and29 compact
+keepers exact. Its8.917682s current-private PASS does not qualify cross-version
+restart. No further661 execution or package purpose remains.
+
+
 Toad440 final1e80524b merged4cc4d531 after exact Debt37230082759 passed.
 Parent verified all122 frozen artifacts and37 original gate hashes, then ran
 the new original guarded operation once. Publication exited0 in42.513595s;
