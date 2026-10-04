@@ -68,7 +68,7 @@
   "regular_files": 19190,
   "failed_assembly01": "Original offline locked extension cache absent; unpublished stage retired by original trap; log retained",
   "replacement_serial_assembly": true,
-  "qualification": "Compiled matching artifact and original whole-tree trust completed; source-only syntax completed; changed SDK span/parity gate pending driver correction, not Ready/installed",
+  "qualification": "Matching native artifact plus original authored six-case SDK source-preview system assembly/parity/span capture accepted; no committed model producer, installed Python/UI, W6, provider, public or whole working-memory acceptance",
   "originals": {
     "ownership.json": "c4b0a0139d13330618481609be0f76d859eeb30ee3355540ff3ae5db549e4dcd",
     "original-manifest.sha256": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
@@ -82,5 +82,90 @@
     "pin-derivation.json": "27b084838e7c67370c2595b29ef2dfad0e66c94d4227bda1729c87d00edc64b9",
     "canonical-verify-original.log": "99d7867d7b9b8e03fcc712f01e4cdbc8270a888f780c6b0fadb4a68fda13f1e9",
     "artifact-source-check.json": "b58a2aa6b350f016976873d8e281c94f426fc5be71bc554d324d6d01c2d5b62d"
+  },
+  "SDK_qualification": {
+    "terminal": {
+      "driver_source": "0270acd478f91b58e89ed2afa8a75943a429adb7",
+      "driver_sha256": "36ae173d40d05b5ed3d3ca6189ce52ed863c0f7c4ab195778141f53491e7d11e",
+      "producer_source": "fcbd30a1316ba6c1f4e39719591b39535425e946",
+      "artifact_manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+      "artifact_tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d",
+      "args": [
+        "node",
+        "/home/ts/wt/comms-field-codec-closure-20260928/tests/native_turn_context_contract.mjs",
+        "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent",
+        "/home/ts/.cache/agent-scratch/working-memory627-system-spans-sdk01-20261004",
+        "--system-source-spans",
+        "--comparison-package",
+        "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 0.9894417780451477,
+      "stdout_sha256": "eeb6d1c4af3274fdded237974d1be2080adf773d239767ee6a3484c20e0c901d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "scope": "Original authored SDK DefaultResourceLoader/session preview assembly and span/parity capture; no committed provider request",
+      "provider_requests": 0,
+      "native_inputs": 0,
+      "saved_user_session_changes": false
+    },
+    "result": {
+      "scope": "Original SDK source-only assembly/capture; no committed provider request",
+      "provider_requests": 0,
+      "native_inputs": 0,
+      "original_builder_byte_parity": true,
+      "cases": [
+        {
+          "name": "default",
+          "utf8_bytes": 3727,
+          "spans": 13,
+          "captured_values_and_request_id": true,
+          "journal_unchanged": true
+        },
+        {
+          "name": "custom-file",
+          "utf8_bytes": 1006,
+          "spans": 13,
+          "captured_values_and_request_id": true,
+          "journal_unchanged": true
+        },
+        {
+          "name": "unchanged-overrides",
+          "utf8_bytes": 1006,
+          "spans": 13,
+          "captured_values_and_request_id": true,
+          "journal_unchanged": true
+        },
+        {
+          "name": "changed-system",
+          "utf8_bytes": 1035,
+          "spans": 13,
+          "captured_values_and_request_id": true,
+          "journal_unchanged": true
+        },
+        {
+          "name": "changed-append",
+          "utf8_bytes": 3763,
+          "spans": 15,
+          "captured_values_and_request_id": true,
+          "journal_unchanged": true
+        },
+        {
+          "name": "literal-system",
+          "utf8_bytes": 1021,
+          "spans": 13,
+          "captured_values_and_request_id": true,
+          "journal_unchanged": true
+        }
+      ]
+    },
+    "cleanup": {
+      "scratch": "/home/ts/.cache/agent-scratch/working-memory627-system-spans-sdk01-20261004",
+      "authored_disposable_files": 6,
+      "authored_disposable_bytes": 165,
+      "retired_after_original_Node_terminal": true,
+      "comparison_child_custody": "Original driver awaits close and stdout callback; no separate process census claimed",
+      "saved_user_data": false,
+      "scratch_exists_after": false
+    }
   }
 }
