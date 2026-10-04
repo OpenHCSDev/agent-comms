@@ -86,13 +86,7 @@ class HistoryViews:
         return MessageNotification.window(self.root, self.registry, self.bus.log, messages)
 
     def message_notifications_for_references(self, references: Sequence[MessageReference]):
-        """Read mounted references in the notification owner's bounded windows."""
-        result = {}
-        limit = MessageNotification.window_limit
-        for start in range(0, len(references), limit):
-            sources = self.bus.log.deliveries_for_references(references[start : start + limit])
-            result.update(MessageNotification.delivery_window(self.root, self.registry, sources))
-        return result
+        return MessageNotification.references(self.root, self.registry, self.bus.log, references)
 
     def recent_notifications(self, name: str, *, limit: int = 5):
         return MessageNotification.recent(self.root, self.registry, self.bus.log, name, limit=limit)
@@ -330,36 +324,22 @@ class HistoryViews:
         registry = self.registry.snapshot()
         catalog = self.channels.catalog.read()
         declarations = catalog.views(registry.threads)
-        activities = self.agents.all_activity(snapshot=registry)
         sent = self.last_sent_timestamps()
-        channels = ChannelView.roster(
-            registry, declarations, catalog.pinned_members(), catalog.list_order,
-            activities, sent, ChannelActivity.for_views(declarations, self.bus.channel_activity()),
-            show_stopped=show_stopped, show_archived=show_archived,
-        )
-        threads = ThreadView.roster(
-            registry, self.agents, activities, GoalWaits(self.root / GoalWaits.filename),
-            show_stopped=show_stopped, show_archived=show_archived,
-        )
         unread = (
             self.bus.pending_counts(actor)
             if registry.canonical_name(actor) in registry.threads else {}
         )
         channel_unread: dict[str, int] = {}
-        for view in channels:
-            targets = catalog.history_targets(view.channel.name)
-            channel_unread[view.channel.name] = sum(
+        for name in declarations:
+            targets = catalog.history_targets(name)
+            channel_unread[name] = sum(
                 count for target, count in unread.items() if targets is None or target in targets
             )
-        return CoordinationSnapshot(
-            threads=threads,
-            channels=channels,
-            unread=unread,
-            last_sent=sent,
-            channel_unread=channel_unread,
-            channel_order=catalog.list_order,
-            show_stopped=show_stopped,
-            show_archived=show_archived,
+        return CoordinationSnapshot.capture(
+            self.root, registry, catalog, self.agents, declarations, sent,
+            ChannelActivity.for_views(declarations, self.bus.channel_activity()),
+            unread=unread, channel_unread=channel_unread,
+            show_stopped=show_stopped, show_archived=show_archived,
         )
 
     def viewer_snapshot(
@@ -368,54 +348,23 @@ class HistoryViews:
         """Local presentation scope, independent of agent delivery cursors."""
         viewer = self.messaging.user_identity(worktree).name
         with self.presentation.snapshot(viewer=viewer) as (basis, records, bus_revision):
-            registry = basis.registry
-            declarations = basis.channels
             scopes = basis.scopes
-            order = basis.catalog.list_order
             captured_viewer = basis.viewer
-            viewer_names = basis.viewer_names
-            pins = basis.catalog.pinned_members()
-            notice = basis.notice
             assert captured_viewer is not None
             display_activity, display_unread = self.presentation.display_view_metrics(
-                records, scopes, scopes, captured_viewer, viewer_names, bus_revision
+                records, scopes, scopes, captured_viewer, basis.viewer_names, bus_revision
             )
-            sent = self.last_sent_timestamps()
-            activities = self.agents.all_activity(snapshot=registry)
-            channels = ChannelView.roster(
-                registry,
-                declarations,
-                pins,
-                order,
-                activities,
-                sent,
-                display_activity,
-                show_stopped=show_stopped,
-                show_archived=show_archived,
-            )
-            threads = ThreadView.roster(
-                registry,
-                self.agents,
-                activities,
-                GoalWaits(self.root / GoalWaits.filename),
-                show_stopped=show_stopped,
-                show_archived=show_archived,
-            )
-            snapshot = CoordinationSnapshot(
-                threads=threads,
-                channels=channels,
-                unread=self.bus.pending_counts(captured_viewer),
-                last_sent=sent,
-                channel_unread=display_unread,
-                channel_order=order,
-                show_stopped=show_stopped,
-                show_archived=show_archived,
-                read_marker_notice=notice,
+            snapshot = CoordinationSnapshot.capture(
+                self.root, basis.registry, basis.catalog, self.agents, basis.channels,
+                self.last_sent_timestamps(), display_activity,
+                unread=self.bus.pending_counts(captured_viewer), channel_unread=display_unread,
+                show_stopped=show_stopped, show_archived=show_archived,
+                read_marker_notice=basis.notice,
             )
         # Native file IO never holds the display/bus snapshot locks.
         unread = self.transcript_reads.counts(
             captured_viewer,
-            {view.thread.name: view.thread.session_file or "" for view in threads},
+            {view.thread.name: view.thread.session_file or "" for view in snapshot.threads},
         )
         return replace(snapshot, thread_unread=unread.counts, thread_unread_pending=unread.pending)
 
