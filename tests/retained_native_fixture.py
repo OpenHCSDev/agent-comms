@@ -497,11 +497,15 @@ class RecordedNativeProbe:
             raise ValueError('Captured SDK request does not contain the original bounded narrative')
         if not any(row.get('stage')=='bounded-transform-restored' and row['input_id']==self.input_id for row in records):
             raise ValueError('Original SDK condition hook has not retired')
-        return {'evaluated':True,'narrative_source':source['source'],
-            'checkpoint_session':source['checkpoint_session'],'session':source['session'],
-            'native_entry_id':source['native_entry_id'],
-            'message_binding':self.condition_message_binding(records,applications,serialized,manifest),
-            'scope':'Original transform and narrative present in this recorded SDK input; not final HTTP bytes or comparative recall'}
+        binding=self.condition_message_binding(records,applications,serialized,manifest)
+        return {'evaluated':binding['evaluated'], 'observation':self.condition_observation,
+            'transform':{'evaluated':True,'narrative_source':source['source'],
+                'checkpoint_session':source['checkpoint_session'],'session':source['session'],
+                'native_entry_id':source['native_entry_id'],
+                'scope':'Original SDK transform, narrative presence and retired hook; not complete request binding'},
+            'message_binding':binding,
+            'scope':'Original bounded transform joined to this sealed SDK request; not final HTTP bytes, '
+                    'complete-history capacity, declared comparison arm or comparative recall'}
 
     def condition_message_binding(self,records,applications,serialized,manifest):
         """Bind one actual converter result to the sealed SDK request bytes.
@@ -835,13 +839,13 @@ class RecordedNativeProbe:
                         "original_message_entries": messages,
                         "included_message_entries": tuple(identity for identity in messages if identity in included),
                         "unreferenced_message_entries": tuple(identity for identity in messages if identity not in included),
-                        "complete_message_reference_coverage": bool(included) and all(identity in included for identity in messages),
-                        "full_context_capacity": {"evaluated": False,
-                            "reason": "Current request admission does not establish complete-history construction or provider-token capacity"}}
+                        "complete_message_reference_coverage": bool(included) and all(identity in included for identity in messages)}
             if self.checkpoint is not None:
                 identity = checkpoint["native_entry_id"]
                 coverage["managed_checkpoint"] = {"entry_id": identity,
                     "referenced_in_sdk_sources": identity in included}
+        coverage["full_context_capacity"] = {"evaluated": False,
+            "reason": "Current request admission does not establish complete-history construction or provider-token capacity"}
         observed_request = self.observed_request(manifest)
         budget = self.request_budget(observed_request)
         return {

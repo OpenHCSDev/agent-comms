@@ -144,7 +144,6 @@ async def bounded_application(stage,package,original_python):
                 record(application_stage/'recorded-application.private.json',measured)
                 construction=measured['construction']
                 assert construction['condition_application']['evaluated']
-                assert construction['condition_application']['message_binding']['evaluated']
                 assert construction['request_budget']['evaluated']
                 assert construction['request_completion']['evaluated']
                 assert service.registry.require(owner.name).active_turn is None
