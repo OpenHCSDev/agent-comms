@@ -70,38 +70,79 @@ export async function transformBoundedNativeCondition(session,packagePath,source
     return messages.map(message=>message===matches[0] ? summary : message);
 }
 
-export function armBoundedNativeCondition(session,packagePath,source,transform,output,inputId) {
-    // This function also crosses the private inspector's SDK boundary as source.
-    // Keep its dependencies explicit; no product globals, command or overlay.
-    const agent=session.agent, previous=agent.transformContext;
+export function armNativeCondition(agent,operation,output,inputId,stage) {
+    // One private transform resource owns subscription, failure and restoration.
+    // Operations retain their distinct source facts and original record spelling.
+    const previous=agent.transformContext;
     const fs=process.getBuiltinModule('node:fs');
-    const record=value=>fs.appendFileSync(output,JSON.stringify({input_id:inputId,...value})+'\n',{mode:0o600});
+    const record=(event,value={})=>fs.appendFileSync(output,
+        JSON.stringify({input_id:inputId,stage:stage+'-'+event,...value})+'\n',{mode:0o600});
     const restore=()=>{
-        agent.transformContext=previous;
         unsubscribe();
-        record({stage:'bounded-transform-restored'});
+        if (agent.transformContext===transform) {
+            agent.transformContext=previous;
+            record('restored');
+        }
+    };
+    const transform=async(messages,signal)=>{
+        try {
+            const result=await operation(messages,signal,previous);
+            record('applied',{...result.observation,message_count:result.messages.length,
+                agent_messages_sha256:process.getBuiltinModule('node:crypto').createHash('sha256')
+                    .update(JSON.stringify(result.messages)).digest('hex')});
+            return result.messages;
+        } catch(error) {
+            restore();
+            record('refused',{reason:error.message});
+            throw error;
+        }
     };
     const unsubscribe=agent.subscribe(event=>{
         if (event.type==='agent_end') restore();
     });
-    agent.transformContext=async(messages,signal)=>{
-        try {
-            const transformed=previous ? await previous.call(agent,messages,signal) : messages;
-            const result=await transform(session,packagePath,source,transformed);
-            record({stage:'bounded-transform-applied',session:source.session,
-                checkpoint_session:source.checkpoint_session,native_entry_id:source.native_entry_id,
-                narrative_source:source.source,message_count:result.length,
-                agent_messages_sha256:process.getBuiltinModule('node:crypto').createHash('sha256')
-                    .update(JSON.stringify(result)).digest('hex')});
-            return result;
-        } catch(error) {
-            restore();
-            record({stage:'bounded-transform-refused',reason:error.message});
-            throw error;
-        }
-    };
-    record({stage:'bounded-transform-armed'});
+    agent.transformContext=transform;
+    record('armed');
     return restore;
+}
+
+export function armBoundedNativeCondition(session,packagePath,source,transform,output,inputId) {
+    // Original bounded replacement: run the configured transform first and
+    // replace only its corroborated summary. Original record format is retained.
+    return armNativeCondition(session.agent,async(messages,signal,previous)=>{
+        const transformed=previous ? await previous.call(session.agent,messages,signal) : messages;
+        return {messages:await transform(session,packagePath,source,transformed),
+            observation:{session:source.session,checkpoint_session:source.checkpoint_session,
+                native_entry_id:source.native_entry_id,narrative_source:source.source}};
+    },output,inputId,'bounded-transform');
+}
+
+export function armInstalledNativeCondition(session,construction,output,inputId) {
+    session.storedContext.requireReady();
+    if (!isDeepStrictEqual(Array.from(session.storedContext.messages(session.agent)),
+            construction.agent_messages))
+        throw new Error('Selected SDK construction is not installed');
+    if (!isDeepStrictEqual(construction.source_witness,
+            session.sessionManager.captureCompactionWitness(construction.source_witness.firstKeptEntryId)))
+        throw new Error('Selected SDK installation source changed before observation');
+    const count=construction.agent_messages.length;
+    return armNativeCondition(session.agent,async(messages,signal,previous)=>{
+        const prefix=messages.slice(0,count);
+        if (!isDeepStrictEqual(prefix,construction.agent_messages))
+            throw new Error('Installed SDK prefix changed before the original transform');
+        const inputs=messages.slice(count).filter(message=>message.role==='user' && message.inputId===inputId);
+        if (inputs.length!==1)
+            throw new Error('Installed SDK observation does not contain one original new input');
+        const sourcePrefix=process.getBuiltinModule('node:crypto').createHash('sha256')
+            .update(JSON.stringify(prefix)).digest('hex');
+        // Observe actual entry to the configured transform, then its real result.
+        // No message is filtered, reconstructed or replaced by this observer.
+        const transformed=previous ? await previous.call(session.agent,messages,signal) : messages;
+        return {messages:transformed,observation:{condition:construction.condition,
+            source_witness:construction.source_witness,
+            construction_context_sha256:construction.context_sha256,
+            source_prefix_count:count,source_prefix_sha256:sourcePrefix,
+            source_message_count:messages.length}};
+    },output,inputId,'installed-transform');
 }
 
 export async function applyNativeCondition(session, packagePath, construction) {
@@ -167,5 +208,9 @@ export async function constructNativeConditions(session, packagePath, boundedSou
     };
     if (!isDeepStrictEqual(witness,manager.captureCompactionWitness(witness.firstKeptEntryId)))
         throw new Error('Native selection changed during condition construction');
+    for (const [condition,constructed] of Object.entries(conditions)) {
+        if (constructed.evaluated)
+            Object.defineProperty(constructed,'condition',{value:condition,enumerable:true});
+    }
     return conditions;
 }
