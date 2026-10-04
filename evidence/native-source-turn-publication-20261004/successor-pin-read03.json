@@ -1,0 +1,8 @@
+{
+  "manifest_sha256": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+  "installed_members_equal": 347,
+  "dependency_keeper_files_equal": 84,
+  "native_wholetrust": "Original verify_native_package required by actual NativePiRpcLaunch before every acquisition; readonly immutable086 existingartifact",
+  "package_writes": false,
+  "stopped_read_limit": "Original HTTP provider.requests existed only in retired fixture memory, so final whole-payload absence assertion cannot be rerun from stopped files. Two changed cases use distinct new inputs under explicit successor grant."
+}

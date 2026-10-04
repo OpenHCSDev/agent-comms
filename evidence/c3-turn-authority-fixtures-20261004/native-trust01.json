@@ -1,0 +1,10 @@
+{
+  "package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+  "manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/_native/pi-native.sha256",
+  "manifest_sha256": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+  "tree": "dbc88ed9231d1275da3ce218aa8919a247e41ce1f010ce765e7ac0960193f4ac",
+  "fulltrust": "PASS original verify_native_package",
+  "seconds": 0.7890269870404154,
+  "grant": "explicit Sch633 native READ/execution via parent currentturn",
+  "artifact_changes": false
+}

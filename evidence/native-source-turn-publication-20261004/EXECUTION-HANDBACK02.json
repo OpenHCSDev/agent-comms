@@ -1,0 +1,112 @@
+{
+  "source_head": "ba65531242f70285ac30f03fa87e916b9124f51e",
+  "passed": 2,
+  "failed": 2,
+  "whole_result": "NOT_READY; two retired attribute consumers remain",
+  "duration_seconds": 28.914038544986397,
+  "localhost_http_posts": 4,
+  "native_input_proof_rows": 5,
+  "external_paid_provider_inputs": 0,
+  "public_inputs": 0,
+  "replayed_inputs": 0,
+  "fixtures": [
+    {
+      "saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed02/private/saved-native-owner0/wire",
+      "localhost_posts": 0,
+      "native_input_proofs": 0,
+      "children": [
+        {
+          "pid": 692487,
+          "start_time": 59357032
+        }
+      ],
+      "children_retired": true
+    },
+    {
+      "saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed02/private/saved-native-owner1/wire",
+      "localhost_posts": 1,
+      "native_input_proofs": 1,
+      "children": [
+        {
+          "pid": 693805,
+          "start_time": 59357647
+        }
+      ],
+      "children_retired": true
+    },
+    {
+      "saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed02/private/saved-native-owner2/wire",
+      "localhost_posts": 1,
+      "native_input_proofs": 1,
+      "children": [
+        {
+          "pid": 694678,
+          "start_time": 59358300
+        }
+      ],
+      "children_retired": true
+    },
+    {
+      "saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed02/private/saved-native-owner3/wire",
+      "localhost_posts": 2,
+      "native_input_proofs": 3,
+      "children": [
+        {
+          "pid": 695492,
+          "start_time": 59359063
+        }
+      ],
+      "children_retired": true
+    }
+  ],
+  "process_checks": [
+    {
+      "identity": {
+        "pid": 691984,
+        "start_time": 59356586
+      },
+      "present": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 692487,
+        "start_time": 59357032
+      },
+      "present": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 693805,
+        "start_time": 59357647
+      },
+      "present": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 694678,
+        "start_time": 59358300
+      },
+      "present": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 695492,
+        "start_time": 59359063
+      },
+      "present": false,
+      "group_members": []
+    }
+  ],
+  "installed_members_unchanged": 347,
+  "dependency_keeper_files_unchanged": 84,
+  "old_negatives_preserved": true,
+  "private_originals": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed02",
+  "all_original_children_joined": true,
+  "remaining_group_members": [],
+  "package_execution_claim": "CLOSED; no further imports/build/package writes without successor grant",
+  "native_read_execution_claim": "CLOSED; immutable086 unchanged"
+}

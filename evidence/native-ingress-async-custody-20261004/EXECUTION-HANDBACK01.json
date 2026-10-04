@@ -1,0 +1,22 @@
+{
+  "source_head": "0330823191706ff093e44a36fa315ebd6a0aafee",
+  "installed_production_head": "3ff1f4f7",
+  "wheel_sha256": "64be8bb653ca2b6ebcd80522976212425b7518f2c6673b2d3f20af85b7e5dd07",
+  "all_installed_core_members_equal": 342,
+  "controller_absent": true,
+  "controller_group_empty": true,
+  "owned_run_process_refs": [],
+  "same_uid_processes_read": 185,
+  "permission_gaps": [
+    68488,
+    216738,
+    606173,
+    1561676,
+    1786010,
+    1786012,
+    1953373
+  ],
+  "limits": "Same-UID cmdline/environment reference read, not privileged all-UID package borrower qualification. Native fixture cleanup joined in original terminal batch; no pytest teardown errors. Bohr owns final privileged borrower clearance.",
+  "next_package_operation": "none; released for owner archive/census, new640 purpose requires fresh grant",
+  "original_inputs": "All persistent basetemp original Started/Unknown/source/history/proofs preserved. One inherited sealed tmp_path private N/K source auto-deleted by its old fixture; original log retained, no readback fabricated."
+}

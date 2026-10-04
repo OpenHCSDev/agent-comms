@@ -1,0 +1,17 @@
+{
+  "command": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python /home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/c3-turn-authority-fixtures-20261004/installed-controls.py -o addopts= -q --basetemp /home/ts/.cache/agent-scratch/mendel-c3-turn-authority633-installed01/private tests/test_turn_runner.py tests/test_acp.py::TestHandlers::test_compaction_refuses_to_interrupt_an_active_turn tests/test_acp.py::TestHandlers::test_live_model_change_waits_for_backend_confirmation tests/test_acp.py::TestAgentTurnForwarding tests/test_acp_private_nk_delivery.py::test_acp_private_does_not_overlap_owner_turn tests/test_acp_input_disposition.py tests/test_runtime_goal_retry_running.py tests/test_stack_retry_running.py",
+  "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+  "environment": {
+    "PI_COMPACTION_TEST_PACKAGE": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+    "SELECTED_NATIVE_PROOF": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/c3-turn-authority-fixtures-20261004/installed-source-proof01.json",
+    "PYTHONPATH": "unset",
+    "PYTEST_ADDOPTS": "unset"
+  },
+  "stdout_log": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/c3-turn-authority-fixtures-20261004/installed01.log",
+  "scratch": "/home/ts/.cache/agent-scratch/mendel-c3-turn-authority633-installed01",
+  "maximum_concurrent_owners": 2,
+  "execution": "pending separate Sch086 READ grant and immediately fresh resource check",
+  "external_provider": false,
+  "public_input": false,
+  "native_input": "actual controlled fixture inputs; nonzero for ACK/STARTED/retry cases"
+}

@@ -1,0 +1,72 @@
+{
+  "source_head": "8c27ad4124745a71e7b1d3c069ae50f1483429e6",
+  "passed": 2,
+  "failed": 0,
+  "result": "PASS only two changed related fixture consumers; original01/02 mixed results stay unchanged",
+  "duration_seconds": 16.623298489023,
+  "localhost_http_posts": 3,
+  "native_input_proof_rows": 4,
+  "external_paid_provider_inputs": 0,
+  "public_inputs": 0,
+  "replayed_inputs": 0,
+  "fixtures": [
+    {
+      "saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed03/private/saved-native-owner0/wire",
+      "localhost_posts": 1,
+      "native_input_proofs": 1,
+      "children": [
+        {
+          "pid": 802018,
+          "start_time": 59421278
+        }
+      ],
+      "children_retired": true
+    },
+    {
+      "saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed03/private/saved-native-owner1/wire",
+      "localhost_posts": 2,
+      "native_input_proofs": 3,
+      "children": [
+        {
+          "pid": 803701,
+          "start_time": 59422062
+        }
+      ],
+      "children_retired": true
+    }
+  ],
+  "process_checks": [
+    {
+      "identity": {
+        "pid": 801828,
+        "start_time": 59420815
+      },
+      "present": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 802018,
+        "start_time": 59421278
+      },
+      "present": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 803701,
+        "start_time": 59422062
+      },
+      "present": false,
+      "group_members": []
+    }
+  ],
+  "installed_members_unchanged": 347,
+  "dependency_keeper_files_unchanged": 84,
+  "old_negatives_preserved": true,
+  "private_originals": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed03",
+  "all_original_children_joined": true,
+  "remaining_group_members": [],
+  "package_execution_claim": "CLOSED; no further imports/build/package writes without successor grant",
+  "native_read_execution_claim": "CLOSED; immutable086 unchanged"
+}

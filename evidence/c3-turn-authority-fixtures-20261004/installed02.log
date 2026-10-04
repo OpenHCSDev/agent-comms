@@ -1,0 +1,2340 @@
+FFFFFFFF....FFFFFF..FFFFF..F.F                                           [100%]
+=================================== FAILURES ===================================
+______________ test_mounted_cancel_does_not_cancel_other_session _______________
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7f9a1bdf8c20>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7f9a1bddb4d0>)
+
+    async def test_mounted_cancel_does_not_cancel_other_session(prepared_owner):
+        from agent_comms.fresh_private_session import create_fresh_private_session
+    
+        owner, first, native = prepared_owner
+        project = native.project / "second"
+        project.mkdir()
+        source = create_fresh_private_session(native.session.parent, worktree=project).path
+        second = await native.bind_saved_owner(owner, project=project, session=source)
+        original = native.session.read_bytes()
+        native.provider.response_gate = asyncio.Event()
+        router = build_agent_router(owner)
+    
+        def params(sid):
+            return {"sessionId": sid, "prompt": [{"type": "text", "text": "Work"}]}
+    
+        one = asyncio.create_task(router("session/prompt", params(first), False))
+        two = asyncio.create_task(router("session/prompt", params(second), False))
+        try:
+            async with asyncio.timeout(30):
+                while native.provider.posts != 2:
+>                   assert not one.done() and not two.done()
+E                   AssertionError: assert (not True)
+E                    +  where True = <built-in method done of _asyncio.Task object at 0x7f9a1b93e5f0>()
+E                    +    where <built-in method done of _asyncio.Task object at 0x7f9a1b93e5f0> = <Task finished name='Task-47' coro=<MessageRouter.__call__() done, defined at /home/ts/wt/comms-retained-human-main-20...overage540-installed-20261002/lib/python3.14/site-packages/acp/router.py:165> exception=RequestError('Internal error')>.done
+
+tests/test_turn_runner.py:45: AssertionError
+_____ test_turn_failure_preserves_exact_exception_cause_and_releases_state _____
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1bdf97f0>
+
+    async def run_native(self) -> None:
+        try:
+>           await self.prepare_native()
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:498: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:369: in prepare_native
+    await self.runner.inputs.drain_owned_inbox(self.session_id)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:366: in drain_owned_inbox
+    pushed = await self._drain_private_if_changed(session_id, private_root)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:352: in _drain_private_if_changed
+    before = await self._observe_private_revision(session_id, root_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:344: in _observe_private_revision
+    return await Coordination.run_async(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:47: in run_async
+    return await cls.run_worker(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:33: in run_worker
+    return await join_retirement(pending)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/child_process.py:820: in join_retirement
+    await asyncio.shield(task)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:57: in _run_owned
+    return operation(store)
+           ^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:302: in _private_observation_revision
+    participant = store.participants.get(stable_thread_lookup(owner.thread.created_at))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.participant_store.ParticipantStore object at 0x7f9a1a9d5d60>
+lookup = 'ba522a0c863d509ee8e6a06d1ad7bfcb'
+
+    def get(self, lookup: str) -> ParticipantSnapshot:
+        with self.session.read():
+            db = self.session._connection
+            person = Participants.one(self.session._connection, participant_lookup=lookup)
+            generation = OwnerGenerations.one(self.session._connection, owner_lookup=lookup)
+            pointer = CurrentExecutions.one(self.session._connection, owner_lookup=lookup)
+            if person is None or generation is None or pointer is None:
+>               raise IdentityConflict("participant aggregate is not registered")
+E               agent_comms.coordination_errors.IdentityConflict: participant aggregate is not registered
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/participant_store.py:62: IdentityConflict
+
+The above exception was the direct cause of the following exception:
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7f9a19ce3250>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7f9a19ce07d0>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9a183b1260>
+
+    async def test_turn_failure_preserves_exact_exception_cause_and_releases_state(
+        prepared_owner, monkeypatch
+    ):
+        owner, session, native = prepared_owner
+        original = native.session.read_bytes()
+        source = OSError("native diagnostic source")
+        failure = RuntimeError("selected operation failed")
+    
+        async def stream(*args, **kwargs):
+            # This boundary fails before a native write. Preparation and the lease
+            # have already been acquired by the real saved-session owner.
+            assert owner.turns.turn_state(session).busy
+            assert owner.turns.persistent_backends[session].available
+            raise failure from source
+            yield
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RuntimeError) as caught:
+>           await owner.prompt(session, [{"type": "text", "text": "Work"}])
+
+tests/test_turn_runner.py:91: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:202: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:43: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:48: in consume_handlers
+    value = self.replace_value(value, await handler(value, *args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:276: in _prompt_request
+    return await self.turns.prompt_owned(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:268: in prompt_owned
+    await self.inputs.run_owned_input(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:627: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/queued_input.py:166: in dispatch
+    await turns.run_agent_turn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:553: in run_agent_turn
+    await OwnedTurn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:488: in run
+    await self.run_native()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1bdf97f0>
+
+    async def run_native(self) -> None:
+        try:
+            await self.prepare_native()
+            await self.stream()
+            await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
+        except asyncio.CancelledError:
+            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
+            await backend.terminate_task_process(self.owner_task)
+            state = await Coordination.run_worker(self.settle_unbound)
+            await self.runner.effects._emit_event(
+                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
+            )
+            raise
+        except Exception as error:
+            await Coordination.run_worker(self.settle_unbound)
+            await self.progress.report_failure(error)
+            failure = self.runner.emitted_errors.get(self.session_id)
+            if failure is not None:
+>               raise PromptFailureReceipt(failure, True).request_error() from error
+E               acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:516: RequestError
+__________ test_shutdown_joins_running_turn_before_releasing_session ___________
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7f9a1a986ad0>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7f9a1a987c50>)
+
+    async def test_shutdown_joins_running_turn_before_releasing_session(prepared_owner):
+        owner, session, native = prepared_owner
+        native.provider.response_gate = asyncio.Event()
+        child = owner.turns.persistent_backends[session].custody.child.proc
+        turn = asyncio.create_task(owner.prompt(session, [{"type": "text", "text": "Work"}]))
+        try:
+            async with asyncio.timeout(30):
+                while native.provider.posts != 1:
+>                   assert not turn.done()
+E                   AssertionError: assert not True
+E                    +  where True = <built-in method done of _asyncio.Task object at 0x7f9a1a9da890>()
+E                    +    where <built-in method done of _asyncio.Task object at 0x7f9a1a9da890> = <Task finished name='Task-130' coro=<CommsAgent.prompt() done, defined at /home/ts/wt/comms-retained-human-main-202610...ge540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:189> exception=RequestError('Internal error')>.done
+
+tests/test_turn_runner.py:108: AssertionError
+__________ test_uncaught_failure_feedback_once_even_after_done[None] ___________
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1b974d70>
+
+    async def run_native(self) -> None:
+        try:
+>           await self.prepare_native()
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:498: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:369: in prepare_native
+    await self.runner.inputs.drain_owned_inbox(self.session_id)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:366: in drain_owned_inbox
+    pushed = await self._drain_private_if_changed(session_id, private_root)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:352: in _drain_private_if_changed
+    before = await self._observe_private_revision(session_id, root_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:344: in _observe_private_revision
+    return await Coordination.run_async(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:47: in run_async
+    return await cls.run_worker(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:33: in run_worker
+    return await join_retirement(pending)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/child_process.py:820: in join_retirement
+    await asyncio.shield(task)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:57: in _run_owned
+    return operation(store)
+           ^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:302: in _private_observation_revision
+    participant = store.participants.get(stable_thread_lookup(owner.thread.created_at))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.participant_store.ParticipantStore object at 0x7f9a182cfd40>
+lookup = '8107957a6ea98f520720d438882942a9'
+
+    def get(self, lookup: str) -> ParticipantSnapshot:
+        with self.session.read():
+            db = self.session._connection
+            person = Participants.one(self.session._connection, participant_lookup=lookup)
+            generation = OwnerGenerations.one(self.session._connection, owner_lookup=lookup)
+            pointer = CurrentExecutions.one(self.session._connection, owner_lookup=lookup)
+            if person is None or generation is None or pointer is None:
+>               raise IdentityConflict("participant aggregate is not registered")
+E               agent_comms.coordination_errors.IdentityConflict: participant aggregate is not registered
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/participant_store.py:62: IdentityConflict
+
+The above exception was the direct cause of the following exception:
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7f9a19c73230>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7f9a19c71480>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9a18420290>
+prior = None
+
+    @pytest.mark.parametrize(
+        "prior",
+        [
+            None,
+            events.Error("specific provider failure"),
+            events.Done("specific provider failure", False),
+        ],
+    )
+    async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, monkeypatch, prior):
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        original = native.session.read_bytes()
+    
+        async def stream(*args, **kwargs):
+            persistent = owner.turns.persistent_backends[session]
+            assert persistent.available and persistent.custody.child.proc.alive()
+            if prior is not None:
+                yield prior
+            raise RuntimeError("execution failed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RuntimeError, match="execution failed"):
+>           await owner.prompt(session, [{"type": "text", "text": "Work"}])
+
+tests/test_turn_runner.py:161: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:202: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:43: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:48: in consume_handlers
+    value = self.replace_value(value, await handler(value, *args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:276: in _prompt_request
+    return await self.turns.prompt_owned(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:268: in prompt_owned
+    await self.inputs.run_owned_input(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:627: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/queued_input.py:166: in dispatch
+    await turns.run_agent_turn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:553: in run_agent_turn
+    await OwnedTurn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:488: in run
+    await self.run_native()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1b974d70>
+
+    async def run_native(self) -> None:
+        try:
+            await self.prepare_native()
+            await self.stream()
+            await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
+        except asyncio.CancelledError:
+            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
+            await backend.terminate_task_process(self.owner_task)
+            state = await Coordination.run_worker(self.settle_unbound)
+            await self.runner.effects._emit_event(
+                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
+            )
+            raise
+        except Exception as error:
+            await Coordination.run_worker(self.settle_unbound)
+            await self.progress.report_failure(error)
+            failure = self.runner.emitted_errors.get(self.session_id)
+            if failure is not None:
+>               raise PromptFailureReceipt(failure, True).request_error() from error
+E               acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:516: RequestError
+_________ test_uncaught_failure_feedback_once_even_after_done[prior1] __________
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1bdd9be0>
+
+    async def run_native(self) -> None:
+        try:
+>           await self.prepare_native()
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:498: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:369: in prepare_native
+    await self.runner.inputs.drain_owned_inbox(self.session_id)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:366: in drain_owned_inbox
+    pushed = await self._drain_private_if_changed(session_id, private_root)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:352: in _drain_private_if_changed
+    before = await self._observe_private_revision(session_id, root_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:344: in _observe_private_revision
+    return await Coordination.run_async(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:47: in run_async
+    return await cls.run_worker(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:33: in run_worker
+    return await join_retirement(pending)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/child_process.py:820: in join_retirement
+    await asyncio.shield(task)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:57: in _run_owned
+    return operation(store)
+           ^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:302: in _private_observation_revision
+    participant = store.participants.get(stable_thread_lookup(owner.thread.created_at))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.participant_store.ParticipantStore object at 0x7f9a1a9b8eb0>
+lookup = 'ffd1bb6f539404a8a7f307d1a1a8d7c2'
+
+    def get(self, lookup: str) -> ParticipantSnapshot:
+        with self.session.read():
+            db = self.session._connection
+            person = Participants.one(self.session._connection, participant_lookup=lookup)
+            generation = OwnerGenerations.one(self.session._connection, owner_lookup=lookup)
+            pointer = CurrentExecutions.one(self.session._connection, owner_lookup=lookup)
+            if person is None or generation is None or pointer is None:
+>               raise IdentityConflict("participant aggregate is not registered")
+E               agent_comms.coordination_errors.IdentityConflict: participant aggregate is not registered
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/participant_store.py:62: IdentityConflict
+
+The above exception was the direct cause of the following exception:
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7f9a19c72520>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7f9a1b7ef230>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9a1bef6ad0>
+prior = Error(text='specific provider failure', reason_code=None, command=None, diagnostics=())
+
+    @pytest.mark.parametrize(
+        "prior",
+        [
+            None,
+            events.Error("specific provider failure"),
+            events.Done("specific provider failure", False),
+        ],
+    )
+    async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, monkeypatch, prior):
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        original = native.session.read_bytes()
+    
+        async def stream(*args, **kwargs):
+            persistent = owner.turns.persistent_backends[session]
+            assert persistent.available and persistent.custody.child.proc.alive()
+            if prior is not None:
+                yield prior
+            raise RuntimeError("execution failed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RuntimeError, match="execution failed"):
+>           await owner.prompt(session, [{"type": "text", "text": "Work"}])
+
+tests/test_turn_runner.py:161: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:202: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:43: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:48: in consume_handlers
+    value = self.replace_value(value, await handler(value, *args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:276: in _prompt_request
+    return await self.turns.prompt_owned(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:268: in prompt_owned
+    await self.inputs.run_owned_input(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:627: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/queued_input.py:166: in dispatch
+    await turns.run_agent_turn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:553: in run_agent_turn
+    await OwnedTurn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:488: in run
+    await self.run_native()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1bdd9be0>
+
+    async def run_native(self) -> None:
+        try:
+            await self.prepare_native()
+            await self.stream()
+            await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
+        except asyncio.CancelledError:
+            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
+            await backend.terminate_task_process(self.owner_task)
+            state = await Coordination.run_worker(self.settle_unbound)
+            await self.runner.effects._emit_event(
+                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
+            )
+            raise
+        except Exception as error:
+            await Coordination.run_worker(self.settle_unbound)
+            await self.progress.report_failure(error)
+            failure = self.runner.emitted_errors.get(self.session_id)
+            if failure is not None:
+>               raise PromptFailureReceipt(failure, True).request_error() from error
+E               acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:516: RequestError
+_________ test_uncaught_failure_feedback_once_even_after_done[prior2] __________
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1bdda660>
+
+    async def run_native(self) -> None:
+        try:
+>           await self.prepare_native()
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:498: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:369: in prepare_native
+    await self.runner.inputs.drain_owned_inbox(self.session_id)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:366: in drain_owned_inbox
+    pushed = await self._drain_private_if_changed(session_id, private_root)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:352: in _drain_private_if_changed
+    before = await self._observe_private_revision(session_id, root_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:344: in _observe_private_revision
+    return await Coordination.run_async(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:47: in run_async
+    return await cls.run_worker(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:33: in run_worker
+    return await join_retirement(pending)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/child_process.py:820: in join_retirement
+    await asyncio.shield(task)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:57: in _run_owned
+    return operation(store)
+           ^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:302: in _private_observation_revision
+    participant = store.participants.get(stable_thread_lookup(owner.thread.created_at))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.participant_store.ParticipantStore object at 0x7f9a198560d0>
+lookup = '32faac2553301a865b9c7875d7967b21'
+
+    def get(self, lookup: str) -> ParticipantSnapshot:
+        with self.session.read():
+            db = self.session._connection
+            person = Participants.one(self.session._connection, participant_lookup=lookup)
+            generation = OwnerGenerations.one(self.session._connection, owner_lookup=lookup)
+            pointer = CurrentExecutions.one(self.session._connection, owner_lookup=lookup)
+            if person is None or generation is None or pointer is None:
+>               raise IdentityConflict("participant aggregate is not registered")
+E               agent_comms.coordination_errors.IdentityConflict: participant aggregate is not registered
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/participant_store.py:62: IdentityConflict
+
+The above exception was the direct cause of the following exception:
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7f9a19c69490>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7f9a19c6be30>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9a1ba21ed0>
+prior = Done(text='specific provider failure', ok=False, reason_code=None, diagnostic=None)
+
+    @pytest.mark.parametrize(
+        "prior",
+        [
+            None,
+            events.Error("specific provider failure"),
+            events.Done("specific provider failure", False),
+        ],
+    )
+    async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, monkeypatch, prior):
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        original = native.session.read_bytes()
+    
+        async def stream(*args, **kwargs):
+            persistent = owner.turns.persistent_backends[session]
+            assert persistent.available and persistent.custody.child.proc.alive()
+            if prior is not None:
+                yield prior
+            raise RuntimeError("execution failed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RuntimeError, match="execution failed"):
+>           await owner.prompt(session, [{"type": "text", "text": "Work"}])
+
+tests/test_turn_runner.py:161: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:202: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:43: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:48: in consume_handlers
+    value = self.replace_value(value, await handler(value, *args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:276: in _prompt_request
+    return await self.turns.prompt_owned(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:268: in prompt_owned
+    await self.inputs.run_owned_input(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:627: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/queued_input.py:166: in dispatch
+    await turns.run_agent_turn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:553: in run_agent_turn
+    await OwnedTurn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:488: in run
+    await self.run_native()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1bdda660>
+
+    async def run_native(self) -> None:
+        try:
+            await self.prepare_native()
+            await self.stream()
+            await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
+        except asyncio.CancelledError:
+            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
+            await backend.terminate_task_process(self.owner_task)
+            state = await Coordination.run_worker(self.settle_unbound)
+            await self.runner.effects._emit_event(
+                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
+            )
+            raise
+        except Exception as error:
+            await Coordination.run_worker(self.settle_unbound)
+            await self.progress.report_failure(error)
+            failure = self.runner.emitted_errors.get(self.session_id)
+            if failure is not None:
+>               raise PromptFailureReceipt(failure, True).request_error() from error
+E               acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:516: RequestError
+________ test_compaction_fault_reaches_acp_client_without_original_send ________
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1b977e00>
+
+    async def run_native(self) -> None:
+        try:
+>           await self.prepare_native()
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:498: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:369: in prepare_native
+    await self.runner.inputs.drain_owned_inbox(self.session_id)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:366: in drain_owned_inbox
+    pushed = await self._drain_private_if_changed(session_id, private_root)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:352: in _drain_private_if_changed
+    before = await self._observe_private_revision(session_id, root_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:344: in _observe_private_revision
+    return await Coordination.run_async(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:47: in run_async
+    return await cls.run_worker(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:33: in run_worker
+    return await join_retirement(pending)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/child_process.py:820: in join_retirement
+    await asyncio.shield(task)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:57: in _run_owned
+    return operation(store)
+           ^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:302: in _private_observation_revision
+    participant = store.participants.get(stable_thread_lookup(owner.thread.created_at))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.participant_store.ParticipantStore object at 0x7f9a199a0ff0>
+lookup = 'd2926d974e543c79c6bcde1a4a126e16'
+
+    def get(self, lookup: str) -> ParticipantSnapshot:
+        with self.session.read():
+            db = self.session._connection
+            person = Participants.one(self.session._connection, participant_lookup=lookup)
+            generation = OwnerGenerations.one(self.session._connection, owner_lookup=lookup)
+            pointer = CurrentExecutions.one(self.session._connection, owner_lookup=lookup)
+            if person is None or generation is None or pointer is None:
+>               raise IdentityConflict("participant aggregate is not registered")
+E               agent_comms.coordination_errors.IdentityConflict: participant aggregate is not registered
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/participant_store.py:62: IdentityConflict
+
+The above exception was the direct cause of the following exception:
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7f9a18e697b0>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7f9a198a0270>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9a1a9a9780>
+
+    async def test_compaction_fault_reaches_acp_client_without_original_send(
+        prepared_owner, monkeypatch
+    ):
+        from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown
+    
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        before = native.session.read_bytes()
+        source = OSError("402: insufficient credits on this model")
+        failure = SelectedChildUnknown(str(source))
+        attempts = []
+    
+        async def compact(*args, **kwargs):
+            assert args[3].model.id == "fixture"
+            assert args[5].custody.child.proc.alive()
+            attempts.extend(args[4])
+            raise failure from source
+    
+        async def forbidden_stream(*args, **kwargs):
+            pytest.fail("original input must not reach native after uncertain compaction")
+            yield
+    
+        monkeypatch.setattr("agent_comms.owner_compaction_adaptive.maybe_compact_owner_turn", compact)
+        monkeypatch.setattr(backend, "stream_agent_events", forbidden_stream)
+        with pytest.raises(SelectedChildUnknown) as caught:
+>           await owner.prompt(session, [{"type": "text", "text": "Original stays unknown"}])
+
+tests/test_turn_runner.py:207: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:202: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:43: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:48: in consume_handlers
+    value = self.replace_value(value, await handler(value, *args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:276: in _prompt_request
+    return await self.turns.prompt_owned(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:268: in prompt_owned
+    await self.inputs.run_owned_input(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:627: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/queued_input.py:166: in dispatch
+    await turns.run_agent_turn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:553: in run_agent_turn
+    await OwnedTurn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:488: in run
+    await self.run_native()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1b977e00>
+
+    async def run_native(self) -> None:
+        try:
+            await self.prepare_native()
+            await self.stream()
+            await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
+        except asyncio.CancelledError:
+            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
+            await backend.terminate_task_process(self.owner_task)
+            state = await Coordination.run_worker(self.settle_unbound)
+            await self.runner.effects._emit_event(
+                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
+            )
+            raise
+        except Exception as error:
+            await Coordination.run_worker(self.settle_unbound)
+            await self.progress.report_failure(error)
+            failure = self.runner.emitted_errors.get(self.session_id)
+            if failure is not None:
+>               raise PromptFailureReceipt(failure, True).request_error() from error
+E               acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:516: RequestError
+____ test_actual_provider_failure_reports_started_input_once_without_retry _____
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1bdda510>
+
+    async def run_native(self) -> None:
+        try:
+>           await self.prepare_native()
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:498: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:369: in prepare_native
+    await self.runner.inputs.drain_owned_inbox(self.session_id)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:366: in drain_owned_inbox
+    pushed = await self._drain_private_if_changed(session_id, private_root)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:352: in _drain_private_if_changed
+    before = await self._observe_private_revision(session_id, root_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:344: in _observe_private_revision
+    return await Coordination.run_async(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:47: in run_async
+    return await cls.run_worker(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:33: in run_worker
+    return await join_retirement(pending)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/child_process.py:820: in join_retirement
+    await asyncio.shield(task)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:57: in _run_owned
+    return operation(store)
+           ^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:302: in _private_observation_revision
+    participant = store.participants.get(stable_thread_lookup(owner.thread.created_at))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.participant_store.ParticipantStore object at 0x7f9a1be60c80>
+lookup = '7665bbd1b2edbf27eab123e10aed63f9'
+
+    def get(self, lookup: str) -> ParticipantSnapshot:
+        with self.session.read():
+            db = self.session._connection
+            person = Participants.one(self.session._connection, participant_lookup=lookup)
+            generation = OwnerGenerations.one(self.session._connection, owner_lookup=lookup)
+            pointer = CurrentExecutions.one(self.session._connection, owner_lookup=lookup)
+            if person is None or generation is None or pointer is None:
+>               raise IdentityConflict("participant aggregate is not registered")
+E               agent_comms.coordination_errors.IdentityConflict: participant aggregate is not registered
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/participant_store.py:62: IdentityConflict
+
+The above exception was the direct cause of the following exception:
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7f9a198a19d0>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7f9a198a2250>)
+
+    async def test_actual_provider_failure_reports_started_input_once_without_retry(prepared_owner):
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        native.provider.status = 503
+        async with asyncio.timeout(30):
+>           await owner.prompt(session, [{"type": "text", "text": "Actual failed input"}])
+
+tests/test_turn_runner.py:238: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:202: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:43: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:48: in consume_handlers
+    value = self.replace_value(value, await handler(value, *args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:276: in _prompt_request
+    return await self.turns.prompt_owned(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:268: in prompt_owned
+    await self.inputs.run_owned_input(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:627: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/queued_input.py:166: in dispatch
+    await turns.run_agent_turn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:553: in run_agent_turn
+    await OwnedTurn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:488: in run
+    await self.run_native()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1bdda510>
+
+    async def run_native(self) -> None:
+        try:
+            await self.prepare_native()
+            await self.stream()
+            await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
+        except asyncio.CancelledError:
+            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
+            await backend.terminate_task_process(self.owner_task)
+            state = await Coordination.run_worker(self.settle_unbound)
+            await self.runner.effects._emit_event(
+                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
+            )
+            raise
+        except Exception as error:
+            await Coordination.run_worker(self.settle_unbound)
+            await self.progress.report_failure(error)
+            failure = self.runner.emitted_errors.get(self.session_id)
+            if failure is not None:
+>               raise PromptFailureReceipt(failure, True).request_error() from error
+E               acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:516: RequestError
+______ TestAgentTurnForwarding.test_turn_forwards_tool_calls_and_thinking ______
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1b9746e0>
+
+    async def run_native(self) -> None:
+        try:
+>           await self.prepare_native()
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:498: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:369: in prepare_native
+    await self.runner.inputs.drain_owned_inbox(self.session_id)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:366: in drain_owned_inbox
+    pushed = await self._drain_private_if_changed(session_id, private_root)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:352: in _drain_private_if_changed
+    before = await self._observe_private_revision(session_id, root_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:344: in _observe_private_revision
+    return await Coordination.run_async(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:47: in run_async
+    return await cls.run_worker(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:33: in run_worker
+    return await join_retirement(pending)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/child_process.py:820: in join_retirement
+    await asyncio.shield(task)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:57: in _run_owned
+    return operation(store)
+           ^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:302: in _private_observation_revision
+    participant = store.participants.get(stable_thread_lookup(owner.thread.created_at))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.participant_store.ParticipantStore object at 0x7f9a18484d20>
+lookup = '517a1c59bc89591f255f405b6ec0483b'
+
+    def get(self, lookup: str) -> ParticipantSnapshot:
+        with self.session.read():
+            db = self.session._connection
+            person = Participants.one(self.session._connection, participant_lookup=lookup)
+            generation = OwnerGenerations.one(self.session._connection, owner_lookup=lookup)
+            pointer = CurrentExecutions.one(self.session._connection, owner_lookup=lookup)
+            if person is None or generation is None or pointer is None:
+>               raise IdentityConflict("participant aggregate is not registered")
+E               agent_comms.coordination_errors.IdentityConflict: participant aggregate is not registered
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/participant_store.py:62: IdentityConflict
+
+The above exception was the direct cause of the following exception:
+
+self = <test_acp.TestAgentTurnForwarding object at 0x7f9a1db64f50>
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f9a1851dd60>
+
+    async def test_turn_forwards_tool_calls_and_thinking(self, native_backend):
+        native = native_backend
+        await native.author_history()
+        models = json.loads((native.config / "models.json").read_text())
+        models["providers"]["response-local"]["models"][0]["reasoning"] = True
+        (native.config / "models.json").write_text(json.dumps(models))
+        native.provider.thinking = "Inspecting files"
+        native.provider.tool_call = ("bash", {"command": "pwd"})
+        native.provider.text = "running finished"
+        sent = []
+    
+        class Client:
+            async def session_update(self, *, session_id, update):
+                sent.append(update)
+    
+        async with native.open_owner(native_options=("--tools", "bash"), client=Client()) as (agent, session):
+>           await agent.prompt(session, [{"type": "text", "text": "!agent report working directory"}])
+
+tests/test_acp.py:1511: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:202: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:43: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:48: in consume_handlers
+    value = self.replace_value(value, await handler(value, *args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:276: in _prompt_request
+    return await self.turns.prompt_owned(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:268: in prompt_owned
+    await self.inputs.run_owned_input(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:627: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/queued_input.py:166: in dispatch
+    await turns.run_agent_turn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:553: in run_agent_turn
+    await OwnedTurn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:488: in run
+    await self.run_native()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1b9746e0>
+
+    async def run_native(self) -> None:
+        try:
+            await self.prepare_native()
+            await self.stream()
+            await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
+        except asyncio.CancelledError:
+            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
+            await backend.terminate_task_process(self.owner_task)
+            state = await Coordination.run_worker(self.settle_unbound)
+            await self.runner.effects._emit_event(
+                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
+            )
+            raise
+        except Exception as error:
+            await Coordination.run_worker(self.settle_unbound)
+            await self.progress.report_failure(error)
+            failure = self.runner.emitted_errors.get(self.session_id)
+            if failure is not None:
+>               raise PromptFailureReceipt(failure, True).request_error() from error
+E               acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:516: RequestError
+_____________ TestAgentTurnForwarding.test_turn_sets_wire_activity _____________
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1bddbcb0>
+
+    async def run_native(self) -> None:
+        try:
+>           await self.prepare_native()
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:498: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:369: in prepare_native
+    await self.runner.inputs.drain_owned_inbox(self.session_id)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:366: in drain_owned_inbox
+    pushed = await self._drain_private_if_changed(session_id, private_root)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:352: in _drain_private_if_changed
+    before = await self._observe_private_revision(session_id, root_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:344: in _observe_private_revision
+    return await Coordination.run_async(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:47: in run_async
+    return await cls.run_worker(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:33: in run_worker
+    return await join_retirement(pending)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/child_process.py:820: in join_retirement
+    await asyncio.shield(task)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:57: in _run_owned
+    return operation(store)
+           ^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:302: in _private_observation_revision
+    participant = store.participants.get(stable_thread_lookup(owner.thread.created_at))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.participant_store.ParticipantStore object at 0x7f9a18068050>
+lookup = 'f71b5bf22726a015d11b95146dbb9655'
+
+    def get(self, lookup: str) -> ParticipantSnapshot:
+        with self.session.read():
+            db = self.session._connection
+            person = Participants.one(self.session._connection, participant_lookup=lookup)
+            generation = OwnerGenerations.one(self.session._connection, owner_lookup=lookup)
+            pointer = CurrentExecutions.one(self.session._connection, owner_lookup=lookup)
+            if person is None or generation is None or pointer is None:
+>               raise IdentityConflict("participant aggregate is not registered")
+E               agent_comms.coordination_errors.IdentityConflict: participant aggregate is not registered
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/participant_store.py:62: IdentityConflict
+
+The above exception was the direct cause of the following exception:
+
+self = <test_acp.TestAgentTurnForwarding object at 0x7f9a1db65590>
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f9a1a954c90>
+
+    async def test_turn_sets_wire_activity(self, native_backend):
+        native = native_backend
+        await native.author_history()
+        native.provider.tool_call = ("bash", {"command": "pwd"})
+        async with native.open_owner(native_options=("--tools", "bash")) as (agent, session):
+>           await agent.prompt(session, [{"type": "text", "text": "!agent report working directory"}])
+
+tests/test_acp.py:1552: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:202: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:43: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:48: in consume_handlers
+    value = self.replace_value(value, await handler(value, *args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:276: in _prompt_request
+    return await self.turns.prompt_owned(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:268: in prompt_owned
+    await self.inputs.run_owned_input(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:627: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/queued_input.py:166: in dispatch
+    await turns.run_agent_turn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:553: in run_agent_turn
+    await OwnedTurn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:488: in run
+    await self.run_native()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1bddbcb0>
+
+    async def run_native(self) -> None:
+        try:
+            await self.prepare_native()
+            await self.stream()
+            await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
+        except asyncio.CancelledError:
+            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
+            await backend.terminate_task_process(self.owner_task)
+            state = await Coordination.run_worker(self.settle_unbound)
+            await self.runner.effects._emit_event(
+                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
+            )
+            raise
+        except Exception as error:
+            await Coordination.run_worker(self.settle_unbound)
+            await self.progress.report_failure(error)
+            failure = self.runner.emitted_errors.get(self.session_id)
+            if failure is not None:
+>               raise PromptFailureReceipt(failure, True).request_error() from error
+E               acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:516: RequestError
+_________________ test_acp_private_does_not_overlap_owner_turn _________________
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f9a1a7bde10>
+
+    async def test_acp_private_does_not_overlap_owner_turn(native_backend):
+        native = native_backend
+        await native.author_history()
+        async with native.open_owner() as (agent, session):
+            comms = agent._comms
+            comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
+            sent = comms.messaging.send_message("sender", session, "Selected input after current turn")
+            async with native.original_input(agent, session, "Current human input") as turn:
+                assert await agent.inputs.drain_inbox(session) == 0
+                assert agent.turns.owns_turn(session, turn.turn_id)
+                assert native.provider.posts == 0
+            # The original lease's retirement, not a test map mutation, enables
+            # canonical selected TRIAGE/FULL on the same SDK-authored saved source.
+            native.provider.text = '{"decision":"FULL"}'
+>           assert await agent.inputs.drain_inbox(session) == 1
+E           assert 0 == 1
+
+tests/test_acp_private_nk_delivery.py:592: AssertionError
+_______ test_native_preflight_failure_is_visible_and_cannot_mark_started _______
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1c538440>
+
+    async def run_native(self) -> None:
+        try:
+>           await self.prepare_native()
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:498: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:369: in prepare_native
+    await self.runner.inputs.drain_owned_inbox(self.session_id)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:366: in drain_owned_inbox
+    pushed = await self._drain_private_if_changed(session_id, private_root)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:352: in _drain_private_if_changed
+    before = await self._observe_private_revision(session_id, root_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:344: in _observe_private_revision
+    return await Coordination.run_async(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:47: in run_async
+    return await cls.run_worker(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:33: in run_worker
+    return await join_retirement(pending)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/child_process.py:820: in join_retirement
+    await asyncio.shield(task)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:57: in _run_owned
+    return operation(store)
+           ^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:302: in _private_observation_revision
+    participant = store.participants.get(stable_thread_lookup(owner.thread.created_at))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.participant_store.ParticipantStore object at 0x7f9a02bb27b0>
+lookup = '253a7e18bdc3a985144416922eda574d'
+
+    def get(self, lookup: str) -> ParticipantSnapshot:
+        with self.session.read():
+            db = self.session._connection
+            person = Participants.one(self.session._connection, participant_lookup=lookup)
+            generation = OwnerGenerations.one(self.session._connection, owner_lookup=lookup)
+            pointer = CurrentExecutions.one(self.session._connection, owner_lookup=lookup)
+            if person is None or generation is None or pointer is None:
+>               raise IdentityConflict("participant aggregate is not registered")
+E               agent_comms.coordination_errors.IdentityConflict: participant aggregate is not registered
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/participant_store.py:62: IdentityConflict
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f9a19ae0460>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9a1ab44de0>
+
+    async def test_native_preflight_failure_is_visible_and_cannot_mark_started(native_backend, monkeypatch):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        async with native.open_owner() as (owner, session):
+            updates = Updates()
+            owner.on_connect(updates)
+    
+            async def refused_preflight(self):
+                # Inject refusal at the original prepared-session boundary after
+                # authentic SDK source/identity acquisition. No child, witness or
+                # capability response is fabricated by the caller.
+                raise NativePiUnavailable("native preflight refused before prompt")
+    
+            monkeypatch.setattr(NativeSessionPreparation, "input_ready", refused_preflight)
+            with pytest.raises(NativePiUnavailable, match="preflight"):
+>               await owner.prompt(session, [TextContentBlock(type="text", text="test")])
+
+tests/test_acp_input_disposition.py:58: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:202: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:43: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:48: in consume_handlers
+    value = self.replace_value(value, await handler(value, *args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/acp.py:276: in _prompt_request
+    return await self.turns.prompt_owned(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:268: in prompt_owned
+    await self.inputs.run_owned_input(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/input_drain.py:627: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/queued_input.py:166: in dispatch
+    await turns.run_agent_turn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/turn_runner.py:553: in run_agent_turn
+    await OwnedTurn(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:488: in run
+    await self.run_native()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owned_turn.OwnedTurn object at 0x7f9a1c538440>
+
+    async def run_native(self) -> None:
+        try:
+            await self.prepare_native()
+            await self.stream()
+            await self.progress.publish_result()
+            if failure := self.runner.emitted_errors.get(self.session_id):
+                raise PromptFailureReceipt(failure, True).request_error()
+        except asyncio.CancelledError:
+            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
+            await backend.terminate_task_process(self.owner_task)
+            state = await Coordination.run_worker(self.settle_unbound)
+            await self.runner.effects._emit_event(
+                self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
+            )
+            raise
+        except Exception as error:
+            await Coordination.run_worker(self.settle_unbound)
+            await self.progress.report_failure(error)
+            failure = self.runner.emitted_errors.get(self.session_id)
+            if failure is not None:
+>               raise PromptFailureReceipt(failure, True).request_error() from error
+E               acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/owned_turn.py:516: RequestError
+___ test_late_owner_socket_observes_unknown_until_exact_native_start[False] ____
+
+predicate = <function test_late_owner_socket_observes_unknown_until_exact_native_start.<locals>.<lambda> at 0x7f9a1abd5fe0>
+
+    async def wait_for(predicate):
+        async with asyncio.timeout(30):
+            while not predicate():
+>               await asyncio.sleep(0.01)
+
+tests/test_acp_input_disposition.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+delay = 0.01, result = None
+
+    async def sleep(delay, result=None):
+        """Coroutine that completes after a given time (in seconds)."""
+        if delay <= 0:
+            await __sleep0()
+            return result
+    
+        if math.isnan(delay):
+            raise ValueError("Invalid delay: NaN (not a number)")
+    
+        loop = events.get_running_loop()
+        future = loop.create_future()
+        h = loop.call_later(delay,
+                            futures._set_result_unless_cancelled,
+                            future, result)
+        try:
+>           return await future
+                   ^^^^^^^^^^^^
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:702: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f9a1ab4fc50>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9a1ab44830>
+second_start = False
+
+    @pytest.mark.parametrize("second_start", [False, True])
+    async def test_late_owner_socket_observes_unknown_until_exact_native_start(
+        native_backend, monkeypatch, second_start
+    ):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        native.provider.response_gate = asyncio.Event()
+        acknowledgements = []
+        receive = PiRpcChannel.receive
+    
+        async def observed_response(channel, **options):
+            event = await receive(channel, **options)
+            if isinstance(event, pi.Response) and event.command is commands.Prompt:
+                acknowledgements.append(event)
+            return event
+    
+        monkeypatch.setattr(PiRpcChannel, "receive", observed_response)
+        async with native.open_owner(runtime_enabled=True) as (owner, session):
+            turn = asyncio.create_task(owner.prompt(session, [TextContentBlock(type="text", text="first")]))
+            attachment = canonical_agent(owner._comms, auto_wake=False)
+            updates = Updates()
+            attachment.on_connect(updates)
+            proxy = RuntimeProxy(attachment, session, socket_path(native.root, os.getpid()))
+            try:
+>               await wait_for(lambda: native.provider.posts == 1)
+
+tests/test_acp_input_disposition.py:94: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_input_disposition.py:37: in wait_for
+    async with asyncio.timeout(30):
+               ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7f9a1a65f7c0>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+____ test_late_owner_socket_observes_unknown_until_exact_native_start[True] ____
+
+predicate = <function test_late_owner_socket_observes_unknown_until_exact_native_start.<locals>.<lambda> at 0x7f9a1ad864b0>
+
+    async def wait_for(predicate):
+        async with asyncio.timeout(30):
+            while not predicate():
+>               await asyncio.sleep(0.01)
+
+tests/test_acp_input_disposition.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+delay = 0.01, result = None
+
+    async def sleep(delay, result=None):
+        """Coroutine that completes after a given time (in seconds)."""
+        if delay <= 0:
+            await __sleep0()
+            return result
+    
+        if math.isnan(delay):
+            raise ValueError("Invalid delay: NaN (not a number)")
+    
+        loop = events.get_running_loop()
+        future = loop.create_future()
+        h = loop.call_later(delay,
+                            futures._set_result_unless_cancelled,
+                            future, result)
+        try:
+>           return await future
+                   ^^^^^^^^^^^^
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:702: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f9a1abf9f10>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9a1a9415c0>
+second_start = True
+
+    @pytest.mark.parametrize("second_start", [False, True])
+    async def test_late_owner_socket_observes_unknown_until_exact_native_start(
+        native_backend, monkeypatch, second_start
+    ):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        native.provider.response_gate = asyncio.Event()
+        acknowledgements = []
+        receive = PiRpcChannel.receive
+    
+        async def observed_response(channel, **options):
+            event = await receive(channel, **options)
+            if isinstance(event, pi.Response) and event.command is commands.Prompt:
+                acknowledgements.append(event)
+            return event
+    
+        monkeypatch.setattr(PiRpcChannel, "receive", observed_response)
+        async with native.open_owner(runtime_enabled=True) as (owner, session):
+            turn = asyncio.create_task(owner.prompt(session, [TextContentBlock(type="text", text="first")]))
+            attachment = canonical_agent(owner._comms, auto_wake=False)
+            updates = Updates()
+            attachment.on_connect(updates)
+            proxy = RuntimeProxy(attachment, session, socket_path(native.root, os.getpid()))
+            try:
+>               await wait_for(lambda: native.provider.posts == 1)
+
+tests/test_acp_input_disposition.py:94: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_input_disposition.py:37: in wait_for
+    async with asyncio.timeout(30):
+               ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7f9a19bb87c0>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+___ test_retry_during_unrelated_turn_is_ready_once_without_overlap[success] ____
+
+fut = <coroutine object Event.wait at 0x7f9a1dae7060>, timeout = 30
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout <= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout <= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+>           return await fut
+                   ^^^^^^^^^
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <asyncio.locks.Event object at 0x7f9a1be99df0 [unset]>
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+>           await fut
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f9a1a9a55a0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9a02fe6cf0>
+outcome = 'success'
+
+    @pytest.mark.parametrize("outcome", ["success", "error", "eof", "exception", "cancel"])
+    async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
+        native_backend, monkeypatch, outcome
+    ):
+        native = native_backend
+        await native.author_history()
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+>           await exercise_retry(owner, session, native, monkeypatch, outcome)
+
+tests/test_runtime_goal_retry_running.py:36: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_runtime_goal_retry_running.py:124: in exercise_retry
+    await asyncio.wait_for(entered.wait(), 30)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:487: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7f9a1ba766c0>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+____ test_retry_during_unrelated_turn_is_ready_once_without_overlap[error] _____
+
+fut = <coroutine object Event.wait at 0x7f9a19a0c3c0>, timeout = 30
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout <= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout <= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+>           return await fut
+                   ^^^^^^^^^
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <asyncio.locks.Event object at 0x7f9a035e4e90 [unset]>
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+>           await fut
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f9a1a9bfd90>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9a1bde9160>
+outcome = 'error'
+
+    @pytest.mark.parametrize("outcome", ["success", "error", "eof", "exception", "cancel"])
+    async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
+        native_backend, monkeypatch, outcome
+    ):
+        native = native_backend
+        await native.author_history()
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+>           await exercise_retry(owner, session, native, monkeypatch, outcome)
+
+tests/test_runtime_goal_retry_running.py:36: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_runtime_goal_retry_running.py:124: in exercise_retry
+    await asyncio.wait_for(entered.wait(), 30)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:487: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7f9a02f74840>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+_____ test_retry_during_unrelated_turn_is_ready_once_without_overlap[eof] ______
+
+fut = <coroutine object Event.wait at 0x7f9a19755fc0>, timeout = 30
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout <= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout <= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+>           return await fut
+                   ^^^^^^^^^
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <asyncio.locks.Event object at 0x7f9a1977cc50 [unset]>
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+>           await fut
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f9a1bdbd1d0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9a1bde9780>
+outcome = 'eof'
+
+    @pytest.mark.parametrize("outcome", ["success", "error", "eof", "exception", "cancel"])
+    async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
+        native_backend, monkeypatch, outcome
+    ):
+        native = native_backend
+        await native.author_history()
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+>           await exercise_retry(owner, session, native, monkeypatch, outcome)
+
+tests/test_runtime_goal_retry_running.py:36: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_runtime_goal_retry_running.py:124: in exercise_retry
+    await asyncio.wait_for(entered.wait(), 30)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:487: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7f9a18203d00>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+__ test_retry_during_unrelated_turn_is_ready_once_without_overlap[exception] ___
+
+fut = <coroutine object Event.wait at 0x7f9a1ac3b4c0>, timeout = 30
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout <= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout <= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+>           return await fut
+                   ^^^^^^^^^
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <asyncio.locks.Event object at 0x7f9a1ac4dc10 [unset]>
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+>           await fut
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f9a1bef79d0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9a184f0c20>
+outcome = 'exception'
+
+    @pytest.mark.parametrize("outcome", ["success", "error", "eof", "exception", "cancel"])
+    async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
+        native_backend, monkeypatch, outcome
+    ):
+        native = native_backend
+        await native.author_history()
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+>           await exercise_retry(owner, session, native, monkeypatch, outcome)
+
+tests/test_runtime_goal_retry_running.py:36: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_runtime_goal_retry_running.py:124: in exercise_retry
+    await asyncio.wait_for(entered.wait(), 30)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:487: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7f9a1bb85ec0>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+____ test_retry_during_unrelated_turn_is_ready_once_without_overlap[cancel] ____
+
+fut = <coroutine object Event.wait at 0x7f9a1808ece0>, timeout = 30
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout <= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout <= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+>           return await fut
+                   ^^^^^^^^^
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <asyncio.locks.Event object at 0x7f9a1abffdd0 [unset]>
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+>           await fut
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f9a1844fd90>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9a1982b150>
+outcome = 'cancel'
+
+    @pytest.mark.parametrize("outcome", ["success", "error", "eof", "exception", "cancel"])
+    async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
+        native_backend, monkeypatch, outcome
+    ):
+        native = native_backend
+        await native.author_history()
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+>           await exercise_retry(owner, session, native, monkeypatch, outcome)
+
+tests/test_runtime_goal_retry_running.py:36: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_runtime_goal_retry_running.py:124: in exercise_retry
+    await asyncio.wait_for(entered.wait(), 30)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:487: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7f9a1be14cc0>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+_______ test_busy_retry_keeps_unresolved_attempt_and_owner_fences[owner] _______
+
+self = <agent_comms.runtime.RuntimeProxy object at 0x7f9a1a804a50>
+
+    async def _connect_current(self) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        # Startup has no elapsed-time expiry. The registered process and lease
+        # own its lifetime; caller cancellation also ends this unsent operation.
+        snapshot = await Coordination.run_worker(self._owner_snapshot)
+        try:
+>           process = snapshot.require_active(self.session_id).require_process()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/runtime.py:332: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/registry_document.py:56: in require_active
+    self.status(thread.name).require_active()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = StoppedThreadStatus()
+
+    def require_active(self) -> None:
+        from .errors import RelationViolationError
+    
+>       raise RelationViolationError("live owner is stopped or unavailable")
+E       agent_comms.errors.RelationViolationError: live owner is stopped or unavailable
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/thread_status.py:35: RelationViolationError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f9a1ac09450>
+fence = 'owner'
+
+    @pytest.mark.parametrize("fence", ["claimed", "reserved", "owner", "origin"])
+    async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(native_backend, fence):
+        native = native_backend
+        await native.author_history()
+        async with native.open_owner(runtime_enabled=True) as (owner, session):
+            comms = owner._comms
+            async with native.original_input(owner, session, "Unrelated turn") as turn:
+                store = owner.turns.goals.open_goal_store()
+                goal = comms.goals.update_goal(
+                    session, SetGoalAction(text="Keep attempt authority"), owner_store=store
+                )
+                reservation = store.reserve(goal.id, 1)
+                if fence != "reserved":
+                    store.claim_launch(reservation)
+                if fence in {"owner", "origin"}:
+                    reservation.fail(store, "Known failed attempt")
+                blocked = comms.goals.update_goal(
+                    session,
+                    BlockedGoalAction(
+                        expect=GoalPrecondition(goal_id=goal.id),
+                        block_reason="Owner input required before retry",
+                    ),
+                )
+                generation = store.snapshot(goal.id)
+                proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+                assert owner.turns.owns_turn(session, turn.turn_id)
+                if fence == "owner":
+                    # Loss is an original registry operation, not an invented PID.
+                    comms.registry.unregister(session)
+                elif fence == "origin":
+                    owner.turns.goals.pending_goal_origins[session] = goal.id
+                try:
+                    expected = {"owner": "no longer owns", "origin": "origin turn"}.get(fence, "unresolved")
+                    with pytest.raises(RuntimeError, match=expected):
+>                       await proxy.request("retry_goal", goal_id=goal.id, expected_revision=blocked.revision)
+
+tests/test_runtime_goal_retry_running.py:227: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/runtime.py:355: in request
+    reader, writer = await self._connect_current()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.runtime.RuntimeProxy object at 0x7f9a1a804a50>
+
+    async def _connect_current(self) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        # Startup has no elapsed-time expiry. The registered process and lease
+        # own its lifetime; caller cancellation also ends this unsent operation.
+        snapshot = await Coordination.run_worker(self._owner_snapshot)
+        try:
+            process = snapshot.require_active(self.session_id).require_process()
+        except RelationViolationError as error:
+>           raise ConnectionError(f"Cannot attach {self.session_id!r}: {error}") from error
+E           ConnectionError: Cannot attach 'project': live owner is stopped or unavailable
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/runtime.py:334: ConnectionError
+____ test_native_retry_waits_for_current_response_without_replaying_unknown ____
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f9a1a9bf7f0>
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
+    async def test_native_retry_waits_for_current_response_without_replaying_unknown(native_backend):
+        native = native_backend
+        await native.author_history()
+        release, finish_goal = asyncio.Event(), asyncio.Event()
+        native.provider.response_gate = release
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+            comms = owner._comms
+            store = owner.turns.goals.open_goal_store()
+            goal = comms.goals.update_goal(
+                session, SetGoalAction(text="Finish native retry objective"), owner_store=store
+            )
+            reservation = store.reserve(goal.id, 1)
+            store.claim_launch(reservation)
+            reservation.fail(store, "Previous native goal attempt failed")
+            blocked = comms.goals.update_goal(
+                session,
+                BlockedGoalAction(
+                    expect=GoalPrecondition(goal_id=goal.id),
+                    block_reason="Previous native goal attempt failed",
+                ),
+            )
+            # This retained unconfirmed reservation is input evidence, never a
+            # source of a runnable prompt. It carries no fabricated native start.
+            owner.inputs.dispositions.record(
+                "acp:old-native-unknown", seq=None, owner=session,
+                admission=comms.registry.snapshot().admission_generations[session],
+                target=session, text="Uncertain old native input must never replay",
+            )
+            original = owner.inputs.dispositions.read().lookup("acp:old-native-unknown")
+            proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+            turn = asyncio.create_task(proxy.request(
+                "prompt", prompt=[{"type": "text", "text": "Unrelated ordinary native request"}],
+            ))
+            try:
+                async with asyncio.timeout(30):
+                    while native.provider.posts != 1:
+>                       assert not turn.done()
+E                       AssertionError: assert not True
+E                        +  where True = <built-in method done of _asyncio.Task object at 0x7f9a037df070>()
+E                        +    where <built-in method done of _asyncio.Task object at 0x7f9a037df070> = <Task finished name='Task-1047' coro=<RuntimeConnection.request() done, defined at /home/ts/wt/comms-retained-human-ma...0-installed-20261002/lib/python3.14/site-packages/agent_comms/runtime.py:354> exception=RequestError('Internal error')>.done
+
+tests/test_stack_retry_running.py:55: AssertionError
+=============================== warnings summary ===============================
+../../../../usr/lib/python3.14/site-packages/_pytest/config/__init__.py:1345
+  /usr/lib/python3.14/site-packages/_pytest/config/__init__.py:1345: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; pytest_asyncio
+    self._mark_plugins_for_rewrite(hook, disable_autoload)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_turn_runner.py::test_mounted_cancel_does_not_cancel_other_session
+FAILED tests/test_turn_runner.py::test_turn_failure_preserves_exact_exception_cause_and_releases_state
+FAILED tests/test_turn_runner.py::test_shutdown_joins_running_turn_before_releasing_session
+FAILED tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[None]
+FAILED tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[prior1]
+FAILED tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[prior2]
+FAILED tests/test_turn_runner.py::test_compaction_fault_reaches_acp_client_without_original_send
+FAILED tests/test_turn_runner.py::test_actual_provider_failure_reports_started_input_once_without_retry
+FAILED tests/test_acp.py::TestAgentTurnForwarding::test_turn_forwards_tool_calls_and_thinking
+FAILED tests/test_acp.py::TestAgentTurnForwarding::test_turn_sets_wire_activity
+FAILED tests/test_acp_private_nk_delivery.py::test_acp_private_does_not_overlap_owner_turn
+FAILED tests/test_acp_input_disposition.py::test_native_preflight_failure_is_visible_and_cannot_mark_started
+FAILED tests/test_acp_input_disposition.py::test_late_owner_socket_observes_unknown_until_exact_native_start[False]
+FAILED tests/test_acp_input_disposition.py::test_late_owner_socket_observes_unknown_until_exact_native_start[True]
+FAILED tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[success]
+FAILED tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[error]
+FAILED tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[eof]
+FAILED tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[exception]
+FAILED tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[cancel]
+FAILED tests/test_runtime_goal_retry_running.py::test_busy_retry_keeps_unresolved_attempt_and_owner_fences[owner]
+FAILED tests/test_stack_retry_running.py::test_native_retry_waits_for_current_response_without_replaying_unknown
+21 failed, 9 passed, 1 warning in 308.51s (0:05:08)
