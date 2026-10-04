@@ -73,11 +73,22 @@ membership to the existing acquired reader; original admitted-anchor ancestry is
 unchanged. No coverage call settles UNKNOWN or grants admission/replay. The reader,
 entry and managed-entry covered_prefix methods remain orchestration/default hooks.
 
-SelectedSummaryAttempt.transition is untouched. Its declared_name WHERE parameter
-is an SQL scalar projection of the original member; JsonStorage encodes SET values,
-while TypedTable leaves WHERE parameters unchanged. A tagged FieldCodec dict is
-not a substitute for json_extract(state, '$.kind')'s scalar. Shared-site advice was
-sent directly to Mendel; F4 does not need an F2 codec/schema change.
+The exact F4 SQL handoff is integrated: SelectedSummaryAttempt.transition now
+passes FieldCodec.encode(type(self.state)) at its unchanged json_extract(kind) CAS.
+The existing codec encodes a DeclaredFamily CLASS as its scalar declared name;
+encoding the INSTANCE would instead produce a tagged dict. JsonStorage still
+encodes SET values; TypedTable still passes WHERE parameters through. No predicate,
+transition, schema or coverage change is implied by this one-line projection.
+Mendel/parent granted this exact edit from ca1bf0e0; no other F4 changes copied.
+
+The existing configured fixture's VCS-only origin lookup could not read normal
+file-wheel metadata. It now borrows the existing InstalledSource declaration for
+that origin, which binds actual module/location/directURL to the reviewed artifact.
+Its complete Git-to-imported asset verification remains required. No synthetic VCS
+metadata, source overlay, new proof class or relaxed equality. Existing VCS callers
+retain their original origin path. The F2 driver reuses run/configured_saved_agent
+for one original fork, summary and distinct input; after terminal it observes the
+original creation/commit through the unchanged acquired reader/journal owners.
 
 Source checkpoint 97785da5: hosted Debt ratchet PASS (37178636773). After.json
 uses the existing parser over src/tests/tools (311/364/53, zero omissions). One

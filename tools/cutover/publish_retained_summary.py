@@ -145,6 +145,16 @@ class InstalledSource:
             raise RuntimeError('Installed source bytes are not verified')
         self.direct_url.require_original(self.head, artifacts)
 
+    def require_package(self, module: str, location: Path, direct_url: dict,
+                        artifacts: tuple[ReviewedArtifact, ...]) -> str:
+        """Bind the declared source to the actual imported installer origin."""
+        if (self.module, self.location) != (module, str(location)):
+            raise RuntimeError('Installed source names another imported package')
+        if FieldCodec.encode(self.direct_url) != direct_url:
+            raise RuntimeError('Installed source names another installer origin')
+        self.require_original(artifacts)
+        return self.head
+
 
 @dataclass(frozen=True)
 class InstalledSourceProof:
