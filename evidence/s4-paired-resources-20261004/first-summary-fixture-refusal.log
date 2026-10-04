@@ -1,0 +1,48 @@
+...F.....                                                          [100%]
+=================================== FAILURES ===================================
+_ RecordedMeasurementTests.test_paired_resources_compare_original_totals_without_zero_or_billing_credit _
+
+self = <test_recorded_retention_measurements.RecordedMeasurementTests testMethod=test_paired_resources_compare_original_totals_without_zero_or_billing_credit>
+
+    def test_paired_resources_compare_original_totals_without_zero_or_billing_credit(self):
+        # Prevent two consumers from choosing different completeness/ratio
+        # policies, lost source-input work, or output plus reasoning double count.
+        round_ = replace(coding_scenario().rounds[0], identity='cut')
+        scored = RecallScenario('paired-resources', (round_,)).score(
+            Condition.TASK_MEMORY, RecordedAnswers({}))
+>       summary = SummaryUsage(input=20, output=8, total_tokens=28,
+            cost=SummaryCost(0, 0, 0, 0, 0))
+
+tests/test_recorded_retention_measurements.py:554: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<string>:11: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SummaryUsage(input=20, output=8, cache_read=None, cache_write=None, total_tokens=28, cost=SummaryCost(input=0, output=0, cache_read=0, cache_write=0, total=0), reasoning=None, cache_write_1h=None)
+
+    def __post_init__(self):
+        if (
+            self.cost is None
+            or any(
+                v is None or not 0 <= v <= 2**53 - 1
+                for v in (
+                    self.input,
+                    self.output,
+                    self.cache_read,
+                    self.cache_write,
+                    self.total_tokens,
+                )
+            )
+            or any(
+                v is not None and not 0 <= v <= 2**53 - 1
+                for v in (self.reasoning, self.cache_write_1h)
+            )
+        ):
+>           raise ValueError("Invalid selected native usage")
+E           ValueError: Invalid selected native usage
+
+src/agent_comms/pi_summary_payloads.py:115: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_recorded_retention_measurements.py::RecordedMeasurementTests::test_paired_resources_compare_original_totals_without_zero_or_billing_credit
+1 failed, 8 passed, 27 deselected, 6 subtests passed in 0.36s

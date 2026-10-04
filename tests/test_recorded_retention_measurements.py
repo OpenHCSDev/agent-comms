@@ -545,6 +545,80 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertEqual(empty['records'], 0)
         self.assertFalse(empty['reported_total_tokens']['evaluated'])
 
+    def test_paired_resources_compare_original_totals_without_zero_or_billing_credit(self):
+        # Prevent two consumers from choosing different completeness/ratio
+        # policies, lost source-input work, or output plus reasoning double count.
+        round_ = replace(coding_scenario().rounds[0], identity='cut')
+        scored = RecallScenario('paired-resources', (round_,)).score(
+            Condition.TASK_MEMORY, RecordedAnswers({}))
+        summary = SummaryUsage(input=20, output=8, cache_read=0, cache_write=0, total_tokens=28,
+            cost=SummaryCost(0, 0, 0, 0, 0))
+        cuts = {'cut': {'summary_usage': {'evaluated': True, 'usage': summary}}}
+        candidate = scored.recorded_resources(cuts, {'cut': {'model_steps': (
+            {'usage': {'value': PiUsage(input=4, output=6, total_tokens=10,
+                reasoning=2, cost=PiCost(total=0.25))}},)}}, {})
+        baseline = scored.recorded_resources(cuts, {'cut': {'model_steps': (
+            {'usage': {'value': PiUsage(input=8, output=8, total_tokens=16,
+                reasoning=3, cost=PiCost(total=1))}},)}}, {})
+        paired = scored.paired_resources(candidate, baseline)
+        self.assertEqual(set(paired['groups']), set(candidate) - {'scope'})
+        combined = paired['groups']['combined']
+        self.assertIs(combined['candidate'], candidate['combined'])
+        self.assertIs(combined['baseline'], baseline['combined'])
+        cost = combined['metrics']['normalized_cost']
+        self.assertEqual(cost['difference'], -0.75)
+        self.assertEqual(cost['relative_reduction']['value'], 0.75)
+        self.assertEqual(combined['metrics']['output_tokens']['difference'], -2)
+        self.assertFalse(combined['metrics']['cache_read_tokens']['evaluated'])
+        self.assertIsNone(combined['metrics']['cache_read_tokens']['difference'])
+        workflow = paired['groups']['recorded_workflow']['metrics']['normalized_cost']
+        self.assertFalse(workflow['evaluated'])
+        self.assertIsNone(workflow['difference'])
+        self.assertEqual(workflow['candidate']['observed_value'], 0.25)
+        zero = paired['groups']['summaries']['metrics']['normalized_cost']
+        self.assertTrue(zero['evaluated'])
+        self.assertEqual(zero['difference'], 0)
+        self.assertFalse(zero['relative_reduction']['evaluated'])
+        self.assertIsNone(zero['relative_reduction']['value'])
+        changed = {**baseline, 'summaries': {**baseline['summaries'], 'expected_rounds': ('other',)}}
+        with self.assertRaisesRegex(ValueError, 'same frozen rounds'):
+            scored.paired_resources(candidate, changed)
+
+    def test_paired_resource_batch_keeps_all_trajectories_and_uses_aggregate_denominator(self):
+        # Missing samples cannot be dropped for a cheap mean; ratio of total
+        # resources is distinct from averaging per-pair percentages.
+        round_ = replace(coding_scenario().rounds[0], identity='cut')
+        scored = RecallScenario('resource-batch', (round_,)).score(
+            Condition.TASK_MEMORY, RecordedAnswers({}))
+        def original(cost):
+            return scored.recorded_resources({}, {'cut': {'model_steps': (
+                {'usage': {'value': PiUsage(input=0, output=0, total_tokens=0,
+                    cost=PiCost(total=cost))}},)}}, {})
+        pairs = tuple({'paired_resources': scored.paired_resources(original(a), original(b))}
+                      for a, b in ((0.25, 1), (1, 3)))
+        batch = scored.paired_resource_batch(pairs)
+        cost = batch['groups']['assistants']['metrics']['normalized_cost']
+        self.assertTrue(cost['evaluated'])
+        self.assertEqual(cost['candidate']['value'], 1.25)
+        self.assertEqual(cost['baseline']['value'], 4)
+        self.assertEqual(cost['relative_reduction']['value'], 0.6875)
+        self.assertEqual(cost['candidate']['expected_trajectories'], 2)
+        self.assertEqual(len(batch['groups']['assistants']['samples']), 2)
+        missing = {'paired_resources': scored.paired_resources(
+            scored.recorded_resources({}, {}, {}), original(3))}
+        partial = scored.paired_resource_batch((pairs[0], missing))
+        cost = partial['groups']['assistants']['metrics']['normalized_cost']
+        self.assertFalse(cost['evaluated'])
+        self.assertIsNone(cost['difference'])
+        self.assertIsNone(cost['relative_reduction']['value'])
+        self.assertEqual(cost['candidate']['observed_value'], 0.25)
+        self.assertEqual(cost['candidate']['observed_trajectories'], 1)
+        self.assertEqual(cost['candidate']['expected_trajectories'], 2)
+        tokens = batch['groups']['assistants']['metrics']['reported_total_tokens']
+        self.assertTrue(tokens['evaluated'])
+        self.assertEqual(tokens['difference'], 0)
+        self.assertFalse(tokens['relative_reduction']['evaluated'])
+
     def test_resource_totals_keep_missing_frozen_rounds_and_observed_subtotals(self):
         # Missing cuts/probes cannot turn a partial trajectory into a complete
         # cheap total. Actual reported zero is preserved independently.
