@@ -23,7 +23,11 @@ wire cut and joined worker/cancellation/resource lifetimes remain intact.
 
 Production callers: record/reserve_turn register settlement before durable
 publication; InputDrain.finish_original_inputs joins the same retirement;
-OwnedTurn settles before cancellation/failure observation. Rollback callbacks
+OwnedTurn settles before cancellation/failure observation. InputDrain also removes
+its original_sources binding on the loop that created it, passing only the
+original immutable keys into the SQL/document worker. The prior worker-side pop
+is deleted. A missing live original resource requires no document/lock operation;
+all following/queue/admission cleanup still runs in the original finally block. Rollback callbacks
 ignore the returned value. ACP errors separately read current notice/started
 state at error publication: that is a different observation and stays fresh.
 Compaction/source selection, native bind/start grant checks and recovery all keep
