@@ -1,0 +1,968 @@
+{
+  "tool": "refactor-audit audit.findings.Package.load",
+  "scope": "complete production Python roots; lexical AST declarations, imports, annotations, calls and attribute references",
+  "ambiguity": "MRO, callbacks, Textual bindings and dynamic execution require semantic reading/runtime check; lexical evidence does not prove resolution",
+  "roots": [
+    {
+      "repo": "/home/ts/wt/comms-retained-human-main-20261001",
+      "root": "src/agent_comms",
+      "head": "046faa37781cc421c4d738a794ed8041d2deb5fb",
+      "parsed": 311,
+      "omissions": [],
+      "sites": [
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 75,
+          "kind": "FunctionDef",
+          "source": "def replace_tags(self, name: str, tags: frozenset[str]) -> Thread:"
+        },
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 122,
+          "kind": "FunctionDef",
+          "source": "def delete_saved_view(self, name: str) -> None:"
+        },
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 174,
+          "kind": "FunctionDef",
+          "source": "def rename_tag(self, name: str, new_name: str) -> None:"
+        },
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 182,
+          "kind": "FunctionDef",
+          "source": "def delete_tag(self, name: str) -> None:"
+        },
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 36,
+          "kind": "Attribute",
+          "source": "channels.rename_tag"
+        },
+        {
+          "path": "src/agent_comms/channel_management.py",
+          "line": 38,
+          "kind": "Attribute",
+          "source": "channels.delete_tag"
+        },
+        {
+          "path": "src/agent_comms/cli.py",
+          "line": 20,
+          "kind": "ImportFrom",
+          "source": "from .cli_commands import CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli.py",
+          "line": 44,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli.py",
+          "line": 44,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli.py",
+          "line": 53,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 106,
+          "kind": "ClassDef",
+          "source": "@dataclass(frozen=True, kw_only=True)"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 942,
+          "kind": "ClassDef",
+          "source": "@dataclass(frozen=True, kw_only=True)"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 953,
+          "kind": "ClassDef",
+          "source": "@dataclass(frozen=True, kw_only=True)"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1006,
+          "kind": "ClassDef",
+          "source": "@dataclass(frozen=True, kw_only=True)"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1084,
+          "kind": "ClassDef",
+          "source": "@dataclass(frozen=True, kw_only=True)"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 110,
+          "kind": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 114,
+          "kind": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 127,
+          "kind": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 274,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 284,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 295,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 335,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 353,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 366,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 408,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 425,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 442,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 454,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 473,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 482,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 491,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 499,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 517,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 554,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 614,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 622,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 631,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 643,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 673,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 683,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 701,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 713,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 718,
+          "kind": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 728,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 755,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 765,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 770,
+          "kind": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 782,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 796,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 810,
+          "kind": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 829,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 846,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 855,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 874,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 942,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 953,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 968,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 973,
+          "kind": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 986,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 993,
+          "kind": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1006,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1010,
+          "kind": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1015,
+          "kind": "Name",
+          "source": "ExactTagCliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1025,
+          "kind": "Name",
+          "source": "ExactTagCliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1038,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1043,
+          "kind": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1056,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1062,
+          "kind": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1070,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1076,
+          "kind": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1084,
+          "kind": "Name",
+          "source": "TargetActionCliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1095,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1101,
+          "kind": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1105,
+          "kind": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1118,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1125,
+          "kind": "FunctionDef",
+          "source": "@classmethod"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 124,
+          "kind": "Attribute",
+          "source": "cls.thread_bindings"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1001,
+          "kind": "Attribute",
+          "source": "ctx.channels.replace_tags"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1020,
+          "kind": "Attribute",
+          "source": "ctx.channels.rename_tag"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1033,
+          "kind": "Attribute",
+          "source": "ctx.channels.delete_tag"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1051,
+          "kind": "Attribute",
+          "source": "ctx.channels.delete_saved_view"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 121,
+          "kind": "Attribute",
+          "source": "cls.channel_bindings"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 949,
+          "kind": "Attribute",
+          "source": "CliCommand.target_catalog"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 1088,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 949,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 131,
+          "kind": "Attribute",
+          "source": "member.channel_bindings"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 137,
+          "kind": "Attribute",
+          "source": "member.thread_bindings"
+        },
+        {
+          "path": "src/agent_comms/cli_commands.py",
+          "line": 963,
+          "kind": "Name",
+          "source": "CliCommand"
+        }
+      ]
+    },
+    {
+      "repo": "/home/ts/wt/toad-regression-widget-cost-20261001",
+      "root": "src/toad",
+      "head": "6f6253c03b22773e54b65105cfcbc7db61d46404",
+      "parsed": 288,
+      "omissions": [],
+      "sites": [
+        {
+          "path": "src/toad/app.py",
+          "line": 7,
+          "kind": "ImportFrom",
+          "source": "from toad.thread_actions import ThreadActions"
+        },
+        {
+          "path": "src/toad/app.py",
+          "line": 298,
+          "kind": "Name",
+          "source": "ThreadActions"
+        },
+        {
+          "path": "src/toad/command_catalog.py",
+          "line": 8,
+          "kind": "ImportFrom",
+          "source": "from toad.target_commands import TargetContext, ThreadCommand"
+        },
+        {
+          "path": "src/toad/command_catalog.py",
+          "line": 15,
+          "kind": "ClassDef",
+          "source": "@dataclass(frozen=True)"
+        },
+        {
+          "path": "src/toad/command_catalog.py",
+          "line": 17,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/command_catalog.py",
+          "line": 21,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/command_catalog.py",
+          "line": 60,
+          "kind": "Attribute",
+          "source": "conversation.read_command_catalog"
+        },
+        {
+          "path": "src/toad/command_catalog.py",
+          "line": 33,
+          "kind": "Attribute",
+          "source": "context.available_actions"
+        },
+        {
+          "path": "src/toad/command_catalog.py",
+          "line": 40,
+          "kind": "Name",
+          "source": "ThreadCommand"
+        },
+        {
+          "path": "src/toad/conversation_submission.py",
+          "line": 17,
+          "kind": "ImportFrom",
+          "source": "from toad.command_catalog import CommandCatalog"
+        },
+        {
+          "path": "src/toad/conversation_submission.py",
+          "line": 105,
+          "kind": "Name",
+          "source": "CommandCatalog"
+        },
+        {
+          "path": "src/toad/navigation_target.py",
+          "line": 50,
+          "kind": "ImportFrom",
+          "source": "from toad.target_commands import TargetContext"
+        },
+        {
+          "path": "src/toad/navigation_target.py",
+          "line": 111,
+          "kind": "ImportFrom",
+          "source": "from toad.target_commands import TargetContext"
+        },
+        {
+          "path": "src/toad/navigation_target.py",
+          "line": 51,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/navigation_target.py",
+          "line": 112,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/slash_command.py",
+          "line": 26,
+          "kind": "ImportFrom",
+          "source": "from toad.target_commands import TargetContext"
+        },
+        {
+          "path": "src/toad/slash_command.py",
+          "line": 48,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/slash_command.py",
+          "line": 51,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 16,
+          "kind": "ImportFrom",
+          "source": "from agent_comms.cli_commands import TargetActionsCliCommand"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 25,
+          "kind": "ClassDef",
+          "source": "@dataclass(frozen=True)"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 117,
+          "kind": "ClassDef",
+          "source": "@dataclass(frozen=True)"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 39,
+          "kind": "FunctionDef",
+          "source": "def available_actions(self):"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 68,
+          "kind": "AsyncFunctionDef",
+          "source": "async def command_choices(self):"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 69,
+          "kind": "ImportFrom",
+          "source": "from toad.command_catalog import CommandCatalog"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 170,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 91,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 94,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 97,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 106,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 112,
+          "kind": "Attribute",
+          "source": "conversation.update_slash_commands"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 140,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 147,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 150,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 157,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 163,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 83,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 86,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 43,
+          "kind": "Name",
+          "source": "TargetActionsCliCommand"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 54,
+          "kind": "Attribute",
+          "source": "self.command_choices"
+        },
+        {
+          "path": "src/toad/target_commands.py",
+          "line": 70,
+          "kind": "Name",
+          "source": "CommandCatalog"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 10,
+          "kind": "ImportFrom",
+          "source": "from agent_comms.cli_commands import TargetActionsCliCommand, TargetEditCliCommand"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 17,
+          "kind": "ClassDef",
+          "source": "class ThreadActions:"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 60,
+          "kind": "ClassDef",
+          "source": "class ThreadActionExecution:"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 90,
+          "kind": "Name",
+          "source": "TargetEditCliCommand"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 97,
+          "kind": "ImportFrom",
+          "source": "from agent_comms.cli_commands import CliCommand"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 46,
+          "kind": "Name",
+          "source": "ThreadActionExecution"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 49,
+          "kind": "Name",
+          "source": "ThreadActionExecution"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 22,
+          "kind": "Name",
+          "source": "ThreadActionExecution"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 98,
+          "kind": "Name",
+          "source": "CliCommand"
+        },
+        {
+          "path": "src/toad/thread_actions.py",
+          "line": 115,
+          "kind": "Name",
+          "source": "TargetEditCliCommand"
+        },
+        {
+          "path": "src/toad/widgets/comms_chat.py",
+          "line": 42,
+          "kind": "ImportFrom",
+          "source": "from toad.command_catalog import CommandCatalog"
+        },
+        {
+          "path": "src/toad/widgets/comms_chat.py",
+          "line": 373,
+          "kind": "ImportFrom",
+          "source": "from toad.target_commands import TargetContext"
+        },
+        {
+          "path": "src/toad/widgets/comms_chat.py",
+          "line": 190,
+          "kind": "Attribute",
+          "source": "self.update_slash_commands"
+        },
+        {
+          "path": "src/toad/widgets/comms_chat.py",
+          "line": 376,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/widgets/comms_chat.py",
+          "line": 380,
+          "kind": "Name",
+          "source": "CommandCatalog"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 108,
+          "kind": "ImportFrom",
+          "source": "from toad.command_catalog import CommandCatalog"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1657,
+          "kind": "AsyncFunctionDef",
+          "source": "@work(group='command-catalog', exclusive=True, exit_on_error=False)"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1667,
+          "kind": "AsyncFunctionDef",
+          "source": "async def read_command_catalog(self) -> CommandCatalog:"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1648,
+          "kind": "ImportFrom",
+          "source": "from toad.target_commands import TargetContext"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1667,
+          "kind": "Name",
+          "source": "CommandCatalog"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1558,
+          "kind": "Attribute",
+          "source": "self.update_slash_commands"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1654,
+          "kind": "Name",
+          "source": "TargetContext"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1682,
+          "kind": "Attribute",
+          "source": "self.update_slash_commands"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1703,
+          "kind": "Attribute",
+          "source": "self.update_slash_commands"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1768,
+          "kind": "Attribute",
+          "source": "self.update_slash_commands"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1853,
+          "kind": "Attribute",
+          "source": "self.update_slash_commands"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1660,
+          "kind": "Attribute",
+          "source": "self.read_command_catalog"
+        },
+        {
+          "path": "src/toad/widgets/conversation.py",
+          "line": 1673,
+          "kind": "Name",
+          "source": "CommandCatalog"
+        },
+        {
+          "path": "src/toad/widgets/slash_complete.py",
+          "line": 117,
+          "kind": "Attribute",
+          "source": "self.query_ancestor(Conversation).update_slash_commands"
+        }
+      ]
+    }
+  ],
+  "retired_references": []
+}

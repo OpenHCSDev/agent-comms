@@ -1,0 +1,142 @@
+.......F....F.............                                               [100%]
+=================================== FAILURES ===================================
+_______ test_all_implicit_tag_introduction_paths_honor_name_reservations _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-1113/test_all_implicit_tag_introduc0')
+
+    def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
+        from agent_comms.importing import ImportedMessage, ImportFormat, ImportRole, ImportSnapshot
+    
+        comms = setup_wire(tmp_path)
+        predicate = ViewPredicate(AnyOfMatch, frozenset({"api"}))
+        comms.channels.set_saved_view(SavedView("reserved", ViewKind.PARTICIPANTS, predicate))
+        before = comms.registry.snapshot()
+    
+        with pytest.raises(ValueError, match="reserved by a saved view"):
+            comms.registry.declare(Thread("registered", frozenset({"reserved"}), str(tmp_path)))
+        with pytest.raises(ValueError, match="reserved by a saved view"):
+            comms.threads.claim_thread("claimed", tags=frozenset({"reserved"}), worktree=str(tmp_path))
+    
+        source = tmp_path / "foreign.json"
+        source.write_text("{}")
+    
+        class SnapshotSource:
+            @staticmethod
+            def read(*_args):
+                return ImportSnapshot(
+                    ImportFormat.OPENCODE,
+                    "foreign",
+                    str(tmp_path),
+                    "Foreign",
+                    (ImportedMessage(ImportRole.USER, "continue"),),
+                    "",
+                    1,
+                    0,
+                    (),
+                    "continue",
+                )
+    
+        with pytest.raises(ValueError, match="reserved by a saved view"):
+            comms.threads.import_thread(
+                source,
+                SnapshotSource(),  # type: ignore[arg-type]
+                name="imported",
+                tags=frozenset({"reserved"}),
+            )
+        parent_session = tmp_path / "parent.jsonl"
+        parent_session.write_text("{}\n")
+        comms.registry.declare(
+            Thread("parent", frozenset(), str(tmp_path), session_file=str(parent_session))
+        )
+        with pytest.raises(ValueError, match="reserved by a saved view"):
+>           comms.threads.fork(
+                ForkSpec("child", "parent", "task", frozenset({"reserved"})),
+                pi_bin="/bin/true",
+            )
+
+tests/test_channels.py:220: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/thread_management.py:513: in fork
+    return self._fork_unlocked(spec, resolved_bin)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/thread_management.py:535: in _fork_unlocked
+    session = fork_native_session(parent.session_file, parent.worktree, pi_bin,
+src/agent_comms/native_fork.py:35: in fork_native_session
+    package = NativePiRpcLaunch.package_for_command(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:475: in package_for_command
+    package, route = cls._command_selection(command)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.native_pi.NativePiRpcLaunch'>, command = '/bin/true'
+
+    @classmethod
+    def _command_selection(cls, command: str):
+        """Decode the original launcher selection without acquiring its package.
+    
+        Executable names never establish capability. Configured commands must
+        name this installation's entrypoint, its pinned CLI, or the source stack
+        launcher; execution always uses the verified native package.
+        """
+        import hashlib
+    
+        from .native_package import MANIFEST
+        from .private_nk_entrypoint import PrivateNkLaunch
+    
+        stack_launcher = MANIFEST.parent / "bin" / "pi-native"
+        executable = (
+            Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
+        )
+        route = PrivateNkLaunch.current()
+        if route is not None:
+            package = route.native_package
+        elif executable is not None and executable == stack_launcher.resolve():
+            build = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
+            package = (
+                MANIFEST.parent
+                / f".pi-native-{build}"
+                / "node_modules/@earendil-works/pi-coding-agent"
+            )
+        else:
+            raise NativePiUnavailable("Native owner requires a configured pinned package")
+        allowed = (
+            Path(sys.executable).with_name("pi-comms-native").resolve(),
+            stack_launcher.resolve(),
+            (package / "dist" / "cli.js").resolve(),
+        )
+        if executable is not None and executable not in allowed:
+>           raise NativePiUnavailable("Configured command is not a validated native Pi launcher")
+E           agent_comms.native_pi.NativePiUnavailable: Configured command is not a validated native Pi launcher
+
+src/agent_comms/native_pi.py:469: NativePiUnavailable
+______________ test_thread_presentation_owns_lifecycle_precedence ______________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-1113/test_thread_presentation_owns_0')
+
+    def test_thread_presentation_owns_lifecycle_precedence(tmp_path):
+        thread = Thread("worker", frozenset(), str(tmp_path))
+        working = Activity("worker", ActivityState.WORKING, "Running tests")
+        view = ThreadView(thread, RunningThreadStatus(), working, None, 0)
+>       assert view.presentation.busy
+               ^^^^^^^^^^^^^^^^^
+
+tests/test_channels.py:328: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ThreadView(thread=Thread(name='worker', tags=frozenset(), worktree='/tmp/pytest-of-ts/pytest-1113/test_thread_presenta...9479.479098, diagnostic=None), runtime=None, last_seen=0, goal_execution=None, binding=UnavailableThreadOwnerBinding())
+
+    @property
+    def presentation(self) -> ThreadPresentation:
+        """One declaration-owned interpretation for every thread view."""
+        ordinary = self._display_presentation()
+        if self.status.active:
+>           ordinary = self.activity.readiness.presentation(ordinary, busy=self.activity.state.busy)
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'Activity' object has no attribute 'readiness'
+
+src/agent_comms/presentation.py:522: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_channels.py::test_all_implicit_tag_introduction_paths_honor_name_reservations
+FAILED tests/test_channels.py::test_thread_presentation_owns_lifecycle_precedence
+2 failed, 24 passed in 2.36s
