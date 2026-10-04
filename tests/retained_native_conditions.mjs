@@ -107,7 +107,9 @@ export function armBoundedNativeCondition(session,packagePath,source,transform,o
             const result=await transform(session,packagePath,source,transformed);
             record({stage:'bounded-transform-applied',session:source.session,
                 checkpoint_session:source.checkpoint_session,native_entry_id:source.native_entry_id,
-                narrative_source:source.source,message_count:result.length});
+                narrative_source:source.source,message_count:result.length,
+                agent_messages_sha256:process.getBuiltinModule('node:crypto').createHash('sha256')
+                    .update(JSON.stringify(result)).digest('hex')});
             return result;
         } catch(error) {
             restore();

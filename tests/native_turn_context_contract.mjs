@@ -295,6 +295,12 @@ try {
         const hooked=await session.agent.transformContext(raw.slice(0,-1));
         assert.deepEqual(hooked.at(-1),fresh);
         assert.equal(hooked[0].summary,source.summary);
+        const applicationRecords=readFileSync(join(root,'application-observation.jsonl'),'utf8')
+            .trim().split('\n').map(line=>JSON.parse(line));
+        const appliedRecords=applicationRecords.filter(row=>row.stage==='bounded-transform-applied');
+        assert.equal(appliedRecords.length,1);
+        assert.equal(appliedRecords[0].agent_messages_sha256,
+            createHash('sha256').update(JSON.stringify(hooked)).digest('hex'));
         restore();
         assert.equal(session.agent.transformContext,originalTransform);
         assert.deepEqual(readFileSync(manager.getSessionFile()),before);

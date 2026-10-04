@@ -11,12 +11,13 @@ The SDK's existing transform and conversion callbacks own those two values.
 RecordedNativeProbe owns original capture/manifest/input correlation and consumes
 their original observations; ScoredScenario only exports the resulting relation.
 
-Observe each original conversion through the same acquired private hook lifetime,
+Observe the actual conversion at the existing inspector frame immediately before
+its original onContextReady callback,
 record hashes of its original input/output, and join the transformed-message hash
 to authenticated original SDK segment bytes. Do not convert again, reconstruct a
 summary, infer from a label or serialize decoded opaque provider messages with a
-Python substitute encoder. Restore both callbacks with the existing arm/retire
-owner. All inspector, SDK fixture and configured journey consumers migrate in
+Python substitute encoder. Keep the original transform callback acquisition/restoration unchanged; the
+existing inspector retires its breakpoints/process with the original scope. All inspector, SDK fixture and configured journey consumers migrate in
 one batch. Older missing conversion observations stay unavailable; their existing
 presence result and original receipts are not a newly established binding.
 
