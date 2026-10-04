@@ -232,7 +232,8 @@ async def test_unstarted_input_failure_restores_exact_original_without_replay(na
             if terminal:
                 # The original native failure owner settles unbound input before
                 # reporting its terminal error; error observation alone does not.
-                await Coordination.run_worker(turn.settle_unbound)
+                from agent_comms.input_attempt import NotSentInput
+                assert await Coordination.run_worker(turn.settle_unbound) is NotSentInput
             event = (events.Done("Pi preflight ended before attestation", False)
                      if terminal else events.Error("Pi preflight ended before attestation"))
             await agent._emit_event(session_id, event, Client())

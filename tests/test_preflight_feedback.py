@@ -48,8 +48,7 @@ def test_post_dispatch_failure_preserves_bound_uncertainty(tmp_path):
     output.startup_error('BrokenPipeError: pipe closed during write')
     assert 'not sent' not in output.failure_text.lower()
     assert 'BrokenPipeError' in output.failure_text
-    assert not store.settle_unbound(('acp:partial-write',))
-    after = store.read()
+    after = store.settle_unbound(('acp:partial-write',))
     assert after.lookup('acp:partial-write') == before
     from dataclasses import replace
     feedback = replace(ACPFailure.from_error(-32603, output.failure_text),
