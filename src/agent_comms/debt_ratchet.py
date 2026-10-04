@@ -84,8 +84,10 @@ class FamilyFlattened(PerFileOccurrenceMeasure):
     """The original audit collector, enforced independently for each file."""
 
     mechanism_modules = frozenset({
-        "field_codec.py", "typed_table.py", "coordination_schema.py",
-        "coordinated_runtime_schema.py", "agent_schema.py", "db.py",
+        ("agent_comms", "field_codec.py"), ("agent_comms", "typed_table.py"),
+        ("agent_comms", "coordination_schema.py"),
+        ("agent_comms", "coordinated_runtime_schema.py"),
+        ("toad", "agent_schema.py"), ("toad", "db.py"),
     })
 
     @staticmethod
@@ -94,7 +96,7 @@ class FamilyFlattened(PerFileOccurrenceMeasure):
 
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
-        if Path(filename).name in cls.mechanism_modules:
+        if tuple(Path(filename).parts[-2:]) in cls.mechanism_modules:
             return 0
         return super().count(source, filename)
 

@@ -180,12 +180,16 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(re
     assert FamilyFlattened.occurrences(ast.parse(original).body[0].body[0]) == (
         AuditFamilyFlattened.count(ast.parse(original).body[0].body[0])
     )
+    mechanism = next(name for package, name in FamilyFlattened.mechanism_modules
+                     if package == Path(repo.root).name)
     moved = repo.commit({"second.py": "def carry(value):\n    return value\n",
-                         "another_codec.py": original, "field_codec.py": original})
+                         "another_codec.py": original, mechanism: original,
+                         f"nested/{mechanism}": original})
     status, report = repo.compare(head, moved)
     assert status == 1
     assert report["delta"][f"FamilyFlattened:{repo.root}/another_codec.py"] == 2
-    assert report["head"][f"FamilyFlattened:{repo.root}/field_codec.py"] == 0
+    assert report["head"][f"FamilyFlattened:{repo.root}/{mechanism}"] == 0
+    assert report["head"][f"FamilyFlattened:{repo.root}/nested/{mechanism}"] == 2
 
 
 def test_small_owner_growth_and_exact_threshold_pass(repo: Repository) -> None:

@@ -123,8 +123,9 @@ SQL names are emitted at their actual SQL boundaries; mixed domain modules are
 not exempted wholesale. Named mechanism exemptions are field_codec.py,
 typed_table.py, coordination_schema.py, coordinated_runtime_schema.py (Core),
 agent_schema.py and db.py (Toad). These are the actual codec/schema owners read
-in the source census, not suffix rules. The existing guard rejects moving an
-occurrence into another file or adding a differently named codec facade.
+in the source census, qualified by their original package. A nested file with the
+same basename is not that mechanism. The existing guard rejects moving an
+occurrence into another file or adding a nested/similarly named codec facade.
 
 The storage review also removed F4's extra TextStorage acceptance branch:
 FamilyClassStorage already owns declared-class TEXT storage. SqlStorage.for_type
