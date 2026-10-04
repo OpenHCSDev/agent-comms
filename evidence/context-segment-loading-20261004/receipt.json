@@ -1,5 +1,5 @@
 {
-  "source_checkpoint": "6865713f1a8b70d01962e9d017a674f83bfff6a9",
+  "source_checkpoint": "670f239883915730c164c720158bae85323149aa",
   "final_scope": "SOURCE_CODEC_DECLARATION_LOADING_QUALIFIED_INSTALLED_PREVIEW_PENDING",
   "initial_batch": {
     "passed": 64,
@@ -23,5 +23,40 @@
   "native_builds": 0,
   "provider_calls": 0,
   "ui_launches": 0,
-  "working_memory627_changed": false
+  "working_memory627_changed": false,
+  "owner_correction": {
+    "discovery_owner": "RegistryConfig retained by original LazyDiscoveryDict._set_config",
+    "deleted_carriers": [
+      "_family_discovery_package",
+      "_GenerationProvenance"
+    ],
+    "captured_generation_owner": "AwarenessClaimGenerations",
+    "selected_receipt_owner": "ClaimBatchReceipts",
+    "wake_context_owner": "Thread",
+    "durable_fields_and_external_names_changed": false,
+    "before": "before-owner-correction.json",
+    "after": "after.json"
+  },
+  "final_affected_batch": {
+    "passed": 25,
+    "failed": 1,
+    "deselected": 3,
+    "seconds": 18.75,
+    "raw": "owner-closure-final.txt",
+    "failure": "Original triage fixture expects body absent; base c29425b9 already emits original body. No production regression inferred; assertion preserved.",
+    "exclusions": "Three previously failed retired _trusted_package fixture cases; no production fallback added."
+  },
+  "registry_config_batch": {
+    "passed": 4,
+    "seconds": 0.9,
+    "raw": "registry-owner-final.txt"
+  },
+  "debt": {
+    "original_failure": 37197587989,
+    "retained_failure_log": "hosted-debt-first.txt",
+    "corrected_source": "670f239883915730c164c720158bae85323149aa",
+    "corrected_run": 37198557937,
+    "conclusion": "success",
+    "url": "https://github.com/OpenHCSDev/agent-comms/actions/runs/37198557937"
+  }
 }

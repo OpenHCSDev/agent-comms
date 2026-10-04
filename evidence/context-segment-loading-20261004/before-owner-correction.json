@@ -230,63 +230,21 @@
     },
     {
       "path": "src/agent_comms/cohort_schema.py",
-      "line": 403,
+      "line": 396,
       "node": "ClassDef",
       "expression": "AwarenessClaimGenerations"
     },
     {
       "path": "src/agent_comms/cohort_schema.py",
-      "line": 107,
-      "node": "FunctionDef",
-      "expression": "require_selected_claim"
-    },
-    {
-      "path": "src/agent_comms/cohort_schema.py",
-      "line": 424,
-      "node": "FunctionDef",
-      "expression": "captured_owner"
-    },
-    {
-      "path": "src/agent_comms/cohort_schema.py",
-      "line": 431,
-      "node": "FunctionDef",
-      "expression": "require_selection"
-    },
-    {
-      "path": "src/agent_comms/cohort_schema.py",
-      "line": 443,
-      "node": "FunctionDef",
-      "expression": "require_obligation"
-    },
-    {
-      "path": "src/agent_comms/cohort_schema.py",
-      "line": 419,
-      "node": "Attribute",
-      "expression": "self.captured_owner"
-    },
-    {
-      "path": "src/agent_comms/cohort_schema.py",
-      "line": 431,
+      "line": 235,
       "node": "Name",
       "expression": "ClaimBatchReceipts"
     },
     {
       "path": "src/agent_comms/cohort_schema.py",
-      "line": 242,
+      "line": 314,
       "node": "Name",
       "expression": "ClaimBatchReceipts"
-    },
-    {
-      "path": "src/agent_comms/cohort_schema.py",
-      "line": 321,
-      "node": "Name",
-      "expression": "ClaimBatchReceipts"
-    },
-    {
-      "path": "src/agent_comms/cohort_schema.py",
-      "line": 458,
-      "node": "Attribute",
-      "expression": "self.captured_owner"
     },
     {
       "path": "src/agent_comms/compaction_result.py",
@@ -350,69 +308,63 @@
     },
     {
       "path": "src/agent_comms/context_segments/optional_awareness.py",
-      "line": 20,
+      "line": 21,
       "node": "ImportFrom",
       "expression": "from ..cohort_schema import AwarenessClaimGenerations, ClaimBatchMembers, ClaimBatchReceipts, CohortDeliveryReceipts"
     },
     {
       "path": "src/agent_comms/context_segments/optional_awareness.py",
       "line": 28,
+      "node": "ClassDef",
+      "expression": "_GenerationProvenance"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 47,
+      "node": "Name",
+      "expression": "_GenerationProvenance"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 115,
+      "node": "Name",
+      "expression": "_GenerationProvenance"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 31,
       "node": "Name",
       "expression": "AwarenessClaimGenerations"
     },
     {
       "path": "src/agent_comms/context_segments/optional_awareness.py",
-      "line": 30,
+      "line": 49,
       "node": "Name",
       "expression": "ClaimBatchReceipts"
     },
     {
       "path": "src/agent_comms/context_segments/optional_awareness.py",
-      "line": 87,
-      "node": "Name",
-      "expression": "AwarenessClaimGenerations"
-    },
-    {
-      "path": "src/agent_comms/context_segments/optional_awareness.py",
-      "line": 36,
+      "line": 55,
       "node": "Name",
       "expression": "ClaimBatchReceipts"
     },
     {
       "path": "src/agent_comms/context_segments/optional_awareness.py",
-      "line": 39,
+      "line": 58,
       "node": "Name",
       "expression": "AwarenessClaimGenerations"
     },
     {
       "path": "src/agent_comms/context_segments/optional_awareness.py",
-      "line": 41,
-      "node": "Attribute",
-      "expression": "receipt.require_selected_claim"
-    },
-    {
-      "path": "src/agent_comms/context_segments/optional_awareness.py",
-      "line": 62,
-      "node": "Attribute",
-      "expression": "generation.require_selection"
-    },
-    {
-      "path": "src/agent_comms/context_segments/optional_awareness.py",
-      "line": 96,
+      "line": 82,
       "node": "Name",
       "expression": "AwarenessClaimGenerations"
     },
     {
       "path": "src/agent_comms/context_segments/optional_awareness.py",
-      "line": 99,
-      "node": "Attribute",
-      "expression": "generation.require_obligation"
-    },
-    {
-      "path": "src/agent_comms/context_segments/wake.py",
-      "line": 92,
-      "node": "Attribute",
-      "expression": "owner.wake_context"
+      "line": 124,
+      "node": "Name",
+      "expression": "AwarenessClaimGenerations"
     },
     {
       "path": "src/agent_comms/coordination_cohort.py",
@@ -488,7 +440,7 @@
     },
     {
       "path": "src/agent_comms/declared_family.py",
-      "line": 92,
+      "line": 96,
       "node": "ClassDef",
       "expression": "DeclaredFamily"
     },
@@ -500,31 +452,37 @@
     },
     {
       "path": "src/agent_comms/declared_family.py",
-      "line": 92,
+      "line": 96,
       "node": "Name",
       "expression": "_FamilyMeta"
     },
     {
       "path": "src/agent_comms/declared_family.py",
-      "line": 67,
+      "line": 110,
+      "node": "Name",
+      "expression": "_family_discovery_package"
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
+      "line": 71,
       "node": "Name",
       "expression": "_FamilyMeta"
     },
     {
       "path": "src/agent_comms/declared_family.py",
-      "line": 70,
+      "line": 74,
       "node": "Name",
       "expression": "RegistryConfig"
     },
     {
       "path": "src/agent_comms/declared_family.py",
-      "line": 52,
+      "line": 53,
       "node": "Name",
       "expression": "RegistryConfig"
     },
     {
       "path": "src/agent_comms/declared_family.py",
-      "line": 104,
+      "line": 108,
       "node": "Name",
       "expression": "DeclaredFamily"
     },
@@ -536,7 +494,7 @@
     },
     {
       "path": "src/agent_comms/declared_family.py",
-      "line": 106,
+      "line": 111,
       "node": "Name",
       "expression": "DeclaredFamily"
     },
@@ -548,13 +506,25 @@
     },
     {
       "path": "src/agent_comms/declared_family.py",
+      "line": 63,
+      "node": "Attribute",
+      "expression": "cast(type[DeclaredFamily], root)._family_discovery_package"
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
       "line": 34,
       "node": "Name",
       "expression": "_FamilyMeta"
     },
     {
       "path": "src/agent_comms/declared_family.py",
-      "line": 56,
+      "line": 57,
+      "node": "Name",
+      "expression": "DeclaredFamily"
+    },
+    {
+      "path": "src/agent_comms/declared_family.py",
+      "line": 63,
       "node": "Name",
       "expression": "DeclaredFamily"
     },
@@ -1465,12 +1435,6 @@
       "expression": "DeclaredFamily"
     },
     {
-      "path": "src/agent_comms/threads.py",
-      "line": 237,
-      "node": "FunctionDef",
-      "expression": "wake_context"
-    },
-    {
       "path": "src/agent_comms/todos.py",
       "line": 19,
       "node": "ImportFrom",
@@ -1963,7 +1927,7 @@
       "expression": "require_selection"
     }
   ],
-  "revision": "HEAD",
+  "revision": "e64ae145",
   "roots": [
     {
       "root": "src/agent_comms",
@@ -2006,7 +1970,7 @@
     },
     {
       "path": "src/agent_comms/context_segments/optional_awareness.py",
-      "line": 135,
+      "line": 181,
       "name": "CompleteAwareness",
       "bases": [
         "ContextSegment",
@@ -2289,19 +2253,19 @@
     },
     {
       "path": "src/agent_comms/context_segments/optional_awareness.py",
-      "line": 22,
+      "line": 23,
       "expression": "from ..turn_context import ContextSegment, InstructionFile, TurnContext",
       "node": "ImportFrom"
     },
     {
       "path": "src/agent_comms/context_segments/optional_awareness.py",
-      "line": 135,
+      "line": 181,
       "expression": "ContextSegment",
       "node": "Name"
     },
     {
       "path": "src/agent_comms/context_segments/optional_awareness.py",
-      "line": 115,
+      "line": 161,
       "expression": "ContextSegment",
       "node": "Name"
     },

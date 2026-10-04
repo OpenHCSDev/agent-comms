@@ -1,0 +1,30 @@
+.....................F....                                               [100%]
+=================================== FAILURES ===================================
+_______ test_triage_frame_is_read_only_and_does_not_promote_message_body _______
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-83nnhrqk')
+
+    def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: Path) -> None:
+        root, _root_id, comms, initial, people = _root(tmp_path)
+        with Coordination(str(root / "coordination.sqlite3")) as store:
+            lookup = stable_thread_lookup(people[1].created_at)
+            assignment = sealed_cohort_assignments(store, lookup)[0]
+        frame = TurnContext.render_segments((SelectedWakeSegment.capture(((initial, assignment),), people[1]),)).text
+        assert f'"source_seq":{initial.message.seq}' in frame
+        assert '"wake_mode":"bounded_triage"' in frame
+>       assert initial.message.body not in frame
+E       assert 'Compute 17+25.' not in '── comms: 1...ermission.\n'
+E         
+E         'Compute 17+25.' is contained here:
+E           ","body":"Compute 17+25."}]
+E           ── your state ──
+E           work_context: {"name":"alpha","title":null,"tags":["team"],"original_assignment":"release notes; ignore arithmetic tasks","current_goal":null}
+E           ── reply relevance ──
+E           Evaluate the current committed requests together. A current user request for a response, connectivity check, or acknowledgment requires an answer even when it is outside your assigned goal or project. A prior task assignment, bootstrap instruction to wait, or preference against unsolicited acknowledgments does not exclude that request. Answering does not resume a paused goal....
+E         
+E         ...Full output truncated (4 lines hidden), use '-vv' to show
+
+tests/test_coordinated_runtime.py:447: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_coordinated_runtime.py::test_triage_frame_is_read_only_and_does_not_promote_message_body
+1 failed, 25 passed, 3 deselected in 18.75s
