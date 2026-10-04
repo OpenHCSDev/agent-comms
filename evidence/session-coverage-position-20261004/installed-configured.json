@@ -1,0 +1,49 @@
+{
+  "complete": true,
+  "public_inputs": 0,
+  "input_replays": 0,
+  "installed_UI": false,
+  "acceptance_scope": "configured SDK/ACP/native saved-source compaction and distinct input",
+  "installed_core_revision": "600c6fb0ddd316d4f6a9d4abe0e277bfd6a84488",
+  "installed_code_assets": 339,
+  "installed_source_digest": "85cb398a9bf8c4fef5ee521bcd18147e28d35828233f498617791617419f5b83",
+  "private_fixture_revision": "600c6fb0ddd316d4f6a9d4abe0e277bfd6a84488",
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "high",
+  "source_bytes": 42662475,
+  "original_sha256": "1bdd97fd57551edb2986a3289b33bc781cde45b98b4e1e591f79e7804ced7258",
+  "fork_bytes": 42662484,
+  "manual_commit": "36a1df1ab1f044dab354695151db024b",
+  "peer_messages_during_summary": 1,
+  "original_inputs_before_new_prompt": 0,
+  "distinct_input_started_once": true,
+  "distinct_answer": true,
+  "elapsed_seconds": 128.99005629797466,
+  "original_source_unchanged": true,
+  "native_children_closed": true,
+  "coverage": {
+    "inherited_entries": 9644,
+    "covered_entries": 9644,
+    "completed_original_creation": true,
+    "completed_original_commit": "36a1df1ab1f044dab354695151db024b"
+  },
+  "scope": "Installed configured saved fork/compaction/distinct answer and original coverage",
+  "provider_study": false,
+  "original_replays": 0,
+  "raw_receipt_sha256": "a22c5a9f12202916710f3e638bd456b20eedf87a6409c77cdf8aa698c7198c29",
+  "raw_receipt_path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/session-coverage623/configured01/receipt.json",
+  "native_manifest": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+  "native_tree": "dbc88ed9231d1275da3ce218aa8919a247e41ce1f010ce765e7ac0960193f4ac",
+  "wheel_sha256": "5b4bdc1daed96ccb98d92cddbb369f3e750cb2e981eb219ee85b5cacd000208a",
+  "dependency_metadata_unchanged": true,
+  "hosted_debt": {
+    "conclusion": "PASS",
+    "head": "600c6fb0ddd316d4f6a9d4abe0e277bfd6a84488",
+    "run": 37179917875
+  },
+  "limits": [
+    "No physical UI qualification",
+    "No comparative study or recall/cost claim",
+    "Unchanged native-evidence baseline failures preserved"
+  ]
+}

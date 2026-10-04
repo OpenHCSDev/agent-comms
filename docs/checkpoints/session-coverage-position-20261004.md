@@ -50,7 +50,9 @@ Mendel619 session identity publication and Sch trust/build remain disjoint.
 Source reasoning, complete owner/caller implementation and deletion first. Batch
 focused checks and the actual configured saved-compaction/continuation journey last,
 with originals/UNKNOWN preserved and no replay. No environment, provider variant,
-package/native mutation or thin540 loan is implied. ## Working implementation
+package/native mutation or thin540 loan is implied by the initial plan.
+
+## Working implementation
 
 NativeSessionIdentity.covers is the single physical coverage relation: original
 Path and session header, plus each required original FileRevision's inode and
@@ -104,6 +106,26 @@ lacked test dependencies; no packages were installed. Existing534 supplied read-
 dependencies and system pytest supplied the runner, with bytecode disabled. This
 is a source check, not installed production acceptance.
 
-Matching installed configured saved-compaction qualification remains pending.
-No original/provider/study run was repeated. No new environment, native artifact,
-package mutation or public effect. Failing ratchets do not permit merge.
+## Installed qualification complete
+
+Frozen source600c6fb0 includes the exact SQL class projection and original filewheel
+boundary. Hosted Debt PASS37179917875. Bohr granted exclusive package/execution use
+of thin540; Sch granted unchanged native086 read/execution. One normal Core wheel
+SHA5b4bdc1daed96ccb98d92cddbb369f3e750cb2e981eb219ee85b5cacd000208a
+was installed. All339 original Git assets match, all60 dependency metadata files
+are unchanged, and immutable086 full trust matches its declared manifest/tree.
+No environment/dependency/native artifact build or public package mutation.
+
+The ONE configured Sol/HIGH saved-fork compaction/distinct-input journey PASS
+128.990s through existing configured_saved_agent/run. Actual source42,662,475B,
+SHA1bdd97fd57551edb2986a3289b33bc781cde45b98b4e1e591f79e7804ced7258.
+Manual commit36a1df1ab1f044dab354695151db024b, one actual peer publication during
+summary, then one distinct fresh input/answer. No original input before that prompt.
+Original source/proof unchanged; native children closed; no public input/restart.
+Completed original journal coverage corroborates all9,644 inherited entries.
+Actual driver exit0; raw receipts retained in.artifacts/session-coverage623/configured01.
+Sanitized exact receipt/SHA is evidence/session-coverage-position-20261004/installed-configured.json.
+
+This qualifies the changed installed saved-source compaction/continuation coverage
+family. It is not physical UI, comparative study, HTTP, recall/cost, overall latency
+or full S4 acceptance. Existing source negatives remain visible; no repeat was run.
