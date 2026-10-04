@@ -14,8 +14,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
-from agent_comms.coordination_tables.executions import ExecutionOrigin, ExecutionRecord
-from agent_comms.coordination_tables.participants import OwnerGenerations
+from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.responses import ResponseObligation
 
 from ..cohort_schema import AwarenessClaimGenerations, ClaimBatchMembers, ClaimBatchReceipts, CohortDeliveryReceipts
@@ -25,26 +24,8 @@ from ..wake_candidate_index import ProjectionUnavailableError
 
 
 @dataclass(frozen=True)
-class _GenerationProvenance:
-    """The SQL owner's captured generation, not a present-day wake grant."""
-
+class _SelectedDecision:
     generation: AwarenessClaimGenerations
-
-    def current(self, expected: OwnerGenerations) -> bool:
-        captured = OwnerGenerations(
-            owner_lookup=self.generation.recipient_lookup,
-            owner_thread=self.generation.canonical_thread,
-            generation=self.generation.owner_generation,
-        )
-        if captured.generation < expected.generation:
-            return False
-        if captured != expected:
-            raise ProjectionUnavailableError("captured participant owner changed")
-        return True
-
-
-@dataclass(frozen=True)
-class _SelectedDecision(_GenerationProvenance):
     assignment: WakeAssignment
     receipt: ClaimBatchReceipts
 
@@ -57,8 +38,7 @@ class _SelectedDecision(_GenerationProvenance):
         delivery: CohortDeliveryReceipts,
         generation: AwarenessClaimGenerations,
     ) -> _SelectedDecision:
-        if not receipt.sealed or receipt.message_id != assignment.message_id:
-            raise ProjectionUnavailableError("selected source receipt is unsealed or changed")
+        receipt.require_selected_claim(assignment)
         expected_member = ClaimBatchMembers(
             wire_root_id=receipt.wire_root_id,
             wire_seq=assignment.wire_seq,
@@ -79,16 +59,7 @@ class _SelectedDecision(_GenerationProvenance):
         )
         if delivery != expected_delivery:
             raise ProjectionUnavailableError("selected source delivery changed")
-        expected_generation = AwarenessClaimGenerations(
-            claim_id=assignment.assignment_id,
-            wire_root_id=receipt.wire_root_id,
-            wire_seq=assignment.wire_seq,
-            recipient_lookup=assignment.recipient_lookup,
-            canonical_thread=assignment.recipient,
-            owner_generation=generation.owner_generation,
-        )
-        if generation != expected_generation:
-            raise ProjectionUnavailableError("selected source generation provenance changed")
+        generation.require_selection(assignment, receipt)
         return cls(generation, assignment, receipt)
 
     @property
@@ -112,7 +83,8 @@ class _SelectedDecision(_GenerationProvenance):
 
 
 @dataclass(frozen=True)
-class _OpenObligation(_GenerationProvenance):
+class _OpenObligation:
+    generation: AwarenessClaimGenerations
     obligation: ResponseObligation
 
     @classmethod
@@ -124,25 +96,7 @@ class _OpenObligation(_GenerationProvenance):
         generation: AwarenessClaimGenerations,
         assignment: WakeAssignment,
     ) -> _OpenObligation:
-        if execution.origin is not ExecutionOrigin.WIRE:
-            raise ProjectionUnavailableError("open obligation has no wire origin")
-        expected = OwnerGenerations(
-            owner_lookup=execution.owner_lookup,
-            owner_thread=execution.owner_thread,
-            generation=generation.owner_generation,
-        )
-        captured = OwnerGenerations(
-            owner_lookup=generation.recipient_lookup,
-            owner_thread=generation.canonical_thread,
-            generation=generation.owner_generation,
-        )
-        if (
-            captured != expected or link.assignment_id != generation.claim_id
-            or link.assignment_id != assignment.assignment_id
-            or link.execution_id != obligation.execution_id
-            or assignment.lifecycle.exact_target != obligation.exact_target
-        ):
-            raise ProjectionUnavailableError("open obligation has no exact owner provenance")
+        generation.require_obligation(execution, link, assignment, obligation)
         return cls(generation, obligation)
 
     def context(self):

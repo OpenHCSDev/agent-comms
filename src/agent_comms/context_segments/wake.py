@@ -89,21 +89,7 @@ class SelectedWakeSegment(InstructionSegment):
             separators=(",", ":"),
         )
         work_context = json.dumps(
-            {
-                "name": owner.name,
-                "title": owner.title,
-                "tags": sorted(owner.tags),
-                "original_assignment": owner.task,
-                "current_goal": (
-                    None
-                    if owner.goal is None
-                    else {
-                        "text": owner.goal.text,
-                        "status": owner.goal.state.declared_name,
-                        "progress": owner.goal.progress,
-                    }
-                ),
-            },
+            owner.wake_context(),
             ensure_ascii=True,
             separators=(",", ":"),
         )

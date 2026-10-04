@@ -38,7 +38,6 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
             namespace["__registry__"] = (
                 LazyDiscoveryDict(enable_cache=False) if discovery_package else {}
             )
-            namespace["_family_discovery_package"] = discovery_package
             namespace["declared_name"] = None
         elif root is not None:
             stem = name.removesuffix(root._family_affix) if root._family_affix else name
@@ -58,10 +57,7 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
                 ),
                 key_attribute="declared_name",
                 skip_if_no_key=True,
-                discovery_package=(
-                    discovery_package if is_root
-                    else cast(type[DeclaredFamily], root)._family_discovery_package
-                ),
+                discovery_package=discovery_package,
             )
             if is_root or root is not None
             else None
@@ -107,7 +103,6 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     family_discriminator: ClassVar[str] = "kind"
     _family_root: ClassVar[type[DeclaredFamily] | None] = None
     _family_affix: ClassVar[str]
-    _family_discovery_package: ClassVar[str | None]
     __registry__: ClassVar[dict[str, type[DeclaredFamily]]]
 
     def __init_subclass__(

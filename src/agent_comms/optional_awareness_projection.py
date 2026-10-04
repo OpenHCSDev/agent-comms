@@ -248,12 +248,12 @@ class OptionalAwarenessProjection:
                 owner_thread=owner.name,
                 generation=self.expected_participant_generation,
             )
-            selected = [row for row in decisions if row.current(expected)]
+            selected = [row for row in decisions if row.generation.current(expected)]
             if not any(
                 row.assignment.assignment_id == assignment.assignment_id for row in selected
             ):
                 raise ProjectionUnavailableError("current selected claim has no owner generation")
-            current_obligations = [row for row in obligations if row.current(expected)]
+            current_obligations = [row for row in obligations if row.generation.current(expected)]
             historical_omitted = (len(decisions) - len(selected)) + (
                 len(obligations) - len(current_obligations)
             )

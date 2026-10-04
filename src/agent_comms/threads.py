@@ -234,6 +234,18 @@ class Thread(ThreadProvenance):
         goal = self.active_goal
         return (GoalSegment.capture(self, goal),) if goal is not None else ()
 
+    def wake_context(self) -> dict[str, object]:
+        """This captured thread owns its selected-wake work and goal projection."""
+        goal = self.goal
+        return {
+            "name": self.name, "title": self.title, "tags": sorted(self.tags),
+            "original_assignment": self.task,
+            "current_goal": (None if goal is None else {
+                "text": goal.text, "status": goal.state.declared_name,
+                "progress": goal.progress,
+            }),
+        }
+
     def retained_task_facts(self):
         from .retained_task_facts import GoalTaskFact
 
