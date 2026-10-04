@@ -18,6 +18,7 @@ from enum import Enum
 from itertools import chain
 import json
 from pathlib import Path
+from statistics import mean
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_rpc import unique_fields
@@ -38,6 +39,28 @@ class RecordedAnswers:
 class RecordedNativeProbes:
     rounds: dict[str, RecordedNativeProbe]
     checkpoints: dict[str, RecordedNativeCheckpoint] = field(default_factory=dict)
+
+    def __post_init__(self):
+        originals = tuple((probe.session, probe.input_id) for probe in self.rounds.values())
+        if len(set(originals)) != len(originals):
+            raise ValueError("A recorded trajectory cannot count the same original input twice")
+
+    @staticmethod
+    def require_distinct(runs):
+        """Distinct recorded trajectories cannot reuse a probe journal/input.
+
+        This prevents duplicate sampling; it does not establish statistical
+        independence, randomization or a registered experimental design.
+        Original cut parents may be shared for a same-cut quality comparison.
+        """
+        sessions, inputs = set(), set()
+        for run in runs:
+            selected = {probe.session for probe in run.rounds.values()}
+            selected_inputs = {probe.input_id for probe in run.rounds.values()}
+            if sessions & selected or inputs & selected_inputs:
+                raise ValueError("A comparison batch cannot reuse original probe sessions or inputs")
+            sessions.update(selected)
+            inputs.update(selected_inputs)
 
     def resume_fork(self, journal, inputs):
         """Corroborate recorded work before a distinct continuation, never replay it.
@@ -75,7 +98,7 @@ class RecordedNativeProbes:
                 terminals.append(entry)
             for probe in self.rounds.values():
                 session.require_same_session(probe.session)
-                probe.read(evidence)
+                probe.read(evidence, evidence)
                 if probe.sdk_context is None or probe.submitted_inputs is None:
                     raise ValueError("Continuation requires the original SDK request capture")
                 from agent_comms.input_disposition import InputDocument
@@ -106,28 +129,27 @@ class RecordedNativeProbes:
                      if item.identity in selected)
         if not cuts and not self.rounds:
             return {}, {}
-        path = Path(cuts[0][1].reference.session_file) if cuts else Path(
-            next(iter(self.rounds.values())).session.session_file
-        )
         reports, observations = {}, {}
-        with NativeEntry.open_evidence(path) as evidence:
-            header, _ = evidence.observe()
-            session = NativeSessionIdentity(header.id, str(path))
+        with RecordedNativeProbe.original_readers(self.rounds.values(), selected.values()) as sources:
             previous = None
             for identity, checkpoint in cuts:
+                evidence = sources[Path(checkpoint.reference.session_file)]
+                header, _ = evidence.observe()
+                session = NativeSessionIdentity(header.id, str(evidence.source.path))
                 attempt, entry, covered, assembly = checkpoint.capture(session, evidence)
                 report = checkpoint._report(attempt, entry, covered, assembly)
                 if previous is not None:
-                    old, prior_attempt, prior_entry = previous
+                    old, prior_attempt, prior_entry, prior_session = previous
+                    prior_session.require_same_session(session)
                     if prior_entry.id == entry.id or prior_entry not in evidence.branch(entry.id, evidence.entries):
                         raise ValueError("Repeated measurements require distinct original ancestor cuts")
                     report["source_changes"] = attempt.request.retained.changed_from(prior_attempt.request.retained)
                     report["revision_mass"] = checkpoint.revision_from(old, prior_attempt, attempt)
                 reports[identity] = report
-                previous = checkpoint, attempt, entry
+                previous = checkpoint, attempt, entry, session
             for identity, probe in self.rounds.items():
-                session.require_same_session(probe.session)
-                observations[identity] = probe.read(evidence)
+                observations[identity] = probe.read(sources[Path(probe.session.session_file)],
+                                                    sources[probe.checkpoint_source])
         return reports, observations
 
     def alignment(self, other, observations, baseline, rounds):
@@ -328,10 +350,14 @@ class ScoreView(ABC):
         }
 
     def measurement_totals(self) -> dict:
+        return self.by_measurement(self.scored_answers)
+
+    @classmethod
+    def by_measurement(cls, scored_answers) -> dict:
         grouped = {}
-        for question, outcome in self.scored_answers:
+        for question, outcome in scored_answers:
             grouped.setdefault(question.measurement, []).append(outcome)
-        return {measurement.value: self.totals(iter(outcomes))
+        return {measurement.value: cls.totals(iter(outcomes))
                 for measurement, outcomes in grouped.items()}
 
 
@@ -505,12 +531,46 @@ class ScoredScenario(ScoreView):
             candidate = self.totals(chain.from_iterable(round_.outcomes for round_ in rounds))
             control = self.totals(chain.from_iterable(controls[round_.identity].outcomes for round_ in rounds))
             evaluated = bool(rounds) and all(alignment[round_.identity]["evaluated"] for round_ in rounds)
+            measurements = tuple(self.by_measurement(chain.from_iterable(
+                round_.scored_answers for round_ in selected)) for selected in (
+                    rounds, tuple(controls[round_.identity] for round_ in rounds)))
+            recall = tuple(items.get(Measurement.RECALL.value) for items in measurements)
+            recall_evaluated = evaluated and all(item is not None and item['questions'] for item in recall)
             measured[name] = {"candidate": candidate, "baseline": control,
                               "evaluated": evaluated,
+                              "measurements": {"candidate": measurements[0], "baseline": measurements[1]},
+                              "recall_rate_difference": {
+                                  "evaluated": recall_evaluated,
+                                  "value": recall[0]['correct'] / recall[0]['questions']
+                                           - recall[1]['correct'] / recall[1]['questions']
+                                           if recall_evaluated else None},
                               "correct_difference": candidate["correct"] - control["correct"]
                                                     if evaluated else None,
                               "scope": "Descriptive differences for matched original source and selections; not certified interventions or study margins"}
         return measured
+
+    @staticmethod
+    def paired_batch(comparisons):
+        """Keep one rate observation per recorded trajectory, never per cut.
+
+        Matched-source descriptive quality remains distinct from verified
+        interventions and registered study inference. Missing/assisted samples
+        stay visible; unavailable recall is never an observed zero.
+        """
+        groups = {}
+        for name in comparisons[0]['paired_quality']:
+            samples = tuple(pair['paired_quality'][name] for pair in comparisons)
+            rates = tuple(sample['recall_rate_difference'] for sample in samples)
+            values = tuple(rate['value'] for rate in rates if rate['evaluated'])
+            groups[name] = {
+                'trajectories': len(samples), 'recall_trajectories': len(values),
+                'samples': samples,
+                'mean_recall_rate_difference': {
+                    'evaluated': bool(values) and len(values) == len(samples),
+                    'value': mean(values) if values and len(values) == len(samples) else None},
+                'scope': 'One descriptive recall rate per recorded trajectory; '
+                         'no confidence interval, registered margin, intervention or independence grant'}
+        return groups
 
 
 @dataclass(frozen=True)
@@ -727,6 +787,23 @@ class RecallScenario:
                 "study_acceptance": {"evaluated": False,
                     "reason": "One recorded sample is not a registered comparative study or margin result"}}
 
+    def compare_native_pairs(self, condition, pairs, baseline_condition):
+        """Read a batch of original pairs through the same frozen scorer.
+
+        This is a recorded-data runner, never a provider launcher. A supplied
+        batch is not a preregistration or permission to run an experiment.
+        """
+        if not pairs:
+            raise ValueError("A recorded comparison batch requires at least one pair")
+        RecordedNativeProbes.require_distinct(chain.from_iterable(pairs))
+        comparisons = tuple(self.compare_native(condition, candidate, baseline_condition, control)
+                            for candidate, control in pairs)
+        return {'scenario': self.identity, 'pairs': comparisons,
+                'paired_quality': ScoredScenario.paired_batch(comparisons),
+                'study_acceptance': {'evaluated': False,
+                    'reason': 'Recorded pairs do not supply a registered design, verified '
+                              'condition construction or complete cost/end-to-end journeys'}}
+
 
 
 def coding_scenario() -> RecallScenario:
@@ -861,6 +938,8 @@ def main() -> None:
     recorded.add_argument("--native-probes", type=Path)
     recorded.add_argument("--recorded-run", type=Path,
                           help="RecordedNativeProbes with ordered checkpoint and original evidence references")
+    recorded.add_argument("--recorded-pairs", type=Path,
+                          help="Array of candidate/control RecordedNativeProbes pairs; reads originals only, no study launch")
     parser.add_argument("--compare-recorded-run", type=Path,
                         help="Independent original control; requires --recorded-run")
     parser.add_argument("--baseline-condition", type=Condition, choices=tuple(Condition),
@@ -913,6 +992,10 @@ def main() -> None:
             baseline = FieldCodec.decode(RecordedNativeProbes, json.loads(
                 args.compare_recorded_run.read_text(), object_pairs_hook=unique_fields))
             result = scenario.compare_native(args.condition, probes, args.baseline_condition, baseline)
+    if args.recorded_pairs is not None:
+        pairs = FieldCodec.decode(tuple[tuple[RecordedNativeProbes, RecordedNativeProbes], ...],
+            json.loads(args.recorded_pairs.read_text(), object_pairs_hook=unique_fields))
+        result = scenario.compare_native_pairs(args.condition, pairs, args.baseline_condition)
     if args.native_checkpoint is not None:
         checkpoint = FieldCodec.decode(RecordedNativeCheckpoint, json.loads(
             args.native_checkpoint.read_text(), object_pairs_hook=unique_fields

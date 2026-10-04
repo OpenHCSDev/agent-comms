@@ -1,0 +1,276 @@
+{
+  "parser": "existing refactor-audit Package",
+  "roots": {
+    "src": {
+      "parsed": 311,
+      "omissions": []
+    },
+    "tests": {
+      "parsed": 364,
+      "omissions": []
+    }
+  },
+  "sites": {
+    "src/agent_comms/cli_commands.py": [
+      {
+        "line": 373,
+        "declaration": "original_source"
+      },
+      {
+        "line": 392,
+        "declaration": "original_source"
+      },
+      {
+        "line": 382,
+        "call": "self.original_source"
+      }
+    ],
+    "src/agent_comms/native_entries.py": [
+      {
+        "line": 198,
+        "declaration": "NativeEvidenceRead"
+      },
+      {
+        "line": 378,
+        "declaration": "NativeEvidenceScope"
+      }
+    ],
+    "src/agent_comms/native_source_cursor.py": [
+      {
+        "line": 104,
+        "call": "NativeEvidenceScope"
+      },
+      {
+        "line": 226,
+        "call": "NativeEvidenceScope"
+      }
+    ],
+    "src/agent_comms/selected_summary_admission.py": [
+      {
+        "line": 95,
+        "declaration": "original_source"
+      }
+    ],
+    "tests/compaction_retention_fixture.py": [
+      {
+        "line": 38,
+        "declaration": "RecordedNativeProbes"
+      },
+      {
+        "line": 367,
+        "declaration": "ScoredScenario"
+      },
+      {
+        "line": 667,
+        "declaration": "RecallScenario"
+      },
+      {
+        "line": 488,
+        "declaration": "paired_quality"
+      },
+      {
+        "line": 714,
+        "declaration": "compare_native"
+      },
+      {
+        "line": 794,
+        "call": "RecallScenario"
+      },
+      {
+        "line": 690,
+        "call": "ScoredScenario"
+      },
+      {
+        "line": 708,
+        "call": "ScoredScenario"
+      },
+      {
+        "line": 724,
+        "call": "score.paired_quality"
+      },
+      {
+        "line": 915,
+        "call": "scenario.compare_native"
+      },
+      {
+        "line": 927,
+        "call": "checkpoint.original_source"
+      }
+    ],
+    "tests/retained_native_fixture.py": [
+      {
+        "line": 95,
+        "declaration": "RecordedNativeCheckpoint"
+      },
+      {
+        "line": 419,
+        "declaration": "RecordedNativeProbe"
+      },
+      {
+        "line": 219,
+        "declaration": "original_source"
+      },
+      {
+        "line": 247,
+        "declaration": "_fork_capture"
+      },
+      {
+        "line": 280,
+        "declaration": "capture_for_probe"
+      },
+      {
+        "line": 286,
+        "call": "self._fork_capture"
+      },
+      {
+        "line": 254,
+        "call": "self.original_source"
+      },
+      {
+        "line": 272,
+        "call": "self._fork_capture"
+      },
+      {
+        "line": 296,
+        "call": "self.original_source"
+      },
+      {
+        "line": 868,
+        "call": "self.checkpoint.capture_for_probe"
+      }
+    ],
+    "tests/test_compaction_retention_fixture.py": [
+      {
+        "line": 213,
+        "call": "RecordedNativeProbes"
+      },
+      {
+        "line": 213,
+        "call": "RecordedNativeProbe"
+      }
+    ],
+    "tests/test_native_evidence_custody.py": [
+      {
+        "line": 23,
+        "call": "NativeEvidenceScope"
+      },
+      {
+        "line": 37,
+        "call": "NativeEvidenceScope"
+      },
+      {
+        "line": 145,
+        "call": "NativeEvidenceScope"
+      }
+    ],
+    "tests/test_recorded_retention_measurements.py": [
+      {
+        "line": 54,
+        "call": "RecordedNativeCheckpoint"
+      },
+      {
+        "line": 70,
+        "call": "RecordedNativeProbe"
+      },
+      {
+        "line": 166,
+        "call": "RecordedNativeProbe"
+      },
+      {
+        "line": 212,
+        "call": "score.paired_quality"
+      },
+      {
+        "line": 217,
+        "call": "score.paired_quality"
+      },
+      {
+        "line": 230,
+        "call": "RecordedNativeProbe"
+      },
+      {
+        "line": 231,
+        "call": "RecordedNativeProbes"
+      },
+      {
+        "line": 238,
+        "call": "RecordedNativeProbes"
+      },
+      {
+        "line": 378,
+        "call": "RecordedNativeProbe"
+      },
+      {
+        "line": 460,
+        "call": "RecordedNativeProbe"
+      },
+      {
+        "line": 491,
+        "call": "RecordedNativeProbes"
+      },
+      {
+        "line": 516,
+        "call": "RecordedNativeProbe"
+      },
+      {
+        "line": 569,
+        "call": "RecordedNativeProbe"
+      },
+      {
+        "line": 235,
+        "call": "RecordedNativeProbes"
+      },
+      {
+        "line": 486,
+        "call": "RecordedNativeProbes"
+      },
+      {
+        "line": 492,
+        "call": "RecordedNativeProbe"
+      }
+    ],
+    "tests/three_cut_retention_configured_journey.py": [
+      {
+        "line": 173,
+        "call": "RecallScenario"
+      },
+      {
+        "line": 249,
+        "call": "RecordedNativeProbes"
+      },
+      {
+        "line": 284,
+        "call": "RecordedNativeProbes"
+      },
+      {
+        "line": 245,
+        "call": "RecordedNativeCheckpoint"
+      },
+      {
+        "line": 280,
+        "call": "RecordedNativeProbe"
+      },
+      {
+        "line": 404,
+        "call": "RecordedNativeProbes"
+      },
+      {
+        "line": 98,
+        "call": "checkpoint.original_source"
+      },
+      {
+        "line": 399,
+        "call": "RecordedNativeProbes"
+      },
+      {
+        "line": 95,
+        "call": "RecordedNativeCheckpoint"
+      },
+      {
+        "line": 385,
+        "call": "RecordedNativeCheckpoint"
+      }
+    ]
+  },
+  "limits": "Lexical references; dynamic dispatch read semantically, not proven by this census"
+}
