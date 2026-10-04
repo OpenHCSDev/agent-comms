@@ -28,3 +28,29 @@ validation last. Previous635 SDK run and original602 artifacts are not repeated.
 No provider study is launched. Real configured arms, capacity, HTTP and comparative
 recall stay unqualified until their actual paths are observed; 30-pair/USD75 is
 still unapproved.
+
+## Implementation checkpoint
+
+The constructor now acquires only the requested selection; its original four
+constructors still serve the plural SDK caller. The configured inspector arms at
+the RPC prompt invocation, before the original prompt enters preparation. The
+private scope calls the original preparation once and refuses an already busy
+native session instead of modifying its active context. It restores original
+method descriptors and the existing transform subscription on prompt settlement,
+including authentication/preflight refusal and cancellation.
+
+The configured driver takes `--condition-application CONDITION CHECKPOINT`.
+It borrows the completed checkpoint and its original fork proof; it does not
+generate another summary merely to prepare a condition. Missing narrative is
+refused by the existing bounded constructor, not imposed on the other selections.
+The old `--bounded-application` algorithm and inspector-only bounded arm are
+deleted. Actual request/install observations still belong to RecordedNativeProbe.
+
+Before-edit AST acquisition parsed 365 Python files and 14 JavaScript roots
+(11 fixture modules plus original AgentSession/SessionContext/RPC), with no parse
+omissions. Python consumers are the observer context manager and configured
+driver; JavaScript consumers are the original plural SDK contract and inspector
+embedding. The inspector's dynamic frame binding was read directly, not inferred
+from lexical AST. No ContextSegment, W1, runtime/native or installed source edits.
+Changed-path validation remains pending at this source checkpoint; original635
+results are preserved and not reused as qualification of the new prompt hook.

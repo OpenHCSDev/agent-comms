@@ -6,7 +6,7 @@
  */
 import { appendFileSync } from 'node:fs';
 
-const [, , port, packageRoot, output, contexts, summaries, conditionSource] = process.argv;
+const [, , port, packageRoot, output, contexts, summaries, conditionSource, condition] = process.argv;
 if (output && packageRoot) {
     // External inspection preserves the native import fence. Read only original
     // frames from this owned private child's loopback debugger; no code overlay.
@@ -72,15 +72,14 @@ if (output && packageRoot) {
         lineNumber:line(source.readFileSync(`${packageRoot}/dist/core/compaction/compaction.js`, 'utf8').split('\n'),
             'summary = contextPolicy.packSummary(retainedText, summary, annotations,'),
     });
-    const conditionPoint = conditionSource && await post('Debugger.setBreakpointByUrl', {
-        url:pathToFileURL(`${packageRoot}/dist/core/agent-session.js`).href,
-        lineNumber:line(source.readFileSync(`${packageRoot}/dist/core/agent-session.js`,'utf8').split('\n'),
-            '        await this.storedContext.beforeInput(this);'),
+    const conditionPoint = condition && await post('Debugger.setBreakpointByUrl', {
+        url:pathToFileURL(rpc).href,
+        lineNumber:line(rpcLines,'                void session'),
     });
     // Observe the existing converter's result, not a second conversion. The
     // original request ID joins this frame to the later sealed manifest. Both
     // bounded replacement and installed-source observations use this result.
-    const conversionPoint = (conditionSource || contexts) && await post('Debugger.setBreakpointByUrl', {
+    const conversionPoint = (condition || contexts) && await post('Debugger.setBreakpointByUrl', {
         url:pathToFileURL(`${packageRoot}/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js`).href,
         lineNumber:line(source.readFileSync(`${packageRoot}/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js`,'utf8').split('\n'),
             '    await config.onContextReady?.(llmContext, request.requestId);'),
@@ -115,23 +114,28 @@ if (output && packageRoot) {
                 return;
             }
             if (conditionPoint && params.hitBreakpoints.includes(conditionPoint.breakpointId)) {
-                const {armNativeCondition,armBoundedNativeCondition,boundedMessages,transformBoundedNativeCondition}
+                const {armNativeCondition,armInstalledNativeCondition,armConfiguredNativeCondition,
+                    boundedMessages,previewNativeCondition,constructNativeConditions,applyNativeCondition}
                     =await import('./retained_native_conditions.mjs');
-                const originalSource=JSON.parse(source.readFileSync(conditionSource,'utf8'));
+                const originalSource=conditionSource ? JSON.parse(source.readFileSync(conditionSource,'utf8')) : undefined;
                 const armed=await post('Debugger.evaluateOnCallFrame', {
                     callFrameId:frame.callFrameId,
-                    // External inspector evaluation consumes the actual private
-                    // declaration bodies. Only their approved native imports run
-                    // in the child; do not add an external helper import there.
+                    // Original private declarations execute in this owned child.
+                    // No helper import crosses its native package fence.
                     expression:`(() => {
                         const {join}=process.getBuiltinModule('node:path');
                         const {pathToFileURL}=process.getBuiltinModule('node:url');
+                        const {createHash}=process.getBuiltinModule('node:crypto');
                         const {isDeepStrictEqual}=process.getBuiltinModule('node:util');
                         const armNativeCondition=(${armNativeCondition.toString()});
+                        const armInstalledNativeCondition=(${armInstalledNativeCondition.toString()});
                         const boundedMessages=(${boundedMessages.toString()});
-                        const transform=(${transformBoundedNativeCondition.toString()});
-                        (${armBoundedNativeCondition.toString()})(this,${JSON.stringify(packageRoot)},
-                            ${JSON.stringify(originalSource)},transform,${JSON.stringify(output)},options.inputId);
+                        const previewNativeCondition=(${previewNativeCondition.toString()});
+                        const constructNativeConditions=(${constructNativeConditions.toString()});
+                        const applyNativeCondition=(${applyNativeCondition.toString()});
+                        (${armConfiguredNativeCondition.toString()})(session,${JSON.stringify(packageRoot)},
+                            ${JSON.stringify(condition)},${JSON.stringify(originalSource)},
+                            ${JSON.stringify(output)},command.inputId);
                         return 'armed';
                     })()`,returnByValue:true,
                 });
