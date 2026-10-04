@@ -59,13 +59,14 @@ from agent_comms.native_pi import (
     _fresh_selected_revision,
 )
 from agent_comms.native_source_cursor import NativeSourceCursor
-from agent_comms.optional_awareness_projection import OmittedAwareness, OptionalAwarenessProjection
+from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
+from agent_comms.context_segments.optional_awareness import OmittedAwareness
 from agent_comms.publisher import Publisher
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
-from agent_comms.wake_injection import SelectedWakeSegment
+from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.turn_context import TurnContext
 from agent_comms.wake_policy import PassiveWake
 from native_proof_cases import read_proof_rows, write_proof_rows

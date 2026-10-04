@@ -18,7 +18,8 @@ def main():
     stage = Path(sys.argv[1]).absolute()
     stage.mkdir(mode=0o700, parents=True, exist_ok=False)
     hashes = {}
-    for name in ("task_sources.py", "cli_commands.py", "retained_context.py", "wire_log.py",
+    for name in ("task_sources.py", "cli_commands.py", "retained_context.py",
+                 "context_segments/retained.py", "wire_log.py",
                  "input_attempt.py", "input_origin.py", "retained_task_facts.py", "turn_context.py"):
         actual = (installed / name).read_bytes()
         assert actual == (checkout / "src/agent_comms" / name).read_bytes()
