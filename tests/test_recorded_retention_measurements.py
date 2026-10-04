@@ -1039,9 +1039,10 @@ class RecordedMeasurementTests(unittest.TestCase):
             'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
         partial = scored.condition_construction({identities[0]: original}, unavailable)
         self.assertFalse(partial['evaluated'])
-        self.assertEqual(partial['bounded_sdk_application']['observed_rounds'], identities[:1])
+        self.assertEqual(partial['bounded_sdk_application']['available_rounds'], identities[:1])
         self.assertEqual(partial['bounded_sdk_application']['unavailable_rounds'], identities[1:])
         self.assertEqual(partial['source_delivery']['unavailable_rounds'], identities)
+        self.assertEqual(partial['source_delivery']['available_rounds'], ())
         self.assertEqual(partial['full_history_capacity']['unavailable_rounds'], identities)
         evidence = {identity: original for identity in identities}
         delivered = {identity: {'evaluated': True} for identity in identities}

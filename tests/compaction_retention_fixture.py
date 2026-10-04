@@ -603,7 +603,7 @@ class ScoredScenario(ScoreView):
             unavailable = tuple(identity for identity in identities
                 if identity not in values or not values[identity]['evaluated'])
             return {'evaluated': not unavailable, 'expected_rounds': identities,
-                    'observed_rounds': tuple(identity for identity in identities if identity in values),
+                    'available_rounds': tuple(identity for identity in identities if identity not in unavailable),
                     'unavailable_rounds': unavailable}
 
         applications = {identity: original['construction']['condition_application']
