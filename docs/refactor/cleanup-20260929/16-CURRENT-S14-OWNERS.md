@@ -19,6 +19,17 @@ No full UI/performance, CPU, smoothness or all-stalls claim follows from runtime
 identity readback. Actualstyle22 is now PUBLIC: no old private-floor restore or
 new package/import/staging loan is implied by any previous closed grant.
 
+The original public43602 recorder reached saved warm history, sidebar resize,
+held scrolling, reversal, End and A→B→A return. It then exceeded its original
+164-second interaction deadline after Ctrl+Z, before Undo export/channel checks.
+The whole capture remains terminal1/completedFALSE, with owned cleanup empty;
+neither full default acceptance nor a product stall follows from that deadline.
+Heis's retained consecutive Up/Down sheets were inspected after UI exit only:
+painted body/chrome and repeated positions are visible, without a smoothness,
+CPU or DURING claim. Writer/profile correlation remains in progress. Parent
+authorized one focused remaining Undo/channel tail after fresh original client
+admission, without repeating the broad movie or increasing its deadline.
+
 Core656 final5bd29311 merged5c110307 after exact Debt37226434511 passed.
 Seven distinct changed cases qualify cumulatively: original01 remains whole
 FAIL6PASS1FAIL14.192s, corrected readmission02 separatelyPASS1/.878s. Actual
@@ -59,8 +70,16 @@ closed; original first3PASS2FAIL and both runner negatives stay preserved.
 Heis successor4418a5cdeae is source-only/Draft: committed transcript fragment
 resources now separate from native NodeList/teardown; trim/live/End/page/filter
 consumers migrate. Runtime qualification still needed. Arendt continues fullS4
-beyond accepted measurement checkpoints. Sch4402948b56a is source-prepared for
-mergedCore656/Toad439/native086; no staging or public operation is inferred.
+beyond accepted measurement checkpoints. Sch440be1054e3 is source-prepared for
+mergedCore656/Toad439/native086; its exact automatic Debt37228463448 passed.
+Parent verified all51 ordinary canonical tools against Core5c bytes/modes/blobs;
+the full52-member root explicitly excludes global extension activation.
+Bohr issued the original334 preparation-only grant f368ab1e after exact current
+637/04b/Text58 floor archive/readback and fresh229-process borrower clearance.
+Sch verified the grant and all165 protected originals before package work.
+This permits package/origin/source/cohort/canonical preparation in334 only;
+publicstyle22 remains protected, and no new public operation is authorized by
+that grant. Its own final frozen candidate and operands still require review.
 Einstein owns unfinished W6/W7/W8, with disclosure/default annotation OFF.
 No workflow was abandoned at a frozen Ready checkpoint. The full goal is active.
 
