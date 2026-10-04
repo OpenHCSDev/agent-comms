@@ -254,6 +254,7 @@ class SessionLifecycle:
         if (
             self.titles.get(session_id) != name
             or self.display_titles.get(session_id) != thread.title
+            or self.worktrees.get(session_id) != thread.worktree
         ):
             await self.runtime.session_update(
                 session_id=session_id,
@@ -264,14 +265,6 @@ class SessionLifecycle:
                 ),
             )
             self.titles[session_id], self.display_titles[session_id] = name, thread.title
-        if self.worktrees.get(session_id) != thread.worktree:
-            await self.runtime.session_update(
-                session_id=session_id,
-                update=SessionInfoUpdate(
-                    session_update="session_info_update",
-                    field_meta=await self.metadata(name, session_id=session_id),
-                ),
-            )
             self.worktrees[session_id] = thread.worktree
         return name
 

@@ -1,0 +1,62 @@
+{
+  "source_head": "30c9fcb5d20b9f4002458c54997a661ae9d750a8",
+  "scorer_exit": 0,
+  "providers": 0,
+  "inputs": 0,
+  "native_children": 0,
+  "scope": "Original-record CLI and SDK child read through parent/child acquired sources; no new configured or matched model input, registered margin, HTTP or billed-spend result",
+  "three_cut_quality": {
+    "questions": 9,
+    "correct": 9,
+    "quality_denominators": {
+      "unassisted_recall": {
+        "questions": 3,
+        "correct": 3,
+        "stale": 0,
+        "missing": 0
+      },
+      "tool_assisted_task_quality": {
+        "questions": 6,
+        "correct": 6,
+        "stale": 0,
+        "missing": 0
+      },
+      "unobserved": {
+        "questions": 0,
+        "correct": 0,
+        "stale": 0,
+        "missing": 0
+      }
+    },
+    "original_checkpoint_count": 3
+  },
+  "original_child": {
+    "evaluated": true,
+    "input_id": "1430b5fe6148de98860a980a68ec97ac",
+    "different_cut_and_probe_journals": true,
+    "native_answer_matches": true,
+    "context_input_matches": true,
+    "checkpoint_commit_matches": true,
+    "original_fork_available": true,
+    "raw_sha256": "589a56b50621d55178c9996a37fcfc0385ab9aceb87c84eebf3ecb4a7e2fb343"
+  },
+  "elapsed_seconds": 16.332033865037374,
+  "originals_unchanged": true,
+  "scorer_sha256": "0142f71f8aff7069e423b40ccdfc2c17332e542f27f839e62f34680c23b18d6f",
+  "raw_receipt_preserved": "/home/ts/.cache/agent-scratch/s4-paired-original-sources618/receipt.json",
+  "postprocessor_failure": {
+    "type": "KeyError",
+    "detail": "'scope'",
+    "scope": "After original probe.observe completed and original-child.json was written; no reader/native failure or input repeat"
+  },
+  "protected_original_count": 30,
+  "controls": {
+    "unchanged_controls_passed": 18,
+    "corrected_authored_history_control_passed": 1,
+    "failure_preserved": "Initial new control supplied empty history and was refused by original RecallRound; corrected authored fixture only",
+    "batch_command": "PYTHONPATH=src:tests python -m pytest -o addopts= tests/test_recorded_retention_measurements.py -q",
+    "corrected_command": "PYTHONPATH=src:tests python -m pytest -o addopts= tests/test_recorded_retention_measurements.py -k paired_recall -q",
+    "initial_launcher_refusal": "Project addopts require absent pytest-xdist; no tests ran, dependencies/environment unchanged"
+  },
+  "measurement_delta": "Private fixture/scorer/CLI only; src and stack unchanged"
+}

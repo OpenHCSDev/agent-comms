@@ -4,8 +4,9 @@ import asyncio
 import hashlib
 import json
 from collections import Counter
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, fields, replace
+from itertools import chain
 from pathlib import Path
 from typing import Annotated
 
@@ -244,32 +245,33 @@ class RecordedNativeCheckpoint:
                 "native_entry_id": entry.id, "summary": assembly.summary,
                 "source": FieldCodec.encode(self.summary_assembly)}
 
-    def _fork_capture(self,journal:Path,child:NativeEvidenceRead):
+    def _fork_capture(self,journal:Path,child:NativeEvidenceRead,source:NativeEvidenceRead):
         """Original creation owns inheritance for both construction and scoring."""
         session_file=child.source.path
         creation = CompactionJournal.observe_readonly(journal, lambda db:
             NativeForkCreation.one(db, session_file=str(session_file)), absent=None)
         if creation is None:
             raise ValueError("Bounded child requires its original recorded SDK fork")
-        with self.original_source() as (original, source):
-            creation.source.require_same_session(original)
-            captured=self.capture(original,source)
-            header,entries=child.observe()
-            selected=NativeSessionIdentity(header.id,str(session_file))
-            creation.require_same_session(selected)
-            inherited=creation.covered_prefix(child,entries)
-            entry=captured[1]
-            if entry.id not in inherited:
-                raise ValueError("Original checkpoint is outside the SDK fork prefix")
-            copied,_=child.entry_index(entries)[entry.id]
-            if copied!=entry:
-                raise ValueError("Original checkpoint differs from its inherited SDK entry")
-            return creation,original,captured
+        header,_=source.observe()
+        original=NativeSessionIdentity(header.id,str(source.source.path))
+        creation.source.require_same_session(original)
+        captured=self.capture(original,source)
+        header,entries=child.observe()
+        selected=NativeSessionIdentity(header.id,str(session_file))
+        creation.require_same_session(selected)
+        inherited=creation.covered_prefix(child,entries)
+        entry=captured[1]
+        if entry.id not in inherited:
+            raise ValueError("Original checkpoint is outside the SDK fork prefix")
+        copied,_=child.entry_index(entries)[entry.id]
+        if copied!=entry:
+            raise ValueError("Original checkpoint differs from its inherited SDK entry")
+        return creation,original,captured
 
     def fork_condition_source(self,journal:Path,session_file:Path):
         """Bind captured narrative through the recorded SDK creation, not input authority."""
-        with NativeEntry.open_evidence(session_file) as child:
-            creation,original,(_,entry,_,assembly)=self._fork_capture(journal,child)
+        with NativeEntry.open_evidence(session_file) as child, self.original_source() as (_,source):
+            creation,original,(_,entry,_,assembly)=self._fork_capture(journal,child,source)
             constructed=self._condition_source(original,entry,assembly)
             if not constructed['evaluated']:
                 return constructed
@@ -277,13 +279,13 @@ class RecordedNativeCheckpoint:
                 creation.session_id,creation.session_file)),
                     'fork_creation':FieldCodec.encode(creation)}
 
-    def capture_for_probe(self,session,evidence,fork_journal):
+    def capture_for_probe(self,session,evidence,fork_journal,source):
         """A probe may follow the original cut or its corroborated SDK child."""
         if self.reference.session_file==session.session_file:
             return self.capture(session,evidence)
         if fork_journal is None:
             raise ValueError('Inherited checkpoint probe requires its original fork journal')
-        creation,_,captured=self._fork_capture(fork_journal,evidence)
+        creation,_,captured=self._fork_capture(fork_journal,evidence,source)
         creation.require_same_session(session)
         return captured
 
@@ -706,9 +708,30 @@ class RecordedNativeProbe:
         return {"evaluated": True, "terminal_entry": answer.id,
                 "scope": "Correlated ContextBudget model equals this input's final SDK-selected model; not returned-model or HTTP proof"}
 
+    @property
+    def checkpoint_source(self):
+        """The original cut owns its source; an uncut probe owns only its journal."""
+        return Path(self.checkpoint.reference.session_file if self.checkpoint is not None
+                    else self.session.session_file)
+
+    @classmethod
+    @contextmanager
+    def original_readers(cls, probes, checkpoints=()):
+        """Acquire each declared original once for this bounded measurement.
+
+        Child and parent must coexist for SDK inheritance corroboration. These
+        are only acquired descriptors/decoded bytes; every observation still
+        checks its original prefix and every fork still needs its creation.
+        """
+        paths = dict.fromkeys(chain.from_iterable(
+            (Path(probe.session.session_file), probe.checkpoint_source) for probe in probes))
+        paths.update(dict.fromkeys(Path(cut.reference.session_file) for cut in checkpoints))
+        with ExitStack() as resources:
+            yield {path: resources.enter_context(NativeEntry.open_evidence(path)) for path in paths}
+
     def observe(self):
-        with NativeEntry.open_evidence(Path(self.session.session_file)) as evidence:
-            return self.read(evidence)
+        with self.original_readers((self,)) as sources:
+            return self.read(sources[Path(self.session.session_file)], sources[self.checkpoint_source])
 
     def construction(self, evidence, branch, manifest, checkpoint, texts, serialized, answer):
         """Corroborate original SDK source references, not a condition label.
@@ -840,7 +863,7 @@ class RecordedNativeProbe:
                                 "artifacts": message.completed_artifacts()})
         return tuple(measured)
 
-    def read(self, evidence: NativeEvidenceRead):
+    def read(self, evidence: NativeEvidenceRead, source: NativeEvidenceRead):
         """Borrow the run owner's original source for every measurement."""
         evidence.require_path(Path(self.session.session_file))
         data = self.read_sdk_context()
@@ -866,7 +889,7 @@ class RecordedNativeProbe:
         prompt, submitted = self.submitted_prompt(user)
         if self.checkpoint is not None:
             attempt, entry, covered, assembly = self.checkpoint.capture_for_probe(
-                self.session,evidence,self.fork_journal)
+                self.session,evidence,self.fork_journal,source)
             checkpoint = self.checkpoint._report(attempt, entry, covered, assembly)
             retained = attempt.request.retained
             scoped = self.checkpoint.scoped_facts(attempt)
