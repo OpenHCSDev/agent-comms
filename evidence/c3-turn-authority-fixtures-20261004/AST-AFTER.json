@@ -1,0 +1,1423 @@
+{
+  "revision": "4291656d9451d4dca984d28e5e4359ad4ebc007c",
+  "parser": "original audit.findings.Package.load",
+  "parsed_test_modules": 365,
+  "omissions": [],
+  "retired_map_accesses": [],
+  "consumer_sites": [
+    {
+      "path": "tests/native_backend_fixture.py",
+      "owned": true,
+      "sites": [
+        {
+          "line": 19,
+          "node": "alias",
+          "expression": "NativeWitness"
+        },
+        {
+          "line": 59,
+          "node": "AsyncFunctionDef",
+          "expression": "async def bind_saved_owner(self, agent, *, project, session):"
+        },
+        {
+          "line": 69,
+          "node": "FunctionDef",
+          "expression": "def native_arguments(self, options=('--no-tools',)):"
+        },
+        {
+          "line": 76,
+          "node": "AsyncFunctionDef",
+          "expression": "@asynccontextmanager"
+        },
+        {
+          "line": 93,
+          "node": "AsyncFunctionDef",
+          "expression": "@asynccontextmanager"
+        },
+        {
+          "line": 57,
+          "node": "Name",
+          "expression": "NativeWitness"
+        },
+        {
+          "line": 136,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 81,
+          "node": "Attribute",
+          "expression": "self.native_arguments"
+        },
+        {
+          "line": 85,
+          "node": "Attribute",
+          "expression": "self.bind_saved_owner"
+        },
+        {
+          "line": 138,
+          "node": "Attribute",
+          "expression": "self.native_arguments"
+        }
+      ]
+    },
+    {
+      "path": "tests/native_initialization_installed_pilot.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 57,
+          "node": "Attribute",
+          "expression": "child.reader.receive"
+        }
+      ]
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 155,
+          "node": "Attribute",
+          "expression": "thread.turn_state"
+        }
+      ]
+    },
+    {
+      "path": "tests/selected_summary_cases.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 116,
+          "node": "alias",
+          "expression": "NativeWitness"
+        },
+        {
+          "line": 120,
+          "node": "Name",
+          "expression": "NativeWitness"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_acp.py",
+      "owned": true,
+      "sites": [
+        {
+          "line": 1768,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 226,
+          "node": "Attribute",
+          "expression": "native.open_owner"
+        },
+        {
+          "line": 242,
+          "node": "Attribute",
+          "expression": "native.open_owner"
+        },
+        {
+          "line": 1507,
+          "node": "Attribute",
+          "expression": "native.open_owner"
+        },
+        {
+          "line": 1547,
+          "node": "Attribute",
+          "expression": "native.open_owner"
+        },
+        {
+          "line": 227,
+          "node": "Attribute",
+          "expression": "native.original_input"
+        },
+        {
+          "line": 228,
+          "node": "Attribute",
+          "expression": "agent.turns.owns_turn"
+        },
+        {
+          "line": 232,
+          "node": "Attribute",
+          "expression": "agent.turns.owns_turn"
+        },
+        {
+          "line": 243,
+          "node": "Attribute",
+          "expression": "native.original_input"
+        },
+        {
+          "line": 266,
+          "node": "Attribute",
+          "expression": "agent.turns.owns_turn"
+        },
+        {
+          "line": 233,
+          "node": "Attribute",
+          "expression": "agent.turns.turn_state"
+        },
+        {
+          "line": 1552,
+          "node": "Attribute",
+          "expression": "agent.turns.turn_state"
+        },
+        {
+          "line": 267,
+          "node": "Attribute",
+          "expression": "agent.turns.turn_state"
+        },
+        {
+          "line": 1540,
+          "node": "Attribute",
+          "expression": "agent.turns.turn_state"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "owned": true,
+      "sites": [
+        {
+          "line": 78,
+          "node": "Name",
+          "expression": "receive"
+        },
+        {
+          "line": 78,
+          "node": "Attribute",
+          "expression": "PiRpcChannel.receive"
+        },
+        {
+          "line": 188,
+          "node": "Attribute",
+          "expression": "comms.threads.restore_stopped"
+        },
+        {
+          "line": 189,
+          "node": "Attribute",
+          "expression": "comms.owners.acquire_thread"
+        },
+        {
+          "line": 46,
+          "node": "Attribute",
+          "expression": "native.open_owner"
+        },
+        {
+          "line": 87,
+          "node": "Attribute",
+          "expression": "native.open_owner"
+        },
+        {
+          "line": 81,
+          "node": "Name",
+          "expression": "receive"
+        },
+        {
+          "line": 62,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        },
+        {
+          "line": 141,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "owned": true,
+      "sites": [
+        {
+          "line": 581,
+          "node": "Attribute",
+          "expression": "native.open_owner"
+        },
+        {
+          "line": 585,
+          "node": "Attribute",
+          "expression": "native.original_input"
+        },
+        {
+          "line": 587,
+          "node": "Attribute",
+          "expression": "agent.turns.owns_turn"
+        },
+        {
+          "line": 595,
+          "node": "Attribute",
+          "expression": "agent.turns.turn_state"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_backend.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 98,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2846,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 302,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1166,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1312,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2066,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2992,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 91,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 342,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 360,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1070,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2026,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2218,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 408,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 479,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 510,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 532,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1274,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1352,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1406,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1443,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1476,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1502,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1523,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1552,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1620,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1677,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1709,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1767,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1835,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1886,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1923,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1959,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 1993,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2116,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2246,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2275,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2312,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2365,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2396,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2718,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2767,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2824,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2878,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2918,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2951,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 3042,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 3071,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 3109,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 3151,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 3192,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 3228,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 3293,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2178,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2476,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2488,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2506,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2522,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2559,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2578,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2592,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2606,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2620,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2634,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 3261,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2539,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 2649,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_backend_settlement.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 80,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 62,
+          "node": "Attribute",
+          "expression": "native.open_owner"
+        },
+        {
+          "line": 79,
+          "node": "Attribute",
+          "expression": "native.original_input"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_compaction_boundaries.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 15,
+          "node": "alias",
+          "expression": "NativeWitness"
+        },
+        {
+          "line": 30,
+          "node": "Name",
+          "expression": "NativeWitness"
+        },
+        {
+          "line": 136,
+          "node": "Name",
+          "expression": "NativeWitness"
+        },
+        {
+          "line": 76,
+          "node": "Name",
+          "expression": "NativeWitness"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 274,
+          "node": "alias",
+          "expression": "NativeWitness"
+        },
+        {
+          "line": 284,
+          "node": "Name",
+          "expression": "NativeWitness"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_cursor_load_recovery.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 48,
+          "node": "AsyncFunctionDef",
+          "expression": "async def receive(after=0):"
+        },
+        {
+          "line": 61,
+          "node": "Name",
+          "expression": "receive"
+        },
+        {
+          "line": 82,
+          "node": "Name",
+          "expression": "receive"
+        },
+        {
+          "line": 96,
+          "node": "Name",
+          "expression": "receive"
+        },
+        {
+          "line": 76,
+          "node": "Name",
+          "expression": "receive"
+        },
+        {
+          "line": 85,
+          "node": "Name",
+          "expression": "receive"
+        },
+        {
+          "line": 66,
+          "node": "Name",
+          "expression": "receive"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_image_inputs.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 207,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 248,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 304,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 37,
+          "node": "Attribute",
+          "expression": "native.open_owner"
+        },
+        {
+          "line": 230,
+          "node": "Attribute",
+          "expression": "native.open_owner"
+        },
+        {
+          "line": 38,
+          "node": "Attribute",
+          "expression": "native.original_input"
+        },
+        {
+          "line": 231,
+          "node": "Attribute",
+          "expression": "native.original_input"
+        },
+        {
+          "line": 251,
+          "node": "Attribute",
+          "expression": "native.original_input"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 13,
+          "node": "alias",
+          "expression": "stream_agent_events"
+        },
+        {
+          "line": 300,
+          "node": "Name",
+          "expression": "stream_agent_events"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_mcp_acceptance.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 432,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        },
+        {
+          "line": 442,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        },
+        {
+          "line": 454,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        },
+        {
+          "line": 463,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 37,
+          "node": "Attribute",
+          "expression": "native.open_owner"
+        },
+        {
+          "line": 56,
+          "node": "Attribute",
+          "expression": "native.original_input"
+        },
+        {
+          "line": 66,
+          "node": "Attribute",
+          "expression": "native.original_input"
+        },
+        {
+          "line": 64,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        },
+        {
+          "line": 153,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 182,
+          "node": "Attribute",
+          "expression": "native.original_input"
+        },
+        {
+          "line": 204,
+          "node": "Attribute",
+          "expression": "native.original_input"
+        },
+        {
+          "line": 288,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 354,
+          "node": "Attribute",
+          "expression": "native.original_input"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_message_notifications.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 51,
+          "node": "Attribute",
+          "expression": "comms.registry.require('beta').turn_state"
+        },
+        {
+          "line": 78,
+          "node": "Attribute",
+          "expression": "comms.registry.require('renamed').turn_state"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 262,
+          "node": "Name",
+          "expression": "receive"
+        },
+        {
+          "line": 262,
+          "node": "Attribute",
+          "expression": "PiRpcChannel.receive"
+        },
+        {
+          "line": 267,
+          "node": "Name",
+          "expression": "receive"
+        },
+        {
+          "line": 319,
+          "node": "Attribute",
+          "expression": "channel.receive"
+        },
+        {
+          "line": 403,
+          "node": "Attribute",
+          "expression": "channel.receive"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 14,
+          "node": "alias",
+          "expression": "NativeWitness"
+        },
+        {
+          "line": 74,
+          "node": "Name",
+          "expression": "NativeWitness"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_native_only_execution.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 11,
+          "node": "alias",
+          "expression": "stream_agent_events"
+        },
+        {
+          "line": 82,
+          "node": "Name",
+          "expression": "stream_agent_events"
+        },
+        {
+          "line": 96,
+          "node": "Name",
+          "expression": "stream_agent_events"
+        },
+        {
+          "line": 136,
+          "node": "Attribute",
+          "expression": "channel.receive"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 270,
+          "node": "Attribute",
+          "expression": "child.reader.receive"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_native_startup.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 108,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 164,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_native_tool_declarations.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 117,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 34,
+          "node": "alias",
+          "expression": "NativeWitness"
+        },
+        {
+          "line": 68,
+          "node": "Name",
+          "expression": "NativeWitness"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 807,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 13,
+          "node": "alias",
+          "expression": "NativeWitness"
+        },
+        {
+          "line": 42,
+          "node": "Name",
+          "expression": "NativeWitness"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_pi_payloads.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 12,
+          "node": "alias",
+          "expression": "stream_agent_events"
+        },
+        {
+          "line": 246,
+          "node": "Name",
+          "expression": "stream_agent_events"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_project.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 122,
+          "node": "Attribute",
+          "expression": "native.open_owner"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_registration_process_identity.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 32,
+          "node": "Attribute",
+          "expression": "restored.restore_stopped"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 91,
+          "node": "Attribute",
+          "expression": "new.registry.restore_stopped"
+        },
+        {
+          "line": 47,
+          "node": "Attribute",
+          "expression": "current.registry.restore_stopped"
+        },
+        {
+          "line": 59,
+          "node": "Attribute",
+          "expression": "current.registry.restore_stopped"
+        },
+        {
+          "line": 82,
+          "node": "Attribute",
+          "expression": "current.registry.restore_stopped"
+        },
+        {
+          "line": 171,
+          "node": "Attribute",
+          "expression": "current.threads.restore_stopped"
+        },
+        {
+          "line": 208,
+          "node": "Attribute",
+          "expression": "current.threads.restore_stopped"
+        },
+        {
+          "line": 162,
+          "node": "Attribute",
+          "expression": "current.registry.restore_stopped"
+        },
+        {
+          "line": 201,
+          "node": "Attribute",
+          "expression": "current.threads.restore_stopped"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_runtime.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 211,
+          "node": "AsyncFunctionDef",
+          "expression": "async def receive(reader, writer):"
+        },
+        {
+          "line": 238,
+          "node": "Name",
+          "expression": "receive"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "owned": true,
+      "sites": [
+        {
+          "line": 77,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        },
+        {
+          "line": 35,
+          "node": "Attribute",
+          "expression": "native.open_owner"
+        },
+        {
+          "line": 197,
+          "node": "Attribute",
+          "expression": "native.open_owner"
+        },
+        {
+          "line": 199,
+          "node": "Attribute",
+          "expression": "native.original_input"
+        },
+        {
+          "line": 218,
+          "node": "Attribute",
+          "expression": "owner.turns.owns_turn"
+        },
+        {
+          "line": 125,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        },
+        {
+          "line": 166,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        },
+        {
+          "line": 233,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 54,
+          "node": "Attribute",
+          "expression": "comms.registry.require(session).turn_state"
+        },
+        {
+          "line": 120,
+          "node": "Attribute",
+          "expression": "comms.registry.require(session).turn_state"
+        },
+        {
+          "line": 69,
+          "node": "Attribute",
+          "expression": "comms.registry.require(session).turn_state"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_selected_execution_native.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 103,
+          "node": "Attribute",
+          "expression": "comms.registry.require('beta').turn_state"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 424,
+          "node": "alias",
+          "expression": "NativeWitness"
+        },
+        {
+          "line": 433,
+          "node": "Name",
+          "expression": "NativeWitness"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_stack_inbox_output.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 187,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_stack_native_compaction.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 339,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "owned": true,
+      "sites": [
+        {
+          "line": 24,
+          "node": "Attribute",
+          "expression": "native.open_owner"
+        },
+        {
+          "line": 58,
+          "node": "Attribute",
+          "expression": "owner.turns.owns_turn"
+        },
+        {
+          "line": 80,
+          "node": "Attribute",
+          "expression": "owner.turns.owns_turn"
+        },
+        {
+          "line": 85,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_stack_send_now.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 327,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_stack_settlement_boundary.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 147,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 33,
+          "node": "alias",
+          "expression": "NativeWitness"
+        },
+        {
+          "line": 407,
+          "node": "alias",
+          "expression": "NativeWitness"
+        },
+        {
+          "line": 458,
+          "node": "alias",
+          "expression": "NativeWitness"
+        },
+        {
+          "line": 36,
+          "node": "Name",
+          "expression": "NativeWitness"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_thread_order.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 28,
+          "node": "Attribute",
+          "expression": "comms.owners.acquire_thread"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_tool_diffs.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 100,
+          "node": "Attribute",
+          "expression": "backend.stream_agent_events"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "owned": true,
+      "sites": [
+        {
+          "line": 21,
+          "node": "Attribute",
+          "expression": "native.open_owner"
+        },
+        {
+          "line": 32,
+          "node": "Attribute",
+          "expression": "native.bind_saved_owner"
+        },
+        {
+          "line": 84,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        },
+        {
+          "line": 56,
+          "node": "Attribute",
+          "expression": "owner.turns.owns_turn"
+        },
+        {
+          "line": 94,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        },
+        {
+          "line": 110,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        },
+        {
+          "line": 172,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        },
+        {
+          "line": 223,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        },
+        {
+          "line": 258,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        },
+        {
+          "line": 60,
+          "node": "Attribute",
+          "expression": "owner.turns.turn_state"
+        }
+      ]
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "owned": false,
+      "sites": [
+        {
+          "line": 55,
+          "node": "Attribute",
+          "expression": "service.registry.require(thread.name).turn_state"
+        },
+        {
+          "line": 85,
+          "node": "Name",
+          "expression": "original_input"
+        },
+        {
+          "line": 245,
+          "node": "Attribute",
+          "expression": "service.threads.restore_stopped"
+        },
+        {
+          "line": 246,
+          "node": "Attribute",
+          "expression": "service.owners.acquire_thread"
+        },
+        {
+          "line": 83,
+          "node": "Name",
+          "expression": "original_input"
+        }
+      ]
+    }
+  ],
+  "production_and_stack_diff": "",
+  "dynamic_limit": "Fault callbacks and external native JavaScript dispatch require the final installed qualification; this AST is not execution proof."
+}

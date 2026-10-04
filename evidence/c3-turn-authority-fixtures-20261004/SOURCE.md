@@ -1,6 +1,9 @@
 # Canonical turn-authority fixture migration
 
-Base: actual main `7a5c5fc2e79f2e32e4f340eaba573bf1bfec69bf`.
+Base: actual main `d77e2dc08f445cc6f8695b2cb879994656f429a1` (includes merged #631).
+Production/stack are also byte-unchanged from the earlier F4 main
+`7a5c5fc2e79f2e32e4f340eaba573bf1bfec69bf`. #631 fixture changes are inherited
+main history, not part of this PR or an edit of #632.
 Draft: Core #633. Source-only working checkpoint; not installed or Ready.
 
 ## Owner and consumers
