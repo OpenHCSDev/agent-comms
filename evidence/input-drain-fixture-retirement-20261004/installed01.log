@@ -1,0 +1,40 @@
+...........F....
+=================================== FAILURES ===================================
+______________ test_relevant_source_and_owner_fences_remain[bus] _______________
+
+owner = (<agent_comms.acp.CommsAgent object at 0x7ff88aac1470>, <agent_comms.owned_turn.OwnedTurn object at 0x7ff899c8c590>, <...p:125918363833474193aca9cd03c66598', origin=UnattributedInputOrigin()),), settings_paths=None, settings_revision=None))
+change = 'bus'
+
+    @pytest.mark.parametrize("change", ["original", "bus", "owner", "turn"])
+    async def test_relevant_source_and_owner_fences_remain(owner, change):
+        agent, turn, bridge, witness, source = owner
+        current = turn.thread
+        await queue(agent, turn.session_id)
+        comms = agent._comms
+        if change == "original":
+            agent.inputs.dispositions.update(
+                lambda document: replace(
+                    document,
+                    rows={
+                        **document.rows,
+                        turn.original_keys[0]: replace(document.rows[turn.original_keys[0]], source_text="corrected"),
+                    },
+                )
+            )
+            assert await capture(owner) != source
+        elif change == "bus":
+            comms.threads.claim_thread("peer", tags=frozenset(), worktree=str(comms.root))
+            comms.messaging.send("peer", current.name, "correction")
+>           assert await capture(owner) != source
+E           AssertionError: assert CompactionSource(native=NativeWitness(session_id='372c0e711b95436f99733e9f31b87c41', session_file='/home/ts/.cache/age...cp:125918363833474193aca9cd03c66598', origin=UnattributedInputOrigin()),), settings_paths=None, settings_revision=None) != CompactionSource(native=NativeWitness(session_id='372c0e711b95436f99733e9f31b87c41', session_file='/home/ts/.cache/age...cp:125918363833474193aca9cd03c66598', origin=UnattributedInputOrigin()),), settings_paths=None, settings_revision=None)
+
+tests/test_input_drain.py:198: AssertionError
+=============================== warnings summary ===============================
+../../../../usr/lib/python3.14/site-packages/_pytest/config/__init__.py:864
+  /usr/lib/python3.14/site-packages/_pytest/config/__init__.py:864: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; pytest_asyncio.plugin
+    self.import_plugin(arg, consider_entry_points=True)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_input_drain.py::test_relevant_source_and_owner_fences_remain[bus]
+1 failed, 15 passed, 1 warning in 67.61s (0:01:07)

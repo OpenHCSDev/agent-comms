@@ -1,0 +1,66 @@
+{
+  "state": "READY_SCOPED_INSTALLED_FIXTURE_FAMILY",
+  "source_head": "692c57f5d215d99522b3d0bb7feaf826ae0821fd",
+  "base_main": "e1c399d7a1a93411e8eba14b62c1b7ebce17dcf0",
+  "production_diff": "",
+  "files": [
+    {
+      "path": "tests/input_source_cases.py",
+      "added": 0,
+      "deleted": 17
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "added": 79,
+      "deleted": 2
+    },
+    {
+      "path": "tests/test_acp.py",
+      "added": 0,
+      "deleted": 47
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "added": 112,
+      "deleted": 96
+    }
+  ],
+  "added": 191,
+  "deleted": 162,
+  "installed_python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+  "wheel_sha256": "4e3ff32503360fe7975ec71da19479774c0ff04ac6b0a2aa09ee38a1521219ba",
+  "installed_members_equal": 342,
+  "native": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2ea0a4d4ff2e3628/node_modules/@earendil-works/pi-coding-agent",
+  "native_manifest_sha256": "2ea0a4d4ff2e362864c156e4b11642775b3f2a96e7f01522b346b6f6d9526936",
+  "grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel611-package-execution-grant.json",
+  "checks": [
+    {
+      "log": "installed01.log",
+      "passed": 15,
+      "failed": 1,
+      "seconds": 67.61,
+      "failure": "Obsolete incoming ordinary agent message was expected to change retained user task facts; original raw negative preserved"
+    },
+    {
+      "log": "installed02.log",
+      "passed": 1,
+      "failed": 0,
+      "seconds": 4.84,
+      "scope": "corrected bus/source case: ordinary peer observation unchanged, original human correction changes source"
+    }
+  ],
+  "native_inputs": 0,
+  "provider_requests": 0,
+  "public_mutations": 0,
+  "custody": "Each actual fixture asserts saved native source unchanged, provider.posts==0, native starts empty, all owned children absent and original groups empty after shutdown. Original SDK bounded author process uses BoundedRun retirement. Both tool sessions terminal. No new environment/native copy/build. All private input/UNKNOWN/proof data retained.",
+  "preserved_scratch": [
+    "/home/ts/.cache/agent-scratch/mendel-input-drain611-installed01",
+    "/home/ts/.cache/agent-scratch/mendel-input-drain611-installed02"
+  ],
+  "scope_limits": [
+    "Actual native GetState/stats + SDK-authored historical source and real OwnedTurn/registry/queue/compaction boundary; no provider execution or UI claim",
+    "Existing unchanged provider Started failure coverage is referenced in SOURCE.md, not repeated or claimed by these zero-provider checks",
+    "Historical 13/98s performance remains open",
+    "Other obsolete active_turns suites are identified by AST but are outside the replaced input_source_cases/drain fixture family"
+  ]
+}
