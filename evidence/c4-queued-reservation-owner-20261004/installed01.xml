@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="7" time="14.192" timestamp="2026-10-04T14:48:29.876498-04:00" hostname="desktop"><testcase classname="tests.test_input_documents" name="test_original_publication_ack_loss_enlists_batch_and_scheduled_rollback" time="0.021" /><testcase classname="tests.test_captured_input_dispatch" name="test_initial_capture_rejects_owner_readmission_during_acceptance_notice" time="0.063"><failure message="AssertionError: assert (False)&#10; +  where False = NotSentInput(key='acp:304504fb38b849dc88105f10c825adca', sequence=None, owner='beta', admission=1, target='beta', source_text='Fresh captured input', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={}).accepts_reservation">tmp_path = PosixPath('/home/ts/.cache/agent-scratch/mendel-c4-queued-reservation656-installed01/fixtures/test_initial_capture_rejects_o0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fba496d9ba0&gt;
+
+    async def test_initial_capture_rejects_owner_readmission_during_acceptance_notice(
+        tmp_path, monkeypatch
+    ):
+        comms, agent, _, _ = _owner(tmp_path)
+        admitted = []
+        dispatched = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                notices = decode_updates(kwargs["update"].field_meta)
+                for notice in notices:
+                    if isinstance(notice, InputDeliveryChangedUpdate):
+                        admitted.append(notice.input_id)
+                        owner = comms.registry.require("beta")
+                        comms.registry.register(owner, new_owner=True)
+    
+        async def forbidden(*args, **kwargs):
+            dispatched.append(args)
+            raise AssertionError("Changed captured owner must not reach the native dispatcher")
+    
+        agent.on_connect(Client())
+        monkeypatch.setattr(agent.turns, "run_agent_turn", forbidden)
+        try:
+            with pytest.raises(InputHandoffRefused, match="context changed"):
+                await InitialInput.run(agent.inputs, "beta", "beta", "Fresh captured input")
+            assert len(admitted) == 1 and not dispatched
+            row = agent.inputs.dispositions.read().lookup("acp:" + admitted[0])
+&gt;           assert row.accepts_reservation and not row.has_native_binding
+E           AssertionError: assert (False)
+E            +  where False = NotSentInput(key='acp:304504fb38b849dc88105f10c825adca', sequence=None, owner='beta', admission=1, target='beta', source_text='Fresh captured input', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={}).accepts_reservation
+
+tests/test_captured_input_dispatch.py:43: AssertionError</failure></testcase><testcase classname="tests.test_captured_input_dispatch" name="test_postdispatch_failure_is_not_reclassified_as_admission_refusal" time="0.025" /><testcase classname="tests.test_captured_input_dispatch" name="test_initial_transfer_cancellation_retires_original_before_dispatch" time="0.021" /><testcase classname="tests.test_current_input_origin" name="test_foreign_or_changed_origin_refused_before_any_reservation" time="0.250" /><testcase classname="tests.test_input_drain" name="test_live_future_queue_and_foreign_ingress_do_not_change_summary_source" time="8.354" /><testcase classname="tests.test_acp_input_disposition" name="test_native_steer_keeps_original_input_and_turn_custody" time="4.322" /></testsuite></testsuites>

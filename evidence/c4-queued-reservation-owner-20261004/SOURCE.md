@@ -103,3 +103,11 @@ following reservation, samelease, terminal/socket/childcleanup). These prevent
 concrete changed-family failures. No unchanged655 queue projection matrix or
 new provider reproduction. Sch656086 grant remains conditional on fresh
 Bohr656540 issued purpose; no previous holder/SDK grant reused.
+
+## Installed batch01
+
+The source-equal normal wheel `5f1667ce64c58d67e153850be91dfb669ea9e347218f8d845937a1c12c778a9c` contains all347 Git/local/ZIP-equal assets, including the three declared forced resources. Core-only install and ten-package compatibility check passed. The actual installed seven-case batch returned **6PASS /1FAIL in14.192s**.
+
+The failed readmission control correctly refused the changed owner before dispatch and persisted the original as `NotSentInput`. Its obsolete assertion still expected `accepts_reservation` after original terminal cleanup. `InitialInput.finish` invokes the original `InputDrain.finish_original_inputs`/`InputAttempt.finish_unbound` behavior; no native binding means `ReservedInput` retires to `NotSentInput`. The corrected consumer now asserts that exact original leaf/text and no queued grant/turn task. Production and wheel are unchanged. The failed log/XML remain intact; only this changed assertion needs a successor execution purpose, with no repeated six passing cases or SDK/provider run.
+
+Actual savedSDK source/OwnedTurn acquisition and foreign/future-source retention passed with zero posts/proofs. Actual RuntimeProxy steer passed with two localhost posts/three proof rows. Controller2949111/start61534760 and native2951126/start61535716,2952896/start61536100 are absent; all recorded groups and owned sockets empty. All347 installed assets and92 original nonCore/bin/env keepers remain exact. No external/paid/public/replay. `EXECUTION-HANDBACK01.json` returns native086 READ/execution and requests Bohr's independent whole holder closure. NotReady until the single corrected consumer is qualified.

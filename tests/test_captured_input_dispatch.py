@@ -40,7 +40,10 @@ async def test_initial_capture_rejects_owner_readmission_during_acceptance_notic
             await InitialInput.run(agent.inputs, "beta", "beta", "Fresh captured input")
         assert len(admitted) == 1 and not dispatched
         row = agent.inputs.dispositions.read().lookup("acp:" + admitted[0])
-        assert row.accepts_reservation and not row.has_native_binding
+        assert isinstance(row, NotSentInput) and not row.has_native_binding
+        assert row.source_text == "Fresh captured input"
+        assert not agent.inputs.queued_inputs["beta"]
+        assert not agent.turns.turn_tasks
     finally:
         await agent.shutdown()
 

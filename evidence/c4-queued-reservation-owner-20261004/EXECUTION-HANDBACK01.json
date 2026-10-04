@@ -1,0 +1,92 @@
+{
+  "time": 1791139801.502243,
+  "result": "6 PASS / 1 FAIL; original negative preserved",
+  "exit_code": 1,
+  "cases": 7,
+  "pytest_seconds": 14.192,
+  "failed_case": "test_initial_capture_rejects_owner_readmission_during_acceptance_notice",
+  "failure": "stale fixture expects Reserved; original retired unbound input is NotSent before native dispatch",
+  "controller": {
+    "controller": {
+      "pid": 2949111,
+      "start_time": 61534760
+    },
+    "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "installed_core": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+    "pytest": "/usr/lib/python3.14/site-packages/pytest/__init__.py",
+    "started": 1791139709.697236,
+    "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent"
+  },
+  "cleanup": [
+    {
+      "identity": {
+        "pid": 2949111,
+        "start_time": 61534760
+      },
+      "alive": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 2951126,
+        "start_time": 61535716
+      },
+      "alive": false,
+      "group_members": []
+    },
+    {
+      "identity": {
+        "pid": 2952896,
+        "start_time": 61536100
+      },
+      "alive": false,
+      "group_members": []
+    }
+  ],
+  "fixture_receipts": [
+    {
+      "saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-c4-queued-reservation656-installed01/fixtures/saved-native-owner0/wire",
+      "localhost_posts": 0,
+      "native_input_proofs": 0,
+      "children": [
+        {
+          "pid": 2951126,
+          "start_time": 61535716
+        }
+      ],
+      "children_retired": true
+    },
+    {
+      "saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-c4-queued-reservation656-installed01/fixtures/saved-native-owner1/wire",
+      "localhost_posts": 2,
+      "native_input_proofs": 3,
+      "children": [
+        {
+          "pid": 2952896,
+          "start_time": 61536100
+        }
+      ],
+      "children_retired": true
+    }
+  ],
+  "owned_run_sockets": [],
+  "installed_assets_unchanged": 347,
+  "original_keepers_unchanged": 92,
+  "distributions": {
+    "pydantic_core": "2.46.5",
+    "typing-inspection": "0.4.4",
+    "metaclass-registry": "0.2.1",
+    "annotated-types": "0.8.0",
+    "typing_extensions": "4.15.0",
+    "pydantic": "2.13.5",
+    "packaging": "26.2",
+    "agent-comms": "0.1.0",
+    "nominal-refactor-audit": "0.1.0",
+    "agent-client-protocol": "0.12.1"
+  },
+  "external_paid_public_replay": 0,
+  "source_head": "c656a64c4887fae14227b1e0a04a2b263bdaeade",
+  "native_read_execution": "HAND BACK; no future claim",
+  "holder": "execution/build/import complete; request Bohr independent whole-purpose closure",
+  "grant_sha256": "a4fa8d6d224258b73a591bd03d3381fedc5e2ef3d42aa5e1fa3ee0f86ff441c6"
+}
