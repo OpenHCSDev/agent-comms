@@ -1,0 +1,9 @@
+{
+  "qualified_source": "3759e2038df431595ec5388273415ca643619d8d",
+  "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/session-identity619-wheels/agent_comms-0.1.0-py3-none-any.whl",
+  "sha256": "bc560d93f4b43359e10728a1336a59bbd50002375072e5b884bb22414481f8d5",
+  "source_members_equal": 311,
+  "force_include_members_equal": 3,
+  "source_overlay": false,
+  "native_build": false
+}
