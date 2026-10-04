@@ -199,8 +199,10 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     recent, limited = reopened.relationships._recent_messages()
     assert recent == (first, second) and not limited
     assert reopened.bus.pending_counts_all(['Alice','Bob'])['Alice']==2
-    assert len(ContextCliCommand(thread='Alice',turn=1).apply(reopened)['manifests'])==1
-    assert ContextCliCommand(thread='Alice',diff=True).apply(reopened)['turn']['occurrence']['generation']==2
+    recorded = ContextCliCommand(thread='Alice',turn=1)
+    assert len(recorded.encode_result(recorded.apply(reopened))['manifests'])==1
+    difference = ContextCliCommand(thread='Alice',diff=True)
+    assert difference.encode_result(difference.apply(reopened))['turn']['occurrence']['generation']==2
 
 
 def test_observation_family_rejects_message_fields_and_preview(tmp_path):
@@ -233,11 +235,14 @@ def test_recorded_context_history_retains_rename_and_original_predecessor(tmp_pa
     history = reopened.bus.log.context_manifests('Alice', reopened.registry)
     assert history == (original, second, same_turn, future)
     assert reopened.bus.log.context_manifests('Renamed-Alice', reopened.registry) == history
-    assert ContextCliCommand(thread='Renamed-Alice', turn=1).apply(reopened)['manifests'] == FieldCodec.encode((original,))
-    difference = ContextCliCommand(thread='Alice', turn=2, diff=True).apply(reopened)
+    recorded = ContextCliCommand(thread='Renamed-Alice', turn=1)
+    assert recorded.encode_result(recorded.apply(reopened))['manifests'] == FieldCodec.encode((original,))
+    compare = ContextCliCommand(thread='Alice', turn=2, diff=True)
+    difference = compare.encode_result(compare.apply(reopened))
     assert difference['previous_turn'] == FieldCodec.encode(original.turn)
     assert difference['turn'] == FieldCodec.encode(same_turn.turn)
-    assert ContextCliCommand(thread='Renamed-Alice', diff=True).apply(reopened)['previous_turn'] == FieldCodec.encode(same_turn.turn)
+    latest = ContextCliCommand(thread='Renamed-Alice', diff=True)
+    assert latest.encode_result(latest.apply(reopened))['previous_turn'] == FieldCodec.encode(same_turn.turn)
     with pytest.raises(ValueError, match='No preceding recorded turn'):
         ContextCliCommand(thread='Alice', turn=1, diff=True).apply(reopened)
     with pytest.raises(ValueError, match='outside the original history'):
