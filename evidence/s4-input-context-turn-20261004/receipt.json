@@ -1,0 +1,38 @@
+{
+  "implementation": "2980b386f10c3f2a4aeb9f519e3422e7c9c9a507",
+  "integrated_head": "6ef6dd37b4f3d8f9d87c8eeeda1ea051fe25e22e",
+  "main": "ee2883a4ecb806a6ee89abc2dfde3d2d1b99db9e",
+  "raw_root": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-input-context-turn",
+  "raw_sha256": {
+    "owner-before.json": "f601f1680bf8232d0cd38cd0406d979273ca993520f3212150f8731f6489a0ec",
+    "owner-after.json": "5e710928d6ff5d29e83544d9cbac292306cb7da5f857dca24f77f1c9ce687f47",
+    "focused.log": "8d2df14bdc6a028adb08b913178f6f795234f27c5f09216e30c474e67b3d5936",
+    "private-source.diff": "3b753cb57349d3e3b811e472ec23440c8364d4e9ff8f344fc2ac83058f6d4911"
+  },
+  "qualified_private_sha256": {
+    "tests/retained_native_fixture.py": "4e70bd36e8303d9faa644d1eb90f2e6ad63241daa2cba7fe5530482041588011",
+    "tests/test_recorded_retention_measurements.py": "3a24668bbf0bbcdc26e4c356d5e9a1f23c3e7421487cac3b32900f41340e2723"
+  },
+  "qualification": {
+    "focused": "5 passed, 34 deselected in 0.33s",
+    "scope": "Authored original InputDocument/native text/recorded manifest/request lease acquisition and existing request budget/timing/branch construction consumers",
+    "AST": "734 Python src/tests/tools modules, no parse omissions; lexical references only, not JS/dynamic resolution"
+  },
+  "private_delta": {
+    "added": 124,
+    "deleted": 25
+  },
+  "runtime_stack_tools_delta": 0,
+  "original_session_reads": 0,
+  "SDK_calls": 0,
+  "provider_calls": 0,
+  "native_processes": 0,
+  "packages_envs_loans": 0,
+  "limits": [
+    "No complete lease/birth/process grant from stored input",
+    "Missing manifest has no independent recorded-turn proof",
+    "Missing diagnostics have no independent admission proof",
+    "No configured matched arms, transformed-input capacity, HTTP/billing/study/full S4 qualification"
+  ],
+  "integration": "Normal main merge; both qualified private source files byte-equal implementation2980; main tooling/AGENTS retained, no check repeated"
+}
