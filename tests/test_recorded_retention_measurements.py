@@ -38,7 +38,7 @@ from agent_comms.turn_context import (
     ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, RecordedContextTurn,
     SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment,
 )
-from compaction_retention_fixture import Condition, Measurement, Question, RecallRound, RecallScenario, RecordedAnswers, RecordedNativeProbes, ScoredScenario, coding_scenario
+from compaction_retention_fixture import Condition, Measurement, PairedRecallDesign, Question, RecallRound, RecallScenario, RecordedAnswers, RecordedNativeProbes, ScoredScenario, coding_scenario
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 from selected_summary_cases import manual_summary_record
 from test_task_decisions import admit
@@ -170,6 +170,61 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertEqual(unavailable['recall_trajectories'], 1)
         self.assertFalse(unavailable['mean_recall_rate_difference']['evaluated'])
         self.assertIsNone(unavailable['mean_recall_rate_difference']['value'])
+
+    def test_paired_inference_keeps_complete_samples_and_original_model_selection(self):
+        # Detect selection of only favorable/assisted subsets, cut-level
+        # pseudoreplication, and admission models replaced by registry labels.
+        oracle = FileProvenance(str(self.root / 'oracle.json'), '0' * 64)
+        design = PairedRecallDesign(oracle, Condition.TASK_MEMORY, Condition.BOUNDED,
+            'original/model', 2, 0.95, -0.02, 1000, 17)
+        scenario = RecallScenario('paired', (RecallRound('r1', ('source',), (
+            Question('q', 'Source?', 'source', 'oracle'),)),))
+        correct = scenario.score(Condition.BOUNDED, RecordedAnswers({'r1': {'q': 'source'}}))
+        lost = scenario.score(Condition.TASK_MEMORY, RecordedAnswers({'r1': {'q': 'lost'}}))
+        support = {'r1': {'answer_support': {'unassisted_recall': True}}}
+        progress = RequestProgress('request', 'session', 'input', 1, 2, '3',
+            1, 0, 0, 0, 'budget_admission', model=ReportedModel(provider='original', id='model'))
+        alignment = {'r1': {'evaluated': True, 'request_selection': {
+            'candidate': {'observations': (progress,)}}}}
+
+        def comparison(candidate, evidence=support):
+            return {'candidate': candidate.public(), 'alignment': alignment,
+                'paired_quality': candidate.paired_quality(correct, evidence, support, alignment)}
+
+        pairs = (comparison(lost), comparison(correct))
+        result = ScoredScenario.paired_inference(pairs, design)
+        self.assertEqual((result['mean_recall_rate_difference'], result['lower'], result['upper']),
+                         (-0.5, -1, 0))
+        self.assertFalse(result['meets_recall_margin'])
+        assisted = comparison(correct, {'r1': {'answer_support': {'unassisted_recall': False}}})
+        for incomplete in (assisted, dict(pairs[1], alignment={'r1': {'evaluated': False}})):
+            missing = ScoredScenario.paired_inference((pairs[0], incomplete), design)
+            self.assertFalse(missing['evaluated'])
+            self.assertNotIn('lower', missing)
+        with self.assertRaisesRegex(ValueError, 'model does not match'):
+            ScoredScenario.paired_inference(pairs, replace(design, model='another/model'))
+        with self.assertRaisesRegex(ValueError, 'pair count'):
+            ScoredScenario.paired_inference(pairs[:1], design)
+
+    def test_supplied_design_binds_original_oracle_and_rejects_invalid_parameters(self):
+        # Detect changed oracle bytes or an omitted sample before native reads;
+        # decoding a supplied file is never a preregistration/approval grant.
+        path = self.root / 'oracle.json'
+        raw = json.dumps(FieldCodec.encode(coding_scenario())).encode()
+        path.write_bytes(raw)
+        design = PairedRecallDesign(FileProvenance(str(path), hashlib.sha256(raw).hexdigest()),
+            Condition.TASK_MEMORY, Condition.BOUNDED, 'original/model', 2, 0.95, -0.02, 1000, 17)
+        self.assertEqual(FieldCodec.decode(PairedRecallDesign, FieldCodec.encode(design)), design)
+        with self.assertRaisesRegex(ValueError, 'pair count'):
+            design.compare(())
+        path.write_bytes(raw + b' ')
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            design.compare((None, None))
+        for changed in ({'sample_count': 1}, {'model': ''}, {'confidence': float('nan')},
+                        {'recall_margin': float('inf')}, {'bootstrap_samples': 2},
+                        {'baseline': design.candidate}):
+            with self.subTest(changed=changed), self.assertRaises(ValueError):
+                replace(design, **changed)
 
     def test_admitted_budget_requires_original_request_and_turn_correlation(self):
         # Prevent same-input/time guesses and historical capacity fabrication.
