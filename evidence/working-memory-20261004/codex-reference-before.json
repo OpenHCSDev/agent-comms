@@ -1,0 +1,686 @@
+{
+  "source": "ec9666358fd0d641d2425a5a30aa52e73359d9fb",
+  "modules": 324,
+  "omissions": [],
+  "scope": "Original import role and historical source family; lexical AST does not prove dynamic dispatch",
+  "sites": [
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 107,
+      "node": "ClassDef",
+      "source": "class CodexItem(ImportedCase, DeclaredFamily, affix='CodexItem'):"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 129,
+      "node": "ClassDef",
+      "source": "class MessageCodexItem(CodexItem):"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 147,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 189,
+      "node": "ClassDef",
+      "source": "class HistoricalInstructionCodexItem:"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 200,
+      "node": "ClassDef",
+      "source": "class SystemCodexItem(HistoricalInstructionCodexItem, MessageRoleCodexItem):"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 204,
+      "node": "ClassDef",
+      "source": "class DeveloperCodexItem(HistoricalInstructionCodexItem, MessageRoleCodexItem):"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 248,
+      "node": "ClassDef",
+      "source": "class CodexRecord(ImportedCase, DeclaredFamily, affix='CodexRecord'):"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 387,
+      "node": "ClassDef",
+      "source": "@dataclass"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 115,
+      "node": "FunctionDef",
+      "source": "def historical_instructions(self):"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 120,
+      "node": "Name",
+      "source": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 129,
+      "node": "Name",
+      "source": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 147,
+      "node": "Name",
+      "source": "MessageCodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 172,
+      "node": "FunctionDef",
+      "source": "@property"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 179,
+      "node": "Name",
+      "source": "MessageRoleCodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 184,
+      "node": "Name",
+      "source": "MessageRoleCodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 196,
+      "node": "FunctionDef",
+      "source": "def historical_instructions(self):"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 200,
+      "node": "Name",
+      "source": "HistoricalInstructionCodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 200,
+      "node": "Name",
+      "source": "MessageRoleCodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 204,
+      "node": "Name",
+      "source": "HistoricalInstructionCodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 204,
+      "node": "Name",
+      "source": "MessageRoleCodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 209,
+      "node": "Name",
+      "source": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 230,
+      "node": "Name",
+      "source": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 272,
+      "node": "FunctionDef",
+      "source": "def historical_instructions(self):"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 275,
+      "node": "FunctionDef",
+      "source": "def instruction_sources(self, source, offset, raw):"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 283,
+      "node": "Name",
+      "source": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 290,
+      "node": "Name",
+      "source": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 304,
+      "node": "Name",
+      "source": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 321,
+      "node": "Name",
+      "source": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 342,
+      "node": "FunctionDef",
+      "source": "def historical_instructions(self):"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 363,
+      "node": "Name",
+      "source": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 382,
+      "node": "FunctionDef",
+      "source": "def historical_instructions(self):"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 408,
+      "node": "FunctionDef",
+      "source": "@property"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 364,
+      "node": "Name",
+      "source": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 394,
+      "node": "Name",
+      "source": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 323,
+      "node": "Name",
+      "source": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 383,
+      "node": "Attribute",
+      "source": "self.item.historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 404,
+      "node": "Attribute",
+      "source": "self.instruction_sources"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 404,
+      "node": "Attribute",
+      "source": "record.instruction_sources"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 409,
+      "node": "Attribute",
+      "source": "self.instruction_sources"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 137,
+      "node": "Name",
+      "source": "MessageRoleCodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 277,
+      "node": "Name",
+      "source": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 278,
+      "node": "Attribute",
+      "source": "instruction.role"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 368,
+      "node": "Name",
+      "source": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 400,
+      "node": "Attribute",
+      "source": "self.instruction_sources"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 400,
+      "node": "Attribute",
+      "source": "record.instruction_sources"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 344,
+      "node": "Attribute",
+      "source": "item.historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 279,
+      "node": "Attribute",
+      "source": "self.historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 331,
+      "node": "Name",
+      "source": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 528,
+      "node": "Attribute",
+      "source": "scan.instruction_sources"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 130,
+      "node": "Name",
+      "source": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 502,
+      "node": "Name",
+      "source": "CodexImportScan"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 549,
+      "node": "Name",
+      "source": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 535,
+      "node": "Attribute",
+      "source": "scan.historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 259,
+      "node": "Name",
+      "source": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 166,
+      "node": "Attribute",
+      "source": "self.historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 179,
+      "node": "Attribute",
+      "source": "message.role"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 203,
+      "node": "Attribute",
+      "source": "message.role"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 515,
+      "node": "Name",
+      "source": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 508,
+      "node": "Name",
+      "source": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 524,
+      "node": "Name",
+      "source": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/input_origin.py",
+      "line": 49,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/input_origin.py",
+      "line": 52,
+      "node": "FunctionDef",
+      "source": "def public_text(self, comms) -> str:"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 79,
+      "node": "Attribute",
+      "source": "selected.public_description"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 79,
+      "node": "Attribute",
+      "source": "selected.public_text"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 169,
+      "node": "Attribute",
+      "source": "snapshot.historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 73,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 32,
+      "node": "FunctionDef",
+      "source": "@abstractmethod"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 34,
+      "node": "FunctionDef",
+      "source": "def public_text(self, comms) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 62,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 65,
+      "node": "FunctionDef",
+      "source": "def public_text(self, comms) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 83,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 88,
+      "node": "FunctionDef",
+      "source": "def public_text(self, comms) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 114,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 122,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 125,
+      "node": "FunctionDef",
+      "source": "def public_text(self, comms) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 135,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 149,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 162,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 179,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 187,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 241,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 289,
+      "node": "AsyncFunctionDef",
+      "source": "async def public_text(self, read_reference) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 348,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 359,
+      "node": "FunctionDef",
+      "source": "def public_text(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 426,
+      "node": "FunctionDef",
+      "source": "def public_text(self, original: str) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 464,
+      "node": "FunctionDef",
+      "source": "def public_text(self, segment: ContextSegment) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 523,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 578,
+      "node": "FunctionDef",
+      "source": "def public_text(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 605,
+      "node": "FunctionDef",
+      "source": "def public_text(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 104,
+      "node": "Attribute",
+      "source": "instruction.role"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 104,
+      "node": "Attribute",
+      "source": "self.role"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 373,
+      "node": "Attribute",
+      "source": "self.public_text"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 436,
+      "node": "Attribute",
+      "source": "self.public_text"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 467,
+      "node": "Attribute",
+      "source": "self.coordinates.public_text"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 524,
+      "node": "Attribute",
+      "source": "self.measured_manifest().public_description"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 84,
+      "node": "Attribute",
+      "source": "self.role"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 99,
+      "node": "Name",
+      "source": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 467,
+      "node": "Attribute",
+      "source": "segment.public_text"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 545,
+      "node": "Attribute",
+      "source": "span.public_text"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 899,
+      "node": "Attribute",
+      "source": "source.public_description"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 899,
+      "node": "Attribute",
+      "source": "source.public_text"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 101,
+      "node": "Attribute",
+      "source": "record.historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 263,
+      "node": "Attribute",
+      "source": "value.public_text"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 311,
+      "node": "Attribute",
+      "source": "value.public_text"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 364,
+      "node": "Attribute",
+      "source": "self.public_text"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 40,
+      "node": "Attribute",
+      "source": "self.public_description"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 72,
+      "node": "FunctionDef",
+      "source": "@abstractmethod"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 112,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 136,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/working_memory_requests.py",
+      "line": 47,
+      "node": "FunctionDef",
+      "source": "@abstractmethod"
+    },
+    {
+      "file": "src/agent_comms/working_memory_requests.py",
+      "line": 52,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/working_memory_requests.py",
+      "line": 62,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    },
+    {
+      "file": "src/agent_comms/working_memory_requests.py",
+      "line": 70,
+      "node": "FunctionDef",
+      "source": "def public_description(self) -> str:"
+    }
+  ]
+}

@@ -168,10 +168,6 @@ class MessageRoleCodexItem(MessageCodexItem):
         )
         return cls("\n".join(pieces), text(wire.get("id")))
 
-    @property
-    def role(self):
-        return self.declared_name
-
     @abstractmethod
     def apply(self, buffer): ...
 
@@ -275,8 +271,8 @@ class CodexRecord(ImportedCase, DeclaredFamily, affix="CodexRecord"):
     def instruction_sources(self, source, offset, raw):
         digest = hashlib.sha256(raw).hexdigest()
         return tuple(CodexRolloutProvenance(str(source.resolve()), offset, len(raw), digest,
-                                           index, instruction.role)
-                     for index, instruction in enumerate(self.historical_instructions()))
+                                           index)
+                     for index, _ in enumerate(self.historical_instructions()))
 
 
 @dataclass(frozen=True)

@@ -36,7 +36,6 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
     receipt = comms.threads.import_thread(source, ImportFormat.CODEX, name="historical")
     assert source.read_bytes() == original
     refs = receipt.historical_instructions
-    assert tuple(ref.role for ref in refs) == ("system", "developer")
     assert all(isinstance(ref, CodexRolloutProvenance) for ref in refs)
     assert tuple(ref.public_text(comms) for ref in refs) == (
         "Historical base π.\n", "Historical developer λ.\n")

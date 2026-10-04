@@ -78,10 +78,9 @@ class CodexRolloutProvenance(Provenance):
     length: int
     sha256: str
     instruction: int
-    role: str
 
     def public_description(self) -> str:
-        return (f"Historical Codex {self.role} message · {self.path} · record bytes "
+        return (f"Historical Codex instruction · {self.path} · record bytes "
                 f"{self.offset}:{self.offset + self.length} · item {self.instruction} "
                 "· not current instructions")
 
@@ -101,8 +100,6 @@ class CodexRolloutProvenance(Provenance):
             instruction = record.historical_instructions()[self.instruction]
         except IndexError as error:
             raise ValueError("Historical instruction is outside its original record") from error
-        if instruction.role != self.role:
-            raise ValueError("Historical instruction role differs from its original record")
         return instruction.body
 
 
