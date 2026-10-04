@@ -6,7 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from agent_comms.comms import Comms
+from agent_comms.wire_log import WireLog
 from agent_comms.errors import RelationViolationError
 from checkpoint_schema import declared_schema_digest
 
@@ -18,11 +18,12 @@ def bus_digest(path):
 
 def main():
     root, target_python, installer, root_id = sys.argv[1:]
-    service = Comms(Path(root))
-    with service.bus.log.locked() as custody:
+    root = Path(root)
+    log = WireLog(root / 'bus.jsonl')
+    with log.locked() as custody:
         # The original writer's locked() validates its exact existing schema
         # and certificate before any mutation. No new reader interprets it.
-        marker = service.bus.log._private_marker_unlocked()
+        marker = log._private_marker_unlocked()
         if marker.root_id != root_id or marker.checkpoint_seal is None:
             raise RelationViolationError('Original private writer proof changed.')
         environment = dict(os.environ)
@@ -32,16 +33,16 @@ def main():
         ], env=environment, check=True, capture_output=True, text=True).stdout.strip()
         if target_schema == declared_schema_digest():
             raise RelationViolationError('Target schema no longer requires retained reset.')
-        before = bus_digest(service.bus.log.path)
+        before = bus_digest(log.path)
         retained = replace(marker, checkpoint_version=None, checkpoint_seal=None)
-        service.bus.log.write_metadata_unlocked(retained)
-        (service.root / 'private_bus_checkpoint.sqlite3').unlink()
+        log.write_metadata_unlocked(retained)
+        (root / 'private_bus_checkpoint.sqlite3').unlink()
         subprocess.run([target_python, installer, root, str(custody.descriptor), root_id],
                        env=environment, pass_fds=(custody.descriptor,), check=True)
-        after = service.bus.log.read_metadata_unlocked()
+        after = log.read_metadata_unlocked()
         if replace(after, checkpoint_version=None, checkpoint_seal=None) != retained:
             raise RelationViolationError('Cutover changed original marker identity or admission.')
-        if bus_digest(service.bus.log.path) != before:
+        if bus_digest(log.path) != before:
             raise RelationViolationError('Cutover changed original bus bytes.')
 
 
