@@ -1,0 +1,161 @@
+{
+  "complete": true,
+  "scope": "Original three-cut read-only scorer, not provider/comparison study or native/runtime change",
+  "head": "e004e9fcbdf53b9f034b3a3268a618c6ac56d357",
+  "scorer_sha256": "0142f71f8aff7069e423b40ccdfc2c17332e542f27f839e62f34680c23b18d6f",
+  "resources": {
+    "summaries": {
+      "records": 3,
+      "usage_records": 3,
+      "input_tokens": {
+        "evaluated": true,
+        "value": 176583,
+        "observed_records": 3,
+        "expected_records": 3
+      },
+      "output_tokens": {
+        "evaluated": true,
+        "value": 11101,
+        "observed_records": 3,
+        "expected_records": 3
+      },
+      "cache_read_tokens": {
+        "evaluated": true,
+        "value": 7936,
+        "observed_records": 3,
+        "expected_records": 3
+      },
+      "cache_write_tokens": {
+        "evaluated": true,
+        "value": 0,
+        "observed_records": 3,
+        "expected_records": 3
+      },
+      "reported_total_tokens": {
+        "evaluated": true,
+        "value": 195620,
+        "observed_records": 3,
+        "expected_records": 3
+      },
+      "reasoning_tokens": {
+        "evaluated": true,
+        "value": 0,
+        "observed_records": 3,
+        "expected_records": 3
+      },
+      "normalized_cost": {
+        "evaluated": true,
+        "value": 0.4649696,
+        "observed_records": 3,
+        "expected_records": 3
+      }
+    },
+    "assistants": {
+      "records": 5,
+      "usage_records": 5,
+      "input_tokens": {
+        "evaluated": true,
+        "value": 109435,
+        "observed_records": 5,
+        "expected_records": 5
+      },
+      "output_tokens": {
+        "evaluated": true,
+        "value": 361,
+        "observed_records": 5,
+        "expected_records": 5
+      },
+      "cache_read_tokens": {
+        "evaluated": true,
+        "value": 98816,
+        "observed_records": 5,
+        "expected_records": 5
+      },
+      "cache_write_tokens": {
+        "evaluated": true,
+        "value": 0,
+        "observed_records": 5,
+        "expected_records": 5
+      },
+      "reported_total_tokens": {
+        "evaluated": true,
+        "value": 208612,
+        "observed_records": 5,
+        "expected_records": 5
+      },
+      "reasoning_tokens": {
+        "evaluated": true,
+        "value": 60,
+        "observed_records": 5,
+        "expected_records": 5
+      },
+      "normalized_cost": {
+        "evaluated": true,
+        "value": 0.2323616,
+        "observed_records": 5,
+        "expected_records": 5
+      }
+    },
+    "combined": {
+      "records": 8,
+      "usage_records": 8,
+      "input_tokens": {
+        "evaluated": true,
+        "value": 286018,
+        "observed_records": 8,
+        "expected_records": 8
+      },
+      "output_tokens": {
+        "evaluated": true,
+        "value": 11462,
+        "observed_records": 8,
+        "expected_records": 8
+      },
+      "cache_read_tokens": {
+        "evaluated": true,
+        "value": 106752,
+        "observed_records": 8,
+        "expected_records": 8
+      },
+      "cache_write_tokens": {
+        "evaluated": true,
+        "value": 0,
+        "observed_records": 8,
+        "expected_records": 8
+      },
+      "reported_total_tokens": {
+        "evaluated": true,
+        "value": 404232,
+        "observed_records": 8,
+        "expected_records": 8
+      },
+      "reasoning_tokens": {
+        "evaluated": true,
+        "value": 60,
+        "observed_records": 8,
+        "expected_records": 8
+      },
+      "normalized_cost": {
+        "evaluated": true,
+        "value": 0.6973311999999999,
+        "observed_records": 8,
+        "expected_records": 8
+      }
+    },
+    "scope": "Original journaled summary and assistant completions only; SDK-normalized cost is not billed spend; no unjournaled retries, cache-saving comparison, HTTP accounting or end-to-end timing"
+  },
+  "quality": {
+    "correct": 9,
+    "questions": 9,
+    "unassisted": 3,
+    "assisted": 6
+  },
+  "provider_calls": 0,
+  "new_inputs": 0,
+  "package_environment_native_writes": 0,
+  "checks": {
+    "measurement_controls_passed": 16,
+    "other_module_collection_failure": "test_compaction_retention_fixture: ACP absent under system Python. Original failure retained; no new env or native gate."
+  },
+  "raw": "/home/ts/.cache/agent-scratch/s4-recorded-resource617"
+}

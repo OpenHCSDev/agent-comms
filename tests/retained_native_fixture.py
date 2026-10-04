@@ -139,7 +139,7 @@ class RecordedNativeCheckpoint:
         # NativeSummaryPayload.usage. Never decode another usage vocabulary.
         if entry.usage is None:
             return {"evaluated": False, "reason": "Original summary usage not retained"}
-        return {"evaluated": True, "usage": FieldCodec.encode(entry.usage),
+        return {"evaluated": True, "usage": entry.usage,
                 "tokens_before": entry.tokens_before,
                 "scope": "Original SDK-normalized counters; no cache savings or paired cost inference"}
 
@@ -794,7 +794,7 @@ class RecordedNativeProbe:
             "timestamp": entry.timestamp,
             "usage": {
                 "evaluated": entry.message.usage is not None,
-                "value": FieldCodec.encode(entry.message.usage),
+                "value": entry.message.usage,
             },
             "selection": {
                 "evaluated": bool(entry.message.provider and entry.message.model),
