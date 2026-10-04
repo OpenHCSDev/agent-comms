@@ -1,5 +1,14 @@
 ## Current: ordinary440 installed and display verified; full workflow remains — 2026-10-04
 
+Parent retired its unused standalone channel_recovery_physical_journey wrapper.
+The original ToAd ChannelLifetimeJourney/review_channel_lifetime owns that
+navigation and completed the public440 ordinary18-check journey. No executable
+caller used the parent wrapper; its old source and receipts remain in Git.
+Original NRA Package parsed all316 Core,368 tests and54 tools with no omissions
+before this one-file deletion; all surviving source bytes stay unchanged.
+This removes the alternate physical-recorder recipe, not an unfinished workflow
+obligation. No UI, provider or public operation was repeated for the deletion.
+
 ### Latest integration and original-byte correction
 
 Toad441 exact ec9bc8f9 merged as b57d03e5 after its required Debt passed.
