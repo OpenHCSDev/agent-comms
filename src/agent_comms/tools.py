@@ -8,7 +8,7 @@ from dataclasses import MISSING, asdict, dataclass, field, fields, replace
 from typing import ClassVar, Literal
 
 from .pi_vocabulary import ThinkingLevel
-from .channel_management import TagAction
+from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
 from .channel_targets import is_channel_target
 from .channels import SavedView, ViewKind, ViewMatch, ViewPredicate
 from .cli_commands import (ArchiveCliCommand, RenameSelfCliCommand, StopCliCommand, ThreadsCliCommand, StartCliCommand, ForkCliCommand, DeleteViewCliCommand, PinChannelCliCommand, ChannelActivityCliCommand, PinThreadCliCommand)
@@ -71,6 +71,7 @@ def tool_field(
     description: str,
     *,
     default=MISSING,
+    default_factory=MISSING,
     wire_name=None,
     binding: type[ContextBinding] | None = None,
     choices=None,
@@ -82,7 +83,7 @@ def tool_field(
         metadata["context_binding"] = binding
     if choices is not None:
         metadata["wire_choices"] = choices
-    return field(default=default, metadata=metadata)
+    return field(default=default, default_factory=default_factory, metadata=metadata)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -305,9 +306,12 @@ class CommsTagsTool(ToolRequest):
     action: TagAction = tool_field("Operation", default=TagAction.LIST)
     name: str = tool_field("Tag name", default="")
     new_name: str = tool_field("Replacement tag for rename", default="")
+    disposition: TagDisposition = tool_field("Tagged-thread operation", default_factory=KeepThreadsTagDisposition)
+    confirmed: bool = tool_field("Confirm thread archiving or deletion", default=False)
 
     def apply(self, comms: Comms) -> JsonObject:
-        tags = self.action.apply(comms.channels, self.name, self.new_name)
+        tags = self.action.apply(comms.channels, self.name, self.new_name,
+                                disposition=self.disposition, confirmed=self.confirmed)
         return {"tags": sorted(tags)}
 
 

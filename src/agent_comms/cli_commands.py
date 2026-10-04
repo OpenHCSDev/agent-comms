@@ -42,6 +42,7 @@ from .message_reference import MessageReference
 from .thread_management import ForkSpec
 from .thread_execution import ThreadExecution, ExternalThreadExecution
 from .owner_lifecycle import OwnerStartResult
+from .channel_management import TagDisposition, KeepThreadsTagDisposition, TagChangeResult
 
 
 def _duration_seconds(value: str) -> float:
@@ -137,8 +138,17 @@ class TargetField:
         formatter = self.declaration.metadata['editor_format']
         if formatter is not None:
             return formatter(self.value)
+        if self.choices:
+            return type(self.value).declared_name
         return ('' if self.value is None else self.value if isinstance(self.value, str)
                 else json.dumps(FieldCodec.encode(self.value)))
+
+    @property
+    def choices(self) -> tuple[tuple[str, str], ...]:
+        if isinstance(self.annotation, type) and issubclass(self.annotation, DeclaredFamily):
+            return tuple((member.label, member.declared_name)
+                         for member in self.annotation.members_with(self.annotation))
+        return ()
 
     @property
     def required(self) -> bool:
@@ -166,6 +176,9 @@ class TargetAction:
     @property
     def confirmation(self) -> str:
         return self.bound.confirmation()
+
+    def edited(self, arguments: dict[str, str]) -> CliCommand:
+        return self.bound.edited(self.declaration.editor_arguments(arguments))
 
     def encode(self) -> dict[str, object]:
         """Only the CLI boundary requests the external catalog JSON shape."""
@@ -217,11 +230,6 @@ class ThreadTagsResult:
 class TagRenamedResult:
     renamed: str
     name: str
-
-
-@dataclass(frozen=True)
-class TagDeletedResult:
-    deleted_tag: str
 
 
 @dataclass(frozen=True)
@@ -308,6 +316,8 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                 result[key] = None
             elif normalize is not None:
                 result[key] = normalize(text)
+            elif isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
+                result[key] = {'kind': text}
             elif annotation is str or str in get_args(annotation):
                 result[key] = text
             else:
@@ -317,6 +327,17 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
     def confirmation(self) -> str:
         return ''
 
+    def with_confirmation(self, confirmed: bool) -> Self:
+        return self
+
+    def edited(self, arguments: dict[str, object]) -> Self:
+        captured = {declared.metadata.get('wire_name', declared.name): getattr(self, declared.name)
+                    for declared in fields(self) if declared.metadata['target_bound']}
+        if captured.keys() & arguments.keys():
+            raise ValueError('Target-bound parameters cannot be overridden')
+        return type(self).from_payload({'kind': self.declared_name,
+                                       **FieldCodec.encode(captured), **arguments})
+
     @classmethod
     def execute_target(cls, comms: Comms, target: str, arguments: dict[str, object],
                        *, confirmed: bool = False, channel: str | None = None) -> object:
@@ -324,16 +345,10 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         if len(bindings) != 1:
             raise ValueError('This action is no longer available for the target')
         bound, = bindings
-        bound_names = {declared.metadata.get('wire_name', declared.name)
-                       for declared in fields(bound) if declared.metadata['target_bound']}
-        if bound_names & arguments.keys():
-            raise ValueError('Target-bound parameters cannot be overridden')
-        if bound.confirmation() and not confirmed:
-            raise ValueError(bound.confirmation())
-        captured = {declared.metadata.get('wire_name', declared.name): getattr(bound, declared.name)
-                    for declared in fields(bound) if declared.metadata['target_bound']}
-        return cls.from_payload({'kind': cls.declared_name,
-                                 **FieldCodec.encode(captured), **arguments}).apply(comms)
+        edited = bound.edited(arguments)
+        if edited.confirmation() and not confirmed:
+            raise ValueError(edited.confirmation())
+        return edited.with_confirmation(confirmed).apply(comms)
 
     @classmethod
     def add_parser(cls, subparsers: Any) -> None:
@@ -1152,14 +1167,47 @@ class RenameTagCliCommand(ExactTagCliCommand, declared_name='rename-tag'):
 
 @dataclass(frozen=True, kw_only=True)
 class DeleteTagCliCommand(ExactTagCliCommand, declared_name='delete-tag'):
-    help = 'Delete channel tag'
+    help = 'Remove tag, archive tagged threads, or delete tagged threads'
+    disposition: TagDisposition = option('--disposition', default_factory=KeepThreadsTagDisposition,
+                                        help='Choose what happens to tagged threads')
+    confirmed: bool = option('--confirmed', default=False, target_bound=True)
 
     def confirmation(self):
-        return f"Delete tag #{self.name} from all threads? Saved views referencing it must be removed first."
+        return self.disposition.confirmation(self.name)
 
-    def apply(self, ctx: Comms) -> TagDeletedResult:
-        ctx.channels.delete_tag(self.name)
-        return TagDeletedResult(self.name)
+    def with_confirmation(self, confirmed: bool) -> Self:
+        return replace(self, confirmed=confirmed)
+
+    def apply(self, ctx: Comms) -> TagChangeResult:
+        return ctx.channels.delete_tag(self.name, disposition=self.disposition, confirmed=self.confirmed)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ArchiveChannelCliCommand(CliCommand, declared_name='archive-channel'):
+    help = 'Archive channel'
+    name: str = option('--name', target_bound=True)
+    archived: bool = option('--archived', default=True, target_bound=True)
+
+    @classmethod
+    def channel_bindings(cls, comms, channel):
+        return (cls(name=channel.name),) if channel.builtin is None and not channel.archived else ()
+
+    def confirmation(self):
+        return (f"Archive {self.name}? Hide the channel without removing threads, tags or history. It can be restored."
+                if self.archived else '')
+
+    def apply(self, ctx: Comms) -> Channel:
+        return ctx.channels.set_channel_archived(self.name, self.archived)
+
+
+@dataclass(frozen=True, kw_only=True)
+class RestoreChannelCliCommand(ArchiveChannelCliCommand, declared_name='restore-channel'):
+    help = 'Restore archived channel'
+    archived: bool = option('--archived', default=False, target_bound=True)
+
+    @classmethod
+    def channel_bindings(cls, comms, channel):
+        return (cls(name=channel.name),) if channel.builtin is None and channel.archived else ()
 
 
 @dataclass(frozen=True, kw_only=True)
