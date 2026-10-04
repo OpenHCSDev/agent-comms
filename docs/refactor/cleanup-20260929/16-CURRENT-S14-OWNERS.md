@@ -1,4 +1,70 @@
-## Current: snapshot/sidebar merged; reservation and W6 closure continue — 2026-10-04
+## Current: original436 published; C4 source complete; whole UI and W6 remain — 2026-10-04
+
+Tristan closed the original Toad client and authorized updating the install.
+The original frozen436 operation published once: terminal0,43.751656s, all19
+owners retained their incarnations/settings and acquired new live process
+identities. All five default commands now point to actualstyle22, and the same
+e206 root/id uses immutable native086. Original public receipt and readback are
+under Sch's new-publication436; parent review records the exact paths/hash.
+The first command failed importing frozen modules because Python -I excludes
+its script directory, before receipt/preimages/public effects. The corrected
+launch explicitly admitted the same frozen operator directory; no frozen file
+or operator operand was changed. Original historical guard refusal remains.
+
+This publishes qualified Core1a/Toad436/Text59/NRA9a/native086. It does not
+install later Core654/655/656 or Toad439 merely because they are merged.
+Heis owns remaining ordinary-default continuous UI/history/channel/tab/return/
+draft/undo/reader and meaningful motion acceptance on the now-matched086 epoch.
+No full UI/performance, CPU, smoothness or all-stalls claim follows from runtime
+identity readback. Actualstyle22 is now PUBLIC: no old private-floor restore or
+new package/import/staging loan is implied by any previous closed grant.
+
+Core656 final5bd29311 merged5c110307 after exact Debt37226434511 passed.
+Seven distinct changed cases qualify cumulatively: original01 remains whole
+FAIL6PASS1FAIL14.192s, corrected readmission02 separatelyPASS1/.878s. Actual
+saved SDK source custody and native/socket steer retain their precise0posts/
+0proofs and2localhostposts/3proof strengths. All owned groups/sockets retired,
+347 assets/92 keepers/ten distributions remained exact; both purposes closed
+independently. Original reservation/initial cleanup belongs to existing
+InputDispositions/QueuedInput/InitialInput, and InputDrain is486 lines.
+
+Core6583d52535d merged60a154fd after exact Debt37227094963 passed. Its original
+C4 source reconciliation closes field/lifetime/consumer/deletion and new-case
+edit-count requirements, not just a threshold:316 production modules parsed
+without omissions; only original explicitly excepted WireLog609 exceeds500.
+Default queue/status/input/handling and continuous workflow acceptance remains
+open. Source completeness does not promote that pending live requirement.
+
+Core657ac94dc0d merged1726be59 after exact Debt37227152735 passed. The existing
+constructor retains SDK manifest once; RecordedConditionInstallation validates
+acquired session/ancestry and reuses complete recorded message parts to compare
+the ordered prefix by kind/SHA/size. Five authored controls/.51s and missing
+trajectory CLI qualified source/private measurement plumbing only. Six source
+files and eight raw keeper hashes matched the determining receipt. Actual
+configured constructor-to-request execution, capacity/HTTP/recall/independent
+arms/billing/fullS4 remain unfinished;30pairs/USD75 remains unapproved.
+
+W6 original empty-filter TypedTable defect is source-fixed through existing
+TypedRow declared-field subset and TypedTable optional-select versus required
+SQL-list contracts. Coreb522/7d0f355 assets and retainedToadc632319 source proof
+qualified seven checks plus fresh private schema10 initialization. Successor02
+then timed out-15/90.032595s without completed App assertions or phase trace.
+Fresh schema10 and ModelLabel Unclassified/HumanLabel USER Promised decoded;
+runtimeinput0/annotationrequests0/bus0B. These are scoped positives, not App/
+native-reader PASS or evidence of a native/missing-start fault. Einstein owns
+App/session/inspection wait-lifetime source investigation; no unchanged rerun.
+All1470/69/390 restored and the e29 purpose plus7a READ/execution independently
+closed; original first3PASS2FAIL and both runner negatives stay preserved.
+
+Heis successor4418a5cdeae is source-only/Draft: committed transcript fragment
+resources now separate from native NodeList/teardown; trim/live/End/page/filter
+consumers migrate. Runtime qualification still needed. Arendt continues fullS4
+beyond accepted measurement checkpoints. Sch4402948b56a is source-prepared for
+mergedCore656/Toad439/native086; no staging or public operation is inferred.
+Einstein owns unfinished W6/W7/W8, with disclosure/default annotation OFF.
+No workflow was abandoned at a frozen Ready checkpoint. The full goal is active.
+
+## Historical: snapshot/sidebar merged; reservation and W6 closure continue — 2026-10-04
 
 Parent654 exacte3882fd11ffc264bbbb9da55add6791ee6752eb4 merged
 b1a91fb561cfac4ea99f9a7b23f3dae9bb772f56 after exact automatic

@@ -2,6 +2,14 @@
 
 The authoritative current installation, active owners, actual verification and remaining defects are recorded once in [16-CURRENT-S14-OWNERS.md](16-CURRENT-S14-OWNERS.md), under its newest dated heading. The full original goal remains active. The dated entries below are historical evidence, not the current live state.
 
+Current public delivery is original436:19 relaunched owners, five defaults,
+same root/native086 identity readback verified. Remaining acceptance is the
+actual continuous default UI/workflow. C4 source closure is merged658 and all
+seven changed656 cases qualified; latest merged product is a separate future
+receiver, not silently installed. W6 App remains unqualified after its successor
+timeout, with source investigation active. Full performance, S4 and W7/W8 remain
+open; see the current owner section above for concrete source and evidence.
+
 ## Historical delivery update — 2026-10-02T12:14Z
 
 Default paired324 is installed: Cored6e196a8 (521/529 and prior523/524/525/528), Toad source322, Textual25, nativead533. Five default links target `/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002`. Preserve-only publication completed44.680s; all19 owners/configurations and actual route verified. Original sessions, inputs and UNKNOWN remain preserved. The ordinary default `toad-comms openhcs-helper` physical saved-history check completed45.659s; parent inspected the actual Ready/history/collapsed coordination screenshot before the final receipt existed, without simultaneous recorder-PID verification. This is not during-motion acceptance. Recorder255 remains distinct from operator0. This is startup/display proof, not scrolling acceptance.
