@@ -1,0 +1,21 @@
+{
+  "state": "actual private filesystem source-publication controls PASS",
+  "checks": [
+    "new source exact BOM/UTF8/CRLF bytes and private600 mode",
+    "replacement/preimage exact bytes and original644 mode",
+    "replacement/preimage exact bytes and original755 mode",
+    "physical exclusive creation refuses late existing file unchanged",
+    "physical exclusive creation refuses late dangling alias unchanged",
+    "original preimage refuses existing attempt without mutation",
+    "changed original replacement refused",
+    "existing stopped installation owns exact source recovery footprint"
+  ],
+  "native_inputs": 0,
+  "provider_calls": 0,
+  "public_actions": 0,
+  "package_writes": 0,
+  "frozen436_artifacts_unchanged": 115,
+  "frozen_ready_sha256": "8796ce30c748b25adfa2b02f09f551d9921225df753544d18047e87d9a558c42",
+  "scratch_retired": true,
+  "scope": "Original source declaration and real exclusive filesystem writes; no stopped-owner restart/public activation/UI claim"
+}
