@@ -1,0 +1,110 @@
+{
+  "source_head": "84cb6774",
+  "result": "PASS; original private current-schema custody only",
+  "receipt": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/retained-index-writer-custody-20261004/installed01/receipt.json",
+  "receipt_sha256": "916384748d8cc620ae768ee86ba0095a86afb74f997ec7f803ed495bc80e439e",
+  "elapsed_seconds": 8.917681585997343,
+  "controller": {
+    "pid": 40255,
+    "start_time": 62200674
+  },
+  "children": [
+    {
+      "pid": 41320,
+      "start_time": 62200894
+    },
+    {
+      "pid": 41421,
+      "start_time": 62201036
+    },
+    {
+      "pid": 41868,
+      "start_time": 62201215
+    },
+    {
+      "pid": 41909,
+      "start_time": 62201300
+    },
+    {
+      "pid": 42444,
+      "start_time": 62201384
+    },
+    {
+      "pid": 42809,
+      "start_time": 62201471
+    },
+    {
+      "pid": 43057,
+      "start_time": 62201551
+    },
+    {
+      "pid": 43177,
+      "start_time": 62201657
+    },
+    {
+      "pid": 43199,
+      "start_time": 62201721
+    }
+  ],
+  "all_original_identities_absent": true,
+  "groups": [],
+  "sockets": [],
+  "installed_source_proof": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/retained-index-writer-custody-20261004/INSTALLED-SOURCE-PROOF.json",
+  "installed_source_proof_sha256": "062cf21ce452079a38a4cdaae53de86fc4ff26cd3d14a89369b580af4a738e25",
+  "unchanged_assets": 347,
+  "unchanged_noncore_original_members": 94,
+  "historical_subset": 92,
+  "unchanged_metadata_files": 69,
+  "distributions": {
+    "pydantic_core": "2.46.5",
+    "typing-inspection": "0.4.4",
+    "metaclass-registry": "0.2.1",
+    "annotated-types": "0.8.0",
+    "typing_extensions": "4.15.0",
+    "pydantic": "2.13.5",
+    "packaging": "26.2",
+    "agent-comms": "0.1.0",
+    "nominal-refactor-audit": "0.1.0",
+    "agent-client-protocol": "0.12.1"
+  },
+  "direct_url": {
+    "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel661-retained-index-tools-execution-only-issued-grant.json",
+  "grant_sha256": "2e9939ef44fc40fdf814ba8f762cc9821f80c5dda1a8d4076a1de21bf42ffc79",
+  "compact_keepers": {
+    "installed01/derived-index-preimage/bus_meta.json": "83229bee8e4547c7d9ff8b3ce53607d4e1a689bb5a9c6aff550c7a7803da0b6c",
+    "installed01/descriptor-refusal.stderr": "8ff4fdfcdc9d7c35b4a055526e88d4e138a5263a52162a9d9083f15b1f606157",
+    "installed01/descriptor-refusal.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "installed01/driver.log": "d7f897f9304059624788dfc0489dcde78b7b70e11de049404d825352fcbbc2d0",
+    "installed01/inherited-rebuild.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "installed01/inherited-rebuild.stdout": "d3dc56e539111488310a75de16eaf80fc00850d9add14a01fa538698f42b54a5",
+    "installed01/installer-root-refusal.stderr": "c3d1070330a7ab3dad2d9ccbafebf38d85ad7fbfe19e32bf68df401d079c30f8",
+    "installed01/installer-root-refusal.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "installed01/missing-seal-wire/bus.jsonl": "81c331af292f33787f5d031cc9b99fcb94e1d4fe1312da58afc7312cb6004018",
+    "installed01/missing-seal-wire/bus_meta.json": "80acda6fb2c59c6c10eaa7f1c5a1377f82206ce52cd141b7b8f0aa93bcaa2150",
+    "installed01/missing-seal-wire/registry.json": "68bbfdb1052bc9c282661e50ecf4d932f4882809c5d5bccc1852146fc28bb1bd",
+    "installed01/original-root-refusal.stderr": "382195b8cf697c939582857b51f07fc8308c3d4ff3396c6a466acd48d63c38c9",
+    "installed01/original-root-refusal.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "installed01/receipt.json": "916384748d8cc620ae768ee86ba0095a86afb74f997ec7f803ed495bc80e439e",
+    "installed01/rejected-derived-schema.json": "1f464d58d800c3b111a2a58a934a243eb9f57cdc6e160a61e0cb836757171a30",
+    "installed01/same-schema-refusal.stderr": "d20f0f4223829d2e386c2d4ed44c1fa7133b27645248dac2a6485651f2ac2728",
+    "installed01/same-schema-refusal.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "installed01/seal-marker-preimage.json": "ca87b3cc61317936f79bd3dfba26574c8006b8352d876c1ca888bf6551e9ddab",
+    "installed01/seal-refusal.stderr": "0e8a430480225f9156cf5aea222b03df29d7fbc653b40038023ed583b5816253",
+    "installed01/seal-refusal.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "installed01/seal-seed.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "installed01/seal-seed.stdout": "b155ae9224d6dddd218ff6faa2eb4695fc4575f429d2f6b664eefcc42ba681ba",
+    "installed01/seed.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "installed01/seed.stdout": "ed2f42d1d280b9d8ad8e2d2dce7003aa6410f0395f4a9ec37553166d69168f79",
+    "installed01/wire/bus.jsonl": "fc863965695bfe7dd6d1c1454a0caa5e025c98ee60230f2e9d1c729510a5815f",
+    "installed01/wire/bus_meta.json": "1708f8cd87b596b9497f6c6fa586929cd5fa76226454c4257692b385e7bd5f66",
+    "installed01/wire/registry.json": "7a2fdb88a068f26ac0af7b57bb63c25b935ebfcd3f6c51471602831faaf32059",
+    "installed01/wrong-schema-refusal.stderr": "10256a35c87afeba56d208ace2efaceee49e2887ffdb397638088b5e9fa599a3",
+    "installed01/wrong-schema-refusal.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "cross_version_writer_restart_qualified": false,
+  "native_provider_public_replay": 0,
+  "claim": "WHOLE540 package/build/import/read/execution HAND BACK; no current or future borrower claim. Shared lifecycle ONLY Bohr."
+}

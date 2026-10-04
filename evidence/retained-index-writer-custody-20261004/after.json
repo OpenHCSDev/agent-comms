@@ -1,0 +1,1220 @@
+{
+  "revision": "926bc94764cf08be4af33ef33270c3ce8232c90c",
+  "mechanism": "existing audit.findings.Package/FunctionFacts",
+  "coverage": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 316,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 366,
+      "omissions": []
+    },
+    {
+      "root": "tools",
+      "parsed": 54,
+      "omissions": []
+    }
+  ],
+  "related_functions": {
+    "src/agent_comms/comms.py": [
+      {
+        "declaration": "src/agent_comms/comms.py::wire",
+        "lines": 8,
+        "calls": [
+          "Comms",
+          "bind_owners",
+          "resolve_comms_route"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/comms.py::__init__",
+        "lines": 37,
+        "calls": [
+          "AgentActivity",
+          "ChannelCatalog",
+          "ChannelManagement",
+          "CollaborationLedger",
+          "Goals",
+          "HistoryViews",
+          "MessageBus",
+          "Messaging",
+          "OwnerLifecycle",
+          "Path",
+          "Registration",
+          "ThreadManagement",
+          "ThreadRelationships",
+          "Transcripts",
+          "expanduser",
+          "mkdir"
+        ]
+      }
+    ],
+    "src/agent_comms/store_files.py": [
+      {
+        "declaration": "src/agent_comms/store_files.py::_store_lock_file",
+        "lines": 6,
+        "calls": [
+          "mkdir",
+          "open",
+          "with_name"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/store_files.py::_held_store_source",
+        "lines": 16,
+        "calls": [
+          "RelationViolationError",
+          "S_ISREG",
+          "StoreLock",
+          "ValueError",
+          "WireLog",
+          "exists",
+          "fileno",
+          "lstat",
+          "release_store_lock",
+          "type",
+          "verify_before_read_unlocked"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/store_files.py::_store_lock",
+        "lines": 19,
+        "calls": [
+          "_held_store_source",
+          "_store_lock_file",
+          "acquire",
+          "acquire_store_lock",
+          "current",
+          "fileno"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/store_files.py::_async_store_lock",
+        "lines": 22,
+        "calls": [
+          "StoreLockContention",
+          "_held_store_source",
+          "_store_lock_file",
+          "acquire_async",
+          "current",
+          "fileno"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/store_files.py::_replace_snapshot",
+        "lines": 10,
+        "calls": [
+          "getattr",
+          "min",
+          "range",
+          "replace",
+          "sleep"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/store_files.py::_atomic_write_text",
+        "lines": 25,
+        "calls": [
+          "Path",
+          "_replace_snapshot",
+          "chmod",
+          "close",
+          "fdopen",
+          "fileno",
+          "flush",
+          "fsync",
+          "getattr",
+          "mkdir",
+          "mkstemp",
+          "open",
+          "unlink",
+          "write"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/store_files.py::file_revision",
+        "lines": 7,
+        "calls": [
+          "stat"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/store_files.py::_repair_trailing_jsonl",
+        "lines": 32,
+        "calls": [
+          "fileno",
+          "flush",
+          "fsync",
+          "loads",
+          "open",
+          "read",
+          "rfind",
+          "seek",
+          "truncate",
+          "with_name",
+          "write"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/store_files.py::_iter_jsonl_stream",
+        "lines": 24,
+        "calls": [
+          "ValueError",
+          "endswith",
+          "isinstance",
+          "len",
+          "loads",
+          "readline",
+          "strip",
+          "tell"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/store_files.py::_iter_jsonl_records",
+        "lines": 6,
+        "calls": [
+          "_iter_jsonl_stream",
+          "exists",
+          "open",
+          "str"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/store_files.py::_jsonl_records",
+        "lines": 3,
+        "calls": [
+          "_iter_jsonl_records"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/store_files.py::_append_jsonl",
+        "lines": 7,
+        "calls": [
+          "_repair_trailing_jsonl",
+          "dumps",
+          "encode",
+          "fileno",
+          "flush",
+          "fsync",
+          "open",
+          "write"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/store_files.py::waits",
+        "lines": 17,
+        "calls": [
+          "min",
+          "monotonic",
+          "try_store_lock"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/store_files.py::acquire",
+        "lines": 3,
+        "calls": [
+          "sleep",
+          "waits"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/store_files.py::acquire_async",
+        "lines": 3,
+        "calls": [
+          "sleep",
+          "waits"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/store_files.py::certified_read",
+        "lines": 4,
+        "calls": [
+          "RelationViolationError"
+        ]
+      }
+    ],
+    "src/agent_comms/wire_log.py": [
+      {
+        "declaration": "src/agent_comms/wire_log.py::__init__",
+        "lines": 3,
+        "calls": [
+          "Path"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::locked",
+        "lines": 6,
+        "calls": [
+          "_store_lock"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::certified_read",
+        "lines": 5,
+        "calls": [
+          "_certified_source",
+          "_store_lock"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::read_certified_async",
+        "lines": 20,
+        "calls": [
+          "StoreLockContention",
+          "_store_lock_file",
+          "acquire_async",
+          "current",
+          "fileno",
+          "partial",
+          "run_worker"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::_read_certified",
+        "lines": 4,
+        "calls": [
+          "_certified_source",
+          "_held_store_source",
+          "read"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::_certified_source",
+        "lines": 7,
+        "calls": [
+          "_private_marker_unlocked",
+          "certified_read",
+          "require_current",
+          "require_marker"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::conversation_sources",
+        "lines": 13,
+        "calls": [
+          "_private_marker_unlocked",
+          "_store_lock",
+          "certified_read",
+          "conversation_sources",
+          "exists",
+          "require_current",
+          "require_marker",
+          "tuple"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::addressed_sources",
+        "lines": 18,
+        "calls": [
+          "AddressedPage",
+          "addressed_page",
+          "certified_read",
+          "replace",
+          "tuple"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::full_history",
+        "lines": 3,
+        "calls": [
+          "messages",
+          "verified_snapshot"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::delivery_snapshot",
+        "lines": 4,
+        "calls": [
+          "delivery_messages",
+          "verified_snapshot"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::record_context",
+        "lines": 12,
+        "calls": [
+          "ContextManifestWireObservation",
+          "ObservationWireRecord",
+          "_append_private_unlocked",
+          "_private_marker_unlocked",
+          "locked",
+          "to_wire"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::context_manifests",
+        "lines": 12,
+        "calls": [
+          "_store_lock",
+          "certified_read",
+          "context_manifests",
+          "require",
+          "snapshot",
+          "tuple"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::retained_sources",
+        "lines": 19,
+        "calls": [
+          "InputDispositions",
+          "RetainedTaskFacts",
+          "WireExportBoundary",
+          "_store_lock",
+          "certified_read",
+          "read",
+          "require",
+          "retained_task_facts",
+          "snapshot",
+          "time",
+          "tuple"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::retained_context",
+        "lines": 13,
+        "calls": [
+          "RetainedTaskFacts",
+          "capture",
+          "for_owner",
+          "original_input_facts",
+          "retained_sources"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::_assert_private_directory",
+        "lines": 21,
+        "calls": [
+          "RelationViolationError",
+          "S_ISDIR",
+          "absolute",
+          "bool",
+          "geteuid",
+          "lstat"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::_claim_projection_unlocked",
+        "lines": 3,
+        "calls": [
+          "_claim_projection",
+          "verified_records_unlocked"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::_claim_projection",
+        "lines": 9,
+        "calls": [
+          "ClaimProjection",
+          "apply_transition",
+          "messages",
+          "sequence_after"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::claim_projection",
+        "lines": 9,
+        "calls": [
+          "RelationViolationError",
+          "_claim_projection",
+          "_opened_wire_snapshot",
+          "_snapshot_records"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::_private_marker_unlocked",
+        "lines": 22,
+        "calls": [
+          "RelationViolationError",
+          "S_IMODE",
+          "S_ISREG",
+          "_assert_private_directory",
+          "exists",
+          "geteuid",
+          "is_symlink",
+          "lstat",
+          "read_metadata_unlocked",
+          "with_name"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::verified_records_unlocked",
+        "lines": 20,
+        "calls": [
+          "WireScan",
+          "exists",
+          "on_row",
+          "open",
+          "read",
+          "readline",
+          "tell"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::_append_private_unlocked",
+        "lines": 48,
+        "calls": [
+          "RelationViolationError",
+          "S_IMODE",
+          "S_ISREG",
+          "append_private_bus_checkpoint_unlocked",
+          "certificate_enabled",
+          "close",
+          "dumps",
+          "encode",
+          "fdopen",
+          "fileno",
+          "flush",
+          "from_wire",
+          "fstat",
+          "fsync",
+          "getattr",
+          "geteuid",
+          "len",
+          "open",
+          "require_append",
+          "sequence_after",
+          "write",
+          "write_metadata_unlocked"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::read_delivery_cohort",
+        "lines": 10,
+        "calls": [
+          "RelationViolationError",
+          "ValueError",
+          "certified_read",
+          "delivery",
+          "type"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::delivery_cohorts_unlocked",
+        "lines": 11,
+        "calls": [
+          "RelationViolationError",
+          "_private_marker_unlocked",
+          "delivery",
+          "opened_private_checkpoint_unlocked",
+          "require_current",
+          "tuple"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::_keyed_receipt_unlocked",
+        "lines": 17,
+        "calls": [
+          "TypeError",
+          "_private_marker_unlocked",
+          "keyed_receipt",
+          "opened_private_checkpoint_unlocked",
+          "require_current",
+          "type"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::read_keyed_response",
+        "lines": 5,
+        "calls": [
+          "_keyed_receipt_unlocked",
+          "_store_lock"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::_public_page_records",
+        "lines": 10,
+        "calls": [
+          "dumps",
+          "encode",
+          "has_private_wire_fields",
+          "len",
+          "messages",
+          "public_from_wire",
+          "require_retained_admission",
+          "to_wire"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::_opened_wire_snapshot",
+        "lines": 19,
+        "calls": [
+          "ExitStack",
+          "WireMetadata",
+          "_committed_sequence_unlocked",
+          "_private_marker_unlocked",
+          "_store_lock",
+          "capture",
+          "enter_context",
+          "exists",
+          "open",
+          "seek"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::verified_snapshot",
+        "lines": 8,
+        "calls": [
+          "_opened_wire_snapshot",
+          "_snapshot_records"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::projection_snapshot",
+        "lines": 11,
+        "calls": [
+          "_opened_wire_snapshot",
+          "_snapshot_records"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::_snapshot_records",
+        "lines": 7,
+        "calls": [
+          "WireScan",
+          "min",
+          "read",
+          "readline",
+          "tell"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::page_snapshot",
+        "lines": 17,
+        "calls": [
+          "_iter_jsonl_stream",
+          "_opened_wire_snapshot",
+          "_public_page_records",
+          "iter"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::_record_snapshot",
+        "lines": 8,
+        "calls": [
+          "page_snapshot"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::full_history_snapshot",
+        "lines": 4,
+        "calls": [
+          "_record_snapshot"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::message_by_id",
+        "lines": 8,
+        "calls": [
+          "full_history_snapshot",
+          "next"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::messages_for_references",
+        "lines": 2,
+        "calls": [
+          "deliveries_for_references",
+          "tuple"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::deliveries_for_references",
+        "lines": 7,
+        "calls": [
+          "certified_read",
+          "references",
+          "tuple"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::total_messages",
+        "lines": 3,
+        "calls": [
+          "messages",
+          "sum",
+          "verified_snapshot"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::latest_sequence",
+        "lines": 4,
+        "calls": [
+          "_committed_sequence_unlocked",
+          "_store_lock"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::_iter_log_unlocked",
+        "lines": 5,
+        "calls": [
+          "_private_marker_unlocked",
+          "exists",
+          "messages",
+          "verified_records_unlocked"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::_committed_sequence_unlocked",
+        "lines": 12,
+        "calls": [
+          "_iter_log_unlocked",
+          "certified_read",
+          "claim_gate_enabled",
+          "committed_sequence",
+          "max",
+          "read_metadata_unlocked"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::claim_gate_enabled",
+        "lines": 11,
+        "calls": [
+          "RelationViolationError",
+          "certificate_enabled",
+          "read_metadata_unlocked"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::verify_before_read_unlocked",
+        "lines": 26,
+        "calls": [
+          "RelationViolationError",
+          "S_IMODE",
+          "S_ISREG",
+          "claim_gate_enabled",
+          "geteuid",
+          "lstat",
+          "opened_claim_source_unlocked",
+          "read_metadata_unlocked"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::metadata_path",
+        "lines": 2,
+        "calls": [
+          "with_name"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::read_metadata_unlocked",
+        "lines": 46,
+        "calls": [
+          "RelationViolationError",
+          "S_IMODE",
+          "S_ISREG",
+          "ValueError",
+          "WireMetadata",
+          "_store_lock",
+          "decode",
+          "encode",
+          "exists",
+          "fdopen",
+          "fileno",
+          "fstat",
+          "getattr",
+          "geteuid",
+          "is_symlink",
+          "load",
+          "open"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::write_metadata_unlocked",
+        "lines": 10,
+        "calls": [
+          "_atomic_write_text",
+          "_store_lock",
+          "dumps",
+          "encode"
+        ]
+      },
+      {
+        "declaration": "src/agent_comms/wire_log.py::require_fresh_private_root_unlocked",
+        "lines": 13,
+        "calls": [
+          "RelationViolationError",
+          "S_IMODE",
+          "_assert_private_directory",
+          "any",
+          "exists",
+          "geteuid",
+          "is_symlink",
+          "lstat",
+          "with_name"
+        ]
+      }
+    ],
+    "tools/cutover/install_retained_index.py": [
+      {
+        "declaration": "tools/cutover/install_retained_index.py::require_retained_writer",
+        "lines": 14,
+        "calls": [
+          "Path",
+          "ValueError",
+          "WireLog",
+          "flock",
+          "fstat",
+          "int",
+          "read_metadata_unlocked",
+          "stat"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/install_retained_index.py::main",
+        "lines": 6,
+        "calls": [
+          "dumps",
+          "install_private_bus_checkpoint",
+          "print",
+          "require_retained_writer"
+        ]
+      }
+    ],
+    "tools/cutover/publish_openhcs_recovery.py": [
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::digest",
+        "lines": 3,
+        "calls": [
+          "file_digest",
+          "hexdigest",
+          "open"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::clean_environment",
+        "lines": 4,
+        "calls": [
+          "dict",
+          "pop"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::require_stage",
+        "lines": 22,
+        "calls": [
+          "RuntimeError",
+          "all",
+          "digest",
+          "loads",
+          "read_text",
+          "str",
+          "verify_native_package"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::require_no_clients",
+        "lines": 38,
+        "calls": [
+          "Path",
+          "RuntimeError",
+          "bool",
+          "capture",
+          "current",
+          "dict",
+          "fsdecode",
+          "fsencode",
+          "get",
+          "geteuid",
+          "getpid",
+          "int",
+          "intersection",
+          "isdecimal",
+          "iterdir",
+          "len",
+          "read_bytes",
+          "require",
+          "split",
+          "startswith",
+          "stat",
+          "str",
+          "tuple"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::require_publication_preimages",
+        "lines": 11,
+        "calls": [
+          "RuntimeError",
+          "exists",
+          "is_file",
+          "is_symlink",
+          "read_active_route",
+          "readlink"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::retain_file",
+        "lines": 19,
+        "calls": [
+          "PrivateFileRole",
+          "RuntimeError",
+          "encode",
+          "fchown",
+          "fdopen",
+          "fileno",
+          "flush",
+          "from_stat",
+          "fstat",
+          "fsync",
+          "hexdigest",
+          "lstat",
+          "open",
+          "read",
+          "require",
+          "sha256",
+          "str",
+          "utime",
+          "write"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::fsync_directory",
+        "lines": 6,
+        "calls": [
+          "close",
+          "fsync",
+          "open"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::main",
+        "lines": 72,
+        "calls": [
+          "ActiveRoute",
+          "ArgumentParser",
+          "Comms",
+          "OwnerRestartRequest",
+          "Path",
+          "PublishOpenhcsRecovery",
+          "RestartEnvironment",
+          "RuntimeError",
+          "active_route_path",
+          "add_argument",
+          "any",
+          "capture",
+          "carry",
+          "close",
+          "decode",
+          "digest",
+          "dump",
+          "dumps",
+          "encode",
+          "exists",
+          "fdopen",
+          "fileno",
+          "flock",
+          "flush",
+          "fsync",
+          "is_absolute",
+          "is_file",
+          "is_symlink",
+          "len",
+          "mkdir",
+          "open",
+          "parse_args",
+          "print",
+          "read_active_route",
+          "read_bytes",
+          "require_idle",
+          "require_selection",
+          "require_stage",
+          "restart_owners",
+          "snapshot",
+          "stat",
+          "str",
+          "threads",
+          "time",
+          "tuple"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::failed",
+        "lines": 5,
+        "calls": [
+          "leave_stopped"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::complete",
+        "lines": 13,
+        "calls": [
+          "RuntimeError",
+          "capture",
+          "complete",
+          "encode",
+          "note",
+          "replace",
+          "snapshot",
+          "str",
+          "super",
+          "time",
+          "zip"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::bind_target_launch",
+        "lines": 2,
+        "calls": [
+          "pin_private_nk_launch"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::manifest",
+        "lines": 2,
+        "calls": []
+      },
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::note",
+        "lines": 4,
+        "calls": [
+          "_atomic_write_text",
+          "dumps",
+          "loads",
+          "read_text",
+          "update"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::require_sources",
+        "lines": 9,
+        "calls": [
+          "Path",
+          "RuntimeError",
+          "any",
+          "digest",
+          "items",
+          "read_bytes",
+          "validate"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::require_selection",
+        "lines": 12,
+        "calls": [
+          "InputDispositions",
+          "RuntimeError",
+          "read",
+          "require_current",
+          "require_idle",
+          "require_no_clients",
+          "require_publication_preimages",
+          "require_sources",
+          "zip"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::retain_preimages",
+        "lines": 22,
+        "calls": [
+          "Path",
+          "append",
+          "exists",
+          "fsync_directory",
+          "mkdir",
+          "note",
+          "retain_file",
+          "with_suffix"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::protected_originals",
+        "lines": 17,
+        "calls": [
+          "Path",
+          "add",
+          "digest",
+          "exists",
+          "sorted",
+          "str"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/publish_openhcs_recovery.py::after_stopped",
+        "lines": 47,
+        "calls": [
+          "RuntimeError",
+          "_atomic_write_text",
+          "_publish_active_route_locked",
+          "active_route_path",
+          "carry",
+          "clean_environment",
+          "close",
+          "decode",
+          "dumps",
+          "fsync",
+          "note",
+          "open",
+          "protected_originals",
+          "read_active_route",
+          "read_bytes",
+          "readlink",
+          "replace",
+          "require_no_clients",
+          "require_publication_preimages",
+          "require_sources",
+          "retain_preimages",
+          "run",
+          "snapshot",
+          "str",
+          "symlink_to",
+          "validate"
+        ]
+      }
+    ],
+    "tools/cutover/retained_index_cutover.py": [
+      {
+        "declaration": "tools/cutover/retained_index_cutover.py::failed",
+        "lines": 4,
+        "calls": [
+          "leave_stopped"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/retained_index_cutover.py::operation_arguments",
+        "lines": 2,
+        "calls": []
+      },
+      {
+        "declaration": "tools/cutover/retained_index_cutover.py::require_selection",
+        "lines": 15,
+        "calls": [
+          "OwnerRestartRequest",
+          "Path",
+          "RelationViolationError",
+          "declared_schema_digest",
+          "dict",
+          "from_text",
+          "is_absolute",
+          "is_file",
+          "pop",
+          "run",
+          "str",
+          "strip",
+          "threads",
+          "verify_native_package",
+          "with_name"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/retained_index_cutover.py::after_stopped",
+        "lines": 12,
+        "calls": [
+          "Path",
+          "dict",
+          "pop",
+          "run",
+          "str",
+          "with_name"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/retained_index_cutover.py::bind_target_launch",
+        "lines": 2,
+        "calls": [
+          "pin_private_nk_launch"
+        ]
+      }
+    ],
+    "tools/cutover/retained_index_installed_pilot.py": [
+      {
+        "declaration": "tools/cutover/retained_index_installed_pilot.py::main",
+        "lines": 42,
+        "calls": [
+          "AssertionError",
+          "Comms",
+          "Path",
+          "RetainedIndexCutover",
+          "decode",
+          "dict",
+          "dumps",
+          "events",
+          "file_digest",
+          "for_thread",
+          "hexdigest",
+          "len",
+          "loads",
+          "locked",
+          "mkdir",
+          "open",
+          "pop",
+          "print",
+          "restart_owners",
+          "rows",
+          "run",
+          "sorted",
+          "str",
+          "to_wire",
+          "with_name",
+          "write_text"
+        ]
+      }
+    ],
+    "tools/cutover/retained_index_writer.py": [
+      {
+        "declaration": "tools/cutover/retained_index_writer.py::bus_digest",
+        "lines": 3,
+        "calls": [
+          "file_digest",
+          "hexdigest",
+          "open"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/retained_index_writer.py::main",
+        "lines": 28,
+        "calls": [
+          "Path",
+          "RelationViolationError",
+          "WireLog",
+          "_private_marker_unlocked",
+          "bus_digest",
+          "declared_schema_digest",
+          "dict",
+          "locked",
+          "pop",
+          "read_metadata_unlocked",
+          "replace",
+          "run",
+          "str",
+          "strip",
+          "unlink",
+          "with_name",
+          "write_metadata_unlocked"
+        ]
+      }
+    ],
+    "tools/cutover/retained_routing_cutover.py": [
+      {
+        "declaration": "tools/cutover/retained_routing_cutover.py::operation_arguments",
+        "lines": 2,
+        "calls": [
+          "str"
+        ]
+      },
+      {
+        "declaration": "tools/cutover/retained_routing_cutover.py::require_selection",
+        "lines": 12,
+        "calls": [
+          "RelationViolationError",
+          "exists",
+          "geteuid",
+          "is_absolute",
+          "is_dir",
+          "is_symlink",
+          "require_selection",
+          "stat",
+          "super",
+          "with_name"
+        ]
+      }
+    ]
+  },
+  "dynamic_limit": "Call expressions/imports are source evidence; receiver/MRO/process ownership is read separately, not inferred from syntax.",
+  "writer_sha256": "7b5ea337d2bc7e30933914c9f819a0015f283b076f8db699d1a6a35095c542d4",
+  "parent_exact_writer_equal": true,
+  "other_product_and_operator_changes": ""
+}
