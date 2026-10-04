@@ -342,6 +342,11 @@ class NativeCommitPosition:
         if not self.entry_id or not self.leaf_id:
             raise ValueError("Invalid native metadata receipt; never replay")
 
+    def require_entry(self, entry) -> None:
+        """A returned commit refers to this original journal entry."""
+        if entry.require_entry_id() != self.entry_id:
+            raise CompactionJournalError("Original committed source cut differs")
+
 
 @dataclass(frozen=True)
 class CompactionPublishedMetadata(NativeCommitPosition):

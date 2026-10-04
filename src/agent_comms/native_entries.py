@@ -282,10 +282,9 @@ class NativeEvidenceRead:
         """
         from .native_session_reopen import NativeSessionIdentity
 
-        witness.require_session(str(self.source.path))
         witness.require_current_file(self.source.path)
         header, entries = self.observe()
-        if header.id != witness.session_id:
+        if not witness.covers(self, witness.revision):
             raise ValueError("Native retained facts belong to another session")
         branch = self.branch(witness.leaf_id, entries)
         calls = {}
@@ -336,8 +335,7 @@ class NativeEvidenceRead:
         originals = self.entry_index(entries)
         covered = set()
         for context in contexts:
-            if context.session_file != self.source.path:
-                raise ValueError("Recorded source anchor belongs to another session file")
+            self.require_path(context.session_file)
             pending = set()
             identity = context.session_entry_id
             while identity is not None and identity not in covered:
