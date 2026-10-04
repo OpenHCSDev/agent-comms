@@ -1,0 +1,9 @@
+actual_selected_launch_custody {"preclaim_and_first_verifications": 1, "borrowed_verifications": 0, "independent_verifications": 1, "auth_changed": true, "children_retired": [true, true], "children": [{"identity": {"pid": 3563915, "start_time": 54822456}, "alive": false, "group_members": []}, {"identity": {"pid": 3563945, "start_time": 54822674}, "alive": false, "group_members": []}], "cancelled_saved_read_joined": true, "source_bytes": 42376298, "source_sha256": "659a4f3af42b124bac4a50ee2d44b1ef2c58dcf9f7d82def9426781d855a5002", "provider_requests": 0}
+..
+=============================== warnings summary ===============================
+../../../../usr/lib/python3.14/site-packages/_pytest/config/__init__.py:864
+  /usr/lib/python3.14/site-packages/_pytest/config/__init__.py:864: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; pytest_asyncio.plugin
+    self.import_plugin(arg, consider_entry_points=True)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2 passed, 1 warning in 15.99s
