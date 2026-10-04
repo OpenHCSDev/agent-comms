@@ -1,0 +1,10 @@
+[
+  {
+    "path": "manifest.segments[5].captured_text[0]",
+    "kind": "value",
+    "actual_sha256": "2199a794eef35602681038cea53a207cd84df8bb077588794b53a8fa92ef5717",
+    "recorded_sha256": "ebe9f5683cf5c85899dbdefa46e73d8343cf8bfbf509b1f80077af2922c4ccde",
+    "actual_length": 29406,
+    "recorded_length": 28851
+  }
+]
