@@ -23,7 +23,7 @@ from .thread_status import StoppedThreadStatus
 if TYPE_CHECKING:
     pass
 from .agent_activity import AgentActivity
-from .channel_management import ChannelManagement
+from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
 from .importing import ImportFormat, ImportLimits, ImportReceipt
@@ -91,7 +91,7 @@ class ThreadManagement:
         root: Path,
         registry: Registration,
         bus: MessageBus,
-        channels: ChannelManagement,
+        catalog: ChannelCatalog,
         agents: AgentActivity,
         owners: OwnerLifecycle,
         ledger: CollaborationLedger,
@@ -99,7 +99,7 @@ class ThreadManagement:
         self.root = root
         self.registry = registry
         self.bus = bus
-        self.channels = channels
+        self.catalog = catalog
         self.agents = agents
         self.owners = owners
         self.ledger = ledger
@@ -408,7 +408,7 @@ class ThreadManagement:
         self.agents.activity.rename_thread(previous, current)
         self.agents.runtime_info.rename_thread(previous, current)
         self.ledger.rename_thread(previous, current)
-        with self.channels.catalog.editing() as document:
+        with self.catalog.editing() as document:
             document.rename_thread(previous, current)
         if intent_created:
             # Persist completion only after both authorities and ancillary
@@ -499,11 +499,21 @@ class ThreadManagement:
     def archive(self, name: str) -> None:
         """Hide a stopped participant from presence while retaining messages."""
         with _store_lock(self._wire_lock_path):
-            canonical = self.registry.require(name).name
-            if not self.registry.status(canonical).stopped:
-                raise RelationViolationError("Stop a running thread before archiving it.")
-            self.registry.archive(canonical)
-            self.agents.runtime_info.remove(canonical)
+            self._archive_unlocked((self.registry.require(name),))
+
+    def _archive_unlocked(self, originals: Sequence[Thread]) -> None:
+        self.registry.archive_originals(originals)
+        for original in originals:
+            self.agents.runtime_info.remove(original.name)
+
+    def _delete_unlocked(self, originals: Sequence[Thread]) -> None:
+        """Remove stopped declarations, preserving histories and uncertain inputs."""
+        self.registry.delete_originals(originals)
+        with self.catalog.editing() as document:
+            for original in originals:
+                document.remove_thread(original.name)
+        for original in originals:
+            self.agents.runtime_info.remove(original.name)
 
 
     def fork(self, spec: ForkSpec, pi_bin: str | None = None) -> Thread:

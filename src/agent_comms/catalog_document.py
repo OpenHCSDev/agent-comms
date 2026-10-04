@@ -128,16 +128,6 @@ class CatalogDocument:
         if name in self.all_tags(threads) and name != previous:
             raise ValueError(f"Tag {name!r} already exists; tag rename does not merge identities.")
 
-    def require_unreferenced_tag(self, tag: str) -> None:
-        references = sorted(
-            name for name, view in self.saved_views.items() if tag in view.predicate.tags
-        )
-        if references:
-            raise ValueError(
-                f"Tag {tag!r} is referenced by saved views: {', '.join(references)}; "
-                "update or delete those views first."
-            )
-
     def remember_tags(self, tags: frozenset[str], created_at: float) -> None:
         for tag in tags:
             self.preferences.setdefault(f"#{tag}", ChannelPreferences(created_at=created_at))
