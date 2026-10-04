@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from agent_comms.comms import Comms
 from agent_comms.compaction_identity import SummaryOperationIdentity
@@ -60,6 +61,44 @@ class RecordedMeasurementTests(unittest.TestCase):
         raw = json.dumps(FieldCodec.encode(value), ensure_ascii=False).encode()
         path.write_bytes(raw)
         return FileProvenance(str(path), hashlib.sha256(raw).hexdigest())
+
+    def test_group_reader_shared_once_and_closed_after_second_arm_refuses(self):
+        # Resource plumbing only: detect duplicated acquisition and a leaked
+        # reader when the later arm refuses. This does not simulate native proof.
+        self.session.write_text(json.dumps({'type': 'session', 'id': self.identity.session_id}) + '\n')
+        self.session.chmod(0o600)
+        probes = tuple(RecordedNativeProbe(self.identity, digit * 32, 'answer')
+                       for digit in ('a', 'b'))
+        runs = tuple(RecordedNativeProbes({'r1': probe}) for probe in probes)
+        readers = []
+        refusal = ValueError('second original arm refused')
+
+        def read(probe, evidence, source):
+            self.assertIs(source, evidence)
+            self.assertEqual(evidence.observe()[0].id, self.identity.session_id)
+            readers.append(evidence)
+            if probe == probes[1]:
+                raise refusal
+            return {}
+
+        with patch.object(NativeEntry, 'open_evidence', wraps=NativeEntry.open_evidence) as opened:
+            with patch.object(RecordedNativeProbe, 'read', read):
+                with self.assertRaises(ValueError) as failed:
+                    RecordedNativeProbes.observe_runs(runs, coding_scenario().rounds)
+            self.assertEqual(opened.call_count, 1)
+        self.assertIs(failed.exception, refusal)
+        self.assertIs(readers[0], readers[1])
+        self.assertTrue(readers[0].source.stream.closed)
+        self.assertFalse(readers[0].entries)
+
+    def test_group_round_membership_refuses_before_reader_acquisition(self):
+        # Reject unknown original inputs at their owner, before opening either arm.
+        probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
+        runs = (RecordedNativeProbes({}), RecordedNativeProbes({'foreign': probe}))
+        with patch.object(NativeEntry, 'open_evidence') as opened:
+            with self.assertRaisesRegex(ValueError, 'Unknown native rounds'):
+                RecordedNativeProbes.observe_runs(runs, coding_scenario().rounds)
+        opened.assert_not_called()
 
     def test_original_reader_group_borrows_parent_once_and_retires_on_consumer_error(self):
         # Prevent sibling-source acquisition from replacing inheritance with
@@ -454,20 +493,20 @@ class RecordedMeasurementTests(unittest.TestCase):
         with NativeEntry.open_evidence(self.session) as evidence:
             _, entries = evidence.observe()
             branch = evidence.branch('answer', entries)
-            measured = probe.construction(evidence, branch,
+            measured = probe.construction(evidence, evidence, branch,
                                          manifest(str(self.session), ('first', 'probe')), {}, None, {'evaluated': False}, branch[-1])['source_coverage']
             self.assertTrue(measured['complete_message_reference_coverage'])
             self.assertEqual(measured['included_message_entries'], ('first', 'probe'))
             self.assertFalse(measured['full_context_capacity']['evaluated'])
-            partial = probe.construction(evidence, branch,
+            partial = probe.construction(evidence, evidence, branch,
                                          manifest(str(self.session), ('probe',)), {}, None, {'evaluated': False}, branch[-1])['source_coverage']
             self.assertEqual(partial['unreferenced_message_entries'], ('first',))
             self.assertFalse(partial['complete_message_reference_coverage'])
             for path, ids in ((str(self.root / 'foreign'), ('probe',)),
                               (str(self.session), ('missing',)), (str(self.session), ('answer',))):
                 with self.assertRaises(ValueError):
-                    probe.construction(evidence, branch, manifest(path, ids), {}, None, {'evaluated': False}, branch[-1])
-            self.assertFalse(probe.construction(evidence, branch, None, {}, None, {'evaluated': False}, branch[-1])['source_coverage']['evaluated'])
+                    probe.construction(evidence, evidence, branch, manifest(path, ids), {}, None, {'evaluated': False}, branch[-1])
+            self.assertFalse(probe.construction(evidence, evidence, branch, None, {}, None, {'evaluated': False}, branch[-1])['source_coverage']['evaluated'])
 
     def test_proposed_action_uses_original_scoped_decision_not_answer_label(self):
         # Prevent exact-answer success from becoming an execution or authority

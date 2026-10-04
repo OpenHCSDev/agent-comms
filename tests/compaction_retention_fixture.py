@@ -114,42 +114,67 @@ class RecordedNativeProbes:
                 raise ValueError("Continuation source has unrecorded work or different ancestry")
         return fork
 
-    def observe(self, rounds):
-        """Visit declared cuts in frozen round order, borrowing each source once."""
+    def checkpoints_for(self, rounds):
+        """Select this trajectory's original cuts against the complete oracle."""
+        identities = {item.identity for item in rounds}
+        unexpected = self.rounds.keys() - identities
+        if unexpected:
+            raise ValueError(f"Unknown native rounds: {sorted(unexpected)}")
         if self.rounds.keys() & self.checkpoints.keys():
             raise ValueError("A probed round's checkpoint belongs on its RecordedNativeProbe")
         selected = dict(self.checkpoints)
         for identity, probe in self.rounds.items():
             if probe.checkpoint is not None:
                 selected[identity] = probe.checkpoint
-        unexpected = selected.keys() - {item.identity for item in rounds}
+        unexpected = selected.keys() - identities
         if unexpected:
             raise ValueError(f"Unknown checkpoint rounds: {sorted(unexpected)}")
+        return selected
+
+    @staticmethod
+    def observe_runs(runs, rounds):
+        """Borrow originals for one bounded observation, then release all readers.
+
+        A pair shares its parent descriptor/decoded bytes, never a cached proof.
+        Each arm still observes and corroborates its own original records.
+        Batch comparison calls this once per pair, not for the entire study.
+        """
+        runs = tuple(runs)
+        selected = tuple(run.checkpoints_for(rounds) for run in runs)
+        with RecordedNativeProbe.original_readers(
+                chain.from_iterable(run.rounds.values() for run in runs),
+                chain.from_iterable(cuts.values() for cuts in selected)) as sources:
+            return tuple(run.observe_acquired(rounds, sources, cuts)
+                         for run, cuts in zip(runs, selected))
+
+    def observe(self, rounds):
+        """Visit one trajectory using the same acquired-reader algorithm."""
+        observed, = self.observe_runs((self,), rounds)
+        return observed
+
+    def observe_acquired(self, rounds, sources, selected):
         cuts = tuple((item.identity, selected[item.identity]) for item in rounds
                      if item.identity in selected)
-        if not cuts and not self.rounds:
-            return {}, {}
         reports, observations = {}, {}
-        with RecordedNativeProbe.original_readers(self.rounds.values(), selected.values()) as sources:
-            previous = None
-            for identity, checkpoint in cuts:
-                evidence = sources[Path(checkpoint.reference.session_file)]
-                header, _ = evidence.observe()
-                session = NativeSessionIdentity(header.id, str(evidence.source.path))
-                attempt, entry, covered, assembly = checkpoint.capture(session, evidence)
-                report = checkpoint._report(attempt, entry, covered, assembly)
-                if previous is not None:
-                    old, prior_attempt, prior_entry, prior_session = previous
-                    prior_session.require_same_session(session)
-                    if prior_entry.id == entry.id or prior_entry not in evidence.branch(entry.id, evidence.entries):
-                        raise ValueError("Repeated measurements require distinct original ancestor cuts")
-                    report["source_changes"] = attempt.request.retained.changed_from(prior_attempt.request.retained)
-                    report["revision_mass"] = checkpoint.revision_from(old, prior_attempt, attempt)
-                reports[identity] = report
-                previous = checkpoint, attempt, entry, session
-            for identity, probe in self.rounds.items():
-                observations[identity] = probe.read(sources[Path(probe.session.session_file)],
-                                                    sources[probe.checkpoint_source])
+        previous = None
+        for identity, checkpoint in cuts:
+            evidence = sources[Path(checkpoint.reference.session_file)]
+            header, _ = evidence.observe()
+            session = NativeSessionIdentity(header.id, str(evidence.source.path))
+            attempt, entry, covered, assembly = checkpoint.capture(session, evidence)
+            report = checkpoint._report(attempt, entry, covered, assembly)
+            if previous is not None:
+                old, prior_attempt, prior_entry, prior_session = previous
+                prior_session.require_same_session(session)
+                if prior_entry.id == entry.id or prior_entry not in evidence.branch(entry.id, evidence.entries):
+                    raise ValueError("Repeated measurements require distinct original ancestor cuts")
+                report["source_changes"] = attempt.request.retained.changed_from(prior_attempt.request.retained)
+                report["revision_mass"] = checkpoint.revision_from(old, prior_attempt, attempt)
+            reports[identity] = report
+            previous = checkpoint, attempt, entry, session
+        for identity, probe in self.rounds.items():
+            observations[identity] = probe.read(sources[Path(probe.session.session_file)],
+                                                sources[probe.checkpoint_source])
         return reports, observations
 
     def alignment(self, other, observations, baseline, rounds):
@@ -754,13 +779,14 @@ class RecallScenario:
         )
 
     def observe_native(self, condition: Condition, probes: RecordedNativeProbes):
-        unexpected = probes.rounds.keys() - {item.identity for item in self.rounds}
-        if unexpected:
-            raise ValueError(f"Unknown native rounds: {sorted(unexpected)}")
-        checkpoints, evidence = probes.observe(self.rounds)
+        return self.score_observed(condition, probes.observe(self.rounds))
+
+    def score_observed(self, condition, observed):
+        """Score acquired original observations with the frozen oracle once."""
+        checkpoints, evidence = observed
         scored = []
         for item in self.rounds:
-            if item.identity in probes.rounds:
+            if item.identity in evidence:
                 score, _ = item.score_recorded(evidence[item.identity])
             else:
                 score = item.score({})
@@ -775,8 +801,9 @@ class RecallScenario:
         """The same frozen oracle scores both arms; original records own alignment."""
         if condition == baseline_condition:
             raise ValueError("A comparison requires distinct declared conditions")
-        score, cuts, original = self.observe_native(condition, probes)
-        control, baseline_cuts, baseline_original = self.observe_native(baseline_condition, baseline)
+        observed, baseline_observed = RecordedNativeProbes.observe_runs((probes, baseline), self.rounds)
+        score, cuts, original = self.score_observed(condition, observed)
+        control, baseline_cuts, baseline_original = self.score_observed(baseline_condition, baseline_observed)
         alignment = probes.alignment(baseline, original, baseline_original, self.rounds)
         return {"candidate": score.public_native(cuts, original),
                 "baseline": control.public_native(baseline_cuts, baseline_original),

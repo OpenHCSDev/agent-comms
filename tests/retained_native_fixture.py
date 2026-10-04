@@ -271,13 +271,17 @@ class RecordedNativeCheckpoint:
     def fork_condition_source(self,journal:Path,session_file:Path):
         """Bind captured narrative through the recorded SDK creation, not input authority."""
         with NativeEntry.open_evidence(session_file) as child, self.original_source() as (_,source):
-            creation,original,(_,entry,_,assembly)=self._fork_capture(journal,child,source)
-            constructed=self._condition_source(original,entry,assembly)
-            if not constructed['evaluated']:
-                return constructed
-            return {**constructed,'session':FieldCodec.encode(NativeSessionIdentity(
-                creation.session_id,creation.session_file)),
-                    'fork_creation':FieldCodec.encode(creation)}
+            return self.fork_condition_acquired(journal,child,source)
+
+    def fork_condition_acquired(self,journal,child,source):
+        """Use the caller's original readers with the same fork/source proof."""
+        creation,original,(_,entry,_,assembly)=self._fork_capture(journal,child,source)
+        constructed=self._condition_source(original,entry,assembly)
+        if not constructed['evaluated']:
+            return constructed
+        return {**constructed,'session':FieldCodec.encode(NativeSessionIdentity(
+            creation.session_id,creation.session_file)),
+                'fork_creation':FieldCodec.encode(creation)}
 
     def capture_for_probe(self,session,evidence,fork_journal,source):
         """A probe may follow the original cut or its corroborated SDK child."""
@@ -468,13 +472,13 @@ class RecordedNativeProbe:
             request_observations=original(observed) if observed.is_file() else None,
             condition_observation=original(condition_observation) if condition_observation is not None else None)
 
-    def applied_condition(self,texts,serialized,manifest):
+    def applied_condition(self,evidence,parent,texts,serialized,manifest):
         """Join this input's SDK hook to the corroborated narrative and actual bytes."""
         if self.condition_observation is None:
             return {'evaluated':False,'reason':'Original condition application not captured'}
         if self.checkpoint is None or self.fork_journal is None or not serialized['evaluated']:
             return {'evaluated':False,'reason':'Original checkpoint, fork and SDK bytes required'}
-        source=self.checkpoint.fork_condition_source(self.fork_journal,Path(self.session.session_file))
+        source=self.checkpoint.fork_condition_acquired(self.fork_journal,evidence,parent)
         if not source['evaluated']:
             return source
         records=self.checkpoint.read_json_lines(self.condition_observation)
@@ -733,7 +737,7 @@ class RecordedNativeProbe:
         with self.original_readers((self,)) as sources:
             return self.read(sources[Path(self.session.session_file)], sources[self.checkpoint_source])
 
-    def construction(self, evidence, branch, manifest, checkpoint, texts, serialized, answer):
+    def construction(self, evidence, parent, branch, manifest, checkpoint, texts, serialized, answer):
         """Corroborate original SDK source references, not a condition label.
 
         The successful input-to-answer branch owns the available source. A
@@ -800,7 +804,7 @@ class RecordedNativeProbe:
             "request_budget": budget,
             "request_completion": self.request_completion(budget, answer),
             "source_coverage": coverage,
-            "condition_application": self.applied_condition(texts,serialized,manifest),
+            "condition_application": self.applied_condition(evidence,parent,texts,serialized,manifest),
         }
 
     @staticmethod
@@ -919,7 +923,7 @@ class RecordedNativeProbe:
             "answer_text": answer.message.authoritative_text,
             "model_steps": self.model_steps(branch),
             "tool_steps": tools,
-            "construction": self.construction(evidence, source_branch, manifest, checkpoint, texts, serialized, answer),
+            "construction": self.construction(evidence, source, source_branch, manifest, checkpoint, texts, serialized, answer),
             "scoped_facts": scoped,
             "answer_support": {
                 "tool_calls": len(tools), "tools": tuple(step["call"].name for step in tools),
