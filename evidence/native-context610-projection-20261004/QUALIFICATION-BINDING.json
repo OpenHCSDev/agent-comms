@@ -1,0 +1,20 @@
+{
+  "state": "Original610 SDK scoped qualification accepted; artifact and original negatives unchanged",
+  "ready_head": "672a99f9c1f50e9ae0a5b4396f8f5ef46fdfb301",
+  "actual_merge": "e1c399d7a1a93411e8eba14b62c1b7ebce17dcf0",
+  "owner_ready": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/context-segment-capture-20261003/READY.json",
+  "owner_ready_sha256": "ce9e77085bba52e6377fc4704518f40c89208952ad5966910d75398fcc6918be",
+  "original_artifact_receipt_sha256": "a72785a4f8d7c4f109bb2cb09b4670525e9141bbe5d87dfe12f14d5190da7f2e",
+  "manifest": "2ea0a4d4ff2e362864c156e4b11642775b3f2a96e7f01522b346b6f6d9526936",
+  "tree": "61015ef9b5738be236d9de4dd2d59d24857a6f3b77baa69caa5332addaec280b",
+  "artifact_read_lease_returned": true,
+  "original_sdk_negatives": [
+    "01 simultaneous-artifact import fence refused",
+    "02 explicit process exit truncated stdout; driver now drains callback and joins childclose"
+  ],
+  "qualification": "Original SDK source capture/projection and recorded root/child/mixed contracts, not model onContextReady latency, HTTP bytes, UI performance, historical delay attribution or S4 recall. Whole SDK gate includes reference/candidate startup and private SDK fork; capture milliseconds cover only TurnContext.capture.",
+  "actual_gate_seconds": 43.92502921400592,
+  "matching_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2ea0a4d4ff2e3628/node_modules/@earendil-works/pi-coding-agent",
+  "receiving416_417_current_native_stays_d5_until_safe_window": true,
+  "new_build_provider_or_public_actions": false
+}
