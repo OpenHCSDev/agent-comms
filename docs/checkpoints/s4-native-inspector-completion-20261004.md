@@ -16,9 +16,10 @@ across `src`, `tests`, and `tools`. Native launch patching remains dynamically
 bound and is not resolved by that lexical search. JavaScript ownership is read
 at the original observer; Python AST output does not claim JavaScript coverage.
 
-This is private instrumentation only. No SDK/artifact execution, provider input,
-package changes, or study is authorized here. The original request-ID/JSON
-observer corrections are retained; their actual SDK execution remains open.
+This is private instrumentation only. The initial source checkpoint did not
+execute an SDK/artifact or provider. Parent subsequently renewed the original
+086 read/execution loan for one changed authored SDK stream; that qualification
+is recorded below. No package changes or provider study were authorized.
 
 ## Implemented
 
@@ -58,8 +59,35 @@ the existing child owner carries retirement. This is lexical evidence, not a
 claim to resolve dynamic launch patching or JavaScript with Python AST.
 
 The published [receipt](../../evidence/s4-native-inspector-completion-20261004/receipt.json)
-pins source and raw controls. No actual SDK/inspector attachment, artifact loan,
-provider input, or study was run. The changed observer's SDK qualification,
-configured matched arms, capacity, and the full S4 study remain unfinished.
-The original #659 timeout and tool-capture refusals remain unchanged. The
-separate 30-pair/USD75 study is still unapproved.
+pins source and raw controls. The original #659 timeout and tool-capture refusals
+remain unchanged. The separate 30-pair/USD75 study is still unapproved.
+
+## Changed SDK boundary qualified
+
+One original `native_turn_context_contract.mjs` controlled SDK stream ran with
+the changed inspector against the explicitly renewed immutable 086 artifact.
+The existing authored constructor/transform/converter/onContextReady path was
+used to reach this changed boundary; no old history/selection controls were
+repeated for additional credit. Both children exited normally with code 0 in
+1.778237737s. Node's own completion event released the debugger; the controller
+did not terminate it to obtain exit. Both original owned groups are retired.
+
+The inspector selected exactly one committed-request capture and no constructor
+preview refusal. The original reader authenticated all five segment lengths,
+digests and JSON values: 12,214 UTF-8 bytes in total, including the 8,543-byte
+system layer and 2,778-byte tool catalog. Original authored project/append
+instructions survived, and the complete converter sequence joined to original
+request ID `0a84628c-c2a9-474e-8bf2-e5735d708c64`. The whole-value reader remained
+strict; SDK tool callbacks crossed original JSON serialization before inspection.
+
+The authored journal was unchanged, hooks and canonical messages were restored,
+and the original 086 complete package commitment passed before and after. The
+renewed **086 READ/execution loan is handed back**, with both children gone.
+The new source/terminal/reader/raw receipt hashes are retained alongside the
+unchanged #659 negatives. The earlier seven authored checks were not repeated.
+
+This qualifies the changed SDK observer lifetime/request-ID/whole JSON boundary:
+one controlled stream, zero submitted prompts, zero provider calls, no enrolled
+native claim or wire publication. It is not a configured provider turn, HTTP
+capture, matched study arm, capacity, model recall or whole-turn speed result.
+Those full S4 acceptance gaps remain open.
