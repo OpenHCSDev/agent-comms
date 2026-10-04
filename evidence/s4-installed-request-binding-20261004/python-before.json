@@ -1,0 +1,156 @@
+{
+  "parsed": 365,
+  "omitted": [],
+  "sites": [
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 593,
+      "declaration": "condition_construction"
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 567,
+      "call": "self.condition_construction"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 475,
+      "declaration": "applied_condition"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 510,
+      "declaration": "condition_message_binding"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 500,
+      "call": "self.condition_message_binding"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 866,
+      "call": "self.applied_condition"
+    },
+    {
+      "file": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 23,
+      "declaration": "observe_native_requests"
+    },
+    {
+      "file": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 74,
+      "call": "observe_native_requests"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1040,
+      "call": "scored.condition_construction"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1049,
+      "call": "scored.condition_construction"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1100,
+      "call": "probe.condition_message_binding"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1013,
+      "call": "captured('partial.jsonl', (applied, retired)).applied_condition"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1019,
+      "call": "selected.applied_condition"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1055,
+      "call": "replace(scored, condition=condition).condition_construction"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1114,
+      "call": "probe.condition_message_binding"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1025,
+      "call": "captured('unretired.jsonl', (applied, conversion)).applied_condition"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1029,
+      "call": "selected.applied_condition"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1068,
+      "call": "scored.condition_construction"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1103,
+      "call": "probe.condition_message_binding"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1104,
+      "call": "probe.condition_message_binding"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1106,
+      "call": "probe.condition_message_binding"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1112,
+      "call": "probe.condition_message_binding"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1061,
+      "call": "scored.condition_construction"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 1067,
+      "call": "scored.condition_construction"
+    },
+    {
+      "file": "tests/test_selected_summary_failure_native.py",
+      "line": 298,
+      "call": "observe_native_requests"
+    },
+    {
+      "file": "tests/test_selected_summary_failure_native.py",
+      "line": 339,
+      "call": "observe_native_requests"
+    },
+    {
+      "file": "tests/three_cut_retention_configured_journey.py",
+      "line": 202,
+      "call": "observe_native_requests"
+    },
+    {
+      "file": "tests/three_cut_retention_configured_journey.py",
+      "line": 312,
+      "call": "observe_native_requests"
+    },
+    {
+      "file": "tests/three_cut_retention_configured_journey.py",
+      "line": 77,
+      "call": "observe_native_requests"
+    },
+    {
+      "file": "tests/three_cut_retention_configured_journey.py",
+      "line": 117,
+      "call": "observe_native_requests"
+    }
+  ]
+}
