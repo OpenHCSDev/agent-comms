@@ -16,6 +16,7 @@ from agent_comms import native_package
 from agent_comms.native_package import (
     NativePackageError,
     package_tree_digest,
+    share_native_resources,
     verify_native_package,
 )
 
@@ -78,8 +79,70 @@ def test_unsafe_filesystem_shape_fails_without_opening_special_files(package, sh
         os.mkfifo(extra)
     else:
         (package / "package.json").chmod(0o666)
-    with pytest.raises(NativePackageError, match="links or special|owner-controlled"):
+    with pytest.raises(NativePackageError, match="symlinks or special|owner-controlled|shared resource is writable"):
         verify_native_package(package)
+
+
+def test_new_build_shares_only_equal_frozen_resources(package, tmp_path):
+    deployments = tmp_path / "deployments"
+    donor = deployments / ".pi-native-first/node_modules/@earendil-works/pi-coding-agent"
+    fresh = tmp_path / "new-build"
+    for destination in (donor, fresh):
+        shutil.copytree(package, destination)
+        (destination / "dist").mkdir()
+        (destination / "dist/agent-comms-import-fence.mjs").write_bytes(
+            (Path(__file__).resolve().parents[1] / "stack/native-import-fence.mjs").read_bytes()
+        )
+    share_native_resources(donor, deployments)
+    original_digest = package_tree_digest(donor)
+    original_file = donor / "node_modules/dependency/index.js"
+    changed_file = fresh / "node_modules/dependency/index.js"
+    changed_file.write_text("export const value = 2;\n")
+    before = package_tree_digest(fresh)
+    result = share_native_resources(fresh, deployments)
+    assert result["shared_files"] > 0 and result["shared_content_bytes"] > 0
+    assert os.path.samefile(donor / "package.json", fresh / "package.json")
+    assert not os.path.samefile(original_file, changed_file)
+    assert original_file.read_text() == "export const value = 1;\n"
+    assert package_tree_digest(donor) == original_digest
+    assert package_tree_digest(fresh) == before
+    assert not (fresh / "package.json").stat().st_mode & 0o222
+
+
+def test_previous_import_fence_is_never_a_resource_donor(package, tmp_path):
+    deployments = tmp_path / "deployments"
+    donor = deployments / ".pi-native-old/node_modules/@earendil-works/pi-coding-agent"
+    fresh = tmp_path / "new-build"
+    for destination, fence in ((donor, "old independent-file fence"), (fresh, "new immutable fence")):
+        shutil.copytree(package, destination)
+        (destination / "dist").mkdir()
+        (destination / "dist/agent-comms-import-fence.mjs").write_text(fence)
+    for path in donor.rglob("*"):
+        if path.is_file():
+            path.chmod(path.stat().st_mode & ~0o222)
+    original_digest = package_tree_digest(donor)
+    assert share_native_resources(fresh, deployments)["shared_files"] == 0
+    assert (donor / "package.json").stat().st_nlink == 1
+    assert package_tree_digest(donor) == original_digest
+
+
+def test_readonly_resource_borrow_does_not_change_content_provenance(package, tmp_path, monkeypatch):
+    resource = package / "package.json"
+    resource.chmod(0o444)
+    read = os.read
+    borrowed = False
+
+    def acquire_name(fd, count):
+        nonlocal borrowed
+        block = read(fd, count)
+        if block and not borrowed:
+            borrowed = True
+            os.link(resource, tmp_path / "another-deployment-resource")
+        return block
+
+    monkeypatch.setattr(os, "read", acquire_name)
+    verify_native_package(package)
+    assert borrowed
 
 
 @pytest.mark.parametrize("limit", ["MAX_BYTES", "MAX_ENTRIES", "MAX_DEPTH"])

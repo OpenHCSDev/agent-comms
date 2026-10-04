@@ -59,6 +59,17 @@ assert.deepEqual(run('try { await import("data:text/javascript,export default 1"
 assert.deepEqual(run(`import {loadApprovedExtension} from './agent-comms-import-fence.mjs';
     console.log((await loadApprovedExtension(${JSON.stringify(entry)}))());`),
     { output: 'committed-host-sdk', executed: false });
+// Immutable native resources may share bytes; writable code aliases may not.
+const sharedResource = join(base, 'shared-resource.mjs');
+put(sharedResource, 'export const value = "frozen-resource";');
+fs.chmodSync(sharedResource, 0o444);
+fs.linkSync(sharedResource, join(dist, 'shared-resource.mjs'));
+assert.deepEqual(run('console.log((await import("./shared-resource.mjs")).value);'),
+    { output: 'frozen-resource', executed: false });
+fs.chmodSync(sharedResource, 0o644);
+assert.deepEqual(run('try { await import("./shared-resource.mjs"); } catch(e) {console.log(e.code);}'),
+    { output: 'ERR_NATIVE_IMPORT_BOUNDARY', executed: false });
+fs.chmodSync(sharedResource, 0o444);
 const sourceProbe = `import {loadApprovedExtension} from './agent-comms-import-fence.mjs';
     try { console.log((await loadApprovedExtension(${JSON.stringify(sourceEntry)}))()); }
     catch(e) { console.log(e.code); }`;
@@ -93,7 +104,7 @@ put(entry, 'if (typeof module === "undefined") throw Object.assign(new Error("na
 assert.deepEqual(run(`import {loadApprovedExtension} from './agent-comms-import-fence.mjs';
     try { await loadApprovedExtension(${JSON.stringify(entry)}); } catch(e) { console.log(e.code); }`),
     { output: 'NATIVE_FAILURE', executed: false });
-let cases = 14;
+let cases = 16;
 if (process.env.PI_NATIVE_PACKAGE_DIR) {
     // Copy the pinned Jiti dependency; never let its evaluator/cache touch a frozen artifact.
     const vendor = join(base, 'old-jiti');
