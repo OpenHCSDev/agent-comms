@@ -4,6 +4,7 @@ import {mkdirSync, writeFileSync, readFileSync} from 'node:fs';
 import {join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
+import {spawn} from 'node:child_process';
 import {constructNativeConditions,applyBoundedNativeCondition,
     transformBoundedNativeCondition,armBoundedNativeCondition} from './retained_native_conditions.mjs';
 
@@ -13,6 +14,26 @@ globalThis.fetch = async () => {throw new Error('SOURCE_CONTRACT_FORBIDS_NETWORK
 const pi = await import(pathToFileURL(join(pkg,'dist/index.js')));
 const {TurnContext,NativeInputClaim} = await import(pathToFileURL(join(pkg,'dist/core/turn-context.js')));
 const {estimateTokens} = await import(pathToFileURL(join(pkg,'dist/core/compaction/compaction.js')));
+if (process.argv.includes('--comparison-child')) {
+    // Each SDK keeps its original committed import boundary. The child borrows
+    // this fixture's selected file/coordinates and acquired JSON values only.
+    let input=''; for await (const bytes of process.stdin) input+=bytes;
+    const request=JSON.parse(input);
+    const runtime=await pi.ModelRuntime.create({authPath:join(request.agentDir,'auth.json'),
+        modelsPath:join(request.agentDir,'models.json'),modelsStorePath:join(request.agentDir,'models-store.json')});
+    const settings=pi.SettingsManager.inMemory({compaction:{enabled:false},retry:{enabled:false}});
+    const loader=new pi.DefaultResourceLoader({cwd:request.cwd,agentDir:request.agentDir,settingsManager:settings});
+    await loader.reload();
+    const manager=pi.SessionManager.open(request.session_file);
+    const {session}=await pi.createAgentSession({cwd:request.cwd,agentDir:request.agentDir,
+        modelRuntime:runtime,settingsManager:settings,sessionManager:manager,resourceLoader:loader});
+    try {
+        const entries=request.entries===undefined ? undefined : request.entries.map(id=>manager.getEntry(id));
+        console.log(JSON.stringify(await measureCapture(TurnContext,session,request.context,entries,
+            {cwd:request.cwd,agentDir:request.agentDir})));
+    } finally {session.dispose();manager.entryStore.close();}
+    process.exit(0);
+}
 const cwd=join(root,'project'),agentDir=join(root,'config');
 mkdirSync(cwd,{recursive:true,mode:0o700});mkdirSync(agentDir,{mode:0o700});
 writeFileSync(join(cwd,'AGENTS.md'),'Original project instruction π.\n');
@@ -52,24 +73,21 @@ try {
     // contract against the original immutable SDK on the same acquired values.
     const comparisonIndex=process.argv.indexOf('--comparison-package');
     const comparisonPackage=comparisonIndex<0 ? undefined : resolve(process.argv[comparisonIndex+1]);
-    const baseline=comparisonPackage ? (await import(pathToFileURL(join(
-        comparisonPackage,'dist/core/turn-context.js')))).TurnContext : undefined;
     const compare=async(selected,context,entries)=>{
-        const measure=async declaration=>{
-            const stringify=JSON.stringify;
-            let journalEncodings=0;
-            JSON.stringify=function(value,...args) {
-                if (value?.kind==='journal') journalEncodings++;
-                return stringify.call(this,value,...args);
-            };
-            const started=performance.now();
-            try {
-                const view=await declaration.capture(selected,context,undefined,entries);
-                return {view,elapsed_ms:performance.now()-started,journal_encodings:journalEncodings};
-            } finally {JSON.stringify=stringify;}
-        };
-        const original=await measure(baseline), current=await measure(TurnContext);
-        const originalFull=original.view.full(), currentFull=current.view.full();
+        const child=spawn(process.execPath,[new URL(import.meta.url).pathname,
+            comparisonPackage,root,'--comparison-child'],{stdio:['pipe','pipe','pipe']});
+        let output='',error='';
+        child.stdout.on('data',bytes=>{output+=bytes;});
+        child.stderr.on('data',bytes=>{error+=bytes;});
+        const exited=new Promise((resolve,reject)=>{
+            child.on('error',reject); child.on('exit',code=>resolve(code));
+        });
+        child.stdin.end(JSON.stringify({cwd,agentDir,session_file:selected.sessionFile,
+            context,entries:entries?.map(entry=>entry.id)}));
+        const code=await exited;
+        assert.equal(code,0,error);
+        const original=JSON.parse(output), current=await measureCapture(TurnContext,selected,context,entries);
+        const originalFull=original.full, currentFull=current.full;
         // The system file reference honestly names each artifact. Its original
         // bytes and every other measurement/source coordinate must be identical.
         const reference=originalFull.segments[0].provenance[1];
@@ -78,12 +96,12 @@ try {
         assert.equal(reference.sha256,currentReference.sha256);
         originalFull.segments[0].provenance[1]={...reference,path:currentReference.path};
         assert.deepEqual(currentFull,originalFull);
-        assert.deepEqual(current.view.render(),context);
-        const expected=original.view.observation('same-acquired-source');
+        assert.deepEqual(current.render,JSON.parse(JSON.stringify(context)));
+        const expected=original.observation;
         expected.segments[0].provenance[1]={...reference,path:currentReference.path};
         expected.values[0].provenance[1]={...reference,path:currentReference.path};
-        assert.deepEqual(current.view.observation('same-acquired-source'),expected);
-        assert.deepEqual(current.view.manifest('same-acquired-source'),
+        assert.deepEqual(current.observation,expected);
+        assert.deepEqual(current.manifest,
             (({values,...manifest})=>manifest)(expected));
         return {messages:context.messages.length,
             original_ms:original.elapsed_ms,current_ms:current.elapsed_ms,
@@ -92,7 +110,7 @@ try {
             exact_manifest_and_values:true,render_identical:true};
     };
     let captureComparison;
-    if (baseline) {
+    if (comparisonPackage) {
         const repeated={...provider,messages:[...provider.messages,...provider.messages,
             {role:'user',content:'Authored transformed SDK value',timestamp:999},
             {role:'user',content:'Second authored transformed SDK value',timestamp:1000}]};
@@ -298,4 +316,24 @@ try {
 
 function hashFile(path) {
     return createHash('sha256').update(readFileSync(path)).digest('hex');
+}
+
+async function measureCapture(declaration,session,context,entries) {
+    const stringify=JSON.stringify;
+    let journalEncodings=0;
+    JSON.stringify=function(value,...args) {
+        if (value?.kind==='journal') journalEncodings++;
+        return stringify.call(this,value,...args);
+    };
+    const started=performance.now();
+    let view,elapsed;
+    try {
+        view=await declaration.capture(session,context,undefined,entries);
+        elapsed=performance.now()-started;
+    } finally {JSON.stringify=stringify;}
+    // The original protocol boundary owns JSON representation, including omitted
+    // undefined JS properties. No alternate import loader or cached source.
+    return JSON.parse(JSON.stringify({full:view.full(),render:view.render(),
+        observation:view.observation('same-acquired-source'),manifest:view.manifest('same-acquired-source'),
+        elapsed_ms:elapsed,journal_encodings:journalEncodings}));
 }
