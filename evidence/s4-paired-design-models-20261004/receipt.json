@@ -1,0 +1,45 @@
+{
+  "implementation": "ed4185d70fb41d55dbf0336c026a5039f964a1fc",
+  "base": "d48c777584f289697b3d0f16adf4754c81c36b32",
+  "raw_root": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-paired-design-models",
+  "raw_sha256": {
+    "owner-before.json": "093d77b43087cc05c7bdfee0f438b43065d15e02fd400f81abce0d3f1c319085",
+    "owner-after.json": "0b36531cc7408b8e06ac3a1e89a45fd2ecbecb884c35ea37c7bfac7afee3bc06",
+    "focused.log": "db87262773a03f7957e630203a5f104111e6bf9f772fccd136a7c25e23d8eb59",
+    "pytest-configuration-refusal.log": "5caeb3a7f556ae66fa1ed4dc55751da886d38412e0d9d22d1adbab229156cffa",
+    "oracle.json": "71a415b30200f49736fdcf2656cf95ee10c33857ef9625b2e6dfb9c18d908a35",
+    "design.json": "0f56b6ff1c65dfb9290de045d24a562fc26b6aea4949ded9a829ec8be9a61ba7",
+    "missing-pairs.json": "0b3f8d547b77fd4b359ead9a34ca91b9cdbb3d0a36bbbb06121e85c9a872ae4c",
+    "cli.stdout.json": "8d03c780b071b59b5b04b25eda1dbc509580e8ebafc56c63dc044034e3b60ce3",
+    "cli.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "qualification": {
+    "focused": "5 passed, 32 deselected, 10 subtests passed in 0.27s",
+    "configuration_refusal": "Initial invocation rejected unavailable repository xdist options before collecting tests; preserved; final single-process addopts override uses unchanged source",
+    "CLI": "Existing --comparison-design/--recorded-pairs consumer exit0/empty stderr; two missing trajectories remain unavailable, no interval",
+    "AST": "734 src/tests/tools modules parsed, zero omissions; lexical source evidence, not dynamic dispatch proof"
+  },
+  "source_scope": "Existing PairedRecallDesign supplies the model requirement; original PiModel compares identities, RecordedNativeProbes borrows existing admitted values and journaled completion selections; final-request-only check removed",
+  "src_stack_tools_delta": 0,
+  "provider_calls": 0,
+  "SDK_calls": 0,
+  "original_record_reads": 0,
+  "native_processes": 0,
+  "new_packages_envs_loans": 0,
+  "not_qualified": [
+    "configured multiple-request capture",
+    "complete input capture",
+    "returned provider model",
+    "HTTP bytes",
+    "capacity",
+    "billing",
+    "interventions",
+    "study or full S4"
+  ],
+  "published_projection": {
+    "cli-inference.json": "fa7e91cd4109bfa543f8482af8b64ed6ebd17900bb62bcabde2bb9b057f96e37"
+  },
+  "raw_only": [
+    "cli.stdout.json"
+  ]
+}
