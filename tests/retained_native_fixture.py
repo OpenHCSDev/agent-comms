@@ -551,6 +551,34 @@ class RecordedNativeProbe:
                                  "source": FieldCodec.encode(row.context_provenance()),
                                  "turn_id": row.turn_id}
 
+    def source_delivery(self, expected, original, evidence, boundary_entry, fork):
+        """Bind authored source to an original input before a cut/probe.
+
+        Branch membership comes from the acquired native reader. A different
+        session additionally needs the SDK's original inherited-prefix proof;
+        equal copied entry IDs alone cannot establish source identity.
+        This observes completed work and grants no next input or replay.
+        """
+        if original['prompt'] != expected:
+            raise ValueError('Original stimulus differs from frozen authored source')
+        header, entries = evidence.observe()
+        selected = NativeSessionIdentity(header.id, str(evidence.source.path))
+        source = original['native_input']
+        identities = {source.session_entry_id, self.answer_entry_id}
+        if not self.session.same_session(selected):
+            if fork is None:
+                raise ValueError('Original stimulus lacks matching SDK ancestry')
+            fork.source.require_same_session(self.session)
+            if not identities <= fork.covered_prefix(evidence, entries):
+                raise ValueError('Original stimulus is outside the SDK inherited prefix')
+        before = {entry.require_entry_id() for entry in evidence.branch(boundary_entry, entries)[:-1]}
+        if not identities <= before:
+            raise ValueError('Original stimulus does not precede its selected boundary')
+        return {'evaluated': True, 'input': source, 'session': self.session,
+                'submitted_source': original['submitted_source'], 'boundary_entry': boundary_entry,
+                'scope': 'Exact original authored source and completed native input before the cut/probe; '
+                         'not final HTTP bytes, compaction replacement coverage or ACP acknowledgement'}
+
     @staticmethod
     def answer_for_input(evidence: NativeEvidenceRead, context):
         """Resolve the terminal and its complete original source ancestry.
@@ -944,6 +972,7 @@ class RecordedNativeProbe:
                 for item in fields(NativeContextRecord)
             }),
             "session": FieldCodec.encode(self.session),
+            "native_input": context.input_commit,
             "prompt": prompt,
             "submitted_source": submitted,
             "answer": FieldCodec.encode(answer),
