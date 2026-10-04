@@ -1,0 +1,118 @@
+{
+  "parser": "existing refactor-audit Package",
+  "roots": {
+    "src": {
+      "parsed": 311,
+      "omissions": []
+    },
+    "tests": {
+      "parsed": 364,
+      "omissions": []
+    }
+  },
+  "owners_and_consumers": {
+    "src/agent_comms/pi_payloads.py": [
+      {
+        "line": 106,
+        "declaration": "PiCost"
+      },
+      {
+        "line": 115,
+        "declaration": "PiUsage"
+      }
+    ],
+    "src/agent_comms/pi_summary_payloads.py": [
+      {
+        "line": 69,
+        "declaration": "SummaryCost"
+      },
+      {
+        "line": 93,
+        "declaration": "SummaryUsage"
+      }
+    ],
+    "tests/compaction_retention_fixture.py": [
+      {
+        "line": 367,
+        "declaration": "ScoredScenario"
+      },
+      {
+        "line": 419,
+        "declaration": "public_native"
+      },
+      {
+        "line": 449,
+        "declaration": "recorded_resources"
+      },
+      {
+        "line": 712,
+        "call": "public_native"
+      },
+      {
+        "line": 721,
+        "call": "public_native"
+      },
+      {
+        "line": 722,
+        "call": "public_native"
+      },
+      {
+        "line": 423,
+        "call": "recorded_resources"
+      }
+    ],
+    "tests/retained_native_fixture.py": [
+      {
+        "line": 137,
+        "declaration": "summary_usage"
+      },
+      {
+        "line": 784,
+        "declaration": "model_steps"
+      },
+      {
+        "line": 194,
+        "call": "summary_usage"
+      },
+      {
+        "line": 897,
+        "call": "model_steps"
+      }
+    ],
+    "tests/test_recorded_retention_measurements.py": [
+      {
+        "line": 112,
+        "call": "model_steps"
+      },
+      {
+        "line": 135,
+        "call": "recorded_resources"
+      },
+      {
+        "line": 342,
+        "call": "model_steps"
+      },
+      {
+        "line": 349,
+        "call": "model_steps"
+      },
+      {
+        "line": 499,
+        "call": "summary_usage"
+      },
+      {
+        "line": 150,
+        "call": "recorded_resources"
+      },
+      {
+        "line": 155,
+        "call": "recorded_resources"
+      },
+      {
+        "line": 496,
+        "call": "summary_usage"
+      }
+    ]
+  },
+  "limits": "Lexical source evidence; schema declarations and consumers read semantically, not a dynamic resolver"
+}
