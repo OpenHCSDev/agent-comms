@@ -74,6 +74,15 @@ def test_codex_historical_membership_comes_from_selected_checkpoint_not_prior_re
         "Selected historical wording",)
 
 
+def test_codex_role_members_do_not_become_item_envelopes():
+    from agent_comms.import_records import CodexItem, IgnoredCodexItem
+
+    assert isinstance(CodexItem.from_wire({"type": "developer", "role": "developer",
+                                          "content": "Not a message envelope"}), IgnoredCodexItem)
+    assert isinstance(CodexItem.from_wire({"type": "message", "role": "guardian",
+                                          "content": "Unknown role"}), IgnoredCodexItem)
+
+
 def opencode_export(path, project):
     path.write_text(
         json.dumps(

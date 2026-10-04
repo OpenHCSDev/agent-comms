@@ -222,3 +222,19 @@ round-trip, exact historical roles/wording, guardian exclusion, append tolerance
 changed-record refusal and selected-cut membership. Original generated private
 test directories were retired; no process, native input or provider was launched.
 After mapping:324modules/0omissions/110 lexical sites, codex-after.json.
+
+The exact hosted Debt run37214910759 rejected the new role string dispatch
+(StringDispatch+1/StringDispatchArms+4). Its source cause is corrected through
+the existing CodexItem declaration family: the original message envelope
+decodes MessageRoleCodexItem members; User/Assistant own portable insertion,
+System/Developer compose one historical capability through C3 MRO. Roles derive
+from their declarations. Both manual role lists and the stored role copy are
+deleted. The existing ImportedCase envelope hook keeps nested role members
+from being admitted as external item kinds, preserving the original unknown
+envelope behavior without another role catalog.
+
+Final affected import-family batch15PASS/0.36s includes original OpenCode/Codex
+decoders, source checkpoint selection, import CLI/receipt, historical proof
+read/refusal, and the added nested-role/envelope boundary case. The previous
+three annotation read checks remain unchanged separate source evidence; no
+SDK, App or provider check is repeated. Exact hosted final Debt remains pending.

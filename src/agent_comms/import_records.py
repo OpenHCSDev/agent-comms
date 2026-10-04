@@ -19,7 +19,11 @@ class ImportedCase(ABC):
             member = cls.decode(wire.get("type"))
         except ValueError:
             member = cls.ignored_case()
-        return member.capture(wire)
+        return member.capture_envelope(wire)
+
+    @classmethod
+    def capture_envelope(cls, wire):
+        return cls.capture(wire)
 
     @classmethod
     @abstractmethod
@@ -122,18 +126,36 @@ class IgnoredCodexItem(CodexItem):
         pass
 
 
-@dataclass(frozen=True)
 class MessageCodexItem(CodexItem):
+    """The original message envelope delegates roles to declared members."""
+
     text_types = frozenset({"input_text", "output_text", "text"})
-    role: ImportRole
+
+    @classmethod
+    def capture(cls, wire):
+        try:
+            member = MessageRoleCodexItem.decode(wire.get("role"))
+        except ValueError:
+            return IgnoredCodexItem()
+        return member.capture(wire)
+
+    def apply(self, buffer):
+        raise TypeError("A Codex message envelope requires its decoded role")
+
+
+@dataclass(frozen=True)
+class MessageRoleCodexItem(MessageCodexItem):
     body: str
     source_id: str
 
     @classmethod
+    def capture_envelope(cls, wire):
+        # A nested message role is not an external Codex item kind. The
+        # original envelope alone selects this capability through its role.
+        return IgnoredCodexItem()
+
+    @classmethod
     def capture(cls, wire):
-        role = wire.get("role")
-        if role not in {"user", "assistant", "system", "developer"}:
-            return IgnoredCodexItem()
         content = wire.get("content")
         pieces = (
             [content]
@@ -144,32 +166,43 @@ class MessageCodexItem(CodexItem):
                 if part.get("type") in cls.text_types
             ]
         )
-        body = "\n".join(pieces)
-        if role in {"system", "developer"}:
-            return HistoricalInstructionCodexItem(role, body)
-        return cls(ImportRole(role), body, text(wire.get("id")))
+        return cls("\n".join(pieces), text(wire.get("id")))
+
+    @property
+    def role(self):
+        return self.declared_name
+
+    @abstractmethod
+    def apply(self, buffer): ...
+
+
+class UserCodexItem(MessageRoleCodexItem):
+    def apply(self, buffer):
+        buffer.add(ImportRole.USER, self.body, self.source_id)
+
+
+class AssistantCodexItem(MessageRoleCodexItem):
+    def apply(self, buffer):
+        buffer.add(ImportRole.ASSISTANT, self.body, self.source_id)
+
+
+class HistoricalInstructionCodexItem:
+    """Shared historical capability; not another wire family or role registry."""
 
     def apply(self, buffer):
-        buffer.add(self.role, self.body, self.source_id)
-
-
-@dataclass(frozen=True)
-class HistoricalInstructionCodexItem(CodexItem):
-    """Original external instruction wording, excluded from portable messages."""
-
-    role: str
-    body: str
-
-    @classmethod
-    def capture(cls, wire):
-        # Only the original message decoder constructs this historical case.
-        return IgnoredCodexItem()
-
-    def apply(self, buffer):
+        # Historical instructions are metadata references, never Pi messages.
         pass
 
     def historical_instructions(self):
         return (self,)
+
+
+class SystemCodexItem(HistoricalInstructionCodexItem, MessageRoleCodexItem):
+    pass
+
+
+class DeveloperCodexItem(HistoricalInstructionCodexItem, MessageRoleCodexItem):
+    pass
 
 
 @dataclass(frozen=True)
