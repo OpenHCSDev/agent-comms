@@ -31,8 +31,26 @@ checks that an exclusive async owner can resume and release while shared send
 waits; the existing maintenance control still prevents bytes through closed
 admission and waits through the final synchronous write.
 
-Changed Python sources compile; no test/provider/environment was launched here.
-Actual native followup/ACK/STARTED/UNKNOWN + interrupt/cancel qualification requires
-an explicit successor package purpose on the existing released holder. #633 is
-still unqualified; its remaining obsolete typed-error/subscriber observations
-are fixture consumers, not justification to bypass this actual custody failure.
+Final affected installed qualification is committed in #633 at 1a05c7e9,
+evidence/native-source-turn-publication-20261004/. Production here is byte-equal
+to that normally joined #638+#640+merged #637 source; this does not claim an
+old standalone package qualification. The source owner batch deletes 85 lines
+and adds 71 across four production files.
+
+Original physical shared/exclusive ingress, exclusive final-write, interrupt,
+cancellation isolation and hard-exit UNKNOWN controls passed in the preserved
+#638 original 11-pass/16-fail result. Those accepted controls were not repeated.
+Changed source640 installed01 passed native queued ACK/start and four retry
+paths/exact source/replacement fences (16 pass/4 fixture fail). Original02
+remains 2 pass/2 fixture fail; final03 only two corrected cases passed, exit0,
+16.623298s. Original FULL wire publication, native context receipt, distinct
+retry lease/goal pause/unchanged UNKNOWN and all waiter/inbox/child cleanup pass.
+The previous mixed receipts remain mixed; no failure is relabelled or replayed.
+
+Normal wheel58a11a61 has 347 source/wheel/installed members exact, 84 unchanged
+environment/dependency keeper files. Actual localhost HTTP/native/ACP scope,
+nonzero native inputs, external/paid/public/replay zero. Exact recorded child
+and controller identities/groups absent at joined terminal; Bohr independently
+closed whole540 purpose with 253 all-UID processes/zero borrowers/zero gaps.
+Immutable086 read/execution returned. No timing or public-channel claim.
+Normal merge #638 then #640 then fixture #633; parent owns publication.
