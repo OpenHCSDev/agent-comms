@@ -11,7 +11,7 @@ from agent_comms.threads import Thread
 def answer(path, text):
     with path.open("a") as output:
         output.write(
-            json.dumps({"type": "message", "message": {"role": "assistant", "content": text}})
+            json.dumps({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}})
             + "\n"
         )
 

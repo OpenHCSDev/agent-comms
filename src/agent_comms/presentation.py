@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from .catalog_store import ChannelCatalog
     from .goal_waits import GoalWait
     from .message_bus import MessageBus
+    from .message_reference import MessageReference
     from .messages import Message
     from .read_ledger import ReadLedger
     from .read_ledger import ReadDocument
@@ -80,6 +81,20 @@ class MessageNotification:
         projected = cls.delivery_window(root, registry, sources)
         return {(message.seq,message.message_id):projected.get((message.seq,message.message_id), ())
                 for message in messages}
+
+    @classmethod
+    def references(
+        cls, root: Path, registry: Registration, log: WireLog,
+        references: Sequence[MessageReference],
+    ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
+        """Borrow mounted references in the original bounded delivery windows."""
+        result = {}
+        for start in range(0, len(references), cls.window_limit):
+            sources = log.deliveries_for_references(
+                references[start : start + cls.window_limit]
+            )
+            result.update(cls.delivery_window(root, registry, sources))
+        return result
 
     @classmethod
     def delivery_window(cls, root: Path, registry: Registration,
@@ -569,6 +584,31 @@ class CoordinationSnapshot:
     show_stopped: bool = True
     show_archived: bool = False
     read_marker_notice: str | None = None
+
+    @classmethod
+    def capture(
+        cls, root: Path, registry: RegistrySnapshot, catalog: CatalogDocument,
+        agents: AgentActivity, declarations: Mapping[str, Channel],
+        sent: Mapping[str, float], messages: Mapping[str, ChannelActivity], *,
+        unread: Mapping[str, int], channel_unread: Mapping[str, int],
+        show_stopped: bool, show_archived: bool, read_marker_notice: str | None = None,
+    ) -> CoordinationSnapshot:
+        """Assemble both rosters from the caller's acquired identity and read cut."""
+        activities = agents.all_activity(snapshot=registry)
+        return cls(
+            channels=ChannelView.roster(
+                registry, declarations, catalog.pinned_members(), catalog.list_order,
+                activities, sent, messages,
+                show_stopped=show_stopped, show_archived=show_archived,
+            ),
+            threads=ThreadView.roster(
+                registry, agents, activities, GoalWaits(root / GoalWaits.filename),
+                show_stopped=show_stopped, show_archived=show_archived,
+            ),
+            unread=unread, last_sent=sent, channel_unread=channel_unread,
+            channel_order=catalog.list_order, show_stopped=show_stopped,
+            show_archived=show_archived, read_marker_notice=read_marker_notice,
+        )
 
     def participants(self, channel: str) -> tuple[ThreadView, ...]:
         view = next((view for view in self.channels if view.channel.name == channel), None)

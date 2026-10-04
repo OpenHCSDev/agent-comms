@@ -99,6 +99,7 @@ class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
         pass
 
 
+@dataclass(frozen=True)
 class ReadyDrainReadiness(DrainReadiness):
     def source_diagnostic(self):
         return None
