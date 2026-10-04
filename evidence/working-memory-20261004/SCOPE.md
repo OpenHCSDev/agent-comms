@@ -181,3 +181,28 @@ while contribution offsets/digests use emitted raw UTF8. The comparison child
 now awaits its original stdout completion callback before exit. These are
 driver-only corrections; no SDK run occurred at the incorrect driver head and
 the three frozen producer files remain unchanged.
+
+## Historical Codex capture checkpoint
+
+The original Codex message decoder now distinguishes historical developer and
+system records from portable user/assistant messages. The existing scan owns
+membership in its selected checkpoint and suffix, including deduplication of
+the reverse/forward acquisition. Guardian records remain excluded. ImportSnapshot,
+the original saved import metadata and ImportReceipt retain authenticated
+record references through FieldCodec; they never append instruction wording to
+the Pi conversation or current system layer.
+
+CodexRolloutProvenance extends the existing source-reader family because a
+record range/hash inside an appendable JSONL rollout is a different source
+contract from whole FileProvenance or an SDK JournalProvenance. It reads only
+its original byte range, verifies its digest, and delegates role/text decoding
+to the same original record owner. JSON-record proof bytes and decoded text
+coordinates remain distinct. No copied semantic corpus, fake native request
+manifest or current-file reconstruction is introduced.
+
+Before evidence: codex-before.json, existing NRA Package324modules/0omissions,
+75 lexical owner/consumer sites. This checkpoint closes capture, durable receipt
+and authenticated source-read behavior. Explorer membership for imported
+historical sources and final installed worker/UI/schema qualification remain
+unfinished; the references are not reported as currently supplied instructions.
+Focused end validation follows the coherent source/main/artifact union.

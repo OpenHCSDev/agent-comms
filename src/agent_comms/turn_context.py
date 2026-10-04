@@ -70,6 +70,43 @@ class FileProvenance(Provenance):
 
 
 @dataclass(frozen=True)
+class CodexRolloutProvenance(Provenance):
+    """Authenticate historical role-record bytes; never current instructions."""
+
+    path: str
+    offset: int
+    length: int
+    sha256: str
+    instruction: int
+    role: str
+
+    def public_description(self) -> str:
+        return (f"Historical Codex {self.role} message · {self.path} · record bytes "
+                f"{self.offset}:{self.offset + self.length} · item {self.instruction} "
+                "· not current instructions")
+
+    def public_text(self, comms) -> str:
+        from .import_records import CodexRecord
+        from .importing import object_value
+
+        if min(self.offset, self.length, self.instruction) < 0:
+            raise ValueError("Historical Codex source coordinates must be nonnegative")
+        with Path(self.path).open("rb") as source:
+            source.seek(self.offset)
+            raw = source.read(self.length)
+        if len(raw) != self.length or hashlib.sha256(raw).hexdigest() != self.sha256:
+            raise ValueError("Historical Codex source record changed or is unavailable")
+        record = CodexRecord.from_wire(object_value(json.loads(raw)))
+        try:
+            instruction = record.historical_instructions()[self.instruction]
+        except IndexError as error:
+            raise ValueError("Historical instruction is outside its original record") from error
+        if instruction.role != self.role:
+            raise ValueError("Historical instruction role differs from its original record")
+        return instruction.body
+
+
+@dataclass(frozen=True)
 class OwnerProvenance(Provenance):
     owner: ThreadIncarnation
     revision: str

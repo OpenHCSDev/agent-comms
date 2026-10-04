@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .declared_family import DeclaredFamily
 from .importing import ImportBuffer, ImportRole, ReverseImportBuffer, object_value, objects, text
+from .turn_context import CodexRolloutProvenance
 
 
 class ImportedCase(ABC):
@@ -106,6 +108,9 @@ class CodexItem(ImportedCase, DeclaredFamily, affix="CodexItem"):
     @abstractmethod
     def apply(self, buffer): ...
 
+    def historical_instructions(self):
+        return ()
+
 
 @dataclass(frozen=True)
 class IgnoredCodexItem(CodexItem):
@@ -127,7 +132,7 @@ class MessageCodexItem(CodexItem):
     @classmethod
     def capture(cls, wire):
         role = wire.get("role")
-        if role not in {"user", "assistant"}:
+        if role not in {"user", "assistant", "system", "developer"}:
             return IgnoredCodexItem()
         content = wire.get("content")
         pieces = (
@@ -139,10 +144,32 @@ class MessageCodexItem(CodexItem):
                 if part.get("type") in cls.text_types
             ]
         )
-        return cls(ImportRole(role), "\n".join(pieces), text(wire.get("id")))
+        body = "\n".join(pieces)
+        if role in {"system", "developer"}:
+            return HistoricalInstructionCodexItem(role, body)
+        return cls(ImportRole(role), body, text(wire.get("id")))
 
     def apply(self, buffer):
         buffer.add(self.role, self.body, self.source_id)
+
+
+@dataclass(frozen=True)
+class HistoricalInstructionCodexItem(CodexItem):
+    """Original external instruction wording, excluded from portable messages."""
+
+    role: str
+    body: str
+
+    @classmethod
+    def capture(cls, wire):
+        # Only the original message decoder constructs this historical case.
+        return IgnoredCodexItem()
+
+    def apply(self, buffer):
+        pass
+
+    def historical_instructions(self):
+        return (self,)
 
 
 @dataclass(frozen=True)
@@ -209,6 +236,15 @@ class CodexRecord(ImportedCase, DeclaredFamily, affix="CodexRecord"):
     def forward(self, scan, buffer):
         pass
 
+    def historical_instructions(self):
+        return ()
+
+    def instruction_sources(self, source, offset, raw):
+        digest = hashlib.sha256(raw).hexdigest()
+        return tuple(CodexRolloutProvenance(str(source.resolve()), offset, len(raw), digest,
+                                           index, instruction.role)
+                     for index, instruction in enumerate(self.historical_instructions()))
+
 
 @dataclass(frozen=True)
 class IgnoredCodexRecord(CodexRecord):
@@ -270,6 +306,10 @@ class CompactedCodexRecord(CodexRecord):
             item.apply(probe)
         return probe.latest_request
 
+    def historical_instructions(self):
+        return tuple(instruction for item in self.replacement
+                     for instruction in item.historical_instructions())
+
     def reverse(self, scan, offset, raw):
         request = self.latest_request(scan.reverse_buffer.limits)
         if scan.found_checkpoint:
@@ -306,6 +346,9 @@ class ResponseItemCodexRecord(CodexRecord):
     def forward(self, scan, buffer):
         self.item.apply(buffer)
 
+    def historical_instructions(self):
+        return self.item.historical_instructions()
+
 
 @dataclass
 class CodexImportScan:
@@ -315,6 +358,23 @@ class CodexImportScan:
     latest_project: str = ""
     checkpoint: tuple[int, int, CompactedCodexRecord] | None = None
     prior_request: str = ""
+    instruction_sources: set[CodexRolloutProvenance] = field(default_factory=set)
+
+    def reverse_record(self, record, source, offset, raw):
+        # Older records searched only for a missing user request cannot acquire
+        # instruction membership in the selected checkpoint/suffix.
+        if self.searching_checkpoint:
+            self.instruction_sources.update(record.instruction_sources(source, offset, raw))
+        return record.reverse(self, offset, raw)
+
+    def forward_record(self, record, source, offset, raw, buffer):
+        self.instruction_sources.update(record.instruction_sources(source, offset, raw))
+        record.forward(self, buffer)
+
+    @property
+    def historical_instructions(self):
+        return tuple(sorted(self.instruction_sources,
+                            key=lambda value:(value.offset,value.instruction)))
 
     @property
     def needs_project(self):

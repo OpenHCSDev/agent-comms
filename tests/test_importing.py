@@ -10,6 +10,68 @@ from agent_comms import ImportFormat, ImportLimits
 from agent_comms.cli import main
 from agent_comms.comms import wire
 from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.field_codec import FieldCodec
+from agent_comms.importing import ImportReceipt
+from agent_comms.turn_context import CodexRolloutProvenance
+
+
+def test_codex_instructions_are_authenticated_historical_references_not_current_messages(tmp_path):
+    source = tmp_path / "historical.jsonl"
+    instructions = [
+        {"type": "message", "role": "system", "content": "Historical base π.\n"},
+        {"type": "message", "role": "developer", "content": [
+            {"type": "input_text", "text": "Historical developer λ.\n"}]},
+    ]
+    records = [{"type": "session_meta", "payload": {"id": "original", "cwd": str(tmp_path)}},
+               {"type": "compacted", "payload": {"message": "Original summary",
+                 "replacement_history": instructions + [
+                     {"type": "message", "role": "user", "content": "Original question"}],
+                 "guardian_history": [{"type": "message", "role": "developer",
+                                       "content": "Private guardian wording"}]}},
+               {"type": "response_item", "payload": {
+                   "type": "message", "role": "assistant", "content": "Original answer"}}]
+    source.write_text("".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records))
+    original = source.read_bytes()
+    comms = wire(tmp_path / "wire")
+    receipt = comms.threads.import_thread(source, ImportFormat.CODEX, name="historical")
+    assert source.read_bytes() == original
+    refs = receipt.historical_instructions
+    assert tuple(ref.role for ref in refs) == ("system", "developer")
+    assert all(isinstance(ref, CodexRolloutProvenance) for ref in refs)
+    assert tuple(ref.public_text(comms) for ref in refs) == (
+        "Historical base π.\n", "Historical developer λ.\n")
+    assert FieldCodec.decode(ImportReceipt, receipt.to_wire()) == receipt
+    saved = [json.loads(line) for line in Path(receipt.session_file).read_text().splitlines()]
+    metadata = next(record["data"] for record in saved if record["type"] == "custom")
+    assert FieldCodec.decode(tuple[CodexRolloutProvenance, ...],
+                             metadata["historical_instructions"]) == refs
+    messages = json.dumps([record for record in saved if record["type"] == "message"], ensure_ascii=False)
+    assert "Historical base" not in messages and "Historical developer" not in messages
+    assert "Private guardian wording" not in Path(receipt.session_file).read_text()
+    assert "Original question" in messages and "Original answer" in messages
+    # Appending future turns preserves the original exact record reference.
+    with source.open("ab") as output:
+        output.write(b'{"type":"future","payload":{}}\n')
+    assert refs[1].public_text(comms) == "Historical developer λ.\n"
+    source.write_bytes(source.read_bytes().replace("developer λ".encode(), "developer ψ".encode()))
+    with pytest.raises(ValueError, match="changed or is unavailable"):
+        refs[1].public_text(comms)
+
+
+def test_codex_historical_membership_comes_from_selected_checkpoint_not_prior_request_probe(tmp_path):
+    source = tmp_path / "selected.jsonl"
+    records = [
+        {"type": "session_meta", "payload": {"id": "original", "cwd": str(tmp_path)}},
+        {"type": "response_item", "payload": {"type": "message", "role": "user", "content": "Prior question"}},
+        {"type": "response_item", "payload": {"type": "message", "role": "developer", "content": "Old cut only"}},
+        {"type": "compacted", "payload": {"message": "Selected summary", "replacement_history": [
+            {"type": "message", "role": "developer", "content": "Selected historical wording"}]}},
+    ]
+    source.write_text("".join(json.dumps(record) + "\n" for record in records))
+    snapshot = ImportFormat.CODEX.read(source, ImportLimits(), "original")
+    assert snapshot.latest_request == "Prior question"
+    assert tuple(ref.public_text(None) for ref in snapshot.historical_instructions) == (
+        "Selected historical wording",)
 
 
 def opencode_export(path, project):

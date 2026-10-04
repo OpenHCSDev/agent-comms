@@ -7,7 +7,7 @@ import sqlite3
 from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Iterator, Mapping
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -15,6 +15,8 @@ from typing import BinaryIO, ClassVar
 from uuid import uuid4
 
 from .typed_table import SQLiteSchemaObject, TypedRow
+from .field_codec import FieldCodec
+from .turn_context import CodexRolloutProvenance
 
 
 def object_value(value: object) -> Mapping[str, object]:
@@ -125,6 +127,7 @@ class ImportSnapshot:
     truncated_messages: int
     notices: tuple[str, ...]
     latest_request: str = ""
+    historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
 
     def pi_session(self, project: Path) -> str:
         """A valid Pi v3 tree, using text-only portable historical context."""
@@ -160,6 +163,7 @@ class ImportSnapshot:
                     "messages_imported": len(self.messages),
                     "truncated_messages": self.truncated_messages,
                     "notices": list(self.notices),
+                    "historical_instructions": FieldCodec.encode(self.historical_instructions),
                 },
             },
         )
@@ -251,7 +255,8 @@ class ImportBuffer:
         self.summary = body[: self.limits.per_message]
 
     def snapshot(
-        self, format: ImportFormat, source_id: str, project: str, title: str
+        self, format: ImportFormat, source_id: str, project: str, title: str,
+        *, historical_instructions: tuple[CodexRolloutProvenance, ...] = (),
     ) -> ImportSnapshot:
         if not self.messages and not self.summary:
             raise ValueError("No portable conversation content was found in this session.")
@@ -266,6 +271,7 @@ class ImportBuffer:
             self.truncated,
             tuple(sorted(self.notices)),
             self.latest_request,
+            historical_instructions,
         )
 
 
@@ -505,24 +511,28 @@ class CodexImporter(ImportAdapter, format=ImportFormat.CODEX):
                     raise ValueError("Codex session metadata was not found near the rollout head.")
             for offset, raw, terminated in reverse_lines(stream, boundary):
                 record = codex_record(raw, terminated=terminated, notices=reverse.notices)
-                if record is not None and CodexRecord.from_wire(record).reverse(scan, offset, raw):
-                    break
+                if record is not None:
+                    if scan.reverse_record(CodexRecord.from_wire(record), source, offset, raw):
+                        break
             buffer, after = scan.rebuild()
             if after is not None:
                 if after < boundary:
                     after += 1
-                for _, raw, terminated in forward_lines(stream, after, boundary):
+                for offset, raw, terminated in forward_lines(stream, after, boundary):
                     record = codex_record(raw, terminated=terminated, notices=buffer.notices)
                     if record is not None:
-                        CodexRecord.from_wire(record).forward(scan, buffer)
+                        scan.forward_record(CodexRecord.from_wire(record), source, offset, raw, buffer)
                 buffer.restore_missing_request(scan.prior_request)
         if session_id and session_id != scan.identity:
             raise ValueError("The rollout belongs to a different Codex session.")
+        if scan.instruction_sources:
+            buffer.notices.add("Historical developer/system sources are retained as references, not current instructions.")
         return buffer.snapshot(
             ImportFormat.CODEX,
             scan.identity or source.stem,
             scan.latest_project or scan.project,
             source.stem,
+            historical_instructions=scan.historical_instructions,
         )
 
 
@@ -536,6 +546,7 @@ class ImportReceipt:
     omitted_messages: int
     truncated_messages: int
     notices: tuple[str, ...]
+    historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
 
     def to_wire(self) -> dict[str, object]:
-        return asdict(self)
+        return FieldCodec.encode(self)
