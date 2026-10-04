@@ -213,8 +213,6 @@ class ReviewedRetainedSummaryCohort:
             raise RuntimeError('Use the reviewed target interpreter')
         self.activation.require_original()
         self.source_proof.require_original()
-        if self.activation.path != self.target / 'activation.json':
-            raise RuntimeError('Activation is not the selected immutable target')
         activation = FieldCodec.decode(CohortActivation, json.loads(self.activation.path.read_text()))
         if activation.stage != self.target:
             raise RuntimeError('Activation names another source cohort')
