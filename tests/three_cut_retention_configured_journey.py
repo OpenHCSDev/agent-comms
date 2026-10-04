@@ -45,22 +45,23 @@ def record(path, value):
     return FileProvenance(str(path), digest(path))
 
 
-async def bounded_application(stage,package,original_python):
-    """One new configured cut, original raw capture, SDK child and distinct input.
+async def condition_application(stage,package,original_python,selected_condition: Condition,
+                                checkpoint: RecordedNativeCheckpoint):
+    """Install one selection on an original SDK fork, then submit distinct input.
 
-    This is functional S4 verification, not a comparative provider study. The
-    inspector uses Agent's existing context transform, preserving the original
-    transform and recording its input binding. Original histories are read only.
+    Borrow the existing completed cut/capture. This path neither repeats its
+    compaction nor produces missing historical evidence from today's sources.
+    Configured launch/model/auth/settings still come from the original owner.
     """
     captured=CurrentTypedCapture(Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'),original_python
         ).read('openhcs-architecture-memory')
     original=captured.require_current()
     assert original.model=='openai-codex/gpt-6.1-sol'
     assert ThinkingLevel.optional_name(original.thinking_level)=='high'
+    with checkpoint.original_source() as (identity,evidence):
+        checkpoint.capture(identity,evidence)
+        captured_source=identity.path
     stage.mkdir(mode=0o700,exist_ok=False)
-    capture_stage=stage/'capture'
-    summaries=capture_stage/'summary-assemblies'
-    source_file=Path(original.require_saved_session())
     def capture_source():
         return captured.require_current(),captured.retained
     chunks=[]
@@ -70,52 +71,16 @@ async def bounded_application(stage,package,original_python):
             if update.session_update=='agent_message_chunk' and update.content.type=='text':
                 chunks.append(update.content.text)
 
-    capture_receipt={'complete':False,'public_inputs':0,'input_replays':0,'paid_comparison':False}
-    # Release the inspector before the original native EOF/child join, including
-    # on refusal. ExitStack owns this resource order; no new lifetime authority.
-    with ExitStack() as observations:
-        launch=observations.enter_context(observe_native_requests(package,
-            capture_stage/'summary-observation.jsonl',summaries=summaries))
-        async with configured_saved_agent(capture_stage,package,source_file,Receiver(),capture_receipt,
-                capture_source=capture_source,observe_launch=launch) as (agent,owner,fork):
-            try:
-                summaries.mkdir(mode=0o700)
-                service=agent._comms
-                scope=record(capture_stage/'original-registry.private.json',service.registry.store.read())
-                print('CONFIGURED_FRESH_NARRATIVE_COMPACTION',flush=True)
-                await build_agent_router(agent)('session/prompt',{'sessionId':owner.name,
-                    'prompt':[{'type':'text','text':' '}],'_meta':encode_request(CompactRequest(
-                        'Create a fresh concise narrative of the selected history. Preserve exact original decisions, '
-                        'source coordinates and authorized changes. Do not resume inherited work.'))},False)
-                journal=CompactionJournal(service.root/'compaction-commits.sqlite3')
-                attempt,=journal.summaries.history(fork.session_file)
-                assert isinstance(attempt.state,ManualCommittedSummary)
-                operation=journal.operations.get(attempt.state.commit_id)
-                operation.committed_outcome()
-                checkpoint=RecordedNativeCheckpoint(journal.path,attempt.identity,operation.commit_id,
-                    scope,service.root/'bus.jsonl').capture_summary_observation(summaries)
-                record(capture_stage/'original-checkpoint.private.json',checkpoint)
-                with checkpoint.original_source() as (session,evidence):
-                    narrative=checkpoint.condition_source(session,evidence)
-                record(capture_stage/'original-narrative-source.private.json',narrative)
-                assert narrative['evaluated'],narrative['reason'] if 'reason' in narrative else narrative
-                assert not InputDispositions(service.root/InputDispositions.filename).read().rows
-                captured_source=Path(fork.session_file)
-                capture_receipt.update(complete=True,original_summary_operation=attempt.operation_id,
-                    original_commit=operation.commit_id,raw_summary_bytes=narrative['utf8_bytes'],
-                    new_original_inputs=0)
-            finally:
-                observations.close()
-
     application_stage=stage/'application'
     contexts=application_stage/'sdk-contexts'
     observer_output=application_stage/'condition-observation.jsonl'
     condition_file=application_stage/'fork-condition-source.private.json'
     receipt={'complete':False,'public_inputs':0,'input_replays':0,'paid_comparison':False,
-        'installed_UI':False,'acceptance_scope':'original configured cut/capture/SDK fork/bounded SDK input and distinct answer'}
+        'installed_UI':False,'acceptance_scope':'original completed cut/capture/SDK fork/installed SDK input and distinct answer',
+        'selected_condition':selected_condition}
     with ExitStack() as observations:
         launch=observations.enter_context(observe_native_requests(package,observer_output,
-            contexts=contexts,condition_source=condition_file))
+            contexts=contexts,condition_source=condition_file,condition=selected_condition))
         async with configured_saved_agent(application_stage,package,captured_source,Receiver(),receipt,
                 capture_source=capture_source,observe_launch=launch) as (agent,owner,fork):
             try:
@@ -124,12 +89,10 @@ async def bounded_application(stage,package,original_python):
                 condition=checkpoint.fork_condition_source(
                     service.root/'compaction-commits.sqlite3',Path(fork.session_file))
                 record(condition_file,condition)
-                assert condition['evaluated']
-                assert condition['session']!=condition['checkpoint_session']
                 chunks.clear()
-                marker='ORIGINAL_BOUNDED_S4_APPLICATION_VERIFIED'
+                marker='ORIGINAL_INSTALLED_S4_APPLICATION_VERIFIED'
                 text=f'New distinct isolated verification input. Do not use tools or resume inherited work. Reply exactly {marker}.'
-                print('CONFIGURED_FORK_BOUNDED_DISTINCT_INPUT',flush=True)
+                print('CONFIGURED_FORK_INSTALLED_DISTINCT_INPUT',flush=True)
                 result=await build_agent_router(agent)('session/prompt',{'sessionId':owner.name,
                     'prompt':[{'type':'text','text':text}]},False)
                 assert result.stop_reason=='end_turn' and marker in ''.join(chunks)
@@ -143,12 +106,14 @@ async def bounded_application(stage,package,original_python):
                 measured=probe.observe()
                 record(application_stage/'recorded-application.private.json',measured)
                 construction=measured['construction']
-                assert construction['condition_application']['evaluated']
+                installed=construction['condition_installation']
+                assert installed['evaluated']
+                assert all(item.condition==selected_condition.value for item in installed['installations'])
                 assert construction['request_budget']['evaluated']
                 assert construction['request_completion']['evaluated']
                 assert service.registry.require(owner.name).active_turn is None
                 receipt.update(complete=True,original_cut_correlated=True,
-                    SDK_child_binding=True,bounded_original_narrative_in_actual_SDK_input=True,
+                    SDK_child_binding=True,installed_source_in_actual_SDK_request=True,
                     canonical_request_budget_and_terminal=True,distinct_answer=True,new_original_inputs=1,
                     model_steps=len(measured['model_steps']),model_recall_evaluated=False,
                     final_HTTP_bytes_evaluated=False)
@@ -425,8 +390,12 @@ if __name__ == '__main__':
     modes = {'--continue-committed': committed_checkpoint, '--continue-completed': completed_continuation}
     if sys.argv[4:] == ['--request-construction']:
         asyncio.run(request_construction(stage, Path(sys.argv[2]).resolve(), Path(sys.argv[3]).absolute()))
-    elif sys.argv[4:]==['--bounded-application']:
-        asyncio.run(bounded_application(stage,Path(sys.argv[2]).resolve(),Path(sys.argv[3]).absolute()))
+    elif sys.argv[4:5]==['--condition-application']:
+        if len(sys.argv)!=7:
+            raise ValueError('--condition-application requires Condition and original checkpoint file')
+        asyncio.run(condition_application(stage,Path(sys.argv[2]).resolve(),Path(sys.argv[3]).absolute(),
+            FieldCodec.decode(Condition,sys.argv[5]),
+            FieldCodec.decode(RecordedNativeCheckpoint,json.loads(Path(sys.argv[6]).read_text()))))
     else:
         continuation = modes[sys.argv[4]](stage) if sys.argv[4:] else None
         asyncio.run(run(stage, Path(sys.argv[2]).resolve(), Path(sys.argv[3]).absolute(), continuation=continuation))
