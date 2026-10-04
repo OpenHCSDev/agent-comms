@@ -140,6 +140,7 @@ export function armInstalledNativeCondition(session,construction,output,inputId)
         return {messages:transformed,observation:{condition:construction.condition,
             source_witness:construction.source_witness,
             entry_selection:construction.entry_selection,
+            uncompacted_selection:construction.uncompacted_selection,
             narrative_source:construction.narrative_source,
             construction_manifest:construction.manifest,
             construction_context_sha256:construction.context_sha256,
@@ -180,6 +181,11 @@ export async function constructNativeConditions(session, packagePath, boundedSou
     const {SessionContext}=await import(pathToFileURL(join(packagePath,'dist/core/session-context.js')));
     const manager=session.sessionManager,store=manager.entryStore;
     const witness=manager.captureCompactionWitness(manager.getLeafId());
+    // The SDK owns full-history membership, including non-message entries.
+    // Capture IDs once at the same witness; do not copy messages or reconstruct
+    // this selection later from a condition label/Python message classifier.
+    const uncompactedIds=Array.from(store.uncompactedMetadata(manager.getLeafId()),meta=>meta.id);
+    const uncompactedSelection={kind:'journal',path:witness.sessionFile,entries:uncompactedIds};
     // These SDK metadata owners supply the actual selection. SDK entryMessages
     // supplies raw AgentMessages once; the same acquisition feeds preview and
     // installation. No provider-message-to-AgentMessage reconstruction.
@@ -187,7 +193,7 @@ export async function constructNativeConditions(session, packagePath, boundedSou
         const context=await SessionContext.prefixContext(session,messages);
         const view=await TurnContext.capture(session,context,undefined,entries);
         return {evaluated:true,...await previewNativeCondition(session,packagePath,view),...details,
-            agent_messages:messages,source_witness:witness,
+            agent_messages:messages,source_witness:witness,uncompacted_selection:uncompactedSelection,
             scope:'Original acquired SDK construction; not installed/submitted input or final request capacity'};
     }
     async function bounded() {
@@ -211,7 +217,7 @@ export async function constructNativeConditions(session, packagePath, boundedSou
     }
     const constructors={
         'full-context':async()=>{
-            const entries=Array.from(store.uncompactedMetadata(manager.getLeafId()),meta=>store.get(meta.id));
+            const entries=uncompactedIds.map(id=>store.get(id));
             return entryConstruction(entries);
         },
         'recent-only':async()=>{
