@@ -1,4 +1,36 @@
-## Current: original436 published; C4 source complete; whole UI and W6 remain — 2026-10-04
+## Current: ordinary440 published; Undo/channel tail passed; full workflow remains — 2026-10-04
+
+Toad440 final1e80524b merged4cc4d531 after exact Debt37230082759 passed.
+Parent verified all122 frozen artifacts and37 original gate hashes, then ran
+the new original guarded operation once. Publication exited0 in42.513595s;
+the separate original readback exited0. All19 owners retained their original
+incarnations/settings and acquired new live process identities. All five
+defaults now point to334, with the same original e206 root/id and native086.
+The receipt phase remains public-ui-pending; identity readback is not UI proof.
+The original436 consumed operation and historical activation/proofs stay intact.
+
+Actual public334 now contains Core6565c110307/Toad439af692/Text59180/NRA9a,
+normal69. Its original owned candidate DTO and source proof govern this stage;
+the old PREFIXactivation is historical and was not rewritten. Bohr's independent
+214-process closure verified945 package assets,69 origins,468 unchanged keepers
+and165 protected originals. This prefix is now public: no private package loan,
+old637 restoration or second440 execution is permitted by prior closed grants.
+Former publicstyle22 is not automatically granted for a new private purpose.
+
+On the preceding public436 cohort, corrected tail04 completed with terminal0,
+18 native checks true and owned cleanup empty. Channel opening/return, hidden
+and shown Window admission, retained editor/history resources, draft and Undo,
+and warm body readiness passed. Original broad02 deadline failure and tail03
+exact-name selector failure remain unchanged. Held-scrolling CPU and writer
+gap evidence still needs structural correlation; no smoothness/CPU gain claim.
+
+Heis owns ordinary affected440 UI verification and full performance441 source;
+Einstein owns unfinished W6 wait-lifetime/worker/UI/schema integration. Arendt
+continues fullS4; its completed659 SDK stream qualifies message proof only,
+not whole tool/system projection or clean controller exit. No unqualified
+W6/schema10/7a2e or441 product was installed. The full goal remains active.
+
+## Historical: original436 published; C4 source complete; whole UI and W6 remain — 2026-10-04
 
 Tristan closed the original Toad client and authorized updating the install.
 The original frozen436 operation published once: terminal0,43.751656s, all19
