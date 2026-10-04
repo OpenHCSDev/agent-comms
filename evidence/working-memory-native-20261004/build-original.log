@@ -1,0 +1,104 @@
+patching file node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
+patching file node_modules/@earendil-works/pi-ai/dist/utils/estimate.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/google-generative-ai.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/google-vertex.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/mistral-conversations.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js
+Hunk #1 succeeded at 446 (offset 2 lines).
+patching file dist/core/session-manager.js
+patching file dist/core/compaction/compaction.js
+patching file dist/core/agent-session-runtime.js
+patching file dist/core/agent-session.js
+Hunk #2 succeeded at 34 (offset 1 line).
+Hunk #4 succeeded at 409 (offset -74 lines).
+Hunk #5 succeeded at 784 (offset -74 lines).
+Hunk #6 succeeded at 1069 (offset -74 lines).
+Hunk #7 succeeded at 1792 (offset -68 lines).
+Hunk #8 succeeded at 1845 (offset -73 lines).
+Hunk #9 succeeded at 1903 (offset -71 lines).
+Hunk #10 succeeded at 2000 (offset -73 lines).
+Hunk #11 succeeded at 2098 (offset -73 lines).
+Hunk #12 succeeded at 2179 (offset -71 lines).
+Hunk #13 succeeded at 2874 (offset -73 lines).
+Hunk #14 succeeded at 2951 (offset -73 lines).
+Hunk #15 succeeded at 2973 (offset -73 lines).
+Hunk #16 succeeded at 2999 (offset -73 lines).
+Hunk #17 succeeded at 3054 (offset -73 lines).
+patching file dist/core/cache-stats.d.ts
+patching file dist/core/cache-stats.js
+patching file dist/core/compaction/branch-summarization.d.ts
+patching file dist/core/compaction/branch-summarization.js
+patching file dist/core/compaction/compaction.d.ts
+patching file dist/core/export-html/index.js
+patching file dist/core/extensions/types.d.ts
+patching file dist/core/output-guard.js
+patching file dist/core/sdk.js
+patching file dist/core/session-export.js
+patching file dist/core/session-manager.d.ts
+patching file dist/index.d.ts
+patching file dist/index.js
+patching file dist/main.js
+patching file dist/modes/interactive/components/footer.js
+patching file dist/modes/interactive/interactive-mode.js
+patching file dist/modes/rpc/rpc-mode.js
+Hunk #1 succeeded at 18 (offset 1 line).
+Hunk #2 succeeded at 419 (offset 34 lines).
+Hunk #3 succeeded at 755 (offset -16 lines).
+Hunk #4 succeeded at 826 (offset 40 lines).
+Hunk #5 succeeded at 946 (offset 39 lines).
+Hunk #6 succeeded at 958 (offset 39 lines).
+Hunk #7 succeeded at 966 (offset 40 lines).
+Hunk #8 succeeded at 996 (offset 40 lines).
+patching file node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/google-generative-ai.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/google-shared.d.ts
+patching file node_modules/@earendil-works/pi-ai/dist/api/google-shared.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/google-vertex.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/mistral-conversations.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
+patching file node_modules/@earendil-works/pi-ai/dist/types.d.ts
+patching file node_modules/@earendil-works/pi-ai/dist/types.d.ts
+patching file node_modules/@earendil-works/pi-ai/dist/models.d.ts
+patching file node_modules/@earendil-works/pi-ai/dist/models.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/lazy.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/lazy.d.ts
+patching file node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.lazy.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.d.ts
+patching file node_modules/@earendil-works/pi-ai/dist/compat.js
+patching file node_modules/@earendil-works/pi-ai/dist/compat.d.ts
+patching file dist/core/provider-composer.js
+patching file dist/core/compaction/compaction.js
+npm error code ENOTCACHED
+npm error request to https://registry.npmjs.org/zod-to-json-schema/-/zod-to-json-schema-3.25.2.tgz failed: cache mode is 'only-if-cached' but no cached response is available.
+npm error A complete log of this run can be found in: /home/ts/.npm/_logs/2026-10-04T15_29_56_226Z-debug-0.log
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/prepare-native-import-boundary.py", line 209, in <module>
+    main(Path(sys.argv[1]).resolve(strict=True))
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/prepare-native-import-boundary.py", line 169, in main
+    subprocess.run(
+    ~~~~~~~~~~~~~~^
+        [
+        ^
+    ...<14 lines>...
+        timeout=120,
+        ^^^^^^^^^^^^
+    )
+    ^
+  File "/usr/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['npm', 'ci', '--offline', '--ignore-scripts', '--omit=dev', '--omit=peer', '--no-audit', '--no-fund']' returned non-zero exit status 1.

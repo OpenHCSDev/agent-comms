@@ -1,0 +1,40 @@
+{
+  "scope": "Original changed compiled JS syntax and canonical existing-artifact verification; not SDK execution or W1 runtime acceptance",
+  "source_head": "69ee8e8ea60b9b0ec8e9daef31c97ef8d42f1925",
+  "rows": [
+    {
+      "path": "dist/core/agent-session.js",
+      "exit_code": 0,
+      "stderr": ""
+    },
+    {
+      "path": "dist/core/resource-loader.js",
+      "exit_code": 0,
+      "stderr": ""
+    },
+    {
+      "path": "dist/core/system-prompt.js",
+      "exit_code": 0,
+      "stderr": ""
+    },
+    {
+      "path": "dist/core/skills.js",
+      "exit_code": 0,
+      "stderr": ""
+    },
+    {
+      "path": "dist/core/turn-context.js",
+      "exit_code": 0,
+      "stderr": ""
+    }
+  ],
+  "duration_seconds": 0.18106705497484654,
+  "canonical_verify_exit": 0,
+  "canonical_verify_stdout": "PI_NATIVE_BIN=/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/bin/pi-native\n",
+  "producer_files_unchanged": true,
+  "manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+  "tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d",
+  "SDK_pending": "Einstein driver only correction: original JSONencoded manifest hash/byte units and joined stdout drain; no producer change/rebuild",
+  "provider_calls": 0,
+  "public_changes": false
+}

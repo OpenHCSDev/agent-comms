@@ -13,11 +13,28 @@ whole-content-verified readonly resource sharing. `package_tree_digest` and the
 original manifest bind the final published package. No alternate builder or
 trust ledger is introduced.
 
-One bounded assembly is planned after the producer freeze is confirmed. Actual
-SDK checks must compare emitted prompt bytes and digests, original UTF8 source
-ranges, loader/extension replacements, request identity, and captured projection.
-Lexical source evidence is not runtime proof. No native artifact has been built
-for this checkpoint; W1 is not installed or Ready.
+The producer freeze is confirmed. The first assembly stopped at the original
+offline extension installer because its locked npm tarballs were absent; the
+original trap retired that unpublished stage. Exact registry acquisition restored
+93 unique locked tarballs (3,487,599 bytes), each verified against its lock
+integrity. The single replacement serial assembly completed and the canonical
+builder verified the new sealed package without another assembly.
+
+The matching manifest is
+`7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33`;
+tree `0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d`.
+Exactly ten expected compiled files changed. Under the original same-fence
+sharing policy, 19,180 unchanged readonly files share immutable086 resources;
+the ten distinct files use 286,720 allocated bytes. These are new artifact
+measurements, not reclaimed old payload. The original086 tree remains unchanged.
+
+Five changed JavaScript modules passed syntax checks. SDK acceptance remains
+pending Einstein's correction to the existing authored driver: manifest hashes
+and byte counts use original JSON encoding, whereas source spans use raw emitted
+UTF8; the comparator must join stdout drain before exiting. No SDK gate has been
+run against the incorrect driver and no producer change or rebuild is needed.
+The final batch will check original builder byte parity and captured spans,
+loader/extension replacements, and request identity. W1 is not installed or Ready.
 
 Immutable086 and all handed packages remain unchanged. Frozen436 operands,
 activation and package floor are excluded. This branch changes no installed
