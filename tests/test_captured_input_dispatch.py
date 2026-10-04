@@ -1,5 +1,6 @@
 """Captured admissions survive only their exact live owner; dispatch failures stay uncertain."""
 
+from agent_comms.queued_input import InitialInput
 import pytest
 
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, decode_updates
@@ -32,7 +33,7 @@ async def test_initial_capture_rejects_owner_readmission_during_acceptance_notic
     monkeypatch.setattr(agent.turns, "run_agent_turn", forbidden)
     try:
         with pytest.raises(InputHandoffRefused, match="context changed"):
-            await agent.inputs.run_owned_input("beta", "beta", "Fresh captured input")
+            await InitialInput.run(agent.inputs, "beta", "beta", "Fresh captured input")
         assert len(admitted) == 1 and not dispatched
         row = agent.inputs.dispositions.read().lookup("acp:" + admitted[0])
         assert row.accepts_reservation and not row.has_native_binding
@@ -52,7 +53,7 @@ async def test_postdispatch_failure_is_not_reclassified_as_admission_refusal(tmp
     monkeypatch.setattr(agent.turns, "run_agent_turn", uncertain)
     try:
         with pytest.raises(RelationViolationError) as caught:
-            await agent.inputs.run_owned_input("beta", "beta", "One explicit request")
+            await InitialInput.run(agent.inputs, "beta", "beta", "One explicit request")
         assert caught.value is failure and not isinstance(caught.value, InputHandoffRefused)
         assert len(entered) == 1
         assert len(agent.inputs.dispositions.read().rows) == 1
