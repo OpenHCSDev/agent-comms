@@ -43,4 +43,40 @@ agent-loop/controlled-stream resource. This is authored SDK request plumbing, no
 an enrolled configured input or four model baselines. The configured experiment
 runner's eventual prepare/install/arm/prompt transaction and actual provider
 capacity remain unfinished; this change neither runs nor approves that study.
-Source/runtime/native/W1 are unchanged. Final affected checks are pending.
+Source/runtime/native/W1 are unchanged.
+
+## Scoped Ready
+
+Functional source `d83fb383` is frozen. All 33 affected measurement controls
+passed in 0.904 seconds. They detect foreign session/revision, a source leaf after
+the input, missing hook retirement, absent/different conversion/request bytes,
+output counts mistaken for input-prefix counts, and labels promoted to evidence.
+Existing NRA Package parsed 365 Python modules; Acorn parsed all 11 declared
+private MJS modules. Neither omitted a parse. Static calls are not dynamic proof;
+the original inspector embedding and SDK callbacks executed in the changed run.
+
+One authored SDK run finished in 1.844 seconds, child exit0 and inspector joined.
+All four installed selections passed through the original configured transform,
+converter and onContextReady. Their complete transformed-message hashes matched
+the inspector's converter inputs; converter outputs matched authenticated ordered
+SDK message bytes. Original witness coverage, restored hooks/canonical messages
+and unchanged authored journal/compiled source were corroborated. No native
+claim/input enrollment, prompt, provider call, model selection change, donor read,
+package/environment/native build or public write occurred.
+
+The read-only postprocessor first attempted raw `kind` access on typed provenance
+and refused. That negative is retained. The existing `sdk_request` owner resolved
+the same completed manifest; no SDK/stream/provider execution was repeated.
+
+Public receipts and before/after callers:
+`evidence/s4-installed-request-binding-20261004/`. Raw outputs remain in
+`.artifacts/s4-installed-request-binding635/sdk-installed01`. Both owned PIDs are
+absent. Previous634 and all original602/UNKNOWN artifacts are untouched.
+
+The ancestry-before-enrolled-input relation is exercised by source controls, not
+by this authored SDK loop. The real configured study runner's installation/
+arming/prompt transaction, submitted arm identity, provider capacity, HTTP bytes,
+recall/comparative acceptance and billing remain unqualified. The existing
+30-pair/USD75 proposal remains unapproved and unstarted. General CI failures are
+visible; no broad CI pass is claimed. Hosted exact-head Debt is required separately.
+
