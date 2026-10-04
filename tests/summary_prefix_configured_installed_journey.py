@@ -14,8 +14,6 @@ import sys
 from unittest.mock import patch
 
 from compaction_retention_fixture import Condition
-from original_owner_capture import CurrentTypedCapture
-from compaction_source_successor_installed_journey import run
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.child_process import ParentedProcess
 
@@ -64,6 +62,9 @@ def observe_native_requests(package, observation, *, contexts=None, summaries=No
 
 
 async def main(stage, package, original_python):
+    from original_owner_capture import CurrentTypedCapture
+    from compaction_source_successor_installed_journey import run
+
     captured = CurrentTypedCapture(
         Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'), original_python,
     ).read('openhcs-architecture-memory')
