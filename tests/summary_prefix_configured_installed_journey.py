@@ -14,14 +14,18 @@ import subprocess
 import sys
 from unittest.mock import patch
 
+from compaction_retention_fixture import Condition
 from original_owner_capture import CurrentTypedCapture
 from compaction_source_successor_installed_journey import run
 from agent_comms.native_pi import NativePiRpcLaunch
 
 
 @contextmanager
-def observe_native_requests(package, observation, *, contexts=None, summaries=None, condition_source=None):
+def observe_native_requests(package, observation, *, contexts=None, summaries=None,
+                            condition_source=None, condition: Condition | None = None):
     """Borrow original native frames and retire every owned inspector on exit."""
+    if condition_source is not None and condition is None:
+        raise ValueError('Original narrative source requires an explicit SDK condition selection')
     observer = Path(__file__).with_name('summary_prefix_native_observer.mjs').resolve()
     observers = []
 
@@ -43,7 +47,8 @@ def observe_native_requests(package, observation, *, contexts=None, summaries=No
                 ['node', str(observer), str(port), str(package), str(observation),
                  str(contexts) if contexts is not None else '',
                  str(summaries) if summaries is not None else '',
-                 str(condition_source) if condition_source is not None else ''],
+                 str(condition_source) if condition_source is not None else '',
+                 condition.value if condition is not None else ''],
                 env={'PATH': os.defpath}, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL))
             argv = (argv[0], f'--inspect-brk=127.0.0.1:{port}', *argv[1:])

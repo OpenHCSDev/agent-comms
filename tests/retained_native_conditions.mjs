@@ -4,7 +4,7 @@ import {isDeepStrictEqual} from 'node:util';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-async function observe(session, packagePath, view) {
+export async function previewNativeCondition(session, packagePath, view) {
     const {ContextBudget, BudgetAdmissionError} = await import(pathToFileURL(join(
         packagePath, 'node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js')));
     const context = view.render();
@@ -139,6 +139,7 @@ export function armInstalledNativeCondition(session,construction,output,inputId)
         const transformed=previous ? await previous.call(session.agent,messages,signal) : messages;
         return {messages:transformed,observation:{condition:construction.condition,
             source_witness:construction.source_witness,
+            entry_selection:construction.entry_selection,
             construction_context_sha256:construction.context_sha256,
             source_prefix_count:count,source_prefix_sha256:sourcePrefix,
             source_message_count:messages.length}};
@@ -172,7 +173,7 @@ export async function applyNativeCondition(session, packagePath, construction) {
     return {...construction,scope:'Original AgentMessages installed through selected SessionContext; not input admission/submission, final request capacity or provider proof'};
 }
 
-export async function constructNativeConditions(session, packagePath, boundedSource) {
+export async function constructNativeConditions(session, packagePath, boundedSource, selections) {
     const {TurnContext}=await import(pathToFileURL(join(packagePath,'dist/core/turn-context.js')));
     const {SessionContext}=await import(pathToFileURL(join(packagePath,'dist/core/session-context.js')));
     const manager=session.sessionManager,store=manager.entryStore;
@@ -180,13 +181,10 @@ export async function constructNativeConditions(session, packagePath, boundedSou
     // These SDK metadata owners supply the actual selection. SDK entryMessages
     // supplies raw AgentMessages once; the same acquisition feeds preview and
     // installation. No provider-message-to-AgentMessage reconstruction.
-    const full=Array.from(store.uncompactedMetadata(manager.getLeafId()),meta=>store.get(meta.id));
-    const recent=Array.from(store.keptMetadata(manager.getLeafId()),meta=>store.get(meta.id));
-    const task=Array.from(session.storedContext.messages(session.agent));
     async function construction(messages,entries,details={}) {
         const context=await SessionContext.prefixContext(session,messages);
         const view=await TurnContext.capture(session,context,undefined,entries);
-        return {evaluated:true,...await observe(session,packagePath,view),...details,
+        return {evaluated:true,...await previewNativeCondition(session,packagePath,view),...details,
             agent_messages:messages,source_witness:witness,
             scope:'Original acquired SDK construction; not installed/submitted input or final request capacity'};
     }
@@ -200,17 +198,93 @@ export async function constructNativeConditions(session, packagePath, boundedSou
             checkpoint_session:boundedSource.checkpoint_session,
             native_entry_id:boundedSource.native_entry_id});
     }
-    const conditions={
-        'full-context':await construction(Array.from(SessionContext.entryMessages(full.values())),full),
-        'recent-only':await construction(Array.from(SessionContext.entryMessages(recent.values())),recent),
-        'task-memory':await construction(task,Array.from(manager.buildContextEntries())),
-        bounded:await bounded(),
+    async function entryConstruction(entries) {
+        // This selection and raw SDK conversion share the acquired entry set.
+        // A manifest's broad attribution or mutable ReadyContext messages alone
+        // cannot reconstruct this observation later. Retain references, not a
+        // second message payload or selection algorithm.
+        return construction(Array.from(SessionContext.entryMessages(entries.values())),entries,{
+            entry_selection:{kind:'journal',path:witness.sessionFile,
+                entries:entries.map(entry=>entry.id)}});
+    }
+    const constructors={
+        'full-context':async()=>{
+            const entries=Array.from(store.uncompactedMetadata(manager.getLeafId()),meta=>store.get(meta.id));
+            return entryConstruction(entries);
+        },
+        'recent-only':async()=>{
+            const entries=Array.from(store.keptMetadata(manager.getLeafId()),meta=>store.get(meta.id));
+            return entryConstruction(entries);
+        },
+        'task-memory':()=>construction(Array.from(session.storedContext.messages(session.agent)),
+            Array.from(manager.buildContextEntries())),
+        bounded,
     };
-    if (!isDeepStrictEqual(witness,manager.captureCompactionWitness(witness.firstKeptEntryId)))
-        throw new Error('Native selection changed during condition construction');
-    for (const [condition,constructed] of Object.entries(conditions)) {
+    const conditions={};
+    for (const condition of selections ?? Object.keys(constructors)) {
+        if (!Object.hasOwn(constructors,condition))
+            throw new Error('Unknown SDK construction selection');
+        const constructed=await constructors[condition]();
         if (constructed.evaluated)
             Object.defineProperty(constructed,'condition',{value:condition,enumerable:true});
+        conditions[condition]=constructed;
     }
+    if (!isDeepStrictEqual(witness,manager.captureCompactionWitness(witness.firstKeptEntryId)))
+        throw new Error('Native selection changed during condition construction');
     return conditions;
+}
+
+export function armConfiguredNativeCondition(session,packagePath,condition,source,output,inputId) {
+    // This is private fixture instrumentation of the existing prompt resource.
+    // The original prompt alone still claims/admits/enqueues the input and owns
+    // auth, extensions, callbacks, persistence and terminal disposition.
+    const scope=new DisposableStack();
+    const originalPrompt=session.prompt;
+    const promptDescriptor=Object.getOwnPropertyDescriptor(session,'prompt');
+    const record=stage=>process.getBuiltinModule('node:fs').appendFileSync(output,
+        JSON.stringify({stage,input_id:inputId,condition})+'\n',{mode:0o600});
+    const restorePrompt=()=>{
+        if (session.prompt===prompt) {
+            if (promptDescriptor) Object.defineProperty(session,'prompt',promptDescriptor);
+            else delete session.prompt;
+        }
+    };
+    async function prompt(text,options) {
+        restorePrompt();
+        try {
+            if (options.inputId!==inputId)
+                throw new Error('Configured SDK construction belongs to another original input');
+            if (this.isStreaming || this.isCompacting)
+                throw new Error('Configured SDK construction requires an idle native prompt');
+            const context=this.storedContext;
+            const originalBeforeInput=context.beforeInput;
+            const beforeDescriptor=Object.getOwnPropertyDescriptor(context,'beforeInput');
+            const restoreBeforeInput=()=>{
+                if (context.beforeInput===beforeInput) {
+                    if (beforeDescriptor) Object.defineProperty(context,'beforeInput',beforeDescriptor);
+                    else delete context.beforeInput;
+                }
+            };
+            async function beforeInput(selected) {
+                restoreBeforeInput();
+                await originalBeforeInput.call(this,selected);
+                // Readiness/selection and current budget remain with the
+                // original SDK owners. Build only this declared selection.
+                const constructions=await constructNativeConditions(selected,packagePath,source,[condition]);
+                const construction=await applyNativeCondition(selected,packagePath,constructions[condition]);
+                scope.defer(armInstalledNativeCondition(selected,construction,output,inputId));
+            }
+            context.beforeInput=beforeInput;
+            scope.defer(restoreBeforeInput);
+            return await originalPrompt.call(this,text,options);
+        } catch(error) {
+            record('installed-input-refused');
+            throw error;
+        } finally {scope.dispose();}
+    }
+    scope.defer(()=>record('installed-input-retired'));
+    scope.defer(restorePrompt);
+    session.prompt=prompt;
+    record('installed-input-armed');
+    return ()=>scope.dispose();
 }

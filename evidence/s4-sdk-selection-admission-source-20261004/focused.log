@@ -1,0 +1,8 @@
+test_installed_source_uses_original_witness_ancestry_and_request (test_recorded_retention_measurements.RecordedMeasurementTests.test_installed_source_uses_original_witness_ancestry_and_request) ... ok
+test_condition_groups_preserve_frozen_rounds_and_do_not_promote_labels (test_recorded_retention_measurements.RecordedMeasurementTests.test_condition_groups_preserve_frozen_rounds_and_do_not_promote_labels) ... ok
+test_condition_binding_uses_complete_original_messages_and_request (test_recorded_retention_measurements.RecordedMeasurementTests.test_condition_binding_uses_complete_original_messages_and_request) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.025s
+
+OK

@@ -1,0 +1,168 @@
+{
+  "scope": "privileged proc cwd/exe/argv/environment/FD/maps",
+  "actual_borrowers": [],
+  "historical_underscore_only": [
+    {
+      "pid": 287415,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 288457,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 288822,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 289351,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 289460,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 290149,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 290286,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 290306,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 290454,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 290660,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 291126,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 291728,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 292131,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 292616,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 293076,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 293237,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 293239,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 293264,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 293276,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 374681,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 1253898,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 1261808,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    },
+    {
+      "pid": 1354743,
+      "field": "environ",
+      "matching_keys": [
+        "_"
+      ]
+    }
+  ],
+  "permission_gaps": []
+}
