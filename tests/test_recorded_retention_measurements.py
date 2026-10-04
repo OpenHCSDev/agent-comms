@@ -413,17 +413,20 @@ class RecordedMeasurementTests(unittest.TestCase):
         revised = replace(observed, requested_output_tokens=20, admitted_output_tokens=10)
         selected = capture(({'acquisition': {}}, publication(replace(observed, request_id='other')),
                             publication(observed), publication(revised)))
-        observations = selected.observed_request(manifest)
+        requests = selected.observed_requests(manifest)
+        observations = requests[manifest.request_id]
         result = selected.request_budget(observations)
         self.assertTrue(result['evaluated'])
         self.assertEqual(result['observations'], (observed, revised))
-        self.assertFalse(selected.request_budget(selected.observed_request(replace(manifest, request_id=None)))['evaluated'])
-        self.assertFalse(probe.request_budget(probe.observed_request(manifest))['evaluated'])
+        self.assertEqual(selected.observed_requests(replace(manifest, request_id=None)), {})
+        self.assertEqual(probe.observed_requests(manifest), {})
+        self.assertEqual(tuple(requests), ('other', 'request'))
+        self.assertEqual(requests['other'], (replace(observed, request_id='other'),))
         for changed in (replace(observed, session_id='other'), replace(observed, input_id='b' * 32)):
             with self.assertRaises(ValueError):
-                capture((publication(changed),)).observed_request(manifest)
+                capture((publication(changed),)).observed_requests(manifest)
         with self.assertRaises(ValueError):
-            capture((publication(observed, replace(lease, turn_id='other')),)).observed_request(manifest)
+            capture((publication(observed, replace(lease, turn_id='other')),)).observed_requests(manifest)
 
         # Timing and budget borrow the same acquisition. Different stages and
         # real zero callback counters must not be lost or become whole-turn time.
@@ -434,7 +437,8 @@ class RecordedMeasurementTests(unittest.TestCase):
         selected = capture(tuple(publication(point) for point in (observed, headers, first, end)))
         with patch.object(RecordedNativeCheckpoint, 'read_json_lines',
                           wraps=RecordedNativeCheckpoint.read_json_lines) as reads:
-            acquired = selected.observed_request(manifest)
+            requests = selected.observed_requests(manifest)
+            acquired = requests[manifest.request_id]
             timing = selected.request_timing(acquired)
             budget = selected.request_budget(acquired)
         self.assertEqual(reads.call_count, 1)
@@ -444,6 +448,62 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertEqual(timing['observations'][0].callback_ms, 0)
         self.assertFalse(timing['whole_turn_evaluated'])
         self.assertFalse(selected.request_timing(())['evaluated'])
+
+    def test_input_request_measurements_preserve_interleaved_requests_and_fences(self):
+        # Earlier model/tool requests cannot disappear or borrow the final
+        # SDK digest. Acquisition is once; ordering, retry stages, zero callback
+        # measurements and missing budget remain original observations.
+        owner = Thread('original', frozenset(), str(self.root), created_at=12)
+        turn = RecordedContextTurn(TurnId('turn'), TurnIdentity(owner.incarnation, 1))
+        manifest = ContextManifest(owner.incarnation, turn, (), 'counter', request_id='final')
+        lease = TurnLeaseFence(turn.occurrence, turn.identity.value, 3)
+        probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
+        first = RequestProgress('tool-step', self.identity.session_id, probe.input_id,
+            1, 2, '3', 1, 0, 0, 0, 'budget_admission')
+        headers = replace(first, stage='headers', elapsed_ms=9, observed_at_ms=10, monotonic_ns='11')
+        final = replace(first, request_id='final', started_at_ms=20, observed_at_ms=21, monotonic_ns='22')
+        revised = replace(first, attempt=1, admitted_output_tokens=0)
+        no_budget = replace(final, request_id='partial', stage='first_event')
+        foreign = replace(first, request_id='foreign', input_id='b' * 32)
+        points = (first, final, headers, revised, no_budget, foreign)
+        raw = ''.join(json.dumps({'turn': FieldCodec.encode(lease), 'native': FieldCodec.encode(point)})
+                      + '\n' for point in points).encode()
+        path = self.root / 'input-requests.jsonl'
+        path.write_bytes(raw)
+        selected = replace(probe, request_observations=FileProvenance(str(path), hashlib.sha256(raw).hexdigest()))
+        with patch.object(RecordedNativeCheckpoint, 'read_json_lines',
+                          wraps=RecordedNativeCheckpoint.read_json_lines) as reads:
+            requests = selected.observed_requests(manifest)
+            measured = selected.input_request_measurements(requests)
+            selected_budget = selected.request_budget(requests[manifest.request_id])
+        self.assertEqual(reads.call_count, 1)
+        self.assertEqual(tuple(requests), ('tool-step', 'final', 'partial'))
+        self.assertEqual(requests['tool-step'], (first, headers, revised))
+        self.assertEqual(selected_budget['observations'], (final,))
+        self.assertEqual(measured['observed_requests'], 3)
+        self.assertTrue(measured['evaluated'])
+        self.assertFalse(measured['complete_input_evaluated'])
+        tool, terminal, partial = measured['requests']
+        self.assertEqual(tool['budget']['observations'], (first, revised))
+        self.assertIs(tool['budget']['observations'][0], tool['timing']['observations'][0])
+        self.assertEqual(tool['timing']['observations'][0].callback_ms, 0)
+        self.assertFalse(partial['budget']['evaluated'])
+        self.assertTrue(partial['timing']['evaluated'])
+        self.assertFalse(selected.input_request_measurements({})['evaluated'])
+        public = FieldCodec.encode(measured)
+        self.assertEqual(tuple(item['request_id'] for item in public['requests']),
+                         ('tool-step', 'final', 'partial'))
+        self.assertEqual(public['requests'][0]['budget']['observations'][1]['admittedOutputTokens'], 0)
+        # An earlier request with matching session/input but another turn is
+        # not silently granted the final request's original lease.
+        changed = json.dumps({'turn': FieldCodec.encode(replace(lease, turn_id='other')),
+                              'native': FieldCodec.encode(first)}).encode() + b'\n'
+        path.write_bytes(changed)
+        with self.assertRaisesRegex(ValueError, 'another recorded turn'):
+            replace(selected, request_observations=FileProvenance(str(path), hashlib.sha256(changed).hexdigest())
+                    ).observed_requests(manifest)
+        with self.assertRaisesRegex(ValueError, 'artifact changed'):
+            selected.observed_requests(manifest)
 
     def test_model_steps_keep_tool_step_usage_and_distinguish_missing_from_zero(self):
         # Prevent final-answer-only accounting from hiding earlier tool-step
