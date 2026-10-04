@@ -575,19 +575,24 @@ async def test_contended_cursor_refresh_still_invalidates_replaced_owner(tmp_pat
     assert updates[-1].scope.admission_generation > scope.admission_generation
 
 
-async def test_acp_private_does_not_overlap_owner_turn(tmp_path, monkeypatch):
-    comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
-    fake, calls = _fake_model(decision="FULL")
-    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
-    agent.turns.active_turns["beta"] = "active-human-turn"
-    assert await agent.inputs.drain_inbox("beta") == 0
-    assert calls == []
-    agent.turns.active_turns.pop("beta")
-    assert await agent.inputs.drain_inbox("beta") == 1
-    assert len(calls) == 1
+async def test_acp_private_does_not_overlap_owner_turn(native_backend):
+    native = native_backend
+    await native.author_history()
+    async with native.open_owner() as (agent, session):
+        comms = agent._comms
+        comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
+        sent = comms.messaging.send_message("sender", session, "Selected input after current turn")
+        async with native.original_input(agent, session, "Current human input") as turn:
+            assert await agent.inputs.drain_inbox(session) == 0
+            assert agent.turns.owns_turn(session, turn.turn_id)
+            assert native.provider.posts == 0
+        # The original lease's retirement, not a test map mutation, enables
+        # canonical selected TRIAGE/FULL on the same SDK-authored saved source.
+        native.provider.text = '{"decision":"FULL"}'
+        assert await agent.inputs.drain_inbox(session) == 1
+        assert native.provider.posts == 2
+        assert comms.bus.log.message_by_id(sent.id) == sent
+        assert not agent.turns.turn_state(session).busy and not agent.inputs.backend_inboxes
 
 
 async def test_acp_private_without_explicit_package_refuses_legacy_delivery(tmp_path):

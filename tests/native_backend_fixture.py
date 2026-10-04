@@ -56,22 +56,33 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
         assert result.outcome.successful, result.stderr.decode()
         return FieldCodec.decode(NativeWitness, json.loads(result.stdout))
 
+    async def bind_saved_owner(self, agent, *, project, session):
+        """Bind an SDK source through the original session and native owners."""
+        session_id = (await agent.new_session(cwd=str(project))).session_id
+        original = agent._comms.registry.require(session_id)
+        attached = agent._comms.threads.attach_session(original, str(session))
+        await agent.turns.prepare_selected_session(session_id, attached)
+        child = agent.turns.persistent_backends[session_id].custody.child.proc
+        self.children.append(child)
+        return session_id
+
+    def native_arguments(self, options=("--no-tools",)):
+        """One external native argument declaration for saved/ACP consumers."""
+        return ("--provider", "response-local", "--model", "fixture", "--thinking", "off",
+                "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+                "--no-prompt-templates", *options)
+
     @asynccontextmanager
-    async def open_owner(self):
+    async def open_owner(self, *, runtime_enabled=False, auto_wake=False,
+                         native_options=("--no-tools",), client=None):
         """Acquire the real saved ACP owner and attested idle native child."""
         agent = canonical_agent(
-            Comms(self.root), auto_wake=False, agent_bin="pi",
-            agent_args=["--provider", "response-local", "--model", "fixture", "--thinking", "off",
-                        "--offline", "--no-extensions", "--no-skills", "--no-context-files",
-                        "--no-prompt-templates", "--no-tools"],
+            Comms(self.root), auto_wake=auto_wake, runtime_enabled=runtime_enabled, agent_bin="pi",
+            agent_args=self.native_arguments(native_options),
         )
+        agent.on_connect(client)
         try:
-            session_id = (await agent.new_session(cwd=str(self.project))).session_id
-            original = agent._comms.registry.require(session_id)
-            attached = agent._comms.threads.attach_session(original, str(self.session))
-            await agent.turns.prepare_selected_session(session_id, attached)
-            child = agent.turns.persistent_backends[session_id].custody.child.proc
-            self.children.append(child)
+            session_id = await self.bind_saved_owner(agent, project=self.project, session=self.session)
             yield agent, session_id
         finally:
             await agent.shutdown()
@@ -124,20 +135,7 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
         async with asyncio.timeout(25):
             async for event in backend.stream_agent_events(
                 "pi",
-                [
-                    "--provider",
-                    "response-local",
-                    "--model",
-                    "fixture",
-                    "--thinking",
-                    "off",
-                    "--offline",
-                    "--no-extensions",
-                    "--no-skills",
-                    "--no-context-files",
-                    "--no-prompt-templates",
-                    "--no-tools",
-                ],
+                self.native_arguments(),
                 text,
                 str(self.project),
                 session_file=str(self.session),

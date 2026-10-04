@@ -2,19 +2,13 @@
 
 import asyncio
 import os
-from dataclasses import replace
+from contextlib import aclosing
 
 import pytest
 
 from agent_comms import agent_events as ae
+from agent_comms import backend
 from agent_comms.acp_extension import GoalChangedUpdate, decode_updates
-from agent_comms.bus_publication import stable_thread_lookup
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.cohort_schema import install_private_cohort_schema
-from agent_comms.comms import wire
-from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
-from agent_comms.coordination_response import install_private_response_schema
-from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     BlockedGoalAction,
@@ -26,20 +20,24 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import CompletedGeneration, ReadyGeneration
 from agent_comms.goals import Goal
-from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.runtime import RuntimeProxy, socket_path
-from delivery_owner_fixture import canonical_agent
+from test_backend_native_lifecycle import native_backend
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 
 
 @pytest.mark.parametrize("outcome", ["success", "error", "eof", "exception", "cancel"])
 async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
-    tmp_path, monkeypatch, outcome
+    native_backend, monkeypatch, outcome
 ):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = wire(tmp_path / "wire")
-    owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+    native = native_backend
+    await native.author_history()
+    async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+        await exercise_retry(owner, session, native, monkeypatch, outcome)
+
+
+async def exercise_retry(owner, session, native, monkeypatch, outcome):
+    comms = owner._comms
     entered, release = asyncio.Event(), asyncio.Event()
     settled, finish = asyncio.Event(), asyncio.Event()
     continued = asyncio.Event()
@@ -53,18 +51,6 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
             updates.append(kwargs["update"])
 
     owner.on_connect(Client())
-    session = (await owner.new_session(str(tmp_path / "project"))).session_id
-    # The live drain requires the same installed stores and participant as the
-    # production root. Merely issuing the bus marker is insufficient.
-    with Coordination(str(comms.root / "coordination.sqlite3")) as coordination:
-        install_private_cohort_schema(coordination)
-        install_private_response_schema(coordination)
-        install_native_runtime_schema(coordination)
-        install_prompt_binding_schema(coordination)
-        coordination.participants.register(
-            stable_thread_lookup(comms.registry.require(session).created_at),
-            session, session, committed=True,
-        )
     store = owner.turns.goals.open_goal_store()
     goal = comms.goals.update_goal(
         session, SetGoalAction(text="Finish the blocked objective"), owner_store=store
@@ -82,11 +68,13 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
         "acp:old-unknown",
         seq=None,
         owner=session,
-        admission=1,
+        admission=comms.registry.snapshot().admission_generations[session],
         target=session,
         text="Uncertain old input must never replay",
     )
     old_unknown = owner.inputs.dispositions.read().rows.get("acp:old-unknown")
+
+    native_stream = backend.stream_agent_events
 
     async def events(*args, **kwargs):
         nonlocal active_backends, max_active_backends
@@ -96,45 +84,45 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
         active_backends += 1
         max_active_backends = max(max_active_backends, active_backends)
         try:
-            native_id = f"{number:032x}"
-            with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
-                assert allowed is True
-            assert kwargs["native_start"](None, native_id, args[2])
-            yield ae.InputStarted(id=None)
-            if number == 1:
-                entered.set()
-                await release.wait()
-                yield ae.StreamSettled()
-                settled.set()
-                await finish.wait()
-                if outcome == "exception":
-                    raise RuntimeError("Current user turn failed")
-                if outcome != "eof":
-                    yield ae.Done(ok=outcome == "success", text="Current turn ended")
-            else:
-                current = comms.registry.require(session).goal
-                assert current.state.active and current.id == goal.id
-                assert store.snapshot(goal.id).number == 2
-                comms.goals.update_goal(
-                    session,
-                    CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
-                    actor=ModelInvocable,
-                )
-                yield ae.ToolEnd(id="report", name="alternate_goal_report", ok=True)
-                yield ae.StreamSettled()
-                yield ae.Done(ok=True, text="Goal completed")
-                continued.set()
+            # Only the external stream's terminal delivery is held/interrupted.
+            # Native input IDs, starts, source receipts and phases stay original.
+            async with aclosing(native_stream(*args, **kwargs)) as stream:
+                async for event in stream:
+                    if number == 1 and isinstance(event, ae.InputStarted):
+                        entered.set()
+                        await release.wait()
+                    if number == 2 and isinstance(event, ae.Done):
+                        current = comms.registry.require(session).goal
+                        assert current.state.active and current.id == goal.id
+                        assert store.snapshot(goal.id).number == 2
+                        comms.goals.update_goal(
+                            session,
+                            CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                            actor=ModelInvocable,
+                        )
+                    yield event
+                    if number == 1 and isinstance(event, ae.StreamSettled):
+                        settled.set()
+                        await finish.wait()
+                        if outcome == "exception":
+                            raise RuntimeError("Current user turn failed")
+                        if outcome == "eof":
+                            return
+                    if number == 2 and isinstance(event, ae.Done):
+                        continued.set()
         finally:
             active_backends -= 1
 
+    if outcome == "error":
+        native.provider.status = 503
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     turn = asyncio.create_task(
         proxy.request("prompt", prompt=[{"type": "text", "text": "Current user request"}])
     )
     try:
-        await asyncio.wait_for(entered.wait(), 3)
-        assert session in owner.turns.active_turns and session in owner.inputs.backend_inboxes
+        await asyncio.wait_for(entered.wait(), 30)
+        assert owner.turns.turn_state(session).busy and session in owner.inputs.backend_inboxes
         results = await asyncio.gather(
             *(
                 proxy.request("retry_goal", goal_id=goal.id, expected_revision=blocked.revision)
@@ -172,20 +160,21 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
             assert store.snapshot(goal.id) == generation
         else:
             release.set()
-            await asyncio.wait_for(settled.wait(), 3)
+            await asyncio.wait_for(settled.wait(), 30)
             # Native settlement alone is not permission to overlap a still-open stream.
             assert (
-                session not in owner.turns.active_turns and session in owner.inputs.backend_inboxes
+                owner.turns.turn_state(session).busy and session in owner.inputs.backend_inboxes
             )
             await owner.turns.goals.schedule_goal(session)
             assert len(calls) == 1 and not owner.inputs.pending_turns.get(session)
+            native.provider.status = 200
             finish.set()
             if outcome == "exception":
                 with pytest.raises(RuntimeError, match="Current user turn failed"):
                     await turn
             else:
                 assert (await turn)["stopReason"] == "end_turn"
-            await asyncio.wait_for(continued.wait(), 5)
+            await asyncio.wait_for(continued.wait(), 30)
             await owner.inputs.wake_tasks[session]
             assert len(calls) == 2
             assert comms.registry.require(session).goal.state.declared_name == "completed"
@@ -202,54 +191,44 @@ async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
 
 
 @pytest.mark.parametrize("fence", ["claimed", "reserved", "owner", "origin"])
-async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(tmp_path, monkeypatch, fence):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = wire(tmp_path / "wire")
-    owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
-    monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
-    session = (await owner.new_session(str(tmp_path / "project"))).session_id
-    store = owner.turns.goals.open_goal_store()
-    goal = comms.goals.update_goal(
-        session, SetGoalAction(text="Keep attempt authority"), owner_store=store
-    )
-    reservation = store.reserve(goal.id, 1)
-    if fence != "reserved":
-        store.claim_launch(reservation)
-    if fence in {"owner", "origin"}:
-        reservation.fail(store, "Known failed attempt")
-    blocked = comms.goals.update_goal(
-        session,
-        BlockedGoalAction(
-            expect=GoalPrecondition(goal_id=goal.id),
-            block_reason="Owner input required before retry",
-        ),
-    )
-    generation = store.snapshot(goal.id)
-    owner.turns.active_turns[session] = "unrelated-turn"
-    owner.inputs.backend_inboxes[session] = asyncio.Queue()
-    proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
-    if fence == "owner":
-        # Call the actual owner handler after identity changed, without redirecting the proxy.
-        original = owner.sessions.require
-
-        def replaced_owner(session_id):
-            comms.registry.register(
-                replace(comms.registry.require(session), process_identity=ProcessIdentity(os.getpid() + 100000, 1))
+async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(native_backend, fence):
+    native = native_backend
+    await native.author_history()
+    async with native.open_owner(runtime_enabled=True) as (owner, session):
+        comms = owner._comms
+        async with native.original_input(owner, session, "Unrelated turn") as turn:
+            store = owner.turns.goals.open_goal_store()
+            goal = comms.goals.update_goal(
+                session, SetGoalAction(text="Keep attempt authority"), owner_store=store
             )
-            return original(session_id)
-
-        monkeypatch.setattr(owner.sessions, "require", replaced_owner)
-    elif fence == "origin":
-        owner.turns.goals.pending_goal_origins[session] = goal.id
-    try:
-        expected = {"owner": "owner changed", "origin": "origin turn"}.get(fence, "unresolved")
-        with pytest.raises(RuntimeError, match=expected):
-            await proxy.request("retry_goal", goal_id=goal.id, expected_revision=blocked.revision)
-        assert comms.registry.require(session).goal == blocked
-        assert store.snapshot(goal.id) == generation
-        assert not owner.inputs.pending_turns.get(session)
-    finally:
-        owner.turns.active_turns.clear()
-        owner.inputs.backend_inboxes.clear()
-        await owner.shutdown()
-        await proxy.close()
+            reservation = store.reserve(goal.id, 1)
+            if fence != "reserved":
+                store.claim_launch(reservation)
+            if fence in {"owner", "origin"}:
+                reservation.fail(store, "Known failed attempt")
+            blocked = comms.goals.update_goal(
+                session,
+                BlockedGoalAction(
+                    expect=GoalPrecondition(goal_id=goal.id),
+                    block_reason="Owner input required before retry",
+                ),
+            )
+            generation = store.snapshot(goal.id)
+            proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+            assert owner.turns.owns_turn(session, turn.turn_id)
+            if fence == "owner":
+                # Loss is an original registry operation, not an invented PID.
+                comms.registry.unregister(session)
+            elif fence == "origin":
+                owner.turns.goals.pending_goal_origins[session] = goal.id
+            try:
+                expected = {"owner": "no longer owns", "origin": "origin turn"}.get(fence, "unresolved")
+                with pytest.raises(RuntimeError, match=expected):
+                    await proxy.request("retry_goal", goal_id=goal.id, expected_revision=blocked.revision)
+                assert comms.registry.require(session).goal == blocked
+                assert store.snapshot(goal.id) == generation
+                assert not owner.inputs.pending_turns.get(session)
+            finally:
+                await proxy.close()
+        assert not owner.turns.turn_state(session).busy and not owner.inputs.backend_inboxes
+    assert native.provider.posts == 0
