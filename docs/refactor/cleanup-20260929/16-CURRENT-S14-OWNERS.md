@@ -16,6 +16,10 @@ the old PREFIXactivation is historical and was not rewritten. Bohr's independent
 and165 protected originals. This prefix is now public: no private package loan,
 old637 restoration or second440 execution is permitted by prior closed grants.
 Former publicstyle22 is not automatically granted for a new private purpose.
+Parent now authorizes Bohr to adjudicate that exact former holder for sole441
+private acceptance. Eligibility requires actual nonlive status, all defaults
+still334, fresh owner/borrower checks and an archive of its actual current floor.
+This is not a package grant or permission to restore the historical1470 floor.
 
 On the preceding public436 cohort, corrected tail04 completed with terminal0,
 18 native checks true and owned cleanup empty. Channel opening/return, hidden
@@ -23,12 +27,27 @@ and shown Window admission, retained editor/history resources, draft and Undo,
 and warm body readiness passed. Original broad02 deadline failure and tail03
 exact-name selector failure remain unchanged. Held-scrolling CPU and writer
 gap evidence still needs structural correlation; no smoothness/CPU gain claim.
+The two reviewed gaps are predominantly before enqueue:200.687ms plus9.308ms
+writer for the210ms input gap,196.819ms plus4.643ms for the201ms history gap.
+The sampled RichVisual path cannot identify the responsible widget or prove
+Markdown rebuilding: existing Content/Visual/strip owners remain distinct.
+No native patch or repeated capture follows from that ambiguous sample.
 
 Heis owns ordinary affected440 UI verification and full performance441 source;
 Einstein owns unfinished W6 wait-lifetime/worker/UI/schema integration. Arendt
 continues fullS4; its completed659 SDK stream qualifies message proof only,
 not whole tool/system projection or clean controller exit. No unqualified
 W6/schema10/7a2e or441 product was installed. The full goal remains active.
+
+Core659 final95bf099c mergedc060ec2d after exact Debt37230240961 passed.
+Parent checked all23 retained raw hashes and seven source hashes; final private
+files equal implementation1e653 and production/stack/tools are unchanged.
+Original SDK entry selection now reaches the installation/reader/scorer once;
+message-count completeness is deleted. Four controls and the one completed SDK
+message/history projection qualify that scope. The original45.033s controller
+timeout and whole tool/system refusal remain failures, with no stream rerun.
+Arendt continues the original debugger/controller completion family source pass;
+provider capacity, matched arms and the30-pair/USD75 study remain unqualified.
 
 ## Historical: original436 published; C4 source complete; whole UI and W6 remain — 2026-10-04
 
