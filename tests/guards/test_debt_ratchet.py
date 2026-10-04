@@ -39,7 +39,7 @@ class Repository:
 
     def compare(self, base: str, head: str) -> tuple[int, dict]:
         result = subprocess.run(
-            [str(Path(sys.executable).with_name("agent-comms-ratchet")), "--root", self.root, "--base", base, "--head", head],
+            [sys.executable, "-m", "agent_comms.debt_ratchet", "--root", self.root, "--base", base, "--head", head],
             cwd=self.path,
             capture_output=True,
             text=True,
@@ -165,7 +165,9 @@ def owner(name: str, lines: int, indent: str = "") -> str:
     )
 
 
-def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(repo: Repository):
+@pytest.mark.parametrize("root", ["src/agent_comms", "src/toad", "src/textual"])
+def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(tmp_path: Path, root: str):
+    repo = Repository(tmp_path, root)
     from agent_comms.debt_ratchet import FamilyFlattened
     from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
 
@@ -180,16 +182,24 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(re
     assert FamilyFlattened.occurrences(ast.parse(original).body[0].body[0]) == (
         AuditFamilyFlattened.count(ast.parse(original).body[0].body[0])
     )
-    mechanism = next(name for package, name in FamilyFlattened.mechanism_modules
-                     if package == Path(repo.root).name)
+    original_modules = tuple(module for module in FamilyFlattened.mechanism_modules
+                             if module.parent == Path(repo.root))
+    facades = {f"{directory}/{module.parent.name}/{module.name}"
+               for module in FamilyFlattened.mechanism_modules
+               for directory in ("nested", "vendor")}
+    facades.update(f"nested/{module.name}" for module in FamilyFlattened.mechanism_modules)
     moved = repo.commit({"second.py": "def carry(value):\n    return value\n",
-                         "another_codec.py": original, mechanism: original,
-                         f"nested/{mechanism}": original})
+                         "another_codec.py": original,
+                         **{module.name: original for module in original_modules},
+                         **{path: original for path in facades}})
     status, report = repo.compare(head, moved)
     assert status == 1
     assert report["delta"][f"FamilyFlattened:{repo.root}/another_codec.py"] == 2
-    assert report["head"][f"FamilyFlattened:{repo.root}/{mechanism}"] == 0
-    assert report["head"][f"FamilyFlattened:{repo.root}/nested/{mechanism}"] == 2
+    for module in original_modules:
+        assert report["head"][f"FamilyFlattened:{module.as_posix()}"] == 0
+    for path in facades:
+        assert report["head"][f"FamilyFlattened:{repo.root}/{path}"] == 2
+
 
 
 def test_small_owner_growth_and_exact_threshold_pass(repo: Repository) -> None:

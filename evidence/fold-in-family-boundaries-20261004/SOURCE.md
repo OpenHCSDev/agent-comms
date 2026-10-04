@@ -223,3 +223,36 @@ The granted existing style22 now has exact original Core611/Toad9138/Texta52/
 NRA d392 bytes, all69 versions/origins, archive-member readback and pip check.
 Whole package/import/execution and native READ claims are returned. No further
 Core control/App/provider run is needed for this unchanged source milestone.
+
+## Exact mechanism path correction
+
+Parent review found the earlier package-tail exemption was incorrect. Full Git
+paths were truncated to their last two components; nested/agent_comms/field_codec.py
+and vendor/toad/db.py inherited a genuine mechanism exemption. FamilyFlattened
+now holds the complete repository-relative paths of the same six original
+modules and compares the supplied Git path directly. The suffix interpretation
+is deleted; GitMeasure already owns the full source path and scope. No new
+collector, package/module roster, exclusion, aggregate offset or scanner.
+
+The existing real Git guard now exercises Core, Toad and Textual roots. Every
+nested/package/module and vendor/package/module combination of the six originals
+counts, including repeated agent_comms and toad tails. The genuine Core/Toad
+paths remain zero; Textual has no original mechanism exemption. Cross-file
+reductions still cannot cancel growth. Its existing subprocess calls the same
+packaged module CLI via python -m instead of assuming a sibling installed
+console script, preserving real Git/AST execution for source and installed runs.
+The original one-packaged-owner control also passes. Four changed guards pass
+7.65s on system Python using own source plus the genuine NRA9a98 wheel directly;
+this is source-only qualification and requires no borrowed package writes.
+
+Before evidence uses the original Package owner:311 modules, zero omissions.
+After evidence parses the changed production and fixture modules and records
+complete affected owner definitions/consumers; no omitted changed module. The
+unchanged original collector/history-growth evidence and accepted saved App
+remain intact. No new App/provider/fork/input/native run or timing claim.
+
+Normal Core F1 main486b8366 (including628docs/fixtures) is joined. Toad normally
+joins actual F1 main31c93c7c, preserving byte-exact session_presentation.py and
+widgets/conversation.py release files plus standalone427. Product qualification
+remains the original receipt and separately accepted F1 release; this source-only
+ratchet correction does not relabel either old negative.

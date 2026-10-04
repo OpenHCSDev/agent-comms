@@ -83,7 +83,9 @@ class PerFileOccurrenceMeasure(OccurrenceMeasure):
 class FamilyFlattened(PerFileOccurrenceMeasure):
     """The original audit collector, enforced independently for each file."""
 
-    mechanism_modules = frozenset({
+    # GitMeasure supplies complete repository-relative paths. Only those exact
+    # original modules own codec/schema behavior; nested package tails do not.
+    mechanism_modules = frozenset(Path("src", package, module) for package, module in {
         ("agent_comms", "field_codec.py"), ("agent_comms", "typed_table.py"),
         ("agent_comms", "coordination_schema.py"),
         ("agent_comms", "coordinated_runtime_schema.py"),
@@ -96,7 +98,7 @@ class FamilyFlattened(PerFileOccurrenceMeasure):
 
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
-        if tuple(Path(filename).parts[-2:]) in cls.mechanism_modules:
+        if Path(filename) in cls.mechanism_modules:
             return 0
         return super().count(source, filename)
 
