@@ -27,7 +27,7 @@ from agent_comms.backend import PersistentPiSession
 from agent_comms.native_attestation import ObservedAttestation
 from agent_comms.native_custody import PiSessionChild
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.pi_payloads import PiMessage, StateData, ToolResultMessage
+from agent_comms.pi_payloads import PiMessage, PiPayload, StateData, ToolResultMessage
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_rpc import unique_fields
 from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
@@ -433,7 +433,7 @@ class RecordedNativeCheckpoint:
 
 
 @dataclass(frozen=True)
-class RecordedConditionInstallation:
+class RecordedConditionInstallation(PiPayload):
     """One original private SDK hook observation, not enrollment or a grant.
 
     This is a new observation: installed source entering the configured transform.
@@ -455,11 +455,22 @@ class RecordedConditionInstallation:
     # which borrow live SDK messages do not prove a journal entry selection.
     entry_selection: JournalProvenance | None = field(default=None,
         metadata={"wire_omit_default": True})
+    # Original EntryStore.uncompactedMetadata selection at this same witness.
+    # Older observations did not retain it; never infer it from an arm label.
+    uncompacted_selection: JournalProvenance | None = field(default=None,
+        metadata={"wire_omit_default": True})
     # An original constructor resource, not inferred from its condition label.
     narrative_source: FileProvenance | None = field(default=None,
         metadata={"wire_omit_default": True})
     construction_manifest: NativeContextManifestData | None = field(default=None,
         metadata={"wire_omit_default": True})
+
+    def to_wire(self):
+        """Retain the nested SDK manifest's original external representation."""
+        data = super().to_wire()
+        if self.construction_manifest is not None:
+            data['construction_manifest'] = self.construction_manifest.to_wire()
+        return data
 
     def require_narrative_source(self, source: FileProvenance):
         if self.narrative_source != source:
@@ -544,23 +555,40 @@ class RecordedConditionInstallation:
             'scope':'Complete ordered constructor message partition compared with the captured SDK request prefix; '
                     'requires original transform/converter/request binding; not HTTP bytes, capacity or a matched study'}
 
-    def source_selection(self, identity, ancestry):
-        """Describe the observed SDK entry selection, never provider capacity."""
-        if self.entry_selection is None:
-            return {'evaluated': False,
-                'reason': 'Original SDK journal entry selection was not captured'}
-        selected = self.entry_selection.journal_entries(identity)
+    @staticmethod
+    def require_selection(source, identity, ancestry):
+        """Both original SDK selections borrow the same acquired ancestry."""
+        selected = source.journal_entries(identity)
         available = tuple(entry.require_entry_id() for entry in ancestry)
         selected_set = set(selected)
         if len(selected_set) != len(selected) or tuple(
                 entry for entry in available if entry in selected_set) != selected:
             raise ValueError('SDK selected entries are not an ordered subset of the original construction ancestry')
+        return selected
+
+    def source_selection(self, identity, ancestry):
+        """Compare SDK-owned selections, never a label or message count."""
+        full = (self.require_selection(self.uncompacted_selection, identity, ancestry)
+                if self.uncompacted_selection is not None else None)
+        selected = (self.require_selection(self.entry_selection, identity, ancestry)
+                    if self.entry_selection is not None else None)
+        complete = {'evaluated': False,
+            'reason': 'Original selected and uncompacted SDK entry references required'}
+        if full is not None and selected is not None:
+            complete = {'evaluated': True, 'selected': selected == full,
+                'source': self.uncompacted_selection,
+                'scope': 'Exact ordered SDK uncompacted entry selection at the original construction witness; '
+                         'not transformed bytes, admission or provider capacity'}
+        if selected is None:
+            return {'evaluated': False, 'uncompacted_selection': complete,
+                'reason': 'Original SDK journal entry selection was not captured'}
+        selected_set = set(selected)
         messages = tuple(entry.require_entry_id() for entry in ancestry if entry.is_message)
         return {'evaluated': True, 'source': self.entry_selection,
+            'uncompacted_selection': complete,
             'original_message_entries': messages,
             'selected_message_entries': tuple(entry for entry in messages if entry in selected_set),
             'unselected_message_entries': tuple(entry for entry in messages if entry not in selected_set),
-            'all_original_message_entries_selected': all(entry in selected_set for entry in messages),
             'scope': 'Original SDK entry-based construction before conversion; not complete transformed content, '
                      'provider token capacity, HTTP bytes or a registered intervention'}
 
@@ -659,7 +687,7 @@ class RecordedNativeProbe:
 
     def installed_condition(self,evidence,branch,context,serialized,manifest,records,*,parent,texts):
         """Join an observed installed source to the same original SDK request."""
-        originals=tuple(FieldCodec.decode(RecordedConditionInstallation,row) for row in records
+        originals=tuple(RecordedConditionInstallation.from_wire(row) for row in records
             if row.get('stage')=='installed-transform-applied' and row['input_id']==self.input_id)
         unavailable = {'evaluated': False, 'reason': 'Original SDK journal entry selection unavailable'}
         narrative = {'evaluated': False, 'reason': 'Original installed narrative source and matching SDK bytes unavailable'}
@@ -860,8 +888,8 @@ class RecordedNativeProbe:
             raise ValueError("Recorded SDK context is not this original probe request")
         return manifest
 
-    def serialized_construction(self, data, manifest):
-        """Acquire original SDK bytes independently of a retained-fact oracle.
+    def serialized_segments(self, data, manifest):
+        """Acquire all original SDK serializations against their manifest once.
 
         Both construction and envelope presence borrow this checked capture.
         Re-encoding decoded segment objects cannot supply missing original bytes.
@@ -880,30 +908,50 @@ class RecordedNativeProbe:
             if (len(raw) != segment.utf8_bytes
                     or hashlib.sha256(raw).hexdigest() != segment.sha256):
                 raise ValueError("Recorded SDK segment bytes differ from measured source")
-            # Compare external JSON values, preserving boolean/number kinds;
-            # Python container equality alone equates true and 1. This is not
-            # a replacement for the original serialized-byte digest above.
-            value = json.loads(text, object_pairs_hook=unique_fields)
-            if json.dumps(value, sort_keys=True) != json.dumps(segment.provider_value(), sort_keys=True):
-                raise ValueError("Recorded SDK segment value differs from its original captured bytes")
-        # NativeMessages owns which SDK segments carry provider messages. Join
-        # their ORIGINAL JSON array interiors in order: Python reserialization
-        # can change Unicode, number and opaque-provider-field representation.
-        # The private SDK capture writes these arrays with JSON.stringify.
+        return texts, {"evaluated": True, "artifact": self.sdk_segment_bytes}
+
+    @staticmethod
+    def require_serialized_value(segment, text):
+        # JSON type identity matters: Python equality equates true and 1.
+        value = json.loads(text, object_pairs_hook=unique_fields)
+        if json.dumps(value, sort_keys=True) != json.dumps(segment.provider_value(), sort_keys=True):
+            raise ValueError("Recorded SDK segment value differs from its original captured bytes")
+
+    def serialized_messages(self, data, texts):
+        """NativeMessages owns the exact input partition, not tool callbacks.
+
+        Callers supply the same acquired serializations, already checked against
+        every original digest/length. This projection validates every message
+        value, without claiming that other SDK value projections were preserved.
+        """
         message_parts=[]
         for segment,text in zip(data.segments,texts):
             if isinstance(segment,NativeMessages):
+                self.require_serialized_value(segment, text)
                 if not text.startswith('[') or not text.endswith(']'):
                     raise ValueError('Recorded SDK message segment is not its original JSON array')
                 if text[1:-1]:
                     message_parts.append(text[1:-1])
         messages='['+','.join(message_parts)+']'
+        return {"evaluated": True,
+                "provider_messages_sha256": hashlib.sha256(messages.encode()).hexdigest(),
+                "scope": "Original SDK message segment bytes/values only; not system/tools, full request, HTTP or capacity"}
+
+    def serialized_construction(self, data, manifest):
+        """Whole SDK value agreement, distinct from the message projection."""
+        texts, captured = self.serialized_segments(data, manifest)
+        if not captured['evaluated']:
+            return texts, captured
+        for segment, text in zip(data.segments, texts):
+            if not isinstance(segment, NativeMessages):
+                self.require_serialized_value(segment, text)
+        messages = self.serialized_messages(data, texts)
         return texts, {"evaluated": True, "stage": "recorded SDK provider input",
                 "artifact": self.sdk_segment_bytes,
                 "context_digest": self.sdk_request(data).context_digest,
                 "segments": len(data.segments),
                 "utf8_bytes": sum(segment.utf8_bytes for segment in data.segments),
-                "provider_messages_sha256": hashlib.sha256(messages.encode()).hexdigest(),
+                "provider_messages_sha256": messages['provider_messages_sha256'],
                 "final_transport_evaluated": False,
                 "scope": "Original captured serializations match every SDK measured segment; not HTTP bytes, provider token counts or intervention proof"}
 
@@ -1024,6 +1072,30 @@ class RecordedNativeProbe:
                 "reason": "Original admitted request calculations" if admitted else "No original budget admission observation"}
 
     @staticmethod
+    def full_history_admission(installation, budget):
+        """Join original SDK selection, complete request prefix and admission.
+
+        The native budget alone decides allowance. This reader never computes
+        tokens or treats an admitted smaller context as full-history capacity.
+        Original provider-token/HTTP capacity remains a separate question.
+        """
+        selection = installation['entry_selection']
+        prefix = installation['constructed_prefix']
+        if not selection['evaluated'] or not prefix['evaluated'] or not budget['evaluated']:
+            return {'evaluated': False,
+                'reason': 'Original selected history, complete bound request prefix and native admission required'}
+        full = tuple(value['uncompacted_selection'] for value in selection['observations'])
+        if not all(value['evaluated'] for value in full):
+            return {'evaluated': False, 'observations': full,
+                'reason': 'Original SDK uncompacted selection was not captured'}
+        return {'evaluated': True,
+            'admitted_full_history': all(value['selected'] for value in full) and prefix['preserved'],
+            'selection': full, 'constructed_prefix': prefix, 'request_budget': budget,
+            'scope': 'Original SDK uncompacted selection preserved through this bound constructor/request '
+                     'prefix and its native estimated admission; not provider-token capacity, HTTP bytes, '
+                     'scenario-history equivalence or a matched study'}
+
+    @staticmethod
     def request_timing(observed: tuple[RequestProgress, ...]):
         """Export original native measurements without synthesizing a clock.
 
@@ -1141,6 +1213,8 @@ class RecordedNativeProbe:
         observed_request = observed_requests.get(manifest.request_id, ()) if manifest is not None else ()
         budget = self.request_budget(observed_request)
         records = self.condition_records()
+        installation = self.installed_condition(evidence,branch,context,serialized,manifest,records,
+                                               parent=parent,texts=texts)
         return {
             "fork": fork,
             "journal_settings": {
@@ -1157,9 +1231,9 @@ class RecordedNativeProbe:
             "input_request_measurements": self.input_request_measurements(observed_requests),
             "request_completion": self.request_completion(budget, answer),
             "source_coverage": coverage,
+            "full_history_sdk_admission": self.full_history_admission(installation, budget),
             "condition_application": self.applied_condition(evidence,parent,texts,serialized,manifest,records),
-            "condition_installation": self.installed_condition(evidence,branch,context,serialized,manifest,records,
-                                                              parent=parent,texts=texts),
+            "condition_installation": installation,
         }
 
     @staticmethod
