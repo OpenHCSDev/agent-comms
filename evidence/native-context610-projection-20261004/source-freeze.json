@@ -1,0 +1,23 @@
+{
+  "source_checkpoint": "015192f49a3f8d6c0edf05b8fdc06b260fe49133",
+  "accepted_native_source": "653f17e22af926bfa0e66b2066f23dfd95f56354",
+  "native_production_equal": true,
+  "native_only_changed_file": "stack/native-turn-context.mjs",
+  "files": {
+    "stack/native-turn-context.mjs": "372034dd4f5d6afa4fced26940ac886c7d0e7debb32d6c3cded7868f2e6ba906",
+    "stack/native-turn-context.d.ts": "e47a2ad3d14a5802e6736227ecfb7c5acce4e98733aeac66414ea8912e7e0aba",
+    "stack/patch-native-turn-context.py": "87421c83bdaaba23462593ecf30af6cab3d1d7a2da0c56e990af9680b428096f"
+  },
+  "canonical_recipe_source": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/context-source603-parts-native-20261003/capture-stock-recipe.sh",
+  "canonical_recipe_sha256": "195c43a037e89d6f00dbde1f9d750646e551cbb604837f4121717057e2d73f96",
+  "capture_recipe_sha256": "458e322c340cefb7e839a14ef2253d63e0b3d6e9bfd5d9b666bd42a5014a306a",
+  "original_d5_manifest": "d5efa0d56e7ad3962bf3efc009adf1569167a260f1ceb46824c9271a0e7542a2",
+  "npm_cache": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/npm-cache",
+  "sharing608_excluded": true,
+  "new_environment": false,
+  "new_worktree": false,
+  "provider_calls": 0,
+  "public_changes": false,
+  "purpose": "ONE610 matching original stock recipe; Arendt sole changed SDK comparison/saved-source qualifier",
+  "prior603_manifest_before_parts": "f3dd185eb4b1394e3edb12195b5805a8515d1bccad458d350a2e14c1498c0c72"
+}
