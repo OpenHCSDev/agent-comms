@@ -18,6 +18,7 @@ from .acp_failure import PromptFailureReceipt
 from .channel_input_batch import InputBatch
 from .goal_attempts import LaunchPermit
 from .messages import Message
+from .input_attempt import ReservedInput
 from .input_origin import WireInputOrigin
 from .owned_send_admission import OwnedSendAdmission
 from .native_input_owner import RegistryOwner
@@ -161,30 +162,35 @@ class OwnedTurn:
         self.bus_origins = tuple(origin for origin in self.origins if origin.seq > 0)
         if self.bus_origins:
             with _store_lock(self.runner.comms._wire_lock_path):
-                self.snapshot = self.runner.comms.registry.snapshot()
-                for origin in self.bus_origins:
-                    self.key = self.runner.inputs.dispositions.bus_key(origin, self.thread)
-                    self.original_keys = (*self.original_keys, self.key)
-                    self.runner.inputs.dispositions.record(
-                        self.key,
-                        seq=origin.seq,
+                snapshot = self.runner.comms.registry.snapshot()
+                metadata = self.runner.comms.bus.log.read_metadata_unlocked()
+                originals = tuple(
+                    ReservedInput(
+                        key=self.runner.inputs.dispositions.bus_key(origin, self.thread),
+                        sequence=origin.seq,
                         owner=self.thread_name,
-                        admission=self.snapshot.admission_generations[self.thread_name],
+                        admission=snapshot.admission_generations[self.thread_name],
                         target=origin.target,
-                        text=ScheduledTurn.incoming(
-                            origin, aliases=self.snapshot.aliases
+                        source_text=ScheduledTurn.incoming(
+                            origin, aliases=snapshot.aliases
                         ).prompt,
                         origin=WireInputOrigin(
-                            self.runner.comms.bus.log.read_metadata_unlocked().wire_root_id,
+                            metadata.wire_root_id,
                             origin.reference,
                         ),
                     )
+                    for origin in self.bus_origins
+                )
+                self.original_keys = (*self.original_keys, *(row.key for row in originals))
+                document = self.runner.inputs.dispositions.record_originals(*originals)
+        else:
+            document = self.runner.inputs.dispositions.read()
         batch = InputBatch.capture(
             self.origins,
             self.original_keys,
             self.task,
             self.thread,
-            self.runner.inputs.dispositions,
+            document,
         )
         self.prepare_prompt(batch)
         self.reserve_input(batch)

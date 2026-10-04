@@ -10,7 +10,7 @@ from .channel_targets import is_channel_target
 from .input_attempt import StoredInput
 
 if TYPE_CHECKING:
-    from .input_disposition import InputDispositions
+    from .input_disposition import InputDocument
     from .messages import Message
     from .threads import Thread
 
@@ -37,9 +37,11 @@ class InputBatch(ABC):
         keys: tuple[str, ...],
         prompt: str,
         owner: Thread,
-        dispositions: InputDispositions,
+        document: InputDocument,
     ) -> InputBatch:
-        originals = dispositions.read().originals(keys)
+        from .input_disposition import InputDispositions
+
+        originals = document.originals(keys)
         single = SingleInputBatch(originals)
         # Sequence identity proves distinct channel originals in admitted order.
         channels = {
@@ -49,7 +51,7 @@ class InputBatch(ABC):
         }
         if len(channels) < 2 or tuple(channels.values()) != origins:
             return single
-        expected_keys = tuple(dispositions.bus_key(origin, owner) for origin in origins)
+        expected_keys = tuple(InputDispositions.bus_key(origin, owner) for origin in origins)
         admitted = ChannelInputBatch(originals)
         return admitted if admitted.keys == expected_keys and admitted.prompt == prompt else single
 

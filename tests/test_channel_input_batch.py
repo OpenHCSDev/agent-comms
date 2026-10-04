@@ -34,7 +34,8 @@ def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path):
             text=message.body,
         )
     prompt = "text 1\n\ntext 2"
-    assert InputBatch.capture(origins, keys, prompt, owner, ledger).admits_multiple
+    document = ledger.read()
+    assert InputBatch.capture(origins, keys, prompt, owner, document).admits_multiple
     for messages, input_keys, text in (
         (origins[:1], keys[:1], "text 1"),
         ((origins[0], origins[0]), keys, prompt),
@@ -43,12 +44,12 @@ def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path):
         (origins, tuple(reversed(keys)), prompt),
         (origins, keys, "corrected prompt"),
     ):
-        assert not InputBatch.capture(messages, input_keys, text, owner, ledger).admits_multiple
+        assert not InputBatch.capture(messages, input_keys, text, owner, document).admits_multiple
 
     with pytest.raises(ValueError, match="receipt is unavailable"):
-        InputBatch.capture(origins, (keys[0], "missing"), prompt, owner, ledger)
-    admitted = InputBatch.capture(origins, keys, prompt, owner, ledger)
-    assert admitted.originals == ledger.read().originals(keys)
+        InputBatch.capture(origins, (keys[0], "missing"), prompt, owner, document)
+    admitted = InputBatch.capture(origins, keys, prompt, owner, document)
+    assert admitted.originals == document.originals(keys)
     assert admitted.keys == keys and admitted.prompt == prompt
 
 

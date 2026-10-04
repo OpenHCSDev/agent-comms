@@ -1,6 +1,7 @@
 """Typed saved boundaries and durable acceptance precede process-local scheduling."""
 
 import json
+from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from unittest.mock import patch
 
@@ -20,6 +21,67 @@ from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.locked_store import LockedStore
 from agent_comms.retained_task_facts import InputTaskFact, RetainedTaskFacts
 from agent_comms.errors import RelationViolationError
+from agent_comms.thread_identity import TurnId
+
+
+def test_original_batch_publication_preserves_prior_rows_and_owns_only_new_custody(tmp_path):
+    store = InputDispositions(tmp_path / InputDispositions.filename)
+    args = dict(seq=None, owner="worker", admission=1, target="worker", text="Prior input")
+    assert store.record("prior", **args)
+    assert store.record("unknown", **args)
+    assert store.bind("unknown", admission=1, turn_id="old", native_id="a" * 32,
+                      text="Original sent input")
+    prior = store.read()
+    first = ReservedInput("first", None, "worker", 1, "worker", "First input")
+    second = ReservedInput("second", None, "worker", 1, "worker", "Second input")
+    with ExitStack() as custody:
+        document = store.record_originals(
+            ReservedInput("prior", None, "worker", 1, "worker", "Must not replace"),
+            ReservedInput("unknown", None, "worker", 1, "worker", "Must not replay"),
+            first, replace(first, source_text="Duplicate must not replace"), second,
+            custody=custody,
+        )
+        assert document.originals((first.key, second.key)) == (first, second)
+        assert document.rows[first.key] is first and document.rows[second.key] is second
+        assert document.rows["prior"] == prior.rows["prior"]
+        assert document.rows["unknown"] == prior.rows["unknown"]
+        saved = store.path.read_bytes()
+        assert store.record_originals() == document
+        assert not store.record("first", **args)
+        assert store.path.read_bytes() == saved
+    retired = store.read()
+    assert isinstance(retired.rows[first.key], NotSentInput)
+    assert isinstance(retired.rows[second.key], NotSentInput)
+    assert retired.rows["prior"] == prior.rows["prior"]
+    assert retired.rows["unknown"] == prior.rows["unknown"]
+
+
+def test_original_publication_ack_loss_enlists_batch_and_scheduled_rollback(tmp_path, monkeypatch):
+    store = InputDispositions(tmp_path / InputDispositions.filename)
+    publish = LockedStore._publish_unlocked
+
+    def lose_ack(self, document):
+        publish(self, document)
+        if self.path == store.path and any(isinstance(row, ReservedInput)
+                                          for row in document.rows.values()):
+            raise OSError("Original publication acknowledgement lost")
+
+    monkeypatch.setattr(LockedStore, "_publish_unlocked", lose_ack)
+    rows = tuple(ReservedInput(f"acp:original:{seq}", None, "worker", 1, "worker", "Original")
+                 for seq in (1, 2))
+    with pytest.raises(OSError, match="acknowledgement lost"), ExitStack() as custody:
+        store.record_originals(*rows, custody=custody)
+    assert all(isinstance(row, NotSentInput) for row in store.read().originals(
+        tuple(row.key for row in rows)
+    ))
+    with pytest.raises(OSError, match="acknowledgement lost"), ExitStack() as custody:
+        store.reserve_turn("worker", TurnId("scheduled"), 1, "Original schedule", custody=custody)
+    scheduled = store.read()
+    assert all(isinstance(row, NotSentInput) for row in scheduled.rows.values())
+    saved = store.path.read_bytes()
+    with ExitStack() as custody, pytest.raises(RelationViolationError, match="already reserved"):
+        store.reserve_turn("worker", TurnId("scheduled"), 1, "Replacement", custody=custody)
+    assert store.path.read_bytes() == saved
 
 
 def test_codec_reuses_declared_schema_but_decodes_each_changed_value():
