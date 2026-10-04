@@ -1,6 +1,8 @@
 name: Debt ratchet
 
 on:
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       base:
@@ -26,7 +28,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ inputs.head }}
+          ref: ${{ github.event.pull_request.head.sha || inputs.head }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
@@ -34,8 +36,8 @@ jobs:
         run: python -m pip install --disable-pip-version-check '.[all]' pytest pytest-asyncio
       - name: Compare touched production files
         env:
-          PR_BASE: ${{ inputs.base }}
-          PR_HEAD: ${{ inputs.head }}
+          PR_BASE: ${{ github.event.pull_request.base.sha || inputs.base }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha || inputs.head }}
         run: agent-comms-ratchet --root src/agent_comms --base "$PR_BASE" --head "$PR_HEAD"
       - name: Run every marked surface guard
         env:
