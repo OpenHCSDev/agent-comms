@@ -29,8 +29,9 @@ if (process.argv.includes('--comparison-child')) {
         modelRuntime:runtime,settingsManager:settings,sessionManager:manager,resourceLoader:loader});
     try {
         const entries=request.entries===undefined ? undefined : request.entries.map(id=>manager.getEntry(id));
-        console.log(JSON.stringify(await measureCapture(TurnContext,session,request.context,entries,
-            {cwd:request.cwd,agentDir:request.agentDir})));
+        const output=JSON.stringify(await measureCapture(TurnContext,session,request.context,entries));
+        await new Promise((resolve,reject)=>process.stdout.write(output+'\n',
+            error=>error ? reject(error) : resolve()));
     } finally {session.dispose();manager.entryStore.close();}
     process.exit(0);
 }
@@ -80,7 +81,7 @@ try {
         child.stdout.on('data',bytes=>{output+=bytes;});
         child.stderr.on('data',bytes=>{error+=bytes;});
         const exited=new Promise((resolve,reject)=>{
-            child.on('error',reject); child.on('exit',code=>resolve(code));
+            child.on('error',reject); child.on('close',code=>resolve(code));
         });
         child.stdin.end(JSON.stringify({cwd,agentDir,session_file:selected.sessionFile,
             context,entries:entries?.map(entry=>entry.id)}));
