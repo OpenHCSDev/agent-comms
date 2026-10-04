@@ -6,6 +6,13 @@ Einstein owns `native-turn-context.mjs`, its declaration, and
 base-prompt consumers. Sch owns the existing builder, sealing, manifest and
 matching immutable artifact handoff. Producer edits require direct coordination.
 
+The final builder branch normally joins the exact tested driver checkpoint
+`0270acd478f91b58e89ed2afa8a75943a429adb7`; source/package/three frozen native
+producer files are unchanged by that join. PR649 targets main to run the
+original automatic required Debt ratchet on its exact head. Its draft contains
+Einstein's original W1 source predecessor; native artifact acceptance is scoped
+here, and standalone merge or whole W1/UI readiness is not claimed.
+
 The existing `stack/bin/prepare-pi-native` applies the original stock SHA fences
 and complete patch order. `prepare-native-import-boundary.py` owns the extension
 assembly; `native_package.share_native_resources` owns sealing and same-fence,
