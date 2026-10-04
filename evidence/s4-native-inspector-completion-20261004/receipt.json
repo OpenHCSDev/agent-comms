@@ -1,0 +1,29 @@
+{
+  "scope": "private controller and authored inspector protocol, not SDK execution",
+  "source_head": "1a5243ebda71ac8f6c99fbd63812ed31393863e4",
+  "main": "c060ec2d7101d3884af86f85e44eadb02d14f871",
+  "source_sha256": {
+    "tests/summary_prefix_configured_installed_journey.py": "2337aec3b294d7aaa98dad1745e1eeaa3b8809d975e7ad4b28932ec9303bbc93",
+    "tests/summary_prefix_native_observer.mjs": "36177e0b85093a2ee7d3618a1b4bcf63220264381c922d6e1024f8ef772df693",
+    "tests/three_cut_retention_configured_journey.py": "4fe8015b34e79b30357582117d740a6e72ff90b000713d2791fb040fa1564e64",
+    "tests/test_selected_summary_failure_native.py": "fc4068e4f634a20b483249ef4154cac5307702d03310985ab7428b9ac193a661",
+    "tests/test_native_inspector_lifetime.py": "6702d8fa370cbeb2def8150d3d03ac7b1a1e9882057b5442546d664ee0a08c1f"
+  },
+  "raw_sha256": {
+    ".artifacts/s4-native-inspector-completion/owner-before.json": "c1e8be504525f29118f06b4ab281184965ab5584681090a2edcbebde2272ef29",
+    ".artifacts/s4-native-inspector-completion/owner-after.json": "e29bbf6530ff0a59536b464c763338a5d7677a45f986431b4c71dc8c144fbc3b",
+    ".artifacts/s4-native-inspector-completion/focused-final.log": "a054543897a3f751663d92a368a78edfa3b6c383542a667e5b9110a2ebe77ad6",
+    ".artifacts/s4-native-inspector-completion/focused02.log": "5fba704ce67a9a77c05e6385d95f0f3ea27cbb3486b5c2b870755a32c83d8c4e"
+  },
+  "checks": {
+    "authored_protocol_and_controller": "7 passed in 0.82s",
+    "node_syntax": "passed",
+    "python_compile": "passed"
+  },
+  "original_negative": "#659 sdk01/terminal.json remains original 45.03304000303615s TimeoutExpired; SDK/tool refusals retained",
+  "first_check_refusal": "system Python collection lacked ACP; shared resource now loads configured ACP workflow only at command boundary",
+  "SDK_calls": 0,
+  "provider_calls": 0,
+  "native_artifact_reads": 0,
+  "pending": "Changed observer/request-ID/JSON expressions not qualified against actual SDK. Full S4/study remain unfinished; USD75/30pairs unapproved."
+}
