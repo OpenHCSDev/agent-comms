@@ -1,0 +1,35 @@
+{
+  "scope": "Authored original SDK/RPC/preparation/install/prompt resource and inspector path",
+  "provider_calls": 0,
+  "configured_provider_qualified": false,
+  "study_qualified": false,
+  "original_donor_reads": 0,
+  "compiled_sha256_before": "372034dd4f5d6afa4fced26940ac886c7d0e7debb32d6c3cded7868f2e6ba906",
+  "compiled_sha256_after": "372034dd4f5d6afa4fced26940ac886c7d0e7debb32d6c3cded7868f2e6ba906",
+  "implementation": "c660e46937c6a807e331e1cc1c207794f07c70cb",
+  "results": [
+    {
+      "mode": "publication",
+      "elapsed_s": 1.5174662079662085,
+      "native_exit": 0,
+      "observer_exit": -15,
+      "hook_restored": true,
+      "controlled_streams": 1,
+      "provider_calls": 0,
+      "preflight_success": true,
+      "events": {
+        "input_committed": 1,
+        "context_committed": 1,
+        "turn_context_observed": 1,
+        "agent_end": 1,
+        "agent_settled": 1
+      },
+      "source_hashes": {
+        "observation.jsonl": "73f2e18d69eb603accc82f9db4b934342442b927a5d45a1a5db5a3cc1c7b3e95",
+        "sdk/prompt-exit.json": "f4750e8eb9943ac73e047ed0e5e0d58e6e09846842f11e8b7a7c04a0141b6d09",
+        "contexts/context-f2a7bb302a0cd22770c8805508f62bb6aefa8a75d042df9612f7af5bcd300114.json": "d8e265cf25b0ab649fbd857dff530339e10fa22cd15a1e46fe0bd7229ccd96e6",
+        "contexts/segments-f2a7bb302a0cd22770c8805508f62bb6aefa8a75d042df9612f7af5bcd300114.json": "0a4734b074b7e91736e799c3614d774bf791b598994ed4fedb8ccfe93b143614"
+      }
+    }
+  ]
+}

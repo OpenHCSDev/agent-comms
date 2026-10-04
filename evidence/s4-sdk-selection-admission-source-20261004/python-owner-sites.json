@@ -1,0 +1,311 @@
+{
+  "78e9db33": {
+    "revision": "78e9db33",
+    "parsed": 729,
+    "omitted": [],
+    "sites": [
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 593,
+        "declaration": "condition_construction"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 567,
+        "call": "self.condition_construction"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 426,
+        "declaration": "RecordedConditionInstallation"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 549,
+        "declaration": "installed_condition"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 783,
+        "declaration": "request_budget"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 909,
+        "call": "self.request_budget"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 927,
+        "call": "self.installed_condition"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 44,
+        "import": "RecordedConditionInstallation"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 417,
+        "call": "selected.request_budget"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1058,
+        "call": "RecordedConditionInstallation"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1105,
+        "call": "scored.condition_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1114,
+        "call": "scored.condition_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 439,
+        "call": "selected.request_budget"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1071,
+        "call": "probe.installed_condition"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1074,
+        "call": "probe.installed_condition"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1121,
+        "call": "replace(scored, condition=condition).condition_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 420,
+        "call": "selected.request_budget"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 421,
+        "call": "probe.request_budget"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1079,
+        "call": "probe.installed_condition"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1090,
+        "call": "probe.installed_condition"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1137,
+        "call": "scored.condition_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1092,
+        "call": "probe.installed_condition"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1128,
+        "call": "scored.condition_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1134,
+        "call": "scored.condition_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1136,
+        "call": "scored.condition_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1087,
+        "call": "probe.installed_condition"
+      }
+    ]
+  },
+  "c660e469": {
+    "revision": "c660e469",
+    "parsed": 729,
+    "omitted": [],
+    "sites": [
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 593,
+        "declaration": "condition_construction"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 567,
+        "call": "self.condition_construction"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 426,
+        "declaration": "RecordedConditionInstallation"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 463,
+        "declaration": "source_selection"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 574,
+        "declaration": "installed_condition"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 816,
+        "declaration": "request_budget"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 942,
+        "call": "self.request_budget"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 960,
+        "call": "self.installed_condition"
+      },
+      {
+        "path": "tests/retained_native_fixture.py",
+        "line": 582,
+        "call": "original.source_selection"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 44,
+        "import": "RecordedConditionInstallation"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 417,
+        "call": "selected.request_budget"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1060,
+        "call": "RecordedConditionInstallation"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1139,
+        "call": "scored.condition_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1148,
+        "call": "scored.condition_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 439,
+        "call": "selected.request_budget"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1073,
+        "call": "probe.installed_condition"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1076,
+        "call": "probe.installed_condition"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1158,
+        "call": "replace(scored, condition=condition).condition_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 420,
+        "call": "selected.request_budget"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 421,
+        "call": "probe.request_budget"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1090,
+        "call": "probe.installed_condition"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1098,
+        "call": "probe.installed_condition"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1108,
+        "call": "probe.installed_condition"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1112,
+        "call": "probe.installed_condition"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1123,
+        "call": "probe.installed_condition"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1177,
+        "call": "scored.condition_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1104,
+        "call": "probe.installed_condition"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1125,
+        "call": "probe.installed_condition"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1166,
+        "call": "scored.condition_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1172,
+        "call": "scored.condition_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1175,
+        "call": "scored.condition_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1176,
+        "call": "scored.condition_construction"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 1120,
+        "call": "probe.installed_condition"
+      }
+    ]
+  }
+}

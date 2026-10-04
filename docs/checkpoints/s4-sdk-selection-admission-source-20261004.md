@@ -29,3 +29,13 @@ Source/AST owner and consumer pass precedes implementation. Batch only changed
 source controls and one original SDK observation path after the family is
 coherent; do not repeat accepted635/636/602 work or start a matched study.
 The separate30-pair/USD75 study remains unapproved and unstarted.
+
+## Qualified checkpoint
+
+Implementation c660e469; original authored SDK/RPC publication 1.517s, source
+selection3/3, converter/request binding verified,0provider, hooks restored and
+children joined. Three focused source controls passed. Evidence and original
+hashes: `evidence/s4-sdk-selection-admission-source-20261004/`.
+Existing constructors/probe/scorer own all new work; native/runtime/tools0delta.
+Current hosted Debt37201025536 passed on the implementation. Other CI jobs are
+not acceptance evidence; final evidence-only head still needs its hosted ratchet.
