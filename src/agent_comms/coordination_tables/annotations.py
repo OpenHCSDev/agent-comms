@@ -9,7 +9,7 @@ from agent_comms.typed_table import Column, Index, TypedTable, sql_literal
 from agent_comms.working_memory_questions import SpanQuestion
 from agent_comms.message_reference import MessageReference
 from agent_comms.field_codec import FieldCodec
-from agent_comms.working_memory_labels import ModelLabel, SpanLabel
+from agent_comms.working_memory_labels import Classifier, ModelLabel, SpanLabel
 from agent_comms.working_memory_requests import AnnotationOutcome, DisclosureRequest
 
 
@@ -29,13 +29,15 @@ class SpanAnnotationsRow(CoordinatorTable, TypedTable):
         generated="json_extract(label, '$.question.question')")})
     question_version: str = field(init=False, compare=False, metadata={"sql": Column(
         generated="json_extract(label, '$.question.sha256')")})
+    classifier: type[Classifier] = field(init=False, compare=False, metadata={"sql": Column(
+        generated="json_extract(label, '$.classifier.classifier')")})
     classifier_pin: str = field(init=False, compare=False, metadata={"sql": Column(
         generated="json_extract(label, '$.classifier.pin')")})
     label_kind: type[SpanLabel] = field(init=False, compare=False, metadata={"sql": Column(
         generated="json_extract(label, '$.kind')")})
 
     address: ClassVar[tuple[str, ...]] = (
-        "segment_digest", "offset", "length", "question", "question_version", "classifier_pin")
+        "segment_digest", "offset", "length", "question", "question_version", "classifier", "classifier_pin")
     indexes = (Index(address, unique=True, where=f"label_kind={sql_literal(ModelLabel)}"), Index(address))
 
     @classmethod
@@ -64,6 +66,8 @@ class AnnotationRequestsRow(CoordinatorTable, TypedTable):
         generated="json_extract(request, '$.question.question')")})
     question_version: str = field(init=False, compare=False, metadata={"sql": Column(
         generated="json_extract(request, '$.question.sha256')")})
+    classifier: type[Classifier] = field(init=False, compare=False, metadata={"sql": Column(
+        generated="json_extract(request, '$.classifier.classifier')")})
     classifier_pin: str = field(init=False, compare=False, metadata={"sql": Column(
         generated="json_extract(request, '$.classifier.pin')")})
 

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from .coordination_tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
-from .working_memory_labels import ClassifierVersion, HumanLabel, ModelLabel, QuestionVersion
+from .working_memory_labels import CalibrationReport, ClassifierVersion, HumanLabel, ModelLabel, QuestionVersion
 from .working_memory_requests import CompletedAnnotationOutcome, DisclosureRequest, SubmittedAnnotationOutcome
 
 
@@ -18,13 +18,28 @@ class WorkingMemoryAnnotations:
     def address(span, question: QuestionVersion, classifier: ClassifierVersion):
         return dict(zip(SpanAnnotationsRow.address, (
             span.segment_sha256, span.coordinates.offset, span.coordinates.length,
-            question.question, question.sha256, classifier.pin), strict=True))
+            question.question, question.sha256, classifier.classifier, classifier.pin), strict=True))
 
     def labels(self, span, question, classifier):
         key = self.address(span, question, classifier)
         with self.session.read():
             return tuple(SpanAnnotationsRow.select(self.session._connection,
                 order_by=("id",), **key))
+
+    def calibration(self, question: QuestionVersion, classifier: ClassifierVersion) -> CalibrationReport:
+        with self.session.read():
+            db = self.session._connection
+            originals = SpanAnnotationsRow.select(db, order_by=("id",),
+                question=question.question, question_version=question.sha256,
+                classifier=classifier.classifier, classifier_pin=classifier.pin, label_kind=ModelLabel)
+            cases = []
+            for row in originals:
+                original = row.label
+                rows = SpanAnnotationsRow.select(db, order_by=("id",),
+                    **self.address(original.span, question, classifier))
+                effective = SpanAnnotationsRow.effective(tuple(rows))
+                cases.extend(effective.evaluate_original(original))
+            return CalibrationReport(question, classifier, tuple(cases))
 
     def reserve(self, request: DisclosureRequest, grant) -> AnnotationRequestsRow:
         key = self.address(request.span, request.question, request.classifier)

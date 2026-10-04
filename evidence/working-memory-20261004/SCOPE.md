@@ -61,3 +61,29 @@ changed authored rule set is a different question and must not reuse its old
 answer. The existing QuestionVersion owns that identity; worker reservation
 and the actual disclosed request now derive exactly the same version from it.
 No confidence threshold, native budget or external approval was changed.
+
+## Human-review calibration source checkpoint
+
+`agent-comms annotations calibration` now derives its report from original
+stored ModelLabel answers and the effective HumanLabel correction. The existing
+label family decides whether a row provides evaluation evidence: ModelLabel
+provides none; HumanLabel binds a CalibrationCase to the exact original answer,
+including source/question/model response/probabilities. The report admits only
+one question version and one classifier version, computes accuracy and exact
+reported-probability/observed-frequency pairs, and refuses a report with no
+human reviews. It creates no evaluation corpus/table or automatic thresholds.
+Human confirming an unchanged model answer is a review as well as correcting it.
+
+The original annotation address now includes the Classifier member as well as
+its release pin. Both generated table fields derive it from the existing
+ClassifierVersion payload. Reservation, label lookup, correction and calibration
+use the one address; a second classifier with the same pin cannot borrow another
+member's answer. These are new unreleased schema10 declarations, not a rewrite
+of original databases/proof bytes. Actual stopped carry remains its named owner.
+
+CalibrationCase/ProbabilityFrequency/CalibrationReport are detached report
+results, not new authorities for provenance, labels, storage or visibility.
+No calibration data, confidence threshold or external authorization is invented.
+The source operator is implemented; empirical corpus collection, calibrated
+visibility, W6 and W8 remain unfinished. W1 native matching and Codex capture
+remain unfinished too. No installed or Jev/provider claim follows this batch.

@@ -112,6 +112,10 @@ class ModelLabel(SpanLabel):
     def public_description(self) -> str:
         return f"{self.classifier.pin} · probability {self.probability:.3f} · confidence {self.confidence:.3f}"
 
+    def evaluate_original(self, original: ModelLabel) -> tuple[CalibrationCase, ...]:
+        # An unreviewed prediction supplies no human evaluation evidence.
+        return ()
+
 
 @dataclass(frozen=True)
 class HumanLabel(ModelLabel):
@@ -125,6 +129,78 @@ class HumanLabel(ModelLabel):
 
     def public_description(self) -> str:
         return f"Human correction by {self.author.name} · original classifier {self.classifier.pin}"
+
+    def evaluate_original(self, original: ModelLabel) -> tuple[CalibrationCase, ...]:
+        return (CalibrationCase(original, self),)
+
+
+@dataclass(frozen=True)
+class CalibrationCase:
+    """One stored prediction and its effective original human review."""
+    original: ModelLabel
+    review: HumanLabel
+
+    def __post_init__(self):
+        # A review refines this exact answer; it cannot evaluate another model
+        # release, source, question, response or probability distribution.
+        corrected = HumanLabel.correct(self.original, self.review.answer, self.review.author)
+        if corrected != self.review:
+            raise ValueError("Calibration review differs from its original classifier answer")
+
+    @property
+    def correct(self) -> bool:
+        return self.original.answer is self.review.answer
+
+
+@dataclass(frozen=True)
+class ProbabilityFrequency:
+    """Observed outcomes at an exact reported probability, without thresholds."""
+    answer: type[SpanAnswer]
+    probability: float
+    reviewed: int
+    observed: int
+
+    @property
+    def frequency(self) -> float:
+        return self.observed / self.reviewed
+
+
+@dataclass(frozen=True)
+class CalibrationReport:
+    question: QuestionVersion
+    classifier: ClassifierVersion
+    cases: tuple[CalibrationCase, ...]
+
+    def __post_init__(self):
+        if not self.cases:
+            raise ValueError("No human-reviewed spans exist for this question and classifier version")
+        for case in self.cases:
+            if (case.original.question, case.original.classifier) != (self.question, self.classifier):
+                raise ValueError("Calibration cannot combine different question or classifier versions")
+
+    @property
+    def accuracy(self) -> float:
+        return sum(case.correct for case in self.cases) / len(self.cases)
+
+    def frequencies(self) -> tuple[ProbabilityFrequency, ...]:
+        counts = {}
+        for case in self.cases:
+            for prediction in case.original.probabilities:
+                key = prediction.answer, prediction.probability
+                reviewed, observed = counts.get(key, (0, 0))
+                counts[key] = reviewed + 1, observed + (prediction.answer is case.review.answer)
+        return tuple(ProbabilityFrequency(answer, probability, reviewed, observed)
+            for (answer, probability), (reviewed, observed) in counts.items())
+
+    def public_report(self) -> dict[str, object]:
+        """The CLI boundary renders metrics derived from these original reviews."""
+        return {"question": FieldCodec.encode(self.question),
+                "classifier": FieldCodec.encode(self.classifier),
+                "reviewed": len(self.cases), "accuracy": self.accuracy,
+                "probability_frequencies": tuple(
+                    {**FieldCodec.encode(point), "frequency": point.frequency}
+                    for point in self.frequencies()),
+                "cases": FieldCodec.encode(self.cases)}
 
 
 @dataclass(frozen=True)

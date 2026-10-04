@@ -1,0 +1,435 @@
+{
+  "revision": "a863976f5393b6e7bc2ce9ae32dbabb6889a5f27",
+  "modules": 319,
+  "omissions": [],
+  "sites": [
+    {
+      "file": "src/agent_comms/acp_extension.py",
+      "line": 52,
+      "node": "Name",
+      "name": "labels"
+    },
+    {
+      "file": "src/agent_comms/acp_extension.py",
+      "line": 52,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 566,
+      "node": "ClassDef",
+      "name": "CorrectAnnotationCliCommand"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 568,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 578,
+      "node": "Attribute",
+      "name": "correct"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 17,
+      "node": "ClassDef",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 42,
+      "node": "FunctionDef",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 18,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 34,
+      "node": "Name",
+      "name": "SpanLabel"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 48,
+      "node": "Attribute",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 73,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 48,
+      "node": "Name",
+      "name": "SpanLabel"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 42,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 39,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/coordinator.py",
+      "line": 71,
+      "node": "Name",
+      "name": "WorkingMemoryAnnotations"
+    },
+    {
+      "file": "src/agent_comms/retained_task_facts.py",
+      "line": 335,
+      "node": "Name",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/retained_task_facts.py",
+      "line": 341,
+      "node": "Name",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/retained_task_facts.py",
+      "line": 343,
+      "node": "Name",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/retained_task_facts.py",
+      "line": 344,
+      "node": "Name",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 633,
+      "node": "Name",
+      "name": "ClassifierVersion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 13,
+      "node": "ClassDef",
+      "name": "WorkingMemoryAnnotations"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 23,
+      "node": "FunctionDef",
+      "name": "labels"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 60,
+      "node": "FunctionDef",
+      "name": "correct"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 18,
+      "node": "Name",
+      "name": "QuestionVersion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 18,
+      "node": "Name",
+      "name": "ClassifierVersion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 41,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 60,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 67,
+      "node": "Attribute",
+      "name": "correct"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 68,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 19,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 67,
+      "node": "Name",
+      "name": "HumanLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 26,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 49,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 64,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 28,
+      "node": "ClassDef",
+      "name": "ClassifierVersion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 38,
+      "node": "ClassDef",
+      "name": "QuestionVersion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 63,
+      "node": "ClassDef",
+      "name": "SpanLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 91,
+      "node": "ClassDef",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 117,
+      "node": "ClassDef",
+      "name": "HumanLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 75,
+      "node": "FunctionDef",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 91,
+      "node": "Name",
+      "name": "SpanLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 117,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 121,
+      "node": "FunctionDef",
+      "name": "correct"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 20,
+      "node": "Name",
+      "name": "ClassifierVersion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 65,
+      "node": "Name",
+      "name": "QuestionVersion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 75,
+      "node": "Name",
+      "name": "SpanLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 92,
+      "node": "Name",
+      "name": "ClassifierVersion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 139,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 167,
+      "node": "Name",
+      "name": "ClassifierVersion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 76,
+      "node": "Name",
+      "name": "labels"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 121,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 138,
+      "node": "Name",
+      "name": "QuestionVersion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 139,
+      "node": "Name",
+      "name": "ClassifierVersion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 141,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 168,
+      "node": "Name",
+      "name": "ClassifierVersion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 78,
+      "node": "Name",
+      "name": "labels"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 75,
+      "node": "Name",
+      "name": "SpanLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 83,
+      "node": "Name",
+      "name": "labels"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 84,
+      "node": "Name",
+      "name": "labels"
+    },
+    {
+      "file": "src/agent_comms/working_memory_requests.py",
+      "line": 27,
+      "node": "Name",
+      "name": "ClassifierVersion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_requests.py",
+      "line": 28,
+      "node": "Name",
+      "name": "QuestionVersion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_requests.py",
+      "line": 35,
+      "node": "Name",
+      "name": "QuestionVersion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 80,
+      "node": "Name",
+      "name": "labels"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 93,
+      "node": "Name",
+      "name": "labels"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 56,
+      "node": "Name",
+      "name": "QuestionVersion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 61,
+      "node": "Attribute",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 61,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 57,
+      "node": "Attribute",
+      "name": "labels"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 85,
+      "node": "Name",
+      "name": "labels"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 87,
+      "node": "Name",
+      "name": "labels"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 95,
+      "node": "Name",
+      "name": "labels"
+    }
+  ],
+  "existing_owner": "SpanLabel hierarchy owns corrections; SpanAnnotationsRow owns latest derived label; WorkingMemoryAnnotations owns storage acquisition. No existing calibration/report implementation found.",
+  "scope": "Lexical declarations/calls/reads across all production modules; dynamic dispatch requires semantic reading."
+}

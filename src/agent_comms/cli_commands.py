@@ -17,7 +17,7 @@ from collections.abc import Callable
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
 from enum import Enum
 from pathlib import Path
-from typing import Any, ClassVar, Self, get_args, get_origin, get_type_hints
+from typing import Any, ClassVar, Literal, Self, get_args, get_origin, get_type_hints
 
 from .activity import ActivityState
 from .channels import Channel
@@ -38,7 +38,7 @@ from .exporting import (
 )
 from .importing import ImportFormat, ImportLimits
 from .turn_context import ContextSegment
-from .working_memory_labels import ModelLabel
+from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 from .messages import MessageType
 from .message_reference import MessageReference
@@ -576,6 +576,25 @@ class CorrectAnnotationCliCommand(CliCommand, declared_name="correct-annotation"
         snapshot = ctx.registry.snapshot()
         with Coordination(str(ctx.root / "coordination.sqlite3")) as store:
             return store.annotations.correct(self.label, self.answer, author, snapshot)
+
+
+@dataclass(frozen=True, kw_only=True)
+class AnnotationsCalibrationCliCommand(CliCommand, declared_name="annotations"):
+    help = "Report human-reviewed accuracy and probability frequencies for exact annotation versions"
+    operation: Literal["calibration"] = option("operation", help="calibration")
+    question: QuestionVersion = option("--question", normalize=json.loads,
+        help="JSON of the original question member and version digest")
+    classifier: ClassifierVersion = option("--classifier", normalize=json.loads,
+        help="JSON of the original classifier member and pinned release")
+
+    def apply(self, ctx: Comms):
+        from .coordinator import Coordination
+
+        with Coordination(str(ctx.root / "coordination.sqlite3")) as store:
+            return store.annotations.calibration(self.question, self.classifier)
+
+    def encode_result(self, result):
+        return result.public_report()
 
 
 @dataclass(frozen=True, kw_only=True)
