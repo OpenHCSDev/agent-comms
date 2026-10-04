@@ -20,6 +20,11 @@ Parent now authorizes Bohr to adjudicate that exact former holder for sole441
 private acceptance. Eligibility requires actual nonlive status, all defaults
 still334, fresh owner/borrower checks and an archive of its actual current floor.
 This is not a package grant or permission to restore the historical1470 floor.
+Bohr subsequently verified230 processes with no actual references/gaps, clear
+import/launcher/cache aliases and no style22 references in public registry/runtime
+records. All defaults remain334. The actual1470/69/390 floor equals originale6f;
+that archive can be reused with no new archive. Style22 is now nonlive eligible
+for sole441, but its specific grant still requires exact source/wheel/control.
 
 On the preceding public436 cohort, corrected tail04 completed with terminal0,
 18 native checks true and owned cleanup empty. Channel opening/return, hidden
@@ -54,6 +59,10 @@ equal main, but an older parent-only retained_index_writer.py change remains:
 direct original WireLog custody instead of constructing Comms while rebuilding
 an old checkpoint. Parent owns its source/receipt reconciliation; it is not
 silently called merged, installed, or admitted by current440 canonical tools.
+Mendel is now the active contributor closing that exact tool and its existing
+RetainedIndexCutover/recovery consumers in his reused checkout. Original reset
+file-custody controls are not writer-path acceptance. No package rebuild, old
+consumed cutover replay or current public-store mutation follows from this work.
 Only open feature scopes are Core627/Toad434 W6 and Toad441 performance;
 native artifact649 and this tracking432 remain separate draft handoffs.
 
