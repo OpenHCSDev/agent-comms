@@ -1,0 +1,1031 @@
+{
+  "revision": "638852fa",
+  "collector": "original refactor-audit Package/Repository/FunctionFacts",
+  "roots": {
+    "src/agent_comms": {
+      "parsed": 316,
+      "omissions": []
+    },
+    "tests": {
+      "parsed": 365,
+      "omissions": []
+    },
+    "tools": {
+      "parsed": 54,
+      "omissions": []
+    }
+  },
+  "owner_functions": {
+    "tools/cutover/global_extension_activation.py": [
+      {
+        "declaration": "tools/cutover/global_extension_activation.py::require_original",
+        "calls": [
+          "lstat",
+          "require",
+          "require_destination",
+          "require_original"
+        ],
+        "key_reads": {},
+        "dispatch": {}
+      },
+      {
+        "declaration": "tools/cutover/global_extension_activation.py::require_destination",
+        "calls": [],
+        "key_reads": {},
+        "dispatch": {}
+      },
+      {
+        "declaration": "tools/cutover/global_extension_activation.py::retain_original",
+        "calls": [],
+        "key_reads": {},
+        "dispatch": {}
+      },
+      {
+        "declaration": "tools/cutover/global_extension_activation.py::install",
+        "calls": [
+          "RuntimeError",
+          "digest",
+          "publish_source",
+          "require_original"
+        ],
+        "key_reads": {},
+        "dispatch": {}
+      },
+      {
+        "declaration": "tools/cutover/global_extension_activation.py::publish_source",
+        "calls": [
+          "_atomic_write_text",
+          "decode",
+          "installation_mode",
+          "read_bytes"
+        ],
+        "key_reads": {},
+        "dispatch": {}
+      },
+      {
+        "declaration": "tools/cutover/global_extension_activation.py::installation_mode",
+        "calls": [],
+        "key_reads": {},
+        "dispatch": {}
+      },
+      {
+        "declaration": "tools/cutover/global_extension_activation.py::installation_mode",
+        "calls": [
+          "S_IMODE",
+          "stat"
+        ],
+        "key_reads": {},
+        "dispatch": {}
+      },
+      {
+        "declaration": "tools/cutover/global_extension_activation.py::require_destination",
+        "calls": [
+          "RuntimeError",
+          "is_file",
+          "is_symlink",
+          "require_original"
+        ],
+        "key_reads": {},
+        "dispatch": {}
+      },
+      {
+        "declaration": "tools/cutover/global_extension_activation.py::retain_original",
+        "calls": [
+          "RuntimeError",
+          "digest",
+          "fsync_directory",
+          "read_bytes",
+          "require_original",
+          "write_original"
+        ],
+        "key_reads": {},
+        "dispatch": {}
+      },
+      {
+        "declaration": "tools/cutover/global_extension_activation.py::publish_source",
+        "calls": [
+          "fsync_directory",
+          "read_bytes",
+          "write_original"
+        ],
+        "key_reads": {},
+        "dispatch": {}
+      },
+      {
+        "declaration": "tools/cutover/global_extension_activation.py::require_destination",
+        "calls": [
+          "RuntimeError",
+          "exists",
+          "is_symlink"
+        ],
+        "key_reads": {},
+        "dispatch": {}
+      },
+      {
+        "declaration": "tools/cutover/global_extension_activation.py::retain_original",
+        "calls": [
+          "require_original"
+        ],
+        "key_reads": {},
+        "dispatch": {}
+      },
+      {
+        "declaration": "tools/cutover/global_extension_activation.py::recovery_paths",
+        "calls": [
+          "frozenset"
+        ],
+        "key_reads": {},
+        "dispatch": {}
+      },
+      {
+        "declaration": "tools/cutover/global_extension_activation.py::require_selection",
+        "calls": [
+          "RuntimeError",
+          "exists",
+          "is_symlink",
+          "require_original"
+        ],
+        "key_reads": {},
+        "dispatch": {}
+      },
+      {
+        "declaration": "tools/cutover/global_extension_activation.py::after_stopped",
+        "calls": [
+          "fsync_directory",
+          "install",
+          "mkdir",
+          "require_selection",
+          "retain_original",
+          "snapshot"
+        ],
+        "key_reads": {},
+        "dispatch": {}
+      },
+      {
+        "declaration": "tools/cutover/global_extension_activation.py::require_selection",
+        "calls": [
+          "RuntimeError",
+          "exists",
+          "is_symlink",
+          "require_original",
+          "require_selection",
+          "super"
+        ],
+        "key_reads": {},
+        "dispatch": {}
+      },
+      {
+        "declaration": "tools/cutover/global_extension_activation.py::after_stopped",
+        "calls": [
+          "after_stopped",
+          "open",
+          "require_original",
+          "run",
+          "str",
+          "super"
+        ],
+        "key_reads": {},
+        "dispatch": {}
+      }
+    ]
+  },
+  "related_functions": [
+    {
+      "declaration": "src/agent_comms/activity.py::remove_thread",
+      "calls": [
+        "_atomic_write_text",
+        "_jsonl_records",
+        "_store_lock",
+        "dict",
+        "dumps",
+        "get",
+        "join",
+        "len"
+      ],
+      "key_reads": {
+        "record": [
+          "thread"
+        ]
+      },
+      "dispatch": {}
+    },
+    {
+      "declaration": "src/agent_comms/activity.py::rename_thread",
+      "calls": [
+        "_atomic_write_text",
+        "_jsonl_records",
+        "_store_lock",
+        "dict",
+        "dumps",
+        "get",
+        "join"
+      ],
+      "key_reads": {
+        "record": [
+          "thread"
+        ]
+      },
+      "dispatch": {}
+    },
+    {
+      "declaration": "src/agent_comms/bus_projection.py::write",
+      "calls": [
+        "_atomic_write_text",
+        "dumps",
+        "encode",
+        "signed"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "src/agent_comms/coordinator.py::install_private_runtime",
+      "calls": [
+        "install",
+        "members_with"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "src/agent_comms/diagnostics.py::record_terminal_failure",
+      "calls": [
+        "ValueError",
+        "_atomic_write_text",
+        "close",
+        "dumps",
+        "format",
+        "from_exception",
+        "fsync",
+        "fullmatch",
+        "get",
+        "getattr",
+        "isinstance",
+        "join",
+        "list",
+        "mkdir",
+        "open",
+        "rejection_details",
+        "resolve",
+        "terminal_failure_reason",
+        "type"
+      ],
+      "key_reads": {
+        "event": [
+          "diagnostic"
+        ],
+        "document": [
+          "native",
+          "native_response",
+          "source_error"
+        ]
+      },
+      "dispatch": {
+        "os.name": [
+          "posix"
+        ]
+      }
+    },
+    {
+      "declaration": "src/agent_comms/historical_views.py::attach",
+      "calls": [
+        "ArchivedAccess",
+        "BusPageIndex",
+        "HistorySource",
+        "Path",
+        "PrivateRegistryGuard",
+        "Registration",
+        "TranscriptRoutes",
+        "ValueError",
+        "WireLog",
+        "_atomic_write_text",
+        "_iter_jsonl_records",
+        "_public_page_records",
+        "_store_lock",
+        "capture",
+        "commit_initial",
+        "copy2",
+        "create_pending",
+        "dumps",
+        "encode",
+        "exists",
+        "file_revision",
+        "install_private_bus_checkpoint",
+        "mkdir",
+        "mkdtemp",
+        "next",
+        "read_metadata_unlocked",
+        "resolve",
+        "rmtree",
+        "snapshot",
+        "sources",
+        "stat",
+        "str",
+        "sync",
+        "touch",
+        "tuple",
+        "write_metadata_unlocked"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "src/agent_comms/registry_store.py::_write_unlocked",
+      "calls": [
+        "_atomic_write_text",
+        "commit",
+        "digest",
+        "encode",
+        "prepare",
+        "private_guard_unlocked",
+        "sha256"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "src/agent_comms/thread_management.py::import_thread",
+      "calls": [
+        "ImportLimits",
+        "ImportReceipt",
+        "Path",
+        "S_IMODE",
+        "S_ISDIR",
+        "StoppedThreadStatus",
+        "Thread",
+        "ValueError",
+        "_atomic_write_text",
+        "_declare_unlocked",
+        "_store_lock",
+        "expanduser",
+        "frozenset",
+        "geteuid",
+        "is_dir",
+        "latest_sequence",
+        "len",
+        "lstat",
+        "mark_delivered_through",
+        "mkdir",
+        "name_reserved",
+        "pi_session",
+        "read",
+        "remove",
+        "resolve",
+        "str",
+        "unlink",
+        "uuid4"
+      ],
+      "key_reads": {},
+      "dispatch": {
+        "os.name": [
+          "posix"
+        ]
+      }
+    },
+    {
+      "declaration": "src/agent_comms/thread_management.py::_rename_thread_unlocked",
+      "calls": [
+        "Coordination",
+        "RelationViolationError",
+        "RenameThreadResult",
+        "ValueError",
+        "_atomic_write_text",
+        "_private_marker_unlocked",
+        "_require_no_private_owner_rename",
+        "advance_generation",
+        "canonical_name",
+        "close",
+        "dumps",
+        "editing",
+        "exists",
+        "fsync",
+        "get",
+        "getattr",
+        "is_symlink",
+        "len",
+        "loads",
+        "locked",
+        "name_reserved",
+        "open",
+        "read_metadata_unlocked",
+        "read_text",
+        "register",
+        "rename",
+        "rename_thread",
+        "replace",
+        "require",
+        "stable_thread_lookup",
+        "status",
+        "str",
+        "unlink"
+      ],
+      "key_reads": {
+        "completed_intent": [
+          "completed"
+        ]
+      },
+      "dispatch": {
+        "str(error)": [
+          "participant aggregate is not registered"
+        ]
+      }
+    },
+    {
+      "declaration": "src/agent_comms/tool_output.py::materialize_oversized_output",
+      "calls": [
+        "_atomic_write_text",
+        "chmod",
+        "encode",
+        "exists",
+        "hexdigest",
+        "len",
+        "mkdir",
+        "read_bytes",
+        "resolve",
+        "serialize_tool_output",
+        "sha256"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "src/agent_comms/wire_log.py::write_metadata_unlocked",
+      "calls": [
+        "_atomic_write_text",
+        "_store_lock",
+        "dumps",
+        "encode"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "tests/maintenance_control_fixture.py::_write_unlocked",
+      "calls": [
+        "_atomic_write_text",
+        "dumps",
+        "encode",
+        "resolve",
+        "str"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "tests/test_activity_index.py::test_replacement_truncation_rename_delete_and_missing_file_reset_index",
+      "calls": [
+        "Activity",
+        "ActivityLog",
+        "_atomic_write_text",
+        "all_current",
+        "emit",
+        "encoded",
+        "remove_thread",
+        "rename_thread",
+        "set",
+        "unlink",
+        "write_text"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "tests/test_activity_index.py::test_malformed_complete_record_never_returns_stale_success",
+      "calls": [
+        "ActivityLog",
+        "_atomic_write_text",
+        "all_current",
+        "encoded",
+        "open",
+        "raises",
+        "range",
+        "set",
+        "write",
+        "write_text"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "tests/test_registry_revision.py::test_repeated_reads_parse_once_and_observe_external_changes",
+      "calls": [
+        "Registration",
+        "RunningThreadStatus",
+        "StoppedThreadStatus",
+        "Thread",
+        "_atomic_write_text",
+        "all_threads",
+        "frozenset",
+        "patch",
+        "range",
+        "read_text",
+        "register",
+        "replace",
+        "require",
+        "status",
+        "str",
+        "unlink",
+        "unregister"
+      ],
+      "key_reads": {
+        "reader.all_threads()": [
+          "worker"
+        ]
+      },
+      "dispatch": {
+        "reader.require('renamed').name": [
+          "renamed"
+        ]
+      }
+    },
+    {
+      "declaration": "tests/test_registry_revision.py::test_malformed_replacement_never_serves_stale_success",
+      "calls": [
+        "Registration",
+        "Thread",
+        "_atomic_write_text",
+        "frozenset",
+        "raises",
+        "range",
+        "read_text",
+        "register",
+        "require",
+        "str"
+      ],
+      "key_reads": {},
+      "dispatch": {
+        "registry.require('worker').name": [
+          "worker"
+        ]
+      }
+    },
+    {
+      "declaration": "tools/cutover/carry_history_provenance.py::main",
+      "calls": [
+        "ArgumentParser",
+        "_atomic_write_text",
+        "add_argument",
+        "carry",
+        "dumps",
+        "error",
+        "exists",
+        "parse_args",
+        "resolve"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "tools/cutover/install_retained_routing.py::main",
+      "calls": [
+        "Path",
+        "RegistryStore",
+        "ValueError",
+        "_assert_schema",
+        "_atomic_write_text",
+        "_write_unlocked",
+        "as_uri",
+        "chmod",
+        "closing",
+        "commit",
+        "connect",
+        "digest_json",
+        "dumps",
+        "execute",
+        "exists",
+        "file_witness",
+        "install_private_bus_checkpoint",
+        "items",
+        "join",
+        "len",
+        "loads",
+        "next",
+        "nullcontext",
+        "print",
+        "read_bytes",
+        "read_plan",
+        "read_text",
+        "registry_without_routing",
+        "require_retained_writer",
+        "require_sources",
+        "require_target",
+        "rollback",
+        "stat",
+        "str",
+        "table_rows",
+        "tables",
+        "values"
+      ],
+      "key_reads": {
+        "document['threads'][turn.threa": [
+          "active_turn",
+          "routing"
+        ],
+        "document": [
+          "threads"
+        ],
+        "file_witness(database)": [
+          "mode"
+        ],
+        "plan.database": [
+          "mode"
+        ]
+      },
+      "dispatch": {
+        "k": [
+          "routing"
+        ]
+      }
+    },
+    {
+      "declaration": "tools/cutover/install_retained_task_source.py::main",
+      "calls": [
+        "BusActivityIndex",
+        "Comms",
+        "Path",
+        "ValueError",
+        "WakeCandidateIndex",
+        "_atomic_write_text",
+        "append",
+        "close",
+        "decode",
+        "dumps",
+        "encode",
+        "exists",
+        "fsync",
+        "glob",
+        "hexdigest",
+        "install_private_bus_checkpoint",
+        "is_symlink",
+        "len",
+        "load",
+        "open",
+        "prepare",
+        "print",
+        "read_bytes",
+        "read_metadata_unlocked",
+        "replace",
+        "require_retained_writer",
+        "sha256",
+        "unlink",
+        "with_name",
+        "write_metadata_unlocked",
+        "write_original"
+      ],
+      "key_reads": {
+        "packet": [
+          "through_seq"
+        ]
+      },
+      "dispatch": {}
+    },
+    {
+      "declaration": "tools/cutover/launch_thread_retirement.py::main",
+      "calls": [
+        "Comms",
+        "Path",
+        "_atomic_write_text",
+        "_publish_active_route_locked",
+        "accept",
+        "decode",
+        "dumps",
+        "encode",
+        "from_record",
+        "launch",
+        "len",
+        "load",
+        "loads",
+        "map",
+        "pin_private_nk_launch",
+        "print",
+        "read_active_route",
+        "read_text",
+        "require_current",
+        "snapshot",
+        "update"
+      ],
+      "key_reads": {
+        "packet": [
+          "handoff",
+          "original_route",
+          "receipt",
+          "route_path",
+          "target_route"
+        ],
+        "proof": [
+          "phase"
+        ]
+      },
+      "dispatch": {}
+    },
+    {
+      "declaration": "tools/cutover/native_schema_carry.py::publish_prepared",
+      "calls": [
+        "ExitStack",
+        "ValueError",
+        "any",
+        "digest",
+        "dumps",
+        "encode",
+        "enter_context",
+        "evidence",
+        "fsync_directory",
+        "lstat",
+        "mkdir",
+        "prepare_replacement",
+        "require",
+        "require_original",
+        "retain_file",
+        "str",
+        "write_original"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "tools/cutover/native_schema_carry_controls.py::run_journal_inventory",
+      "calls": [
+        "AssertionError",
+        "CompactionJournal",
+        "capture_requests",
+        "carry_compaction",
+        "chmod",
+        "closing",
+        "connect",
+        "copyfile",
+        "digest",
+        "dumps",
+        "encode",
+        "execute",
+        "journal_observation",
+        "len",
+        "list",
+        "mkdir",
+        "observe",
+        "original_declaration",
+        "require_carry_target",
+        "require_journal_preserved",
+        "select",
+        "transaction",
+        "write_original"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "tools/cutover/native_schema_carry_controls.py::run",
+      "calls": [
+        "AssertionError",
+        "CarryNativeRuntimeInstallation",
+        "CompactionJournal",
+        "RuntimeCompactionFiles",
+        "RuntimeNativeFiles",
+        "ValueError",
+        "acquire",
+        "any",
+        "append",
+        "decode",
+        "digest",
+        "dumps",
+        "encode",
+        "exists",
+        "frozenset",
+        "install",
+        "is_relative_to",
+        "is_symlink",
+        "items",
+        "journal_observation",
+        "len",
+        "list",
+        "loads",
+        "lstat",
+        "members_with",
+        "mkdir",
+        "original_declaration",
+        "original_goal",
+        "read_bytes",
+        "read_text",
+        "replace",
+        "require",
+        "require_candidate",
+        "require_journal_preserved",
+        "resolve",
+        "select",
+        "transaction",
+        "unchanged_protected",
+        "unlink",
+        "write_bytes",
+        "write_original"
+      ],
+      "key_reads": {
+        "before_journal": [
+          "selected_summary_attempts"
+        ]
+      },
+      "dispatch": {
+        "case": [
+          "existing-attempt",
+          "existing-candidate"
+        ]
+      }
+    },
+    {
+      "declaration": "tools/cutover/publish_openhcs_recovery.py::note",
+      "calls": [
+        "_atomic_write_text",
+        "dumps",
+        "loads",
+        "read_text",
+        "update"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "tools/cutover/publish_openhcs_recovery.py::after_stopped",
+      "calls": [
+        "RuntimeError",
+        "_atomic_write_text",
+        "_publish_active_route_locked",
+        "active_route_path",
+        "carry",
+        "clean_environment",
+        "close",
+        "decode",
+        "dumps",
+        "fsync",
+        "note",
+        "open",
+        "protected_originals",
+        "read_active_route",
+        "read_bytes",
+        "readlink",
+        "replace",
+        "require_no_clients",
+        "require_publication_preimages",
+        "require_sources",
+        "retain_preimages",
+        "run",
+        "snapshot",
+        "str",
+        "symlink_to",
+        "validate"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "tools/cutover/publish_retained_summary.py::note",
+      "calls": [
+        "_atomic_write_text",
+        "dumps",
+        "loads",
+        "read_text",
+        "update"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "tools/cutover/publish_retained_summary.py::after_stopped",
+      "calls": [
+        "ExitStack",
+        "RuntimeCompactionFiles",
+        "RuntimeError",
+        "RuntimeGoalFiles",
+        "acquire",
+        "after_stopped",
+        "difference",
+        "digest",
+        "enter_context",
+        "fsync_directory",
+        "install",
+        "lstat",
+        "mkdir",
+        "note",
+        "protected_files",
+        "publish",
+        "require",
+        "require_no_clients",
+        "require_original",
+        "retain_file",
+        "retain_protected",
+        "snapshot",
+        "sorted",
+        "str",
+        "synchronize_goal",
+        "unchanged_protected",
+        "with_suffix"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "tools/cutover/retained_task_writer.py::main",
+      "calls": [
+        "Path",
+        "ValueError",
+        "WireLog",
+        "_private_marker_unlocked",
+        "capture_original",
+        "certified_read",
+        "close",
+        "dict",
+        "dumps",
+        "encode",
+        "fsync",
+        "list",
+        "locked",
+        "map",
+        "mkdir",
+        "open",
+        "pop",
+        "read_bytes",
+        "require_current",
+        "require_marker",
+        "run",
+        "str",
+        "with_name",
+        "write_original"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "tools/cutover/routing_recovery.py::retain_originals",
+      "calls": [
+        "as_uri",
+        "backup",
+        "close",
+        "closing",
+        "connect",
+        "dumps",
+        "encode",
+        "execute",
+        "exists",
+        "file_witness",
+        "fsync",
+        "mkdir",
+        "open",
+        "private_guard_unlocked",
+        "read_bytes",
+        "with_name",
+        "write_original"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "tools/cutover/runtime_installation.py::install",
+      "calls": [
+        "evidence",
+        "install",
+        "prepare",
+        "require_original",
+        "unchanged_by"
+      ],
+      "key_reads": {},
+      "dispatch": {}
+    },
+    {
+      "declaration": "tools/cutover/thread_retirement_cutover.py::complete",
+      "calls": [
+        "Path",
+        "_atomic_write_text",
+        "_read_unlocked",
+        "_write_unlocked",
+        "chmod",
+        "decode",
+        "dumps",
+        "encode",
+        "exists",
+        "hexdigest",
+        "items",
+        "loads",
+        "locked",
+        "mkdir",
+        "read_bytes",
+        "run_cutover_child",
+        "sha256",
+        "str",
+        "validate",
+        "with_name"
+      ],
+      "key_reads": {
+        "originals": [
+          "active-route.json",
+          "owner_release_receipts.json"
+        ],
+        "projected": [
+          "registry",
+          "releases"
+        ],
+        "proof": [
+          "phase"
+        ]
+      },
+      "dispatch": {}
+    }
+  ],
+  "dynamic_limits": "Original syntactic FunctionFacts records callee names, not runtime receiver/dispatch. Historical wrappers source-read; no complete dynamic external caller proof."
+}
