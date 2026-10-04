@@ -22,7 +22,7 @@ from agent_comms.native_entries import MessageEntry, NativeEntry
 from agent_comms.native_input_record import NativeInputCommit
 from agent_comms.native_pi import NativeContextRecord, NativePiUnavailable
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.native_turn_context import NativeContextData
+from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
 from agent_comms.native_tools import ReadTool, WriteTool
 from agent_comms.pi_summary_payloads import SummaryCost, SummaryUsage
 from agent_comms.pi_payloads import AssistantMessage, PiCost, PiUsage, ToolCallContent, ToolResultMessage, UserMessage
@@ -978,6 +978,49 @@ class RecordedMeasurementTests(unittest.TestCase):
         Path(probe.sdk_context.path).write_text('{}')
         with self.assertRaisesRegex(ValueError, 'artifact changed'):
             probe.read_sdk_context()
+
+    def test_public_manifest_uses_original_event_projection_without_reconstructing_values(self):
+        # Prevent a valid public projection from failing raw metadata equality,
+        # and prevent absent/tampered event evidence from granting that projection.
+        context = NativeContextRecord('a' * 32, self.identity.session_id, 'input', 1, 'b' * 64)
+        owner = Thread('original-owner', frozenset(), str(self.root))
+        turn = RecordedContextTurn(TurnId('original-turn'), TurnIdentity(owner.incarnation, 1))
+        content = 'Original public system contribution λ'
+        raw = json.dumps(content, ensure_ascii=False, separators=(',', ':')).encode()
+        segment = SystemLayerSegment(content=content, tokens=12,
+            sha256=hashlib.sha256(raw).hexdigest(), utf8_bytes=len(raw),
+            provenance=(NativeProvenance(self.identity, 1, context.llm_context_digest),))
+        data = NativeContextData('original-counter', self.identity, (segment,))
+        emitted = NativeContextManifestData(data.counter, (segment.measured_manifest(),),
+            request_id='original-request', values=(segment,))
+        manifest = emitted.for_turn(owner.incarnation, turn)
+        probe = RecordedNativeProbe(self.identity, context.input_id, 'answer',
+            sdk_context=self.artifact('original-sdk.json', data.to_wire()),
+            context_manifest=self.artifact('original-wire.json', manifest),
+            sdk_observation=self.artifact('original-event.json', emitted.to_wire()))
+        self.assertEqual(FieldCodec.decode(RecordedNativeProbe, FieldCodec.encode(probe)), probe)
+        acquired = probe.read_sdk_context()
+        self.assertEqual(probe.request_manifest(context, acquired), manifest)
+        self.assertEqual(manifest.segments[0].captured_text, (content,))
+        with self.assertRaisesRegex(ValueError, 'SDK payload differs'):
+            replace(probe, sdk_observation=None).request_manifest(context, acquired)
+        for changed in (replace(manifest, request_id='another-request'),
+                        replace(manifest, counter='another-counter'),
+                        replace(manifest, segments=(segment.measured_manifest(),)),
+                        replace(manifest, segments=(replace(manifest.segments[0],
+                            captured_text=('Forged public contribution',)),))):
+            with self.subTest(changed=changed), self.assertRaisesRegex(ValueError, 'wire public projection'):
+                replace(probe, context_manifest=self.artifact(
+                    'changed-wire.json', changed)).request_manifest(context, acquired)
+        with self.assertRaisesRegex(ValueError, 'SDK payload differs'):
+            probe.request_manifest(context, replace(acquired, segments=(replace(segment, tokens=13),)))
+        with self.assertRaisesRegex(ValueError, 'wire public projection'):
+            replace(probe, sdk_observation=self.artifact('changed-event.json',
+                replace(emitted, values=(replace(segment, content='Altered original value'),)).to_wire())
+                ).request_manifest(context, acquired)
+        Path(probe.sdk_observation.path).write_text('{}')
+        with self.assertRaisesRegex(ValueError, 'artifact changed'):
+            probe.request_manifest(context, acquired)
 
     def test_submitted_condition_keeps_partial_transform_without_claiming_request_binding(self):
         # Detect a completed transform being promoted to a submitted SDK
