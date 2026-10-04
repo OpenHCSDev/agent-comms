@@ -1438,11 +1438,11 @@ for (const original of [source,undefined]) {
 '''.replace('MODULE', json.dumps(module.as_uri())).replace('OUTPUT', json.dumps(str(output))).replace(
             'WITNESS', json.dumps(FieldCodec.encode(NativeWitness(self.identity.session_id,
                 str(self.session), 'source', 'source', FileRevision.from_stat(self.session.stat()))))).replace(
-            'MANIFEST', json.dumps(FieldCodec.encode(NativeContextManifestData('counter', ()))))
+            'MANIFEST', json.dumps(NativeContextManifestData('counter', ()).to_wire()))
         completed = subprocess.run(['node', '--input-type=module', '-e', script],
                                    capture_output=True, text=True, check=True)
         self.assertEqual(completed.stderr, '')
-        applications = tuple(FieldCodec.decode(RecordedConditionInstallation, row)
+        applications = tuple(RecordedConditionInstallation.from_wire(row)
             for row in map(json.loads, output.read_text().splitlines())
             if row['stage'] == 'installed-transform-applied')
         self.assertEqual(applications[0].narrative_source, FileProvenance('original-summary', 'b' * 64))
@@ -1480,8 +1480,8 @@ for (const original of [source,undefined]) {
             (), 'counter', request_id='original-request')
         installed = RecordedConditionInstallation('installed-transform-applied', probe.input_id,
             'recent-only', witness, 'b' * 64, 2, 'c' * 64, 3, 1, 'd' * 64)
-        row = FieldCodec.encode(installed)
-        self.assertEqual(FieldCodec.decode(RecordedConditionInstallation, row), installed)
+        row = installed.to_wire()
+        self.assertEqual(RecordedConditionInstallation.from_wire(row), installed)
         conversion = {'stage': 'bounded-conversion-observed', 'request_id': manifest.request_id,
             'session_id': self.identity.session_id, 'input_id': probe.input_id,
             'agent_messages_sha256': installed.agent_messages_sha256,
@@ -1522,7 +1522,7 @@ for (const original of [source,undefined]) {
                 return SegmentManifest(TranscriptSegment, refs, 'e' * 64, 200, 2, parts)
             constructed = NativeContextManifestData('counter', (group((first, second)),))
             acquired = replace(installed, construction_manifest=constructed)
-            source_record = FieldCodec.encode(acquired)
+            source_record = acquired.to_wire()
             # A fresh input can split/extend original groups without changing
             # their complete ordered message values. Original coordinates stay.
             request = replace(manifest, segments=(group((first,), actual_refs),
@@ -1530,7 +1530,7 @@ for (const original of [source,undefined]) {
             def partition_observed(selected_request=request, selected=acquired, rows=None):
                 return probe.installed_condition(evidence, branch, context, serialized,
                     selected_request, rows if rows is not None else
-                    (FieldCodec.encode(selected), conversion, restored), parent=evidence, texts=())
+                    (selected.to_wire(), conversion, restored), parent=evidence, texts=())
             partitioned = partition_observed()
             prefix = partitioned['constructed_prefix']
             self.assertTrue(prefix['evaluated'])
@@ -1541,7 +1541,7 @@ for (const original of [source,undefined]) {
             self.assertEqual(source_prefix['construction_coordinates'], ((0, 0), (0, 1)))
             self.assertEqual(source_prefix['request_coordinates'], ((0, 0), (1, 0)))
             self.assertIs(source_prefix['message_binding'], partitioned['message_binding'])
-            self.assertEqual(FieldCodec.decode(RecordedConditionInstallation, source_record), acquired)
+            self.assertEqual(RecordedConditionInstallation.from_wire(source_record), acquired)
             for changed_parts in ((second, first, fresh), (first, fresh),
                                   (first, replace(second, sha256='a' * 64), fresh),
                                   (first, replace(second, utf8_bytes=second.utf8_bytes + 1), fresh)):
@@ -1627,9 +1627,9 @@ for (const original of [source,undefined]) {
             source = {'evaluated': True, 'summary': 'Original λ narrative',
                 'source': FieldCodec.encode(reference), 'session': FieldCodec.encode(self.identity),
                 'checkpoint_session': FieldCodec.encode(self.identity), 'native_entry_id': 'commit'}
-            source_row = FieldCodec.encode(with_source)
+            source_row = with_source.to_wire()
             texts = (json.dumps(source['summary'], ensure_ascii=False),)
-            self.assertEqual(FieldCodec.decode(RecordedConditionInstallation, source_row), with_source)
+            self.assertEqual(RecordedConditionInstallation.from_wire(source_row), with_source)
             with patch.object(RecordedNativeCheckpoint, 'fork_condition_acquired', return_value=source) as acquired:
                 def observed(rows, captured_texts=texts):
                     return selected_probe.installed_condition(evidence, branch, context, serialized,
@@ -1646,9 +1646,9 @@ for (const original of [source,undefined]) {
                 for wrong in (replace(reference, path=str(self.root / 'other.json')),
                               replace(reference, sha256='f' * 64)):
                     with self.subTest(reference=wrong), self.assertRaisesRegex(ValueError, 'another original narrative'):
-                        observed((FieldCodec.encode(replace(installed, narrative_source=wrong)), conversion, restored))
+                        observed((replace(installed, narrative_source=wrong).to_wire(), conversion, restored))
                     with self.subTest(partial_reference=wrong), self.assertRaisesRegex(ValueError, 'another original narrative'):
-                        observed((row, FieldCodec.encode(replace(installed, narrative_source=wrong)), conversion, restored))
+                        observed((row, replace(installed, narrative_source=wrong).to_wire(), conversion, restored))
                 with self.assertRaisesRegex(ValueError, 'does not contain'):
                     observed((source_row, conversion, restored), ('"Different narrative"',))
                 # Neither a constructor label nor a partial collection of
@@ -1667,8 +1667,8 @@ for (const original of [source,undefined]) {
                     ((), (), ('prior', 'source'))):
                 observed = replace(installed, entry_selection=JournalProvenance(
                     str(self.session), selection))
-                selected_row = FieldCodec.encode(observed)
-                self.assertEqual(FieldCodec.decode(RecordedConditionInstallation, selected_row), observed)
+                selected_row = observed.to_wire()
+                self.assertEqual(RecordedConditionInstallation.from_wire(selected_row), observed)
                 result = probe.installed_condition(evidence, branch, context, serialized,
                     manifest, (selected_row, conversion, restored), parent=evidence, texts=())
                 observation, = result['entry_selection']['observations']
@@ -1736,8 +1736,8 @@ for (const original of [source,undefined]) {
             for selection in (('source', 'prior'), ('source', 'source'), ('input',)):
                 with self.subTest(selection=selection), self.assertRaisesRegex(ValueError, 'ordered subset'):
                     probe.installed_condition(evidence, branch, context, serialized, manifest,
-                        (FieldCodec.encode(replace(installed, entry_selection=JournalProvenance(
-                            str(self.session), selection))), conversion, restored), parent=evidence, texts=())
+                        (replace(installed, entry_selection=JournalProvenance(
+                            str(self.session), selection)).to_wire(), conversion, restored), parent=evidence, texts=())
             with self.assertRaises(ValueError):
                 probe.installed_condition(evidence, branch, context, serialized, manifest,
                     (FieldCodec.encode(replace(installed, entry_selection=JournalProvenance(
@@ -1852,6 +1852,28 @@ for (const original of [source,undefined]) {
         _, captured = probe.serialized_construction(data, manifest)
         expected = hashlib.sha256(('['+first[1:-1]+','+second[1:-1]+']').encode()).hexdigest()
         self.assertEqual(captured['provider_messages_sha256'],expected)
+        # Debugger return-by-value can expand executable tool callbacks. Exact
+        # original message bytes remain a distinct question, while whole SDK
+        # value disagreement must still refuse rather than be swallowed.
+        tools = '[{"name":"authored-tool"}]'
+        tool = segment(ToolCatalogSegment, tools,
+                       tools=({'name': 'authored-tool', 'execute': {}},))
+        tool_data = replace(data, segments=(*data.segments, tool))
+        tool_manifest = replace(manifest, segments=tuple(s.measured_manifest() for s in tool_data.segments))
+        tool_probe = replace(probe, sdk_segment_bytes=self.artifact(
+            'tool-segments.json', (system, first, second, tools)))
+        texts, acquired = tool_probe.serialized_segments(tool_data, tool_manifest)
+        self.assertTrue(acquired['evaluated'])
+        self.assertEqual(tool_probe.serialized_messages(tool_data, texts)['provider_messages_sha256'], expected)
+        with self.assertRaisesRegex(ValueError, 'segment value differs'):
+            tool_probe.serialized_construction(tool_data, tool_manifest)
+        with self.assertRaisesRegex(ValueError, 'segment value differs'):
+            tool_probe.serialized_messages(replace(tool_data, segments=(
+                tool_data.segments[0], replace(tool_data.segments[1], messages=()),
+                *tool_data.segments[2:])), texts)
+        with self.assertRaisesRegex(ValueError, 'bytes differ'):
+            tool_probe.serialized_segments(replace(tool_data, segments=(
+                *tool_data.segments[:-1], replace(tool, sha256='f' * 64))), tool_manifest)
         applied = {'agent_messages_sha256':'c' * 64}
         conversion = {'stage':'bounded-conversion-observed','request_id':manifest.request_id,
             'session_id':self.identity.session_id,'input_id':probe.input_id,

@@ -27,7 +27,7 @@ from agent_comms.backend import PersistentPiSession
 from agent_comms.native_attestation import ObservedAttestation
 from agent_comms.native_custody import PiSessionChild
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.pi_payloads import PiMessage, StateData, ToolResultMessage
+from agent_comms.pi_payloads import PiMessage, PiPayload, StateData, ToolResultMessage
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_rpc import unique_fields
 from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
@@ -433,7 +433,7 @@ class RecordedNativeCheckpoint:
 
 
 @dataclass(frozen=True)
-class RecordedConditionInstallation:
+class RecordedConditionInstallation(PiPayload):
     """One original private SDK hook observation, not enrollment or a grant.
 
     This is a new observation: installed source entering the configured transform.
@@ -464,6 +464,13 @@ class RecordedConditionInstallation:
         metadata={"wire_omit_default": True})
     construction_manifest: NativeContextManifestData | None = field(default=None,
         metadata={"wire_omit_default": True})
+
+    def to_wire(self):
+        """Retain the nested SDK manifest's original external representation."""
+        data = super().to_wire()
+        if self.construction_manifest is not None:
+            data['construction_manifest'] = self.construction_manifest.to_wire()
+        return data
 
     def require_narrative_source(self, source: FileProvenance):
         if self.narrative_source != source:
@@ -680,7 +687,7 @@ class RecordedNativeProbe:
 
     def installed_condition(self,evidence,branch,context,serialized,manifest,records,*,parent,texts):
         """Join an observed installed source to the same original SDK request."""
-        originals=tuple(FieldCodec.decode(RecordedConditionInstallation,row) for row in records
+        originals=tuple(RecordedConditionInstallation.from_wire(row) for row in records
             if row.get('stage')=='installed-transform-applied' and row['input_id']==self.input_id)
         unavailable = {'evaluated': False, 'reason': 'Original SDK journal entry selection unavailable'}
         narrative = {'evaluated': False, 'reason': 'Original installed narrative source and matching SDK bytes unavailable'}
@@ -881,8 +888,8 @@ class RecordedNativeProbe:
             raise ValueError("Recorded SDK context is not this original probe request")
         return manifest
 
-    def serialized_construction(self, data, manifest):
-        """Acquire original SDK bytes independently of a retained-fact oracle.
+    def serialized_segments(self, data, manifest):
+        """Acquire all original SDK serializations against their manifest once.
 
         Both construction and envelope presence borrow this checked capture.
         Re-encoding decoded segment objects cannot supply missing original bytes.
@@ -901,30 +908,50 @@ class RecordedNativeProbe:
             if (len(raw) != segment.utf8_bytes
                     or hashlib.sha256(raw).hexdigest() != segment.sha256):
                 raise ValueError("Recorded SDK segment bytes differ from measured source")
-            # Compare external JSON values, preserving boolean/number kinds;
-            # Python container equality alone equates true and 1. This is not
-            # a replacement for the original serialized-byte digest above.
-            value = json.loads(text, object_pairs_hook=unique_fields)
-            if json.dumps(value, sort_keys=True) != json.dumps(segment.provider_value(), sort_keys=True):
-                raise ValueError("Recorded SDK segment value differs from its original captured bytes")
-        # NativeMessages owns which SDK segments carry provider messages. Join
-        # their ORIGINAL JSON array interiors in order: Python reserialization
-        # can change Unicode, number and opaque-provider-field representation.
-        # The private SDK capture writes these arrays with JSON.stringify.
+        return texts, {"evaluated": True, "artifact": self.sdk_segment_bytes}
+
+    @staticmethod
+    def require_serialized_value(segment, text):
+        # JSON type identity matters: Python equality equates true and 1.
+        value = json.loads(text, object_pairs_hook=unique_fields)
+        if json.dumps(value, sort_keys=True) != json.dumps(segment.provider_value(), sort_keys=True):
+            raise ValueError("Recorded SDK segment value differs from its original captured bytes")
+
+    def serialized_messages(self, data, texts):
+        """NativeMessages owns the exact input partition, not tool callbacks.
+
+        Callers supply the same acquired serializations, already checked against
+        every original digest/length. This projection validates every message
+        value, without claiming that other SDK value projections were preserved.
+        """
         message_parts=[]
         for segment,text in zip(data.segments,texts):
             if isinstance(segment,NativeMessages):
+                self.require_serialized_value(segment, text)
                 if not text.startswith('[') or not text.endswith(']'):
                     raise ValueError('Recorded SDK message segment is not its original JSON array')
                 if text[1:-1]:
                     message_parts.append(text[1:-1])
         messages='['+','.join(message_parts)+']'
+        return {"evaluated": True,
+                "provider_messages_sha256": hashlib.sha256(messages.encode()).hexdigest(),
+                "scope": "Original SDK message segment bytes/values only; not system/tools, full request, HTTP or capacity"}
+
+    def serialized_construction(self, data, manifest):
+        """Whole SDK value agreement, distinct from the message projection."""
+        texts, captured = self.serialized_segments(data, manifest)
+        if not captured['evaluated']:
+            return texts, captured
+        for segment, text in zip(data.segments, texts):
+            if not isinstance(segment, NativeMessages):
+                self.require_serialized_value(segment, text)
+        messages = self.serialized_messages(data, texts)
         return texts, {"evaluated": True, "stage": "recorded SDK provider input",
                 "artifact": self.sdk_segment_bytes,
                 "context_digest": self.sdk_request(data).context_digest,
                 "segments": len(data.segments),
                 "utf8_bytes": sum(segment.utf8_bytes for segment in data.segments),
-                "provider_messages_sha256": hashlib.sha256(messages.encode()).hexdigest(),
+                "provider_messages_sha256": messages['provider_messages_sha256'],
                 "final_transport_evaluated": False,
                 "scope": "Original captured serializations match every SDK measured segment; not HTTP bytes, provider token counts or intervention proof"}
 
