@@ -7,7 +7,7 @@ import os
 import pytest
 
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_actions import BlockedGoalAction, GoalPrecondition, SetGoalAction
+from agent_comms.goal_actions import BlockedGoalAction, GoalPrecondition, PausedGoalAction, SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goals import Goal
@@ -79,7 +79,10 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
                     await asyncio.sleep(0.01)
             next_lease = comms.registry.require(session).require_turn_lease()
             assert next_lease != lease and owner.turns.owns_turn(session, next_lease.turn_id)
-            paused = await proxy.request("pause_goal")
+            paused = await proxy.request(
+                "update_goal", status=PausedGoalAction, goal_id=resumed_goal.id,
+                expected_revision=resumed_goal.revision,
+            )
             assert FieldCodec.decode(Goal, paused["goal"]).state.declared_name == "paused"
             finish_goal.set()
             await owner.inputs.wake_tasks[session]

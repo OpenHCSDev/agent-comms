@@ -7,6 +7,7 @@ activate private processing for existing public sessions.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 
 import pytest
@@ -576,26 +577,41 @@ async def test_contended_cursor_refresh_still_invalidates_replaced_owner(tmp_pat
 
 
 async def test_acp_private_does_not_overlap_owner_turn(native_backend):
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.messages import Message, MessageType
+    from agent_comms.native_input_record import FullNativeExecution
+    from agent_comms.wake import derive_exact_reply_target
+
     native = native_backend
     await native.author_history()
-    native.provider.text = '{"decision":"FULL"}'
     async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
         comms = agent._comms
         comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
         async with native.original_input(agent, session, "Current human input") as turn:
             sent = comms.messaging.send_message("sender", session, "Selected input after current turn")
+            native.provider.text = json.dumps(FieldCodec.encode((Message(
+                session, derive_exact_reply_target(sent), "Selected input acknowledged",
+                MessageType.INFO, timestamp=0,
+            ),)))
             assert await agent.inputs.drain_inbox(session) == 0
             assert agent.turns.owns_turn(session, turn.turn_id)
             assert native.provider.posts == 0
         # The original lease's retirement, not a test map mutation, enables
-        # canonical selected TRIAGE/FULL on the same SDK-authored saved source.
+        # canonical selected execution on the same SDK-authored saved source.
+        # This direct original requires FULL; it is not a relevance probe.
         # Runtime observation is an actual concurrent consumer; whichever
-        # original drain owns the admission performs these same two stages.
+        # original drain owns the admission consumes the original assignment.
         await agent.inputs.drain_inbox(session)
         async with asyncio.timeout(30):
-            while native.provider.posts != 2 or agent.turns.turn_state(session).busy:
+            while native.provider.posts != 1 or agent.turns.turn_state(session).busy:
                 await asyncio.sleep(0.01)
-        assert native.provider.posts == 2
+        assert native.provider.posts == 1
+        with Coordination(str(comms.root / "coordination.sqlite3")) as store, store.session.read():
+            (original,) = NativeRuntimeInput.select(
+                store.session._connection, where="owner_thread=?", parameters=(session,),
+            )
+            assert original.stage is FullNativeExecution
+            assert original.require_context_proof().input_id == original.input_id
         assert comms.bus.log.message_by_id(sent.id) == sent
         assert not agent.turns.turn_state(session).busy and not agent.inputs.backend_inboxes
 

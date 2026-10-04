@@ -166,10 +166,14 @@ async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, mo
     assert str(caught.value.__cause__) == "execution failed"
     receipt = PromptFailureReceipt.from_error(caught.value.code, str(caught.value), caught.value.data)
     errors = failure_facts(updates, RequestFailedUpdate)
-    assert len(errors) == (2 if isinstance(prior, events.Error) else 1)
-    from agent_comms.input_attempt import NotSentInput
+    from agent_comms.input_attempt import NotSentInput, ReservedInput
 
-    assert errors[-1].failure.input_state is NotSentInput
+    # A failed native terminal and a later controller exception carry the
+    # original reservation followed by its canonical unbound settlement.
+    # Equal text must not discard that distinct input evidence.
+    assert [update.failure.input_state for update in errors] == (
+        [ReservedInput, NotSentInput] if prior is not None else [NotSentInput]
+    )
     assert receipt.notification_published and receipt.failure == errors[-1].failure
     if prior is not None:
         assert errors[-1].failure.detail == prior.text
@@ -258,16 +262,16 @@ async def test_actual_provider_failure_reports_started_input_once_without_retry(
     assert native.provider.posts == 1  # failed original, zero seed/retry
     saved = native.saved_inputs()
     assert len(saved) == 2
-    # The owner adds its instruction/awareness prefix to the actual native prompt.
-    assert (
-        sum(
-            block["text"].endswith("Actual failed input")
-            for message in saved
-            for block in message["content"]
-            if block["type"] == "text"
-        )
-        == 1
-    )
+    from agent_comms.native_entries import NativeEntry
+
+    # The original tracked input, rather than the historical SDK content's
+    # string/array shape, owns the exact current native message.
+    (original,) = owner.inputs.dispositions.read().rows.values()
+    _, entries = NativeEntry.read_evidence(native.session)
+    tracked = NativeEntry.tracked_users(entries)
+    assert tuple(tracked) == (original.native_id,)
+    assert tracked[original.native_id].message.text == original.sent_text
+    assert original.sent_text.endswith("Actual failed input")
     assert owner._comms.registry.require(session).active_turn is None
     assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).busy
     assert not owner.inputs.backend_inboxes
