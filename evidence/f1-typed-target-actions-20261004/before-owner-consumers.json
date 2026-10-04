@@ -1,0 +1,1032 @@
+[
+  {
+    "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+    "root": "src/agent_comms",
+    "phase": "before",
+    "revision": "28c8de1ccd75338ececf19b23b68a2346c80ca1b",
+    "modules": 311,
+    "parse_omissions": [],
+    "owner_consumers": [
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 942,
+        "role": "declaration",
+        "source": "@dataclass(frozen=True, kw_only=True)"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 968,
+        "role": "declaration",
+        "source": "@dataclass(frozen=True, kw_only=True)"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1084,
+        "role": "declaration",
+        "source": "@dataclass(frozen=True, kw_only=True)"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 110,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 114,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 127,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 144,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 161,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 165,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 175,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 194,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 198,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 718,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 770,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 810,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 815,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 973,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 978,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 993,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 997,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1010,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1029,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1043,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1047,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1062,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1076,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1101,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1105,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1109,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1125,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 124,
+        "role": "Load",
+        "source": "cls.thread_bindings"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 149,
+        "role": "Load",
+        "source": "cls.editor_defaults"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 816,
+        "role": "Load",
+        "source": "super().editor_defaults"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 963,
+        "role": "Load",
+        "source": "CliCommand.decode(self.operation).execute_target"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1089,
+        "role": "Load",
+        "source": "command.editor_arguments"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1090,
+        "role": "Load",
+        "source": "command.execute_target"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 121,
+        "role": "Load",
+        "source": "cls.channel_bindings"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 140,
+        "role": "Load",
+        "source": "member.describe"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 158,
+        "role": "Load",
+        "source": "cls.confirmation"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 206,
+        "role": "Load",
+        "source": "cls.confirmation"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 949,
+        "role": "Load",
+        "source": "CliCommand.target_catalog"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 207,
+        "role": "Load",
+        "source": "cls.confirmation"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 131,
+        "role": "Load",
+        "source": "member.channel_bindings"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 137,
+        "role": "Load",
+        "source": "member.thread_bindings"
+      },
+      {
+        "path": "src/agent_comms/config_options.py",
+        "line": 56,
+        "role": "declaration",
+        "source": "@abstractmethod"
+      },
+      {
+        "path": "src/agent_comms/config_options.py",
+        "line": 93,
+        "role": "declaration",
+        "source": "async def describe(self, thread: Thread) -> SessionConfigOptionSelect:"
+      },
+      {
+        "path": "src/agent_comms/config_options.py",
+        "line": 219,
+        "role": "Load",
+        "source": "self.catalog_for(member).describe"
+      },
+      {
+        "path": "src/agent_comms/tools.py",
+        "line": 14,
+        "role": "import",
+        "source": "from .cli_commands import ArchiveCliCommand, RenameSelfCliCommand, StopCliCommand, ThreadsCliCommand, StartCliCommand, ForkCliCommand, DeleteViewCliCommand, PinChannelCliCommand, ChannelActivityCliCommand, PinThreadCliCommand"
+      },
+      {
+        "path": "src/agent_comms/tools.py",
+        "line": 855,
+        "role": "Load",
+        "source": "StartCliCommand"
+      }
+    ]
+  },
+  {
+    "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+    "root": "src/agent_comms",
+    "phase": "after",
+    "revision": "6a9515688fc72aab3c2bbfed63a50227376c4b7f",
+    "modules": 311,
+    "parse_omissions": [],
+    "owner_consumers": [
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 153,
+        "role": "declaration",
+        "source": "@dataclass(frozen=True)"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 180,
+        "role": "declaration",
+        "source": "@dataclass(frozen=True)"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1064,
+        "role": "declaration",
+        "source": "@dataclass(frozen=True, kw_only=True)"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1093,
+        "role": "declaration",
+        "source": "@dataclass(frozen=True, kw_only=True)"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1211,
+        "role": "declaration",
+        "source": "@dataclass(frozen=True, kw_only=True)"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 167,
+        "role": "declaration",
+        "source": "@property"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 248,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 252,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 265,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 284,
+        "role": "declaration",
+        "source": "def describe(self, comms: Comms, target: str, project: str) -> TargetAction:"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 295,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 299,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 317,
+        "role": "declaration",
+        "source": "def confirmation(self) -> str:"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 321,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 846,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 898,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 938,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1098,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1103,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1118,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1135,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1157,
+        "role": "declaration",
+        "source": "def confirmation(self):"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1171,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1174,
+        "role": "declaration",
+        "source": "def confirmation(self):"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1189,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1203,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1226,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1230,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1249,
+        "role": "declaration",
+        "source": "@classmethod"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 284,
+        "role": "Load",
+        "source": "TargetAction"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 168,
+        "role": "Load",
+        "source": "self.bound.confirmation"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 176,
+        "role": "Load",
+        "source": "self.confirmation"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 189,
+        "role": "Load",
+        "source": "self.declaration.editor_arguments"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 190,
+        "role": "Load",
+        "source": "self.declaration.execute_target"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 262,
+        "role": "Load",
+        "source": "cls.thread_bindings"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 265,
+        "role": "Load",
+        "source": "TargetAction"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 287,
+        "role": "Load",
+        "source": "TargetAction"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1071,
+        "role": "Load",
+        "source": "CliCommand.target_catalog"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1070,
+        "role": "Load",
+        "source": "TargetAction"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1088,
+        "role": "Load",
+        "source": "CliCommand.decode(self.operation).execute_target"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 259,
+        "role": "Load",
+        "source": "cls.channel_bindings"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 331,
+        "role": "Load",
+        "source": "bound.confirmation"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 278,
+        "role": "Load",
+        "source": "bound.describe"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 332,
+        "role": "Load",
+        "source": "bound.confirmation"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1073,
+        "role": "Load",
+        "source": "TargetAction"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 1215,
+        "role": "Load",
+        "source": "TargetEdit"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 269,
+        "role": "Load",
+        "source": "member.channel_bindings"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 275,
+        "role": "Load",
+        "source": "member.thread_bindings"
+      },
+      {
+        "path": "src/agent_comms/config_options.py",
+        "line": 56,
+        "role": "declaration",
+        "source": "@abstractmethod"
+      },
+      {
+        "path": "src/agent_comms/config_options.py",
+        "line": 93,
+        "role": "declaration",
+        "source": "async def describe(self, thread: Thread) -> SessionConfigOptionSelect:"
+      },
+      {
+        "path": "src/agent_comms/config_options.py",
+        "line": 219,
+        "role": "Load",
+        "source": "self.catalog_for(member).describe"
+      },
+      {
+        "path": "src/agent_comms/tools.py",
+        "line": 14,
+        "role": "import",
+        "source": "from .cli_commands import ArchiveCliCommand, RenameSelfCliCommand, StopCliCommand, ThreadsCliCommand, StartCliCommand, ForkCliCommand, DeleteViewCliCommand, PinChannelCliCommand, ChannelActivityCliCommand, PinThreadCliCommand"
+      },
+      {
+        "path": "src/agent_comms/tools.py",
+        "line": 855,
+        "role": "Load",
+        "source": "StartCliCommand"
+      }
+    ]
+  },
+  {
+    "repository": "/home/ts/wt/toad-prompt-action-owner-20261002",
+    "root": "src/toad",
+    "phase": "before",
+    "revision": "901771fc58b44996824c52711a1a352e3844dc3d",
+    "modules": 288,
+    "parse_omissions": [],
+    "owner_consumers": [
+      {
+        "path": "src/toad/acp/status.py",
+        "line": 49,
+        "role": "Load",
+        "source": "turns.describe"
+      },
+      {
+        "path": "src/toad/command_catalog.py",
+        "line": 8,
+        "role": "import",
+        "source": "from toad.target_commands import TargetContext, ThreadCommand"
+      },
+      {
+        "path": "src/toad/command_catalog.py",
+        "line": 40,
+        "role": "Load",
+        "source": "ThreadCommand"
+      },
+      {
+        "path": "src/toad/conversation_submission.py",
+        "line": 99,
+        "role": "Load",
+        "source": "view.turns.describe"
+      },
+      {
+        "path": "src/toad/conversation_turn.py",
+        "line": 160,
+        "role": "declaration",
+        "source": "@abstractmethod"
+      },
+      {
+        "path": "src/toad/conversation_turn.py",
+        "line": 187,
+        "role": "declaration",
+        "source": "def describe(self, activity):"
+      },
+      {
+        "path": "src/toad/conversation_turn.py",
+        "line": 230,
+        "role": "declaration",
+        "source": "def describe(self, activity):"
+      },
+      {
+        "path": "src/toad/conversation_turn.py",
+        "line": 266,
+        "role": "declaration",
+        "source": "def describe(self, activity):"
+      },
+      {
+        "path": "src/toad/conversation_turn.py",
+        "line": 267,
+        "role": "Load",
+        "source": "self.binding.describe"
+      },
+      {
+        "path": "src/toad/target_commands.py",
+        "line": 16,
+        "role": "import",
+        "source": "from agent_comms.cli_commands import TargetActionsCliCommand"
+      },
+      {
+        "path": "src/toad/target_commands.py",
+        "line": 17,
+        "role": "import",
+        "source": "from toad.thread_actions import ThreadAction"
+      },
+      {
+        "path": "src/toad/target_commands.py",
+        "line": 117,
+        "role": "declaration",
+        "source": "@dataclass(frozen=True)"
+      },
+      {
+        "path": "src/toad/target_commands.py",
+        "line": 131,
+        "role": "Load",
+        "source": "ThreadAction"
+      },
+      {
+        "path": "src/toad/target_commands.py",
+        "line": 43,
+        "role": "Load",
+        "source": "TargetActionsCliCommand"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 10,
+        "role": "import",
+        "source": "from agent_comms.cli_commands import TargetActionsCliCommand, TargetEditCliCommand"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 87,
+        "role": "declaration",
+        "source": "@dataclass(frozen=True)"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 90,
+        "role": "Load",
+        "source": "TargetEditCliCommand"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 108,
+        "role": "import",
+        "source": "from toad.widgets.comms_command_dialog import CommandDialog"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 28,
+        "role": "Load",
+        "source": "ThreadAction"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 99,
+        "role": "Load",
+        "source": "command.reconnect_targets"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 115,
+        "role": "Load",
+        "source": "TargetEditCliCommand"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 124,
+        "role": "Load",
+        "source": "CommandDialog"
+      },
+      {
+        "path": "src/toad/widgets/comms_command_dialog.py",
+        "line": 10,
+        "role": "declaration",
+        "source": "class CommandDialog(ModalScreen[dict[str, str]]):"
+      },
+      {
+        "path": "src/toad/widgets/conversation.py",
+        "line": 1508,
+        "role": "Load",
+        "source": "self.turns.describe"
+      },
+      {
+        "path": "src/toad/widgets/conversation.py",
+        "line": 1417,
+        "role": "Load",
+        "source": "self.turns.describe"
+      },
+      {
+        "path": "src/toad/widgets/conversation.py",
+        "line": 2077,
+        "role": "Load",
+        "source": "self.turns.describe"
+      }
+    ]
+  },
+  {
+    "repository": "/home/ts/wt/toad-prompt-action-owner-20261002",
+    "root": "src/toad",
+    "phase": "after",
+    "revision": "49523ec00adc3fa6f5e7ef5f1b25477156fbfe30",
+    "modules": 288,
+    "parse_omissions": [],
+    "owner_consumers": [
+      {
+        "path": "src/toad/acp/status.py",
+        "line": 49,
+        "role": "Load",
+        "source": "turns.describe"
+      },
+      {
+        "path": "src/toad/command_catalog.py",
+        "line": 8,
+        "role": "import",
+        "source": "from toad.target_commands import TargetContext, ThreadCommand"
+      },
+      {
+        "path": "src/toad/command_catalog.py",
+        "line": 40,
+        "role": "Load",
+        "source": "ThreadCommand"
+      },
+      {
+        "path": "src/toad/conversation_submission.py",
+        "line": 99,
+        "role": "Load",
+        "source": "view.turns.describe"
+      },
+      {
+        "path": "src/toad/conversation_turn.py",
+        "line": 160,
+        "role": "declaration",
+        "source": "@abstractmethod"
+      },
+      {
+        "path": "src/toad/conversation_turn.py",
+        "line": 187,
+        "role": "declaration",
+        "source": "def describe(self, activity):"
+      },
+      {
+        "path": "src/toad/conversation_turn.py",
+        "line": 230,
+        "role": "declaration",
+        "source": "def describe(self, activity):"
+      },
+      {
+        "path": "src/toad/conversation_turn.py",
+        "line": 266,
+        "role": "declaration",
+        "source": "def describe(self, activity):"
+      },
+      {
+        "path": "src/toad/conversation_turn.py",
+        "line": 267,
+        "role": "Load",
+        "source": "self.binding.describe"
+      },
+      {
+        "path": "src/toad/target_commands.py",
+        "line": 16,
+        "role": "import",
+        "source": "from agent_comms.cli_commands import CliCommand, TargetAction"
+      },
+      {
+        "path": "src/toad/target_commands.py",
+        "line": 17,
+        "role": "import",
+        "source": "from toad.thread_actions import ThreadAction"
+      },
+      {
+        "path": "src/toad/target_commands.py",
+        "line": 117,
+        "role": "declaration",
+        "source": "@dataclass(frozen=True)"
+      },
+      {
+        "path": "src/toad/target_commands.py",
+        "line": 118,
+        "role": "Load",
+        "source": "TargetAction"
+      },
+      {
+        "path": "src/toad/target_commands.py",
+        "line": 43,
+        "role": "Load",
+        "source": "CliCommand.target_catalog"
+      },
+      {
+        "path": "src/toad/target_commands.py",
+        "line": 131,
+        "role": "Load",
+        "source": "ThreadAction"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 10,
+        "role": "import",
+        "source": "from agent_comms.cli_commands import TargetAction, TargetEdit"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 87,
+        "role": "declaration",
+        "source": "@dataclass(frozen=True)"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 89,
+        "role": "Load",
+        "source": "TargetAction"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 90,
+        "role": "Load",
+        "source": "TargetEdit"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 106,
+        "role": "import",
+        "source": "from toad.widgets.comms_command_dialog import CommandDialog"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 28,
+        "role": "Load",
+        "source": "ThreadAction"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 97,
+        "role": "Load",
+        "source": "self.request.declaration.reconnect_targets"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 120,
+        "role": "Load",
+        "source": "definition.confirmation"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 113,
+        "role": "Load",
+        "source": "TargetEdit"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 121,
+        "role": "Load",
+        "source": "CommandDialog"
+      },
+      {
+        "path": "src/toad/thread_actions.py",
+        "line": 114,
+        "role": "Load",
+        "source": "definition.confirmation"
+      },
+      {
+        "path": "src/toad/widgets/comms_command_dialog.py",
+        "line": 4,
+        "role": "import",
+        "source": "from agent_comms.cli_commands import TargetAction"
+      },
+      {
+        "path": "src/toad/widgets/comms_command_dialog.py",
+        "line": 12,
+        "role": "declaration",
+        "source": "class CommandDialog(ModalScreen[dict[str, str]]):"
+      },
+      {
+        "path": "src/toad/widgets/comms_command_dialog.py",
+        "line": 22,
+        "role": "Load",
+        "source": "TargetAction"
+      },
+      {
+        "path": "src/toad/widgets/comms_command_dialog.py",
+        "line": 29,
+        "role": "Load",
+        "source": "self.definition.confirmation"
+      },
+      {
+        "path": "src/toad/widgets/comms_command_dialog.py",
+        "line": 30,
+        "role": "Load",
+        "source": "self.definition.confirmation"
+      },
+      {
+        "path": "src/toad/widgets/conversation.py",
+        "line": 1508,
+        "role": "Load",
+        "source": "self.turns.describe"
+      },
+      {
+        "path": "src/toad/widgets/conversation.py",
+        "line": 1417,
+        "role": "Load",
+        "source": "self.turns.describe"
+      },
+      {
+        "path": "src/toad/widgets/conversation.py",
+        "line": 2077,
+        "role": "Load",
+        "source": "self.turns.describe"
+      }
+    ]
+  },
+  {
+    "repository": "/home/ts/wt/textual-native-subtree-strips-20261002",
+    "root": "src/textual",
+    "phase": "before",
+    "revision": "a52e5b122b09e6414f8adb1fa04995ac9ad6961b",
+    "modules": 249,
+    "parse_omissions": [],
+    "owner_consumers": []
+  },
+  {
+    "repository": "/home/ts/wt/textual-native-subtree-strips-20261002",
+    "root": "src/textual",
+    "phase": "after",
+    "revision": "a52e5b122b09e6414f8adb1fa04995ac9ad6961b",
+    "modules": 249,
+    "parse_omissions": [],
+    "owner_consumers": []
+  }
+]

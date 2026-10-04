@@ -1,0 +1,758 @@
+{
+ "string_dispatch": [
+  {
+   "function": "src/agent_comms/todos.py::_repo",
+   "subject": "piece",
+   "values": [
+    "",
+    ".",
+    ".."
+   ]
+  }
+ ],
+ "isinstance_switch": [
+  {
+   "function": "src/agent_comms/field_codec.py::encode",
+   "subject": "value",
+   "checks": 7
+  },
+  {
+   "function": "src/agent_comms/field_codec.py::value_schema",
+   "subject": "annotation",
+   "checks": 3
+  },
+  {
+   "function": "src/agent_comms/field_codec.py::_decode",
+   "subject": "data",
+   "checks": 5
+  },
+  {
+   "function": "src/agent_comms/field_codec.py::_decode",
+   "subject": "target",
+   "checks": 3
+  }
+ ],
+ "raw_shape": [
+  {
+   "function": "src/agent_comms/bus_page_index.py::record",
+   "subject": "record",
+   "keys": [
+    "from",
+    "seq",
+    "to"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/channel_coding_tools.py::decode_request",
+   "subject": "value",
+   "keys": [
+    "arguments",
+    "call_id",
+    "name",
+    "token"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/cli_commands.py::describe",
+   "subject": "declared.metadata",
+   "keys": [
+    "multiline",
+    "parser_options",
+    "wire_name"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/cli_commands.py::describe",
+   "subject": "schema['properties'][key]",
+   "keys": [
+    "description",
+    "editor_default",
+    "multiline"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/cli_commands.py::add_parser",
+   "subject": "metadata",
+   "keys": [
+    "flags",
+    "group",
+    "parser_default",
+    "parser_default_factory",
+    "parser_options",
+    "wire_name"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/cli_commands.py::add_parser",
+   "subject": "options",
+   "keys": [
+    "choices",
+    "default",
+    "dest",
+    "required"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/declared_family.py::__new__",
+   "subject": "namespace",
+   "keys": [
+    "__registry__",
+    "_family_affix",
+    "declared_name"
+   ],
+   "model": {
+    "model": "src/agent_comms/declared_family.py::DeclaredFamily"
+   }
+  },
+  {
+   "function": "src/agent_comms/diagnostics.py::record_terminal_failure",
+   "subject": "document",
+   "keys": [
+    "native",
+    "native_response",
+    "source_error"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/field_codec.py::_record_schema",
+   "subject": "metadata",
+   "keys": [
+    "description",
+    "wire_choices",
+    "wire_nonnull"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/field_codec.py::_record_schema",
+   "subject": "schema",
+   "keys": [
+    "default",
+    "description",
+    "enum"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/field_codec.py::_decode",
+   "subject": "field.metadata",
+   "keys": [
+    "wire_choices",
+    "wire_nonnull",
+    "wire_required"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/goal_attempts.py::for_goal",
+   "subject": "usage",
+   "keys": [
+    "cost",
+    "input",
+    "output",
+    "totalTokens"
+   ],
+   "model": {
+    "model": "src/agent_comms/pi_payloads.py::PiUsage"
+   }
+  },
+  {
+   "function": "src/agent_comms/goal_presentation.py::from_wire",
+   "subject": "data",
+   "keys": [
+    "block_reason",
+    "goal_id",
+    "inactive_wait_for",
+    "state",
+    "wait_for"
+   ],
+   "model": {
+    "model": "src/agent_comms/goal_presentation.py::GoalExecution"
+   }
+  },
+  {
+   "function": "src/agent_comms/image_inputs.py::prompt_images",
+   "subject": "block",
+   "keys": [
+    "data",
+    "mimeType",
+    "resource",
+    "type"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/import_records.py::capture",
+   "subject": "wire",
+   "keys": [
+    "callID",
+    "state",
+    "tool"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/import_records.py::capture",
+   "subject": "state",
+   "keys": [
+    "error",
+    "input",
+    "output",
+    "status"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/import_records.py::capture",
+   "subject": "wire",
+   "keys": [
+    "content",
+    "id",
+    "role"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/import_records.py::capture",
+   "subject": "wire",
+   "keys": [
+    "arguments",
+    "call_id",
+    "input",
+    "name"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/import_records.py::capture",
+   "subject": "payload",
+   "keys": [
+    "guardian_history",
+    "message",
+    "replacement_history",
+    "summary"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/importing.py::_export",
+   "subject": "info",
+   "keys": [
+    "directory",
+    "id",
+    "revert",
+    "title"
+   ],
+   "model": {
+    "model": "src/agent_comms/importing.py::OpenCodeSession"
+   }
+  },
+  {
+   "function": "src/agent_comms/importing.py::_message",
+   "subject": "info",
+   "keys": [
+    "id",
+    "role",
+    "summary"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/runtime.py::_raise_owner_error",
+   "subject": "rpc",
+   "keys": [
+    "code",
+    "data",
+    "message"
+   ],
+   "model": {
+    "model": "src/agent_comms/exporting.py::WireExportRow"
+   }
+  },
+  {
+   "function": "src/agent_comms/runtime.py::update",
+   "subject": "request",
+   "keys": [
+    "id",
+    "options",
+    "toolCall"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/tools.py::tool_field",
+   "subject": "metadata",
+   "keys": [
+    "context_binding",
+    "wire_choices",
+    "wire_name"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/tools.py::_bounded_inbox_response",
+   "subject": "review",
+   "keys": [
+    "goal_id",
+    "messages",
+    "reviewed_inputs",
+    "wait_for"
+   ],
+   "model": {
+    "model": "src/agent_comms/tools.py::CommsGoalTool"
+   }
+  },
+  {
+   "function": "src/agent_comms/transcripts.py::repair_input_routing",
+   "subject": "report",
+   "keys": [
+    "conflicts",
+    "eligible",
+    "repaired",
+    "skipped"
+   ],
+   "model": {}
+  }
+ ],
+ "exact_key_set": [
+  {
+   "location": "src/agent_comms/acp_extension.py:582"
+  },
+  {
+   "location": "src/agent_comms/bus_publication.py:182"
+  },
+  {
+   "location": "src/agent_comms/channel_coding_tools.py:175"
+  },
+  {
+   "location": "src/agent_comms/pi_events.py:654"
+  }
+ ],
+ "named_attribute": [
+  {
+   "location": "src/agent_comms/acp.py:306",
+   "name": "type"
+  },
+  {
+   "location": "src/agent_comms/acp.py:559",
+   "name": "message"
+  },
+  {
+   "location": "src/agent_comms/acp.py:490",
+   "name": "text"
+  },
+  {
+   "location": "src/agent_comms/acp.py:291",
+   "name": "type"
+  },
+  {
+   "location": "src/agent_comms/active_route.py:212",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/active_route.py:249",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/active_route.py:161",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/active_route.py:293",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/backend.py:189",
+   "name": "_maintenance_wire_locked"
+  },
+  {
+   "location": "src/agent_comms/child_process.py:67",
+   "name": "pidfd_open"
+  },
+  {
+   "location": "src/agent_comms/child_process.py:70",
+   "name": "pidfd_open"
+  },
+  {
+   "location": "src/agent_comms/child_process.py:83",
+   "name": "pidfd_send_signal"
+  },
+  {
+   "location": "src/agent_comms/child_process.py:87",
+   "name": "pidfd_send_signal"
+  },
+  {
+   "location": "src/agent_comms/claim_admission.py:362",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/claim_admission.py:285",
+   "name": "O_DIRECTORY"
+  },
+  {
+   "location": "src/agent_comms/cohort_foreground.py:243",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/debt_ratchet.py:418",
+   "name": "type_param"
+  },
+  {
+   "location": "src/agent_comms/debt_ratchet.py:454",
+   "name": "__module__"
+  },
+  {
+   "location": "src/agent_comms/diagnostics.py:208",
+   "name": "O_DIRECTORY"
+  },
+  {
+   "location": "src/agent_comms/fresh_private_session.py:509",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/fresh_private_session.py:340",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/fresh_private_session.py:400",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/goal_attempts.py:605",
+   "name": "O_DIRECTORY"
+  },
+  {
+   "location": "src/agent_comms/goal_history.py:90",
+   "name": "O_DIRECTORY"
+  },
+  {
+   "location": "src/agent_comms/image_inputs.py:46",
+   "name": "model_dump"
+  },
+  {
+   "location": "src/agent_comms/locked_store.py:138",
+   "name": "O_DIRECTORY"
+  },
+  {
+   "location": "src/agent_comms/maintenance_barrier.py:123",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/mro_dispatch.py:36",
+   "name": "__handled_classes__"
+  },
+  {
+   "location": "src/agent_comms/native_pi.py:793",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/private_bus_checkpoint.py:502",
+   "name": "O_DIRECTORY"
+  },
+  {
+   "location": "src/agent_comms/private_bus_checkpoint.py:812",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/private_bus_checkpoint.py:575",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/private_bus_checkpoint.py:846",
+   "name": "O_DIRECTORY"
+  },
+  {
+   "location": "src/agent_comms/private_bus_checkpoint.py:831",
+   "name": "O_DIRECTORY"
+  },
+  {
+   "location": "src/agent_comms/private_registry_guard.py:39",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/private_registry_guard.py:230",
+   "name": "O_DIRECTORY"
+  },
+  {
+   "location": "src/agent_comms/private_registry_guard.py:136",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/private_registry_guard.py:224",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/private_registry_guard.py:236",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/private_sidecar.py:106",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/recovery_gateway.py:64",
+   "name": "SO_PEERCRED"
+  },
+  {
+   "location": "src/agent_comms/recovery_gateway.py:217",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/recovery_gateway.py:72",
+   "name": "getpeereid"
+  },
+  {
+   "location": "src/agent_comms/recovery_gateway.py:257",
+   "name": "SO_PEERCRED"
+  },
+  {
+   "location": "src/agent_comms/recovery_gateway.py:258",
+   "name": "getpeereid"
+  },
+  {
+   "location": "src/agent_comms/recovery_gateway_client.py:72",
+   "name": "SO_PEERCRED"
+  },
+  {
+   "location": "src/agent_comms/recovery_gateway_client.py:77",
+   "name": "dup"
+  },
+  {
+   "location": "src/agent_comms/recovery_gateway_client.py:79",
+   "name": "getpeereid"
+  },
+  {
+   "location": "src/agent_comms/selected_tool_broker.py:432",
+   "name": "SO_PEERCRED"
+  },
+  {
+   "location": "src/agent_comms/selected_tool_broker.py:432",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/session_fence.py:44",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/store_files.py:181",
+   "name": "O_DIRECTORY"
+  },
+  {
+   "location": "src/agent_comms/store_files.py:158",
+   "name": "winerror"
+  },
+  {
+   "location": "src/agent_comms/thread_management.py:424",
+   "name": "O_DIRECTORY"
+  },
+  {
+   "location": "src/agent_comms/view_unread.py:113",
+   "name": "_connection"
+  },
+  {
+   "location": "src/agent_comms/wire_log.py:315",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/wire_log.py:331",
+   "name": "O_DIRECTORY"
+  },
+  {
+   "location": "src/agent_comms/wire_log.py:601",
+   "name": "O_NONBLOCK"
+  },
+  {
+   "location": "src/agent_comms/wire_log.py:601",
+   "name": "O_NOFOLLOW"
+  }
+ ],
+ "long_condition": [
+  {
+   "location": "src/agent_comms/compaction_records.py:183",
+   "terms": 9,
+   "profile": {
+    "kinds": [
+     [
+      "same_value",
+      8
+     ],
+     [
+      "rule",
+      1
+     ]
+    ]
+   },
+   "text": "self.session_file != str(evidence.source.path) or evidence.entries[0].id != witness.sessio"
+  }
+ ],
+ "god_class": [
+  {
+   "qualname": "src/agent_comms/backend.py::TurnSession",
+   "size": 504
+  },
+  {
+   "qualname": "src/agent_comms/history_views.py::HistoryViews",
+   "size": 515
+  },
+  {
+   "qualname": "src/agent_comms/input_drain.py::InputDrain",
+   "size": 571
+  },
+  {
+   "qualname": "src/agent_comms/wire_log.py::WireLog",
+   "size": 609
+  }
+ ],
+ "god_function": [
+  {
+   "qualname": "src/agent_comms/cohort_foreground.py::run_foreground_once",
+   "size": 114
+  },
+  {
+   "qualname": "src/agent_comms/cohort_schema.py::triggers",
+   "size": 105
+  },
+  {
+   "qualname": "src/agent_comms/compaction_publication.py::publish_pending_local",
+   "size": 115
+  },
+  {
+   "qualname": "src/agent_comms/fresh_private_session.py::create_fresh_private_session",
+   "size": 101
+  },
+  {
+   "qualname": "src/agent_comms/historical_native_inputs.py::read_historical_native_inputs",
+   "size": 106
+  },
+  {
+   "qualname": "src/agent_comms/publisher.py::publish_initial_cohort",
+   "size": 197
+  },
+  {
+   "qualname": "src/agent_comms/recovery_projection.py::project",
+   "size": 137
+  },
+  {
+   "qualname": "src/agent_comms/relationships.py::snapshot",
+   "size": 144
+  },
+  {
+   "qualname": "src/agent_comms/selected_pi_summary_rpc.py::run_selected_summary",
+   "size": 131
+  },
+  {
+   "qualname": "src/agent_comms/thread_management.py::_rename_thread_unlocked",
+   "size": 127
+  },
+  {
+   "qualname": "src/agent_comms/transcripts.py::thread_transcript_page",
+   "size": 101
+  }
+ ],
+ "legacy_marker": [
+  {
+   "location": "src/agent_comms/active_route.py:207",
+   "text": "thread dispatch. Nested shared borrowers remain compatible and each owns"
+  },
+  {
+   "location": "src/agent_comms/pi_payloads.py:320",
+   "text": "fallback_transport: str | None = wire_field(\"fallbackTransport\")"
+  },
+  {
+   "location": "src/agent_comms/pi_payloads.py:340",
+   "text": "if self.fallback_transport is not None:"
+  },
+  {
+   "location": "src/agent_comms/pi_payloads.py:341",
+   "text": "parts.append(f\"reported fallback transport: {self.fallback_transport}\")"
+  },
+  {
+   "location": "src/agent_comms/selected_pi_route.py:111",
+   "text": "fallback preparation, provider request or input replay."
+  }
+ ],
+ "positional_insert": [],
+ "column_insert": [],
+ "embedded_script": [
+  {
+   "location": "src/agent_comms/tool_output.py:22",
+   "length": 252
+  }
+ ],
+ "child_process_site": [
+  {
+   "location": "src/agent_comms/child_process.py:255",
+   "call": "os.kill"
+  },
+  {
+   "location": "src/agent_comms/child_process.py:599",
+   "call": "subprocess.Popen"
+  },
+  {
+   "location": "src/agent_comms/child_process.py:963",
+   "call": "asyncio.create_subprocess_exec"
+  }
+ ],
+ "literal_roster": [
+  {
+   "values": [
+    "X",
+    "Z"
+   ],
+   "copies": 2
+  },
+  {
+   "values": [
+    "split_turn",
+    "unsupported"
+   ],
+   "copies": 2
+  },
+  {
+   "values": [
+    "assistant",
+    "user"
+   ],
+   "copies": 2
+  }
+ ],
+ "dead_module": [
+  {
+   "path": "src/agent_comms/attempt_recovery.py",
+   "lines": 387,
+   "named_in_strings": false
+  },
+  {
+   "path": "src/agent_comms/cohort_send.py",
+   "lines": 74,
+   "named_in_strings": false
+  },
+  {
+   "path": "src/agent_comms/delivery_failure.py",
+   "lines": 29,
+   "named_in_strings": false
+  },
+  {
+   "path": "src/agent_comms/recovery_gateway.py",
+   "lines": 433,
+   "named_in_strings": true
+  },
+  {
+   "path": "src/agent_comms/recovery_gateway_client.py",
+   "lines": 135,
+   "named_in_strings": false
+  },
+  {
+   "path": "src/agent_comms/todos.py",
+   "lines": 562,
+   "named_in_strings": false
+  }
+ ]
+}

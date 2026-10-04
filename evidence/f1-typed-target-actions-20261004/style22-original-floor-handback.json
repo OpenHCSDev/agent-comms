@@ -1,0 +1,46 @@
+{
+  "state": "Original style422 floor RESTORED; whole Sch code/import/read/execution purpose closed",
+  "source_assets": {
+    "agent_comms": 339,
+    "toad": 319,
+    "textual": 266,
+    "textual_diff_view": 3
+  },
+  "package_count": 69,
+  "all_original_versions_equal": true,
+  "all_original_archive_origins_equal": true,
+  "original_activation_sourceproof_bytes_unchanged": true,
+  "original_native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2ea0a4d4ff2e3628/node_modules/@earendil-works/pi-coding-agent",
+  "native_artifacts_mutated": false,
+  "private09_registry": [
+    {
+      "name": "beta",
+      "process_alive": false
+    },
+    {
+      "name": "user",
+      "process_alive": false
+    }
+  ],
+  "exact_failed09_group_retired": true,
+  "original09_terminal": 143,
+  "original09_assertion_receipt": "/home/ts/.cache/agent-scratch/f1-native-delete-installed09/native-view-delete/receipt.json",
+  "whole09_result": "FAILED App shutdown NoMatches Window; separate exact owned cleanup required",
+  "restore_wheels": [
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/input-drain611-wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "sha256": "4e3ff32503360fe7975ec71da19479774c0ff04ac6b0a2aa09ee38a1521219ba"
+    },
+    {
+      "path": "/home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/text53-filewheel-a52e5b122b-20261004/textual-8.2.8-py3-none-any.whl",
+      "sha256": "a805fa110467eb791f5b087d37422e9d58057b2d5308ea2290f3ab6e302bce83"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/session422-native52-20261004/final-toad-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "sha256": "a9a55bc427797c44394723f1ff170aa6ee629637d56b2e65dc15b59f63b38b9f"
+    }
+  ],
+  "original_handback": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/session422-native52-20261004/code-handback.json",
+  "future_sch_style22_claim": false,
+  "public_packages_changed": false
+}
