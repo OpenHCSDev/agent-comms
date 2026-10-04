@@ -297,11 +297,11 @@ try {
         const model=session.model;
         const {BudgetAdmissionError}=await import(pathToFileURL(join(pkg,
             'node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js')));
-        session.agent.setModel({...model,contextWindow:1});
+        session.agent.state.model={...model,contextWindow:1};
         try {
             await assert.rejects(applyNativeCondition(session,pkg,bounded),BudgetAdmissionError);
             assert.deepEqual((await TurnContext.next(session)).render(),provider);
-        } finally {session.agent.setModel(model);}
+        } finally {session.agent.state.model=model;}
         const selectedContext=session.storedContext;
         const {CompactionContext}=await import(pathToFileURL(join(pkg,'dist/core/session-context.js')));
         session.storedContext=new CompactionContext(manager);
