@@ -185,7 +185,7 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
         ledger = owner.inputs.dispositions
         admission = comms.registry.snapshot().admission_generations[session]
         with _store_lock(comms._wire_lock_path), ExitStack() as custody:
-            queued, _ = QueuedInput.capture(
+            queued, _, _receipt = QueuedInput.capture(
                 owner.inputs, session, text="queued", prompt="queued", echo=True,
                 images=(), controller=None, custody=custody,
             )

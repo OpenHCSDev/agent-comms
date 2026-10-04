@@ -1,0 +1,57 @@
+{
+  "time": 1791140231.2088249,
+  "result": "PASS; only corrected readmission consumer",
+  "exit_code": 0,
+  "cases": 1,
+  "pytest_seconds": 0.878,
+  "source_head": "5d3ae591426e670a1f806142d9c219e77f2c791c",
+  "production_equal_installed_source": "c656a64c4887fae14227b1e0a04a2b263bdaeade",
+  "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "5f1667ce64c58d67e153850be91dfb669ea9e347218f8d845937a1c12c778a9c",
+  "controller": {
+    "controller": {
+      "pid": 3089287,
+      "start_time": 61581507
+    },
+    "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "installed_core": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+    "pytest": "/usr/lib/python3.14/site-packages/pytest/__init__.py",
+    "started": 1791140176.8943841,
+    "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent"
+  },
+  "cleanup": [
+    {
+      "identity": {
+        "pid": 3089287,
+        "start_time": 61581507
+      },
+      "alive": false,
+      "group_members": []
+    }
+  ],
+  "owned_run_sockets": [],
+  "native_children": [],
+  "native_inputs_provider_public_replay": 0,
+  "installed_git_assets_equal": 347,
+  "original_keepers_unchanged": 92,
+  "distributions": {
+    "pydantic_core": "2.46.5",
+    "typing-inspection": "0.4.4",
+    "metaclass-registry": "0.2.1",
+    "annotated-types": "0.8.0",
+    "typing_extensions": "4.15.0",
+    "pydantic": "2.13.5",
+    "packaging": "26.2",
+    "agent-comms": "0.1.0",
+    "nominal-refactor-audit": "0.1.0",
+    "agent-client-protocol": "0.12.1"
+  },
+  "direct_url": {
+    "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "original01_negative_unchanged": true,
+  "grant_sha256": "7a68af7dff84ae6fcfca7e71bd7d47eaab6d032e8bb5c0ce729a27ac4389b9fe",
+  "holder": "WHOLE HAND BACK; no future package/build/import/read/execution claim; shared lifecycle ONLY Bohr",
+  "native_artifact": "no new native execution/renewal; original01 lease already returned"
+}

@@ -1,0 +1,18 @@
+{
+  "merged_main": "b1a91fb5",
+  "merge_head": "218c48f040f7a1744971c09563dfb92eea64f498",
+  "reviewed_source": "c98ba956",
+  "owned_production_bytes_unchanged": [
+    "src/agent_comms/input_disposition.py",
+    "src/agent_comms/input_drain.py",
+    "src/agent_comms/queued_input.py",
+    "src/agent_comms/turn_runner.py"
+  ],
+  "merged_parent_bytes_exact": [
+    "src/agent_comms/activity.py",
+    "src/agent_comms/history_views.py",
+    "src/agent_comms/presentation.py"
+  ],
+  "fixture_migration": "Scheduled strict-refusal control matches the same shared reservation-owner error; unchanged exception type and original bytes equality assertion.",
+  "execution": "No656 package/SDK/tests run; fresh Bohr holder purpose required; separate Sch086 grant conditional on holder purpose."
+}
