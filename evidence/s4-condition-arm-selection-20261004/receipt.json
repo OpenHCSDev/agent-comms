@@ -1,0 +1,44 @@
+{
+  "implementation": "e483722fe707c3757fba8421d818a68e55972a36",
+  "base": "8c0f1a09cc8c5d6ff39d48f0984af79af49f2aaa",
+  "raw_root": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-condition-arm-selection",
+  "raw_sha256": {
+    "owner-before.json": "5e08bb4dbdcc9b18f5bfb952de4ea5c19c76a674053f6f05f040bde638c7e5a6",
+    "owner-after.json": "d11f9868f248fe9ce200d4cc156ccf3474d4f2afb390fe7e78fa26560368679d",
+    "focused.log": "1c0a5c5d9cf23e9d2b9ee8fba3ea09b85e644ab2d91c36e05adec80b6142f2fe",
+    "missing-pairs.json": "0b3f8d547b77fd4b359ead9a34ca91b9cdbb3d0a36bbbb06121e85c9a872ae4c",
+    "cli.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "cli-selection.json": "352ee807de31eb57fe444076229c89d6b185106baaa21c24e23c80d0c4b2f019",
+    "cli.stdout.json": "50ea736e5dea439dc4009bf01f5acfe836a9b0bb91397459333e98a558da5d7f"
+  },
+  "raw_only": [
+    "cli.stdout.json"
+  ],
+  "qualification": {
+    "focused": "3 passed, 34 deselected, 24 subtests passed in 0.24s",
+    "scope": "Authored installed witness/entry ancestry, original converter/request relation, public scorer constructor checks and unavailable original records",
+    "CLI": "Existing recorded-pairs CLI, two missing trajectories; constructor observations unavailable/all3 frozen rounds kept, no construction/study grant; exit0/empty stderr",
+    "AST": "734 src/tests/tools Python modules, zero parse omissions; lexical source not dynamic/injected JS proof"
+  },
+  "source_delta": {
+    "private_fixture_control": "62 added / 15 deleted",
+    "src": 0,
+    "stack": 0,
+    "tools": 0,
+    "private_JS_producers": 0
+  },
+  "original_session_reads": 0,
+  "SDK_calls": 0,
+  "provider_calls": 0,
+  "native_processes": 0,
+  "packages_envs_loans": 0,
+  "not_qualified": [
+    "configured matched arms",
+    "complete transformed source",
+    "complete history capacity",
+    "HTTP or returned model",
+    "interventions or independence",
+    "billing",
+    "study or full S4"
+  ]
+}
