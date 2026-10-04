@@ -1,0 +1,15 @@
+{
+  "scope": "Same original602 recorded SDK application; no new capture/provider/input",
+  "original_probe_sha256": "fff818b493fe9a784d20dc318d386c7a14469948d4626e5dd53623693c63ca0d",
+  "original_hashes_unchanged": 8,
+  "narrative_presence_evaluated": true,
+  "message_binding": {
+    "evaluated": false,
+    "reason": "Original SDK conversion not captured"
+  },
+  "model_steps": 1,
+  "original_context_sha256": "515fd61864badcd3ddfbcb3eb83cddd349212ca6f22e6843218c0f185ef5c68d",
+  "provider_messages_sha256": "6ad7ef5cee4e984b6ba14fdcb7a8f76715253d29b7622df46fd26af36b9c7b2f",
+  "elapsed_seconds": 10.293272729031742,
+  "new_model_inputs": 0
+}
