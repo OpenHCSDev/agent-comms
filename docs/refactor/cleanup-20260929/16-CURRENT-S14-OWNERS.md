@@ -49,6 +49,14 @@ timeout and whole tool/system refusal remain failures, with no stream rerun.
 Arendt continues the original debugger/controller completion family source pass;
 provider capacity, matched arms and the30-pair/USD75 study remain unqualified.
 
+Parent tracking branch normally joined merged659. Production/src/stack/pins
+equal main, but an older parent-only retained_index_writer.py change remains:
+direct original WireLog custody instead of constructing Comms while rebuilding
+an old checkpoint. Parent owns its source/receipt reconciliation; it is not
+silently called merged, installed, or admitted by current440 canonical tools.
+Only open feature scopes are Core627/Toad434 W6 and Toad441 performance;
+native artifact649 and this tracking432 remain separate draft handoffs.
+
 ## Historical: original436 published; C4 source complete; whole UI and W6 remain — 2026-10-04
 
 Tristan closed the original Toad client and authorized updating the install.
