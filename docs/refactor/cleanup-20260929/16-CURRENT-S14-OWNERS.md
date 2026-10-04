@@ -72,6 +72,25 @@ verified authorization, not an App result or confirmed lifecycle release.
 All1470/69/390 restoration, joined cleanup and independent handback obligations
 remain; public334 and prior raw results are untouched.
 
+The corrected442 original App completed once: exit0 in10.636214859900065s,
+all29 checks true. Parent independently read terminal84bcf66a and receipt288e9414,
+including wire initial/restart loading, Working/Live checkpoint custody and
+original task/reader whole close. Handback414b6ef4 and final census5bd1e153
+match their original SHA values; owner1169370/birth62747559 is recorded terminal0
+with no owned cleanup remaining or errors. Owner reports full1470/69/390 restore;
+Bohr's independent readback/lifecycle closure is the next custody step. The late
+release notice is the earlier transition for this consumed App, not a second
+launch authorization. Heis owns result publication/final exact Debt and scoped
+Ready before normal merge; no build/App/provider repeat is needed.
+
+Parent432 packaging precision: src/stack/tools/tests/build declarations and
+dependency pins now equal actual mainad7, after deleting the unused wrapper.
+AGENTS and the existing .pi/APPEND_SYSTEM contain standing instruction updates.
+The latter is one of the three forced wheel assets, so this parent's whole wheel
+is not byte-equal to retained Core5f. Parent432 remains a separate Draft; those
+instruction changes are not folded into442, current public440 or receiving444's
+current Core source-equality claim. No extra gate for442 follows from this fact.
+
 Parent reviewed the coherent four-file checkpoint correction: TranscriptState
 combines its source-admission capability with the original resource fact, and
 the facade delegates. MountedMessageHistory retains reader/loading availability;
