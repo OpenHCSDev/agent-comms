@@ -27,6 +27,7 @@ from agent_comms.pi_rpc import unique_fields
 from agent_comms.native_entries import NativeEntry
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_tools import CodingTool
+from agent_comms.pi_payloads import ReportedModel
 from agent_comms.message_reference import MessageReference
 from agent_comms.turn_context import FileProvenance, JournalProvenance, ToolCatalogSegment
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
@@ -77,6 +78,31 @@ class PairedRecallDesign:
         result['comparison_design'] = FieldCodec.encode(self)
         result['recall_inference'] = ScoredScenario.paired_inference(result['pairs'], self)
         return result
+
+    def model_alignment(self, alignment):
+        """Bind every observed selection to this supplied design.
+
+        Equal mixed-model sets in both arms are descriptive matches, not a
+        single-model design. Completion identities come from original journal
+        records; admissions borrow the already acquired diagnostic values.
+        Neither supplies a returned provider model or complete request capture.
+        """
+        for provider, model in alignment['completion_selection']['models']:
+            ReportedModel(provider=provider, id=model).require_selection(self.model)
+        models = tuple(point.model
+            for arm in alignment['input_requests'].values()
+            for request in arm['requests']
+            for point in request['budget']['observations'])
+        available = bool(models) and all(model is not None and model.display_name is not None
+                                         for model in models)
+        for model in models:
+            if model is not None and model.display_name is not None:
+                model.require_selection(self.model)
+        return {'evaluated': available,
+                'reason': 'All observed admission and completion selections match the supplied model'
+                          if available else 'Original admitted request model unavailable',
+                'scope': 'Observed original selections only; not complete capture, '
+                         'returned model, HTTP, capacity or study acceptance'}
 
     def construction_plan(self, sampling_seed: int):
         """Export prospective operands; never grant or launch a native turn.
@@ -312,6 +338,8 @@ class RecordedNativeProbes:
                 "captured_settings": configured,
                 "request_selection": request,
                 "completion_selection": completion,
+                "input_requests": {"candidate": a["input_request_measurements"],
+                                   "baseline": b["input_request_measurements"]},
                 "request_completion": terminals,
                 "sdk_manifest_changes": a["sdk_manifest"].changed_since(b["sdk_manifest"]),
                 "reason": "; ".join(unavailable) if unavailable else
@@ -840,11 +868,9 @@ class ScoredScenario(ScoreView):
                 if not alignment['evaluated']:
                     unavailable.append(f"Pair {index + 1}, round {identity}: original alignment unavailable")
                     continue
-                # request_alignment already requires all admitted observations
-                # in both arms to match. Bind that selection to the supplied
-                # model through the same PiModel owner, never registry settings.
-                original = alignment['request_selection']['candidate']['observations'][0]
-                original.model.require_selection(design.model)
+                models = design.model_alignment(alignment)
+                if not models['evaluated']:
+                    unavailable.append(f"Pair {index + 1}, round {identity}: {models['reason']}")
             quality = pair['paired_quality']['unassisted_recall']
             frozen = pair['candidate']['measurements'].get(Measurement.RECALL.value)
             measured = quality['measurements']['candidate'].get(Measurement.RECALL.value)

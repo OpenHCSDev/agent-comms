@@ -346,8 +346,10 @@ class RecordedMeasurementTests(unittest.TestCase):
         support = {'r1': {'answer_support': {'unassisted_recall': True}}}
         progress = RequestProgress('request', 'session', 'input', 1, 2, '3',
             1, 0, 0, 0, 'budget_admission', model=ReportedModel(provider='original', id='model'))
-        alignment = {'r1': {'evaluated': True, 'request_selection': {
-            'candidate': {'observations': (progress,)}}}}
+        requests = RecordedNativeProbe.input_request_measurements({'request': (progress,)})
+        alignment = {'r1': {'evaluated': True,
+            'completion_selection': {'models': (('original', 'model'),)},
+            'input_requests': {'candidate': requests, 'baseline': requests}}}
 
         def comparison(candidate, evidence=support):
             return {'candidate': candidate.public(), 'alignment': alignment,
@@ -367,6 +369,42 @@ class RecordedMeasurementTests(unittest.TestCase):
             ScoredScenario.paired_inference(pairs, replace(design, model='another/model'))
         with self.assertRaisesRegex(ValueError, 'pair count'):
             ScoredScenario.paired_inference(pairs[:1], design)
+
+        # Both arms can agree on the same mixed set while violating a supplied
+        # single-model design. Earlier tool steps and nonselected admissions
+        # must not disappear behind the final request's matching model.
+        mixed = dict(alignment['r1'], completion_selection={
+            'models': (('original', 'model'), ('other', 'model'))})
+        earlier = replace(progress, request_id='earlier',
+                          model=ReportedModel(provider='other', id='model'))
+        different = RecordedNativeProbe.input_request_measurements({
+            'earlier': (earlier,), 'request': (progress,)})
+        revised = RecordedNativeProbe.input_request_measurements({
+            'request': (earlier, progress)})
+        for changed in (mixed,
+                dict(alignment['r1'], input_requests={'candidate': different, 'baseline': different}),
+                dict(alignment['r1'], input_requests={'candidate': requests, 'baseline': different}),
+                dict(alignment['r1'], input_requests={'candidate': revised, 'baseline': requests})):
+            with self.subTest(changed=changed), self.assertRaisesRegex(ValueError, 'model does not match'):
+                ScoredScenario.paired_inference((pairs[0], dict(pairs[1], alignment={'r1': changed})), design)
+
+        missing = RecordedNativeProbe.input_request_measurements({
+            'earlier': (replace(progress, model=None),), 'request': (progress,)})
+        missing_alignment = dict(alignment['r1'], input_requests={
+            'candidate': missing, 'baseline': requests})
+        unavailable = ScoredScenario.paired_inference((pairs[0], dict(pairs[1],
+            alignment={'r1': missing_alignment})), design)
+        self.assertFalse(unavailable['evaluated'])
+        self.assertNotIn('lower', unavailable)
+        self.assertIn('admitted request model unavailable', unavailable['reasons'][0])
+        # A missing earlier admission is not a complete-capture claim or a
+        # known mismatch. Retain that distinction while checking known values.
+        partial = RecordedNativeProbe.input_request_measurements({
+            'earlier': (replace(progress, stage='headers', model=None),), 'request': (progress,)})
+        partial_alignment = dict(alignment['r1'], input_requests={
+            'candidate': partial, 'baseline': requests})
+        self.assertTrue(design.model_alignment(partial_alignment)['evaluated'])
+        self.assertFalse(partial['complete_input_evaluated'])
 
     def test_supplied_design_binds_original_oracle_and_rejects_invalid_parameters(self):
         # Detect changed oracle bytes or an omitted sample before native reads;
@@ -810,6 +848,7 @@ class RecordedMeasurementTests(unittest.TestCase):
                     'c' * 64, 10, 2),), 'native', request_id='request')
             return {'construction': {'fork': fork, 'sdk_manifest': manifest,
                 'request_budget': {'evaluated': True, 'observations': (point,)},
+                'input_request_measurements': RecordedNativeProbe.input_request_measurements({'request': (point,)}),
                 'request_completion': RecordedNativeProbe.request_completion(
                     {'evaluated': True, 'observations': (point,)},
                     MessageEntry(id='terminal', message=AssistantMessage(provider='provider', model='model')))},
@@ -825,6 +864,10 @@ class RecordedMeasurementTests(unittest.TestCase):
             candidate.alignment(different, a, {'r1': observation('parent', 'other/model', probe=control)}, scenario.rounds)
         observed = candidate.alignment(different, a, b, scenario.rounds)
         self.assertTrue(observed['r1']['evaluated'])
+        self.assertIs(observed['r1']['input_requests']['candidate'],
+                      a['r1']['construction']['input_request_measurements'])
+        self.assertIs(observed['r1']['input_requests']['baseline'],
+                      b['r1']['construction']['input_request_measurements'])
         self.assertFalse(observed['r2']['evaluated'])
         self.assertEqual(len(observed['r1']['sdk_manifest_changes']['removed']), 1)
         self.assertEqual(len(observed['r1']['sdk_manifest_changes']['added']), 1)
@@ -918,6 +961,11 @@ class RecordedMeasurementTests(unittest.TestCase):
         different = {'model_steps': (dict(selected, selection=dict(observation, model='another')),)}
         with self.assertRaisesRegex(ValueError, 'completion models'):
             RecordedNativeProbes.completion_alignment(a, different)
+        # Matching mixed sets remain a valid descriptive observation. Only a
+        # supplied single-model design owns their rejection for inference.
+        mixed = {'model_steps': a['model_steps'] + different['model_steps']}
+        self.assertEqual(RecordedNativeProbes.completion_alignment(mixed, mixed)['models'],
+                         (('openai-codex', 'another'), ('openai-codex', 'configured-alias')))
 
     def test_construction_corroborates_segment_references_on_original_branch(self):
         # Detect foreign, missing and future source coordinates before a context
