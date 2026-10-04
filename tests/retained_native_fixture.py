@@ -15,6 +15,7 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_records import CompactionOperation, NativeForkCreation, SelectedSummaryAttempt
 from agent_comms.field_codec import FieldCodec, FieldRepresentation, PathText
 from agent_comms.input_disposition import InputDocument, InputDispositions
+from agent_comms.input_attempt import InputAttempt, MissingInput
 from agent_comms.native_entries import ManagedCompactionEntry, MessageEntry, NativeEntry, NativeEvidenceRead, ThinkingLevelChangeEntry
 from agent_comms.native_input_record import NativeInputIdText
 from agent_comms.native_pi import NativeContextProof, NativeContextRecord
@@ -644,23 +645,30 @@ class RecordedNativeProbe:
             'provider_messages_sha256':conversion['provider_messages_sha256'],
             'scope':'Complete original SDK transformed/converter message sequence; not payload hooks, HTTP bytes, full-history capacity or comparative recall'}
 
-    def submitted_prompt(self, user):
+    def submitted_prompt(self, user, manifest):
         """Bind an original submitted source to its exact recorded native write.
 
         A direct-native control measures its native user text. An ACP capture
         supplies the original InputDocument, whose STARTED member owns both
-        submitted and rendered text. This is measurement, never lease authority.
+        submitted and rendered text. The sealed manifest supplies the expected
+        turn; original diagnostic leases supply admission separately. Missing
+        evidence cannot be replaced by the row's own answer. This is
+        measurement, never lease authority.
         """
         if self.submitted_inputs is None:
-            return user.message.text, {"scope": "original native user text"}
+            return user.message.text, {"scope": "original native user text"}, MissingInput()
         document = RecordedNativeCheckpoint.read_record(self.submitted_inputs, InputDocument)
         row, = (row for row in document.rows.values()
                 if row.has_started and row.native_id == self.input_id)
-        if not row.matches_native(turn_id=row.turn_id, native_id=self.input_id, text=user.message.text):
+        turn_id = row.turn_id if manifest is None else manifest.turn.require_recorded().identity.value
+        if not row.matches_native(turn_id=turn_id, native_id=self.input_id, text=user.message.text):
             raise ValueError("Original submitted input differs from the recorded native write")
-        return row.source_text, {"scope": "original STARTED InputDocument source and exact sent text",
+        scope = ("original STARTED InputDocument source, exact sent text and sealed recorded turn"
+                 if manifest is not None else
+                 "original STARTED InputDocument source and exact sent text; recorded turn unavailable")
+        return row.source_text, {"scope": scope,
                                  "source": FieldCodec.encode(row.context_provenance()),
-                                 "turn_id": row.turn_id}
+                                 "turn_id": row.turn_id}, row
 
     def source_delivery(self, expected, original, evidence, boundary_entry, fork):
         """Bind authored source to an original input before a cut/probe.
@@ -813,7 +821,7 @@ class RecordedNativeProbe:
                 "present": len(retained.facts) if present else 0,
                 "exact_envelope_present": present}
 
-    def observed_requests(self, manifest) -> dict[str, tuple[RequestProgress, ...]]:
+    def observed_requests(self, manifest, submitted: InputAttempt) -> dict[str, tuple[RequestProgress, ...]]:
         """Acquire this fenced input's original diagnostic values once.
 
         The manifest owns the selected request's generation/digest and anchors
@@ -838,6 +846,8 @@ class RecordedNativeProbe:
                 raise ValueError("Original request observation belongs to another recorded turn")
             if progress.session_id != self.session.session_id or progress.input_id != self.input_id:
                 raise ValueError("Original request observation belongs to another native session/input")
+            if submitted.exists:
+                submitted.require_started(lease.admission_generation)
             observed.setdefault(progress.request_id, []).append(progress)
         return {identity: tuple(points) for identity, points in observed.items()}
 
@@ -934,7 +944,7 @@ class RecordedNativeProbe:
         with self.original_readers((self,)) as sources:
             return self.read(sources[Path(self.session.session_file)], sources[self.checkpoint_source])
 
-    def construction(self, evidence, parent, branch, manifest, checkpoint, texts, serialized, answer, context):
+    def construction(self, evidence, parent, branch, manifest, checkpoint, texts, serialized, answer, context, submitted):
         """Corroborate original SDK source references, not a condition label.
 
         The successful input-to-answer branch owns the available source. A
@@ -986,7 +996,7 @@ class RecordedNativeProbe:
                     "referenced_in_sdk_sources": identity in included}
         coverage["full_context_capacity"] = {"evaluated": False,
             "reason": "Current request admission does not establish complete-history construction or provider-token capacity"}
-        observed_requests = self.observed_requests(manifest)
+        observed_requests = self.observed_requests(manifest, submitted)
         observed_request = observed_requests.get(manifest.request_id, ()) if manifest is not None else ()
         budget = self.request_budget(observed_request)
         records = self.condition_records()
@@ -1093,7 +1103,7 @@ class RecordedNativeProbe:
             raise ValueError("Recorded answer belongs to another original input")
         branch = source_branch[source_branch.index(user) + 1:]
         tools = self.tool_steps(branch)
-        prompt, submitted = self.submitted_prompt(user)
+        prompt, submitted, submitted_input = self.submitted_prompt(user, manifest)
         if self.checkpoint is not None:
             attempt, entry, covered, assembly = self.checkpoint.capture_for_probe(
                 self.session,evidence,self.fork_journal,source)
@@ -1127,7 +1137,7 @@ class RecordedNativeProbe:
             "answer_text": answer.message.authoritative_text,
             "model_steps": self.model_steps(branch),
             "tool_steps": tools,
-            "construction": self.construction(evidence, source, source_branch, manifest, checkpoint, texts, serialized, answer, context),
+            "construction": self.construction(evidence, source, source_branch, manifest, checkpoint, texts, serialized, answer, context, submitted_input),
             "scoped_facts": scoped,
             "answer_support": {
                 "tool_calls": len(tools), "tools": tuple(step["call"].name for step in tools),

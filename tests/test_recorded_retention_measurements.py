@@ -17,6 +17,9 @@ from agent_comms.compaction_records import NativeForkCreation, SelectedSummaryAt
 from agent_comms.compaction_states import ReservedSummary
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
+from agent_comms.errors import RelationViolationError
+from agent_comms.input_attempt import MissingInput, ReservedInput
+from agent_comms.input_disposition import InputDocument
 from agent_comms.native_compaction_request import NativeSummaryPayload
 from agent_comms.native_entries import MessageEntry, NativeEntry
 from agent_comms.native_input_record import NativeInputCommit
@@ -38,7 +41,7 @@ from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.threads import Thread
 from agent_comms.turn_context import (
     ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, RecordedContextTurn,
-    SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment, ToolCatalogSegment,
+    SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment, ToolCatalogSegment, NextContextTurn,
 )
 from compaction_retention_fixture import Condition, Measurement, PairedRecallDesign, Question, RecallRound, RecallScenario, RecordedAnswers, RecordedNativeProbes, ScoredScenario, coding_scenario
 from retained_native_fixture import RecordedConditionInstallation, RecordedNativeCheckpoint, RecordedNativeProbe
@@ -63,6 +66,92 @@ class RecordedMeasurementTests(unittest.TestCase):
         raw = json.dumps(FieldCodec.encode(value), ensure_ascii=False).encode()
         path.write_bytes(raw)
         return FileProvenance(str(path), hashlib.sha256(raw).hexdigest())
+
+    def submitted_capture(self):
+        owner = Thread('original', frozenset(), str(self.root), created_at=12)
+        turn = RecordedContextTurn(TurnId('original-turn'), TurnIdentity(owner.incarnation, 11))
+        manifest = ContextManifest(owner.incarnation, turn, (), 'counter', request_id='request')
+        reserved = ReservedInput('acp:original', None, owner.name, 3, owner.name, 'Original source')
+        bound = reserved.bind(admission=3, turn_id=turn.identity.value,
+                              native_id='a' * 32, text='Rendered native input')
+        row = bound.started(turn_id=turn.identity.value, native_id=bound.native_id,
+                            text=bound.sent_text)
+        original = self.artifact('submitted-input.json', InputDocument(rows={row.key: row}))
+        probe = RecordedNativeProbe(self.identity, row.native_id, 'answer', submitted_inputs=original)
+        user = NativeEntry.from_wire({'type': 'message', 'id': 'input',
+            'message': {'role': 'user', 'content': row.sent_text}})
+        return probe, user, manifest, row, bound
+
+    def test_submitted_source_requires_independent_recorded_turn(self):
+        # A row cannot authenticate its own turn. Preserve exact source/sent
+        # text, hash refusal and UNKNOWN while checking the original manifest.
+        probe, user, manifest, row, unknown = self.submitted_capture()
+        before = Path(probe.submitted_inputs.path).read_bytes()
+        with patch.object(RecordedNativeCheckpoint, 'read_record',
+                          wraps=RecordedNativeCheckpoint.read_record) as acquired:
+            text, source, submitted = probe.submitted_prompt(user, manifest)
+        self.assertEqual(acquired.call_count, 1)
+        self.assertEqual(text, row.source_text)
+        self.assertEqual(submitted, row)
+        self.assertIn('sealed recorded turn', source['scope'])
+        wrong_turn = replace(manifest.turn, identity=TurnId('another-turn'))
+        with self.assertRaisesRegex(ValueError, 'differs from the recorded native write'):
+            probe.submitted_prompt(user, replace(manifest, turn=wrong_turn))
+        with self.assertRaisesRegex(ValueError, 'next-context preview'):
+            probe.submitted_prompt(user, replace(manifest, turn=NextContextTurn()))
+        wrong_text = NativeEntry.from_wire({'type': 'message', 'id': 'input',
+            'message': {'role': 'user', 'content': 'Different rendered input'}})
+        with self.assertRaisesRegex(ValueError, 'differs from the recorded native write'):
+            probe.submitted_prompt(wrong_text, manifest)
+        narrower = probe.submitted_prompt(user, None)
+        self.assertEqual(narrower[0], row.source_text)
+        self.assertIn('recorded turn unavailable', narrower[1]['scope'])
+        direct = replace(probe, submitted_inputs=None).submitted_prompt(user, manifest)
+        self.assertEqual(direct[0], row.sent_text)
+        self.assertIsInstance(direct[2], MissingInput)
+        uncertain = replace(probe, submitted_inputs=self.artifact('unknown.json',
+            InputDocument(rows={unknown.key: unknown})))
+        with self.assertRaises(ValueError):
+            uncertain.submitted_prompt(user, manifest)
+        self.assertEqual(Path(probe.submitted_inputs.path).read_bytes(), before)
+        Path(probe.submitted_inputs.path).write_bytes(before + b' ')
+        with self.assertRaisesRegex(ValueError, 'artifact changed'):
+            probe.submitted_prompt(user, manifest)
+
+    def test_original_request_lease_owns_submitted_admission(self):
+        # Turn generation11 and admission3 are deliberately different. The
+        # acquired original row is shared with request budget/timing; no row
+        # reread or invented full lease from its name/admission is permitted.
+        probe, user, manifest, row, _ = self.submitted_capture()
+        lease = TurnLeaseFence(manifest.turn.occurrence, row.turn_id, row.admission)
+        point = RequestProgress('request', self.identity.session_id, probe.input_id,
+                                1, 2, '3', 1, 0, 0, 0, 'headers')
+
+        def captured(fence):
+            path = self.root / 'requests.jsonl'
+            raw = (json.dumps({'turn': FieldCodec.encode(fence),
+                               'native': FieldCodec.encode(point)}) + '\n').encode()
+            path.write_bytes(raw)
+            return replace(probe, request_observations=FileProvenance(
+                str(path), hashlib.sha256(raw).hexdigest()))
+
+        selected = captured(lease)
+        with patch.object(RecordedNativeCheckpoint, 'read_record',
+                          wraps=RecordedNativeCheckpoint.read_record) as inputs, \
+             patch.object(RecordedNativeCheckpoint, 'read_json_lines',
+                          wraps=RecordedNativeCheckpoint.read_json_lines) as diagnostics:
+            _, _, submitted = selected.submitted_prompt(user, manifest)
+            requests = selected.observed_requests(manifest, submitted)
+        self.assertEqual(inputs.call_count, 1)
+        self.assertEqual(diagnostics.call_count, 1)
+        self.assertEqual(requests['request'], (point,))
+        self.assertTrue(selected.request_timing(requests['request'])['evaluated'])
+        for admission in (2, 11):
+            with self.subTest(admission=admission):
+                with self.assertRaisesRegex(RelationViolationError, 'Input start admission changed'):
+                    captured(replace(lease, admission_generation=admission)).observed_requests(manifest, row)
+        self.assertEqual(probe.observed_requests(manifest, row), {})
+        self.assertEqual(selected.observed_requests(None, row), {})
 
     def test_construction_rounds_preserve_prefix_and_public_probe_boundary(self):
         # Prevent cumulative source from being resent at each cut, edited
@@ -451,20 +540,20 @@ class RecordedMeasurementTests(unittest.TestCase):
         revised = replace(observed, requested_output_tokens=20, admitted_output_tokens=10)
         selected = capture(({'acquisition': {}}, publication(replace(observed, request_id='other')),
                             publication(observed), publication(revised)))
-        requests = selected.observed_requests(manifest)
+        requests = selected.observed_requests(manifest, MissingInput())
         observations = requests[manifest.request_id]
         result = selected.request_budget(observations)
         self.assertTrue(result['evaluated'])
         self.assertEqual(result['observations'], (observed, revised))
-        self.assertEqual(selected.observed_requests(replace(manifest, request_id=None)), {})
-        self.assertEqual(probe.observed_requests(manifest), {})
+        self.assertEqual(selected.observed_requests(replace(manifest, request_id=None), MissingInput()), {})
+        self.assertEqual(probe.observed_requests(manifest, MissingInput()), {})
         self.assertEqual(tuple(requests), ('other', 'request'))
         self.assertEqual(requests['other'], (replace(observed, request_id='other'),))
         for changed in (replace(observed, session_id='other'), replace(observed, input_id='b' * 32)):
             with self.assertRaises(ValueError):
-                capture((publication(changed),)).observed_requests(manifest)
+                capture((publication(changed),)).observed_requests(manifest, MissingInput())
         with self.assertRaises(ValueError):
-            capture((publication(observed, replace(lease, turn_id='other')),)).observed_requests(manifest)
+            capture((publication(observed, replace(lease, turn_id='other')),)).observed_requests(manifest, MissingInput())
 
         # Timing and budget borrow the same acquisition. Different stages and
         # real zero callback counters must not be lost or become whole-turn time.
@@ -475,7 +564,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         selected = capture(tuple(publication(point) for point in (observed, headers, first, end)))
         with patch.object(RecordedNativeCheckpoint, 'read_json_lines',
                           wraps=RecordedNativeCheckpoint.read_json_lines) as reads:
-            requests = selected.observed_requests(manifest)
+            requests = selected.observed_requests(manifest, MissingInput())
             acquired = requests[manifest.request_id]
             timing = selected.request_timing(acquired)
             budget = selected.request_budget(acquired)
@@ -511,7 +600,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         selected = replace(probe, request_observations=FileProvenance(str(path), hashlib.sha256(raw).hexdigest()))
         with patch.object(RecordedNativeCheckpoint, 'read_json_lines',
                           wraps=RecordedNativeCheckpoint.read_json_lines) as reads:
-            requests = selected.observed_requests(manifest)
+            requests = selected.observed_requests(manifest, MissingInput())
             measured = selected.input_request_measurements(requests)
             selected_budget = selected.request_budget(requests[manifest.request_id])
         self.assertEqual(reads.call_count, 1)
@@ -539,9 +628,9 @@ class RecordedMeasurementTests(unittest.TestCase):
         path.write_bytes(changed)
         with self.assertRaisesRegex(ValueError, 'another recorded turn'):
             replace(selected, request_observations=FileProvenance(str(path), hashlib.sha256(changed).hexdigest())
-                    ).observed_requests(manifest)
+                    ).observed_requests(manifest, MissingInput())
         with self.assertRaisesRegex(ValueError, 'artifact changed'):
-            selected.observed_requests(manifest)
+            selected.observed_requests(manifest, MissingInput())
 
     def test_model_steps_keep_tool_step_usage_and_distinguish_missing_from_zero(self):
         # Prevent final-answer-only accounting from hiding earlier tool-step
@@ -991,19 +1080,19 @@ class RecordedMeasurementTests(unittest.TestCase):
             _, entries = evidence.observe()
             branch = evidence.branch('answer', entries)
             measured = probe.construction(evidence, evidence, branch,
-                                         manifest(str(self.session), ('first', 'probe')), {}, None, {'evaluated': False}, branch[-1], context)['source_coverage']
+                                         manifest(str(self.session), ('first', 'probe')), {}, None, {'evaluated': False}, branch[-1], context, MissingInput())['source_coverage']
             self.assertTrue(measured['complete_message_reference_coverage'])
             self.assertEqual(measured['included_message_entries'], ('first', 'probe'))
             self.assertFalse(measured['full_context_capacity']['evaluated'])
             partial = probe.construction(evidence, evidence, branch,
-                                         manifest(str(self.session), ('probe',)), {}, None, {'evaluated': False}, branch[-1], context)['source_coverage']
+                                         manifest(str(self.session), ('probe',)), {}, None, {'evaluated': False}, branch[-1], context, MissingInput())['source_coverage']
             self.assertEqual(partial['unreferenced_message_entries'], ('first',))
             self.assertFalse(partial['complete_message_reference_coverage'])
             for path, ids in ((str(self.root / 'foreign'), ('probe',)),
                               (str(self.session), ('missing',)), (str(self.session), ('answer',))):
                 with self.assertRaises(ValueError):
-                    probe.construction(evidence, evidence, branch, manifest(path, ids), {}, None, {'evaluated': False}, branch[-1], context)
-            self.assertFalse(probe.construction(evidence, evidence, branch, None, {}, None, {'evaluated': False}, branch[-1], context)['source_coverage']['evaluated'])
+                    probe.construction(evidence, evidence, branch, manifest(path, ids), {}, None, {'evaluated': False}, branch[-1], context, MissingInput())
+            self.assertFalse(probe.construction(evidence, evidence, branch, None, {}, None, {'evaluated': False}, branch[-1], context, MissingInput())['source_coverage']['evaluated'])
 
     def test_proposed_action_uses_original_scoped_decision_not_answer_label(self):
         # Prevent exact-answer success from becoming an execution or authority
