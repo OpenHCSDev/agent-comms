@@ -115,3 +115,22 @@ Full S4, configured corrected-capture acceptance, matched arms, HTTP/token
 capacity and USD75/30-pair study remain unfinished/unapproved at their original
 scope. This checkpoint demonstrates real installed source selection and the
 configured terminal; it does not turn the preserved reader refusal into PASS.
+
+## Scoped Ready
+
+Parent accepted the installed configured terminal/budget path and the source
+correction at their exact strengths. The original failure stays unchanged;
+corrected configured-capture and complete S4 construction execution remain
+unfinished. No second configured input is needed for this useful checkpoint.
+
+Source `28d58f25` has exact hosted Debt run37240665353 **SUCCESS**. Main is
+normally integrated and up to date. The final documentation head retains the
+same reviewed source and controls; its own hosted Debt is required before merge.
+Broader CI reports failures and is not claimed passed.
+
+Sch closed this specific086 renewal after the original terminal/holder receipts.
+The whole Arendt540 claim is returned. Bohr's final privileged census read228
+processes,0 permission gaps,0 holder/private-output references;19 legitimate
+shared public native environment references remain untouched. Bohr alone owns
+final holder lifecycle closure. No package use, native execution or next loan is
+inferred from this handback.
