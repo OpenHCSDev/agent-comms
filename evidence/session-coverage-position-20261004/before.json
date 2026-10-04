@@ -1,0 +1,336 @@
+{
+  "parser": "existing refactor-audit Package",
+  "roots": {
+    "src": {
+      "parsed": 311,
+      "omissions": []
+    },
+    "tests": {
+      "parsed": 364,
+      "omissions": []
+    },
+    "tools": {
+      "parsed": 53,
+      "omissions": []
+    }
+  },
+  "sites": {
+    "src/agent_comms/backend.py": [
+      "54 import native_session_reopen: NativeSessionIdentity",
+      "57 import selected_source: SessionRevision"
+    ],
+    "src/agent_comms/compaction_boundary.py": [
+      "16 import native_entries: NativeEvidenceRead",
+      "18 import owner_compaction_prepare: NativeWitness"
+    ],
+    "src/agent_comms/compaction_outcomes.py": [
+      "17 import selected_source: SessionRevision"
+    ],
+    "src/agent_comms/compaction_private_inputs.py": [
+      "20 import compaction_records: NativeForkCreation",
+      "32 import private_path: FileRevision",
+      "36 import native_entries: NativeEvidenceRead",
+      "64 call created.covered_prefix"
+    ],
+    "src/agent_comms/compaction_records.py": [
+      "17 import compaction_states: CommittedNativeOutcome",
+      "27 import native_session_reopen: NativeSessionIdentity",
+      "28 import private_path: FileRevision",
+      "375 declaration NativeForkCreation",
+      "170 declaration covered_prefix",
+      "395 declaration covered_prefix",
+      "409 declaration recorded_prefix",
+      "410 call creation.covered_prefix"
+    ],
+    "src/agent_comms/compaction_source.py": [
+      "11 import owner_compaction_prepare: NativeWitness",
+      "16 import compaction_states: CommittedNativeOutcome"
+    ],
+    "src/agent_comms/compaction_states.py": [
+      "19 import private_path: FileRevision",
+      "335 declaration NativeCommitPosition",
+      "396 declaration CommittedNativeOutcome",
+      "27 import selected_source: SessionRevision"
+    ],
+    "src/agent_comms/compaction_summaries.py": [
+      "33 import native_entries: NativeEvidenceRead",
+      "90 import selected_source: SessionRevision"
+    ],
+    "src/agent_comms/continued_private_session.py": [
+      "15 import native_entries: NativeEvidenceRead",
+      "18 import native_session_reopen: NativeSessionIdentity",
+      "22 import selected_source: SessionRevision",
+      "45 call evidence.covered_prefix",
+      "70 call evidence.recorded_source_prefix"
+    ],
+    "src/agent_comms/fresh_private_session.py": [
+      "25 import private_path: FileIdentity, FileRevision"
+    ],
+    "src/agent_comms/native_admission_epoch.py": [
+      "19 import native_session_reopen: NativeSessionIdentity"
+    ],
+    "src/agent_comms/native_attestation.py": [
+      "13 import native_session_reopen: NativeSessionIdentity"
+    ],
+    "src/agent_comms/native_compaction_request.py": [
+      "18 import owner_compaction_prepare: NativeWitness"
+    ],
+    "src/agent_comms/native_custody.py": [
+      "16 import native_session_reopen: NativeSessionIdentity",
+      "23 import selected_source: SessionRevision",
+      "24 import owner_compaction_prepare: NativeWitness",
+      "253 import selected_source: SessionRevision"
+    ],
+    "src/agent_comms/native_entries.py": [
+      "198 declaration NativeEvidenceRead",
+      "57 declaration covered_prefix",
+      "327 declaration recorded_source_prefix",
+      "352 declaration covered_prefix",
+      "558 declaration covered_prefix",
+      "283 import native_session_reopen: NativeSessionIdentity",
+      "353 import compaction_records: NativeForkCreation",
+      "355 call NativeForkCreation.recorded_prefix",
+      "565 call operation.covered_prefix",
+      "359 call entry.covered_prefix",
+      "564 call super().covered_prefix"
+    ],
+    "src/agent_comms/native_fork.py": [
+      "9 import native_session_reopen: NativeSessionIdentity",
+      "11 import compaction_records: NativeForkCreation"
+    ],
+    "src/agent_comms/native_pi.py": [
+      "29 import native_entries: NativeEvidenceRead",
+      "30 import private_path: FileIdentity, FileRevision"
+    ],
+    "src/agent_comms/native_prompt_binding.py": [
+      "31 import native_entries: NativeEvidenceRead"
+    ],
+    "src/agent_comms/native_revision_text.py": [
+      "5 import private_path: FileIdentity, FileRevision"
+    ],
+    "src/agent_comms/native_runtime_input.py": [
+      "27 import native_session_reopen: NativeSessionIdentity",
+      "101 import native_session_reopen: NativeSessionIdentity"
+    ],
+    "src/agent_comms/native_session_reopen.py": [
+      "13 import private_path: FileRevision",
+      "21 declaration NativeSessionIdentity"
+    ],
+    "src/agent_comms/native_startup.py": [
+      "23 import native_session_reopen: NativeSessionIdentity"
+    ],
+    "src/agent_comms/native_turn_context.py": [
+      "7 import native_session_reopen: NativeSessionIdentity"
+    ],
+    "src/agent_comms/owner_compaction_adaptive.py": [
+      "21 import selected_source: SessionRevision"
+    ],
+    "src/agent_comms/owner_compaction_commit.py": [
+      "18 import selected_source: SessionRevision",
+      "29 import native_entries: NativeEvidenceRead",
+      "31 import owner_compaction_prepare: NativeWitness"
+    ],
+    "src/agent_comms/owner_compaction_gate.py": [
+      "18 import private_path: FileRevision"
+    ],
+    "src/agent_comms/owner_compaction_manual.py": [
+      "23 import selected_source: SessionRevision"
+    ],
+    "src/agent_comms/owner_compaction_prepare.py": [
+      "22 import native_session_reopen: NativeSessionIdentity",
+      "26 import private_path: FileRevision",
+      "38 declaration NativeWitness",
+      "30 import native_entries: NativeEvidenceRead",
+      "56 import native_entries: NativeEvidenceRead"
+    ],
+    "src/agent_comms/pi_commands.py": [
+      "18 import compaction_states: CommittedNativeOutcome",
+      "26 import native_session_reopen: NativeSessionIdentity",
+      "27 import owner_compaction_prepare: NativeWitness"
+    ],
+    "src/agent_comms/pi_payloads.py": [
+      "18 import native_session_reopen: NativeSessionIdentity"
+    ],
+    "src/agent_comms/pi_summary_payloads.py": [
+      "12 import owner_compaction_prepare: NativeWitness",
+      "331 import native_session_reopen: NativeSessionIdentity",
+      "356 import native_session_reopen: NativeSessionIdentity",
+      "357 import private_path: FileRevision"
+    ],
+    "src/agent_comms/private_path.py": [
+      "24 declaration FileIdentity",
+      "34 declaration FileRevision"
+    ],
+    "src/agent_comms/private_send_admission.py": [
+      "31 import private_path: FileRevision",
+      "32 import native_session_reopen: NativeSessionIdentity"
+    ],
+    "src/agent_comms/selected_pi_route.py": [
+      "12 import native_session_reopen: NativeSessionIdentity"
+    ],
+    "src/agent_comms/selected_pi_summary_rpc.py": [
+      "24 import owner_compaction_prepare: NativeWitness",
+      "34 import native_entries: NativeEvidenceRead"
+    ],
+    "src/agent_comms/selected_session.py": [
+      "19 import native_session_reopen: NativeSessionIdentity",
+      "202 import selected_source: SessionRevision"
+    ],
+    "src/agent_comms/selected_source.py": [
+      "13 import private_path: FileRevision",
+      "58 declaration SessionRevision"
+    ],
+    "src/agent_comms/selected_summary_admission.py": [
+      "26 import selected_source: SessionRevision",
+      "29 import compaction_states: CommittedNativeOutcome"
+    ],
+    "src/agent_comms/threads.py": [
+      "31 import owner_compaction_prepare: NativeWitness"
+    ],
+    "src/agent_comms/turn_context.py": [
+      "16 import native_session_reopen: NativeSessionIdentity"
+    ],
+    "src/agent_comms/turn_input_binding.py": [
+      "10 import selected_source: SessionRevision"
+    ],
+    "tests/compaction_retention_fixture.py": [
+      "25 import agent_comms.native_session_reopen: NativeSessionIdentity",
+      "48 import agent_comms.compaction_records: NativeForkCreation"
+    ],
+    "tests/native_backend_fixture.py": [
+      "19 import agent_comms.owner_compaction_prepare: NativeWitness"
+    ],
+    "tests/retained_native_fixture.py": [
+      "14 import agent_comms.compaction_records: NativeForkCreation",
+      "17 import agent_comms.native_entries: NativeEvidenceRead",
+      "26 import agent_comms.native_session_reopen: NativeSessionIdentity",
+      "169 call operation.covered_prefix",
+      "260 call creation.covered_prefix",
+      "730 call fork.covered_prefix"
+    ],
+    "tests/selected_summary_cases.py": [
+      "14 import agent_comms.selected_source: SessionRevision",
+      "116 import agent_comms.owner_compaction_prepare: NativeWitness",
+      "117 import agent_comms.private_path: FileRevision"
+    ],
+    "tests/selected_summary_recovery_installed_journey.py": [
+      "30 import agent_comms.selected_source: SessionRevision"
+    ],
+    "tests/test_backend_native_custody.py": [
+      "9 import agent_comms.native_session_reopen: NativeSessionIdentity"
+    ],
+    "tests/test_compaction_boundaries.py": [
+      "15 import agent_comms.owner_compaction_prepare: NativeWitness"
+    ],
+    "tests/test_compaction_outcome_read.py": [
+      "16 import agent_comms.compaction_states: CommittedNativeOutcome"
+    ],
+    "tests/test_compaction_outcome_transcript.py": [
+      "22 import agent_comms.selected_source: SessionRevision"
+    ],
+    "tests/test_compaction_publication.py": [
+      "20 import agent_comms.compaction_states: CommittedNativeOutcome"
+    ],
+    "tests/test_compaction_retention_fixture.py": [
+      "16 import agent_comms.native_session_reopen: NativeSessionIdentity"
+    ],
+    "tests/test_context_source_inspection.py": [
+      "10 import agent_comms.native_session_reopen: NativeSessionIdentity"
+    ],
+    "tests/test_continued_private_session.py": [
+      "23 import agent_comms.selected_source: SessionRevision",
+      "272 import agent_comms.compaction_states: CommittedNativeOutcome",
+      "274 import agent_comms.owner_compaction_prepare: NativeWitness",
+      "276 import agent_comms.private_path: FileRevision",
+      "334 import agent_comms.compaction_records: NativeForkCreation",
+      "336 import agent_comms.native_session_reopen: NativeSessionIdentity",
+      "337 import agent_comms.private_path: FileRevision"
+    ],
+    "tests/test_native_catalog_discovery.py": [
+      "39 import agent_comms.native_session_reopen: NativeSessionIdentity",
+      "534 import agent_comms.native_entries: NativeEvidenceRead"
+    ],
+    "tests/test_native_file_artifact.py": [
+      "13 import agent_comms.private_path: FileRevision",
+      "14 import agent_comms.owner_compaction_prepare: NativeWitness",
+      "17 import agent_comms.selected_source: SessionRevision"
+    ],
+    "tests/test_native_session_reopen.py": [
+      "13 import agent_comms.native_session_reopen: NativeSessionIdentity"
+    ],
+    "tests/test_native_snapshot_identity.py": [
+      "8 import agent_comms.native_session_reopen: NativeSessionIdentity"
+    ],
+    "tests/test_owner_compaction_commit.py": [
+      "34 import agent_comms.owner_compaction_prepare: NativeWitness",
+      "35 import agent_comms.private_path: FileRevision"
+    ],
+    "tests/test_owner_compaction_prepare.py": [
+      "554 import agent_comms.native_session_reopen: NativeSessionIdentity"
+    ],
+    "tests/test_owner_compaction_runtime.py": [
+      "13 import agent_comms.owner_compaction_prepare: NativeWitness",
+      "16 import agent_comms.private_path: FileRevision"
+    ],
+    "tests/test_private_path.py": [
+      "9 import agent_comms.private_path: FileIdentity, FileRevision"
+    ],
+    "tests/test_recorded_retention_measurements.py": [
+      "15 import agent_comms.compaction_records: NativeForkCreation",
+      "22 import agent_comms.native_session_reopen: NativeSessionIdentity",
+      "28 import agent_comms.private_path: FileRevision"
+    ],
+    "tests/test_reservation_rules.py": [
+      "20 import agent_comms.selected_source: SessionRevision"
+    ],
+    "tests/test_retained_journal_framing.py": [
+      "5 import agent_comms.compaction_states: CommittedNativeOutcome",
+      "10 import agent_comms.private_path: FileIdentity, FileRevision"
+    ],
+    "tests/test_retained_manual_compaction.py": [
+      "30 import agent_comms.native_session_reopen: NativeSessionIdentity"
+    ],
+    "tests/test_retained_native_tool_latency.py": [
+      "21 import agent_comms.native_entries: NativeEvidenceRead",
+      "22 import agent_comms.private_path: FileRevision"
+    ],
+    "tests/test_selected_owner_compaction_integration.py": [
+      "26 import agent_comms.native_session_reopen: NativeSessionIdentity"
+    ],
+    "tests/test_selected_summary_admission.py": [
+      "22 import agent_comms.compaction_states: CommittedNativeOutcome"
+    ],
+    "tests/test_selected_summary_exchange.py": [
+      "25 import agent_comms.selected_source: SessionRevision",
+      "422 import agent_comms.owner_compaction_prepare: NativeWitness"
+    ],
+    "tests/test_selected_summary_failure_native.py": [
+      "25 import agent_comms.native_session_reopen: NativeSessionIdentity"
+    ],
+    "tests/test_selected_summary_journal.py": [
+      "18 import agent_comms.compaction_states: CommittedNativeOutcome"
+    ],
+    "tests/test_selected_summary_output_accounting.py": [
+      "21 import agent_comms.native_session_reopen: NativeSessionIdentity"
+    ],
+    "tests/test_summary_failure_recovery.py": [
+      "18 import agent_comms.selected_source: SessionRevision"
+    ],
+    "tests/test_task_decisions.py": [
+      "33 import agent_comms.owner_compaction_prepare: NativeWitness",
+      "34 import agent_comms.private_path: FileRevision",
+      "407 import agent_comms.owner_compaction_prepare: NativeWitness",
+      "458 import agent_comms.owner_compaction_prepare: NativeWitness"
+    ],
+    "tests/three_cut_retention_configured_journey.py": [
+      "25 import agent_comms.native_session_reopen: NativeSessionIdentity"
+    ],
+    "tools/cutover/publish_openhcs_recovery.py": [
+      "32 import agent_comms.private_path: FileRevision"
+    ],
+    "tools/cutover/retained_summary_reset.py": [
+      "16 import agent_comms.private_path: FileRevision"
+    ]
+  },
+  "limit": "Lexical declaration/import/call evidence; consumers read semantically, dynamic dispatch not resolved by this output"
+}

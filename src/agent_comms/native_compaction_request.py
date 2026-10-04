@@ -99,6 +99,23 @@ class NativeIntent:
     payload_digest: str = field(metadata={"wire_name": "payloadDigest"})
     metadata_digest: str = field(metadata={"wire_name": "metadataDigest"})
 
+    def require_committed_payload(self, operation: CompactionOperation, entry, outcome) -> None:
+        """The original intent owns marker and payload corroboration together."""
+        from .compaction_errors import CompactionJournalError
+
+        try:
+            self.witness.require_session(operation.session_file)
+        except ValueError as error:
+            raise CompactionJournalError("Original committed source cut differs") from error
+        if entry.details.agent_comms_commit != self.identity(operation.commit_id):
+            raise CompactionJournalError("Original committed source cut differs")
+        if (
+            entry.payload_digest(self.witness) != self.payload_digest
+            or entry.metadata_digest() != self.metadata_digest
+            or outcome.metadata_digest != self.metadata_digest
+        ):
+            raise CompactionJournalError("Original committed source payload differs")
+
     def journal_json(
         self, owner: OwnerCompactionAttestation, source: CompactionSource,
         selected: SelectedCommitReference | None = None,
