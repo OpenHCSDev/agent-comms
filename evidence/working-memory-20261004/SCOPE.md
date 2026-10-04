@@ -54,3 +54,10 @@ Primitive integer validation remains the existing FieldCodec ingress, not a
 second exact-type check in consumers. This is source implementation, not
 installed/paid acceptance. Existing native assembly and full feature
 qualification/calibration remain unfinished; external annotations are OFF.
+
+Relation-question versions also include the original disclosed owner rules.
+Unchanged literal text can reuse a literal-meaning answer, but a relation to a
+changed authored rule set is a different question and must not reuse its old
+answer. The existing QuestionVersion owns that identity; worker reservation
+and the actual disclosed request now derive exactly the same version from it.
+No confidence threshold, native budget or external approval was changed.

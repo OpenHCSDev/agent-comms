@@ -40,8 +40,12 @@ class QuestionVersion:
     sha256: str
 
     @classmethod
-    def current(cls, question: type[SpanQuestion]):
-        raw = json.dumps(question.declaration(), sort_keys=True, separators=(",", ":")).encode()
+    def current(cls, question: type[SpanQuestion], owner_rules: tuple[str, ...] = ()):
+        # A relation to authored rules is a different question when that original
+        # rule set changes. Other questions discard that unrelated input.
+        raw = json.dumps({"definition": question.declaration(),
+                          "owner_rules": question.disclosed_owner_rules(owner_rules)},
+                         sort_keys=True, separators=(",", ":")).encode()
         return cls(question, hashlib.sha256(raw).hexdigest())
 
 

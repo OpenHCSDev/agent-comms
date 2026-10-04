@@ -50,10 +50,10 @@ class AnnotationWorker:
                                             lambda store: operation(store.annotations))
 
     async def answer(self, policy, manifest, segment, span, question):
-        version = QuestionVersion.current(question)
         grant, rules = await Coordination.run_worker(
             partial(policy.acquire, self.comms, manifest.thread))
         grant.require_segment(segment)
+        version = QuestionVersion.current(question, rules)
         rows = await self.store(lambda owner: owner.labels(span, version, grant.classifier))
         if rows:
             from .coordination_tables.annotations import SpanAnnotationsRow
