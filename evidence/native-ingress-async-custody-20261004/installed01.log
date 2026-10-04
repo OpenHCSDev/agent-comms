@@ -1,0 +1,1280 @@
+.F..FFFFFF.FFFF..FFFF.....F                                              [100%]
+=================================== FAILURES ===================================
+______ test_direct_claim_and_bind_denied_after_phase_ack_in_other_process ______
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/mendel-native-ingress638-installed01/private/test_direct_claim_and_bind_den0')
+
+    async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp_path: Path) -> None:
+        root = tmp_path / "wire"
+        comms = Comms(root)
+        q: mp.Queue = mp.Queue()
+        ready = mp.Event()
+        proc = mp.Process(target=_claim_other_process, args=(str(comms.registry.store.path), ready, q))
+>       proc.start()
+
+tests/test_maintenance_barrier.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/process.py:121: in start
+    self._popen = self._Popen(self)
+                  ^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/context.py:224: in _Popen
+    return _default_context.get_context().Process._Popen(process_obj)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/context.py:300: in _Popen
+    return Popen(process_obj)
+           ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/popen_forkserver.py:35: in __init__
+    super().__init__(process_obj)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/popen_fork.py:20: in __init__
+    self._launch(process_obj)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/popen_forkserver.py:51: in _launch
+    self.sentinel, w = forkserver.connect_to_new_process(self._fds)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/forkserver.py:106: in connect_to_new_process
+    connection.answer_challenge(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/connection.py:970: in answer_challenge
+    message = connection.recv_bytes(256)         # reject large message
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/connection.py:222: in recv_bytes
+    buf = self._recv_bytes(maxlength)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/connection.py:447: in _recv_bytes
+    buf = self._recv(4)
+          ^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <multiprocessing.connection.Connection object at 0x7fc86cb6c190>
+size = 4, read = <built-in function read>
+
+    def _recv(self, size, read=_read):
+        buf = io.BytesIO()
+        handle = self._handle
+        remaining = size
+        while remaining > 0:
+            to_read = min(BUFSIZE, remaining)
+>           chunk = read(handle, to_read)
+                    ^^^^^^^^^^^^^^^^^^^^^
+E           ConnectionResetError: [Errno 104] Connection reset by peer
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/connection.py:412: ConnectionResetError
+----------------------------- Captured stderr call -----------------------------
+ERROR: usage: pytest.main() [options] [file_or_dir] [file_or_dir] [...]
+pytest.main(): error: unrecognized arguments: -n --maxprocesses=8 --dist=worksteal
+  inifile: /home/ts/wt/comms-goal-ledger-schema-carry-20261002/pyproject.toml
+  rootdir: /home/ts/wt/comms-goal-ledger-schema-carry-20261002
+
+_____ test_turn_failure_preserves_exact_exception_cause_and_releases_state _____
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7fc86c101d10>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7fc86c101810>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc86d833310>
+
+    async def test_turn_failure_preserves_exact_exception_cause_and_releases_state(
+        prepared_owner, monkeypatch
+    ):
+        owner, session, native = prepared_owner
+        original = native.session.read_bytes()
+        source = OSError("native diagnostic source")
+        failure = RuntimeError("selected operation failed")
+    
+        async def stream(*args, **kwargs):
+            # This boundary fails before a native write. Preparation and the lease
+            # have already been acquired by the real saved-session owner.
+            assert owner.turns.turn_state(session).busy
+            assert owner.turns.persistent_backends[session].available
+            raise failure from source
+            yield
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RequestError) as caught:
+            await owner.prompt(session, [{"type": "text", "text": "Work"}])
+        assert caught.value.__cause__ is failure and failure.__cause__ is source
+>       receipt = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
+                                                                     ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'RequestError' object has no attribute 'message'
+
+tests/test_turn_runner.py:95: AttributeError
+__________ test_uncaught_failure_feedback_once_even_after_done[None] ___________
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7fc867b27ed0>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7fc867b27b10>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc86d117710>
+prior = None
+
+    @pytest.mark.parametrize(
+        "prior",
+        [
+            None,
+            events.Error("specific provider failure"),
+            events.Done("specific provider failure", False),
+        ],
+    )
+    async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, monkeypatch, prior):
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        original = native.session.read_bytes()
+    
+        async def stream(*args, **kwargs):
+            persistent = owner.turns.persistent_backends[session]
+            assert persistent.available and persistent.custody.child.proc.alive()
+            if prior is not None:
+                yield prior
+            raise RuntimeError("execution failed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RequestError) as caught:
+            await owner.prompt(session, [{"type": "text", "text": "Work"}])
+        assert isinstance(caught.value.__cause__, RuntimeError)
+        assert str(caught.value.__cause__) == "execution failed"
+>       receipt = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
+                                                                     ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'RequestError' object has no attribute 'message'
+
+tests/test_turn_runner.py:167: AttributeError
+_________ test_uncaught_failure_feedback_once_even_after_done[prior1] __________
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7fc867bbbe10>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7fc867bbbbb0>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc867b6e210>
+prior = Error(text='specific provider failure', reason_code=None, command=None, diagnostics=())
+
+    @pytest.mark.parametrize(
+        "prior",
+        [
+            None,
+            events.Error("specific provider failure"),
+            events.Done("specific provider failure", False),
+        ],
+    )
+    async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, monkeypatch, prior):
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        original = native.session.read_bytes()
+    
+        async def stream(*args, **kwargs):
+            persistent = owner.turns.persistent_backends[session]
+            assert persistent.available and persistent.custody.child.proc.alive()
+            if prior is not None:
+                yield prior
+            raise RuntimeError("execution failed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RequestError) as caught:
+            await owner.prompt(session, [{"type": "text", "text": "Work"}])
+        assert isinstance(caught.value.__cause__, RuntimeError)
+        assert str(caught.value.__cause__) == "execution failed"
+>       receipt = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
+                                                                     ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'RequestError' object has no attribute 'message'
+
+tests/test_turn_runner.py:167: AttributeError
+_________ test_uncaught_failure_feedback_once_even_after_done[prior2] __________
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7fc86c065810>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7fc86c065ba0>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc86c4fd0f0>
+prior = Done(text='specific provider failure', ok=False, reason_code=None, diagnostic=None)
+
+    @pytest.mark.parametrize(
+        "prior",
+        [
+            None,
+            events.Error("specific provider failure"),
+            events.Done("specific provider failure", False),
+        ],
+    )
+    async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, monkeypatch, prior):
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        original = native.session.read_bytes()
+    
+        async def stream(*args, **kwargs):
+            persistent = owner.turns.persistent_backends[session]
+            assert persistent.available and persistent.custody.child.proc.alive()
+            if prior is not None:
+                yield prior
+            raise RuntimeError("execution failed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RequestError) as caught:
+            await owner.prompt(session, [{"type": "text", "text": "Work"}])
+        assert isinstance(caught.value.__cause__, RuntimeError)
+        assert str(caught.value.__cause__) == "execution failed"
+>       receipt = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
+                                                                     ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'RequestError' object has no attribute 'message'
+
+tests/test_turn_runner.py:167: AttributeError
+________ test_compaction_fault_reaches_acp_client_without_original_send ________
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7fc86cd0dd90>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7fc86ef3af90>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc86464b8c0>
+
+    async def test_compaction_fault_reaches_acp_client_without_original_send(
+        prepared_owner, monkeypatch
+    ):
+        from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown
+    
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        before = native.session.read_bytes()
+        source = OSError("402: insufficient credits on this model")
+        failure = SelectedChildUnknown(str(source))
+        attempts = []
+    
+        async def compact(*args, **kwargs):
+            assert args[3].model.id == "fixture"
+            assert args[5].custody.child.proc.alive()
+            attempts.extend(args[4])
+            raise failure from source
+    
+        async def forbidden_stream(*args, **kwargs):
+            pytest.fail("original input must not reach native after uncertain compaction")
+            yield
+    
+        monkeypatch.setattr("agent_comms.owner_compaction_adaptive.maybe_compact_owner_turn", compact)
+        monkeypatch.setattr(backend, "stream_agent_events", forbidden_stream)
+        with pytest.raises(RequestError) as caught:
+            await owner.prompt(session, [{"type": "text", "text": "Original stays unknown"}])
+        assert caught.value.__cause__ is failure and failure.__cause__ is source
+>       receipt = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
+                                                                     ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'RequestError' object has no attribute 'message'
+
+tests/test_turn_runner.py:218: AttributeError
+____ test_actual_provider_failure_reports_started_input_once_without_retry _____
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7fc86c8ec8d0>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7fc867b76250>)
+
+    async def test_actual_provider_failure_reports_started_input_once_without_retry(prepared_owner):
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        native.provider.status = 503
+        with pytest.raises(RequestError) as caught:
+            async with asyncio.timeout(30):
+                await owner.prompt(session, [{"type": "text", "text": "Actual failed input"}])
+>       receipt = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
+                                                                     ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'RequestError' object has no attribute 'message'
+
+tests/test_turn_runner.py:251: AttributeError
+_________________ test_acp_private_does_not_overlap_owner_turn _________________
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fc867d20750>
+
+    async def test_acp_private_does_not_overlap_owner_turn(native_backend):
+        native = native_backend
+        await native.author_history()
+        native.provider.text = '{"decision":"FULL"}'
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
+            comms = agent._comms
+            comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
+            async with native.original_input(agent, session, "Current human input") as turn:
+                sent = comms.messaging.send_message("sender", session, "Selected input after current turn")
+                assert await agent.inputs.drain_inbox(session) == 0
+                assert agent.turns.owns_turn(session, turn.turn_id)
+                assert native.provider.posts == 0
+            # The original lease's retirement, not a test map mutation, enables
+            # canonical selected TRIAGE/FULL on the same SDK-authored saved source.
+            # Runtime observation is an actual concurrent consumer; whichever
+            # original drain owns the admission performs these same two stages.
+            await agent.inputs.drain_inbox(session)
+            async with asyncio.timeout(30):
+                while native.provider.posts != 2 or agent.turns.turn_state(session).busy:
+>                   await asyncio.sleep(0.01)
+
+tests/test_acp_private_nk_delivery.py:597: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+delay = 0.01, result = None
+
+    async def sleep(delay, result=None):
+        """Coroutine that completes after a given time (in seconds)."""
+        if delay <= 0:
+            await __sleep0()
+            return result
+    
+        if math.isnan(delay):
+            raise ValueError("Invalid delay: NaN (not a number)")
+    
+        loop = events.get_running_loop()
+        future = loop.create_future()
+        h = loop.call_later(delay,
+                            futures._set_result_unless_cancelled,
+                            future, result)
+        try:
+>           return await future
+                   ^^^^^^^^^^^^
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:702: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fc867d20750>
+
+    async def test_acp_private_does_not_overlap_owner_turn(native_backend):
+        native = native_backend
+        await native.author_history()
+        native.provider.text = '{"decision":"FULL"}'
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
+            comms = agent._comms
+            comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
+            async with native.original_input(agent, session, "Current human input") as turn:
+                sent = comms.messaging.send_message("sender", session, "Selected input after current turn")
+                assert await agent.inputs.drain_inbox(session) == 0
+                assert agent.turns.owns_turn(session, turn.turn_id)
+                assert native.provider.posts == 0
+            # The original lease's retirement, not a test map mutation, enables
+            # canonical selected TRIAGE/FULL on the same SDK-authored saved source.
+            # Runtime observation is an actual concurrent consumer; whichever
+            # original drain owns the admission performs these same two stages.
+            await agent.inputs.drain_inbox(session)
+>           async with asyncio.timeout(30):
+                       ^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_private_nk_delivery.py:595: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7fc8669ca380>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.optional_awareness_projection:optional_awareness_projection.py:233 Optional awareness omitted; original delivered alone (ProjectionUnavailableError)
+_______ test_native_preflight_failure_is_visible_and_cannot_mark_started _______
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fc866933550>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc8669d52b0>
+
+    async def test_native_preflight_failure_is_visible_and_cannot_mark_started(native_backend, monkeypatch):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        async with native.open_owner() as (owner, session):
+            updates = Updates()
+            owner.on_connect(updates)
+    
+            async def refused_preflight(self):
+                # Inject refusal at the original prepared-session boundary after
+                # authentic SDK source/identity acquisition. No child, witness or
+                # capability response is fabricated by the caller.
+                raise NativePiUnavailable("native preflight refused before prompt")
+    
+            monkeypatch.setattr(NativeSessionPreparation, "input_ready", refused_preflight)
+            with pytest.raises(RequestError) as caught:
+                await owner.prompt(session, [TextContentBlock(type="text", text="test")])
+            assert isinstance(caught.value.__cause__, NativePiUnavailable)
+            assert "preflight" in str(caught.value.__cause__)
+>           failure = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
+                                                                         ^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'RequestError' object has no attribute 'message'
+
+tests/test_acp_input_disposition.py:63: AttributeError
+___ test_late_owner_socket_observes_unknown_until_exact_native_start[False] ____
+
+predicate = <function test_late_owner_socket_observes_unknown_until_exact_native_start.<locals>.<lambda> at 0x7fc86467a090>
+
+    async def wait_for(predicate):
+        async with asyncio.timeout(30):
+            while not predicate():
+>               await asyncio.sleep(0.01)
+
+tests/test_acp_input_disposition.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+delay = 0.01, result = None
+
+    async def sleep(delay, result=None):
+        """Coroutine that completes after a given time (in seconds)."""
+        if delay <= 0:
+            await __sleep0()
+            return result
+    
+        if math.isnan(delay):
+            raise ValueError("Invalid delay: NaN (not a number)")
+    
+        loop = events.get_running_loop()
+        future = loop.create_future()
+        h = loop.call_later(delay,
+                            futures._set_result_unless_cancelled,
+                            future, result)
+        try:
+>           return await future
+                   ^^^^^^^^^^^^
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:702: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fc86c349c70>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc866964130>
+second_start = False
+
+    @pytest.mark.parametrize("second_start", [False, True])
+    async def test_late_owner_socket_observes_unknown_until_exact_native_start(
+        native_backend, monkeypatch, second_start
+    ):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        native.provider.response_gate = asyncio.Event()
+        acknowledgements = []
+        receive = PiRpcChannel.receive
+    
+        async def observed_response(channel, **options):
+            event = await receive(channel, **options)
+            if isinstance(event, pi.Response) and event.command is commands.Prompt:
+                acknowledgements.append(event)
+            return event
+    
+        monkeypatch.setattr(PiRpcChannel, "receive", observed_response)
+        async with native.open_owner(runtime_enabled=True) as (owner, session):
+            turn = asyncio.create_task(owner.prompt(session, [TextContentBlock(type="text", text="first")]))
+            attachment = canonical_agent(owner._comms, auto_wake=False)
+            updates = Updates()
+            attachment.on_connect(updates)
+            proxy = RuntimeProxy(attachment, session, socket_path(native.root, os.getpid()))
+            try:
+                await wait_for(lambda: native.provider.posts == 1)
+                # Subscribe after the original input starts, before transferring
+                # this socket controller's distinct follow-up into owned custody.
+                await proxy.subscribe()
+                accepted = await proxy.request(
+                    "prompt", prompt=[{"type": "text", "text": "followup"}],
+                    meta=encode_request(QueuePromptRequest()),
+                )
+                (receipt,) = decode_updates(accepted["_meta"])
+                assert isinstance(receipt, InputDeliveryChangedUpdate)
+                public_id = receipt.input_id
+                key = "acp:" + public_id
+>               await wait_for(lambda: any(event.id == public_id and event.success
+                                          for event in acknowledgements))
+
+tests/test_acp_input_disposition.py:112: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_input_disposition.py:39: in wait_for
+    async with asyncio.timeout(30):
+               ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7fc86681bd40>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+____ test_late_owner_socket_observes_unknown_until_exact_native_start[True] ____
+
+predicate = <function test_late_owner_socket_observes_unknown_until_exact_native_start.<locals>.<lambda> at 0x7fc86caf6400>
+
+    async def wait_for(predicate):
+        async with asyncio.timeout(30):
+            while not predicate():
+>               await asyncio.sleep(0.01)
+
+tests/test_acp_input_disposition.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+delay = 0.01, result = None
+
+    async def sleep(delay, result=None):
+        """Coroutine that completes after a given time (in seconds)."""
+        if delay <= 0:
+            await __sleep0()
+            return result
+    
+        if math.isnan(delay):
+            raise ValueError("Invalid delay: NaN (not a number)")
+    
+        loop = events.get_running_loop()
+        future = loop.create_future()
+        h = loop.call_later(delay,
+                            futures._set_result_unless_cancelled,
+                            future, result)
+        try:
+>           return await future
+                   ^^^^^^^^^^^^
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:702: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fc867d10b90>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc866964050>
+second_start = True
+
+    @pytest.mark.parametrize("second_start", [False, True])
+    async def test_late_owner_socket_observes_unknown_until_exact_native_start(
+        native_backend, monkeypatch, second_start
+    ):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        native.provider.response_gate = asyncio.Event()
+        acknowledgements = []
+        receive = PiRpcChannel.receive
+    
+        async def observed_response(channel, **options):
+            event = await receive(channel, **options)
+            if isinstance(event, pi.Response) and event.command is commands.Prompt:
+                acknowledgements.append(event)
+            return event
+    
+        monkeypatch.setattr(PiRpcChannel, "receive", observed_response)
+        async with native.open_owner(runtime_enabled=True) as (owner, session):
+            turn = asyncio.create_task(owner.prompt(session, [TextContentBlock(type="text", text="first")]))
+            attachment = canonical_agent(owner._comms, auto_wake=False)
+            updates = Updates()
+            attachment.on_connect(updates)
+            proxy = RuntimeProxy(attachment, session, socket_path(native.root, os.getpid()))
+            try:
+                await wait_for(lambda: native.provider.posts == 1)
+                # Subscribe after the original input starts, before transferring
+                # this socket controller's distinct follow-up into owned custody.
+                await proxy.subscribe()
+                accepted = await proxy.request(
+                    "prompt", prompt=[{"type": "text", "text": "followup"}],
+                    meta=encode_request(QueuePromptRequest()),
+                )
+                (receipt,) = decode_updates(accepted["_meta"])
+                assert isinstance(receipt, InputDeliveryChangedUpdate)
+                public_id = receipt.input_id
+                key = "acp:" + public_id
+>               await wait_for(lambda: any(event.id == public_id and event.success
+                                          for event in acknowledgements))
+
+tests/test_acp_input_disposition.py:112: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_input_disposition.py:39: in wait_for
+    async with asyncio.timeout(30):
+               ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7fc86760ef80>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+___ test_retry_during_unrelated_turn_is_ready_once_without_overlap[success] ____
+
+fut = <coroutine object Event.wait at 0x7fc866a8e260>, timeout = 30
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout <= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout <= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+>           return await fut
+                   ^^^^^^^^^
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <asyncio.locks.Event object at 0x7fc86525f830 [unset]>
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+>           await fut
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fc86ced47a0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc867bdfbd0>
+outcome = 'success'
+
+    @pytest.mark.parametrize("outcome", ["success", "error", "eof", "exception", "cancel"])
+    async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
+        native_backend, monkeypatch, outcome
+    ):
+        native = native_backend
+        await native.author_history()
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+>           await exercise_retry(owner, session, native, monkeypatch, outcome)
+
+tests/test_runtime_goal_retry_running.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_runtime_goal_retry_running.py:168: in exercise_retry
+    await asyncio.wait_for(settled.wait(), 30)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:487: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7fc867b8b100>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+____ test_retry_during_unrelated_turn_is_ready_once_without_overlap[error] _____
+
+fut = <coroutine object Event.wait at 0x7fc86466aea0>, timeout = 30
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout <= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout <= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+>           return await fut
+                   ^^^^^^^^^
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <asyncio.locks.Event object at 0x7fc867695cd0 [unset]>
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+>           await fut
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fc86cb63a10>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc86c66f9a0>
+outcome = 'error'
+
+    @pytest.mark.parametrize("outcome", ["success", "error", "eof", "exception", "cancel"])
+    async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
+        native_backend, monkeypatch, outcome
+    ):
+        native = native_backend
+        await native.author_history()
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+>           await exercise_retry(owner, session, native, monkeypatch, outcome)
+
+tests/test_runtime_goal_retry_running.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_runtime_goal_retry_running.py:168: in exercise_retry
+    await asyncio.wait_for(settled.wait(), 30)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:487: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7fc86c5cf700>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+_____ test_retry_during_unrelated_turn_is_ready_once_without_overlap[eof] ______
+
+fut = <coroutine object Event.wait at 0x7fc86c6698c0>, timeout = 30
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout <= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout <= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+>           return await fut
+                   ^^^^^^^^^
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <asyncio.locks.Event object at 0x7fc867c89730 [unset]>
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+>           await fut
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fc86cb63350>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc8644dea50>
+outcome = 'eof'
+
+    @pytest.mark.parametrize("outcome", ["success", "error", "eof", "exception", "cancel"])
+    async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
+        native_backend, monkeypatch, outcome
+    ):
+        native = native_backend
+        await native.author_history()
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+>           await exercise_retry(owner, session, native, monkeypatch, outcome)
+
+tests/test_runtime_goal_retry_running.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_runtime_goal_retry_running.py:168: in exercise_retry
+    await asyncio.wait_for(settled.wait(), 30)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:487: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7fc86f750e00>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+__ test_retry_during_unrelated_turn_is_ready_once_without_overlap[exception] ___
+
+fut = <coroutine object Event.wait at 0x7fc8654d59a0>, timeout = 30
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout <= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout <= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+>           return await fut
+                   ^^^^^^^^^
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <asyncio.locks.Event object at 0x7fc86c317950 [unset]>
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+>           await fut
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fc86c934d60>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc864649710>
+outcome = 'exception'
+
+    @pytest.mark.parametrize("outcome", ["success", "error", "eof", "exception", "cancel"])
+    async def test_retry_during_unrelated_turn_is_ready_once_without_overlap(
+        native_backend, monkeypatch, outcome
+    ):
+        native = native_backend
+        await native.author_history()
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+>           await exercise_retry(owner, session, native, monkeypatch, outcome)
+
+tests/test_runtime_goal_retry_running.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_runtime_goal_retry_running.py:168: in exercise_retry
+    await asyncio.wait_for(settled.wait(), 30)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:487: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7fc867923bc0>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+____ test_native_retry_waits_for_current_response_without_replaying_unknown ____
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fc86d973c50>
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
+    async def test_native_retry_waits_for_current_response_without_replaying_unknown(native_backend):
+        native = native_backend
+        await native.author_history()
+        release, finish_goal = asyncio.Event(), asyncio.Event()
+        native.provider.response_gate = release
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+            comms = owner._comms
+            store = owner.turns.goals.open_goal_store()
+            goal = comms.goals.update_goal(
+                session, SetGoalAction(text="Finish native retry objective"), owner_store=store
+            )
+            reservation = store.reserve(goal.id, 1)
+            store.claim_launch(reservation)
+            reservation.fail(store, "Previous native goal attempt failed")
+            blocked = comms.goals.update_goal(
+                session,
+                BlockedGoalAction(
+                    expect=GoalPrecondition(goal_id=goal.id),
+                    block_reason="Previous native goal attempt failed",
+                ),
+            )
+            # This retained unconfirmed reservation is input evidence, never a
+            # source of a runnable prompt. It carries no fabricated native start.
+            owner.inputs.dispositions.record(
+                "acp:old-native-unknown", seq=None, owner=session,
+                admission=comms.registry.snapshot().admission_generations[session],
+                target=session, text="Uncertain old native input must never replay",
+            )
+            original = owner.inputs.dispositions.read().lookup("acp:old-native-unknown")
+            proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+            await proxy.subscribe()
+            turn = asyncio.create_task(proxy.request(
+                "prompt", prompt=[{"type": "text", "text": "Unrelated ordinary native request"}],
+            ))
+            try:
+                async with asyncio.timeout(30):
+                    while native.provider.posts != 1:
+                        assert not turn.done()
+                        await asyncio.sleep(0.01)
+                lease = comms.registry.require(session).require_turn_lease()
+                assert owner.turns.owns_turn(session, lease.turn_id)
+                assert session in owner.inputs.backend_inboxes
+                resumed = await proxy.request(
+                    "retry_goal", goal_id=goal.id, expected_revision=blocked.revision,
+                )
+                resumed_goal = FieldCodec.decode(Goal, resumed["goal"])
+                assert resumed_goal.state.active and resumed_goal.id == goal.id
+                generation = GoalAttemptStore(store.root).snapshot(goal.id)
+                assert (generation.number, generation.lifecycle, generation.attempt_id) == (
+                    2, ReadyGeneration(), None,
+                )
+                await owner.turns.goals.schedule_goal(session)
+                assert native.provider.posts == 1 and not owner.inputs.pending_turns.get(session)
+                # The original localhost response resource supplies both gates;
+                # no alternate model catalog, HTTP server or native event script.
+                native.provider.response_gate = finish_goal
+                release.set()
+>               assert (await turn)["stopReason"] == "end_turn"
+                        ^^^^^^^^^^
+
+tests/test_stack_retry_running.py:76: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/runtime.py:372: in request
+    _raise_owner_error(data)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = {'error': 'Internal error', 'rpcError': {'code': -32603, 'message': 'Internal error', 'data': {'agentCommsFailure': {'...diagnostics/3acea4808b694ad4b8fa4dfc5fecd0ff.json)', 'input_state': 'started', ...}, 'notification_published': True}}}}
+
+    def _raise_owner_error(data: dict[str, Any]) -> None:
+        if "error" not in data:
+            return
+        from acp.exceptions import RequestError
+    
+        rpc = data.get("rpcError")
+        if (
+            isinstance(rpc, dict)
+            and type(rpc.get("code")) is int
+            and isinstance(rpc.get("message"), str)
+        ):
+>           raise RequestError(rpc["code"], rpc["message"], rpc.get("data"))
+E           acp.exceptions.RequestError: Internal error
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/runtime.py:142: RequestError
+=============================== warnings summary ===============================
+../../../../usr/lib/python3.14/site-packages/_pytest/config/__init__.py:1345
+  /usr/lib/python3.14/site-packages/_pytest/config/__init__.py:1345: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; pytest_asyncio
+    self._mark_plugins_for_rewrite(hook, disable_autoload)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_maintenance_barrier.py::test_direct_claim_and_bind_denied_after_phase_ack_in_other_process
+FAILED tests/test_turn_runner.py::test_turn_failure_preserves_exact_exception_cause_and_releases_state
+FAILED tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[None]
+FAILED tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[prior1]
+FAILED tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[prior2]
+FAILED tests/test_turn_runner.py::test_compaction_fault_reaches_acp_client_without_original_send
+FAILED tests/test_turn_runner.py::test_actual_provider_failure_reports_started_input_once_without_retry
+FAILED tests/test_acp_private_nk_delivery.py::test_acp_private_does_not_overlap_owner_turn
+FAILED tests/test_acp_input_disposition.py::test_native_preflight_failure_is_visible_and_cannot_mark_started
+FAILED tests/test_acp_input_disposition.py::test_late_owner_socket_observes_unknown_until_exact_native_start[False]
+FAILED tests/test_acp_input_disposition.py::test_late_owner_socket_observes_unknown_until_exact_native_start[True]
+FAILED tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[success]
+FAILED tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[error]
+FAILED tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[eof]
+FAILED tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[exception]
+FAILED tests/test_stack_retry_running.py::test_native_retry_waits_for_current_response_without_replaying_unknown
+16 failed, 11 passed, 1 warning in 327.12s (0:05:27)

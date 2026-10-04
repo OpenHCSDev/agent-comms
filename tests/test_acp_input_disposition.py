@@ -60,7 +60,7 @@ async def test_native_preflight_failure_is_visible_and_cannot_mark_started(nativ
             await owner.prompt(session, [TextContentBlock(type="text", text="test")])
         assert isinstance(caught.value.__cause__, NativePiUnavailable)
         assert "preflight" in str(caught.value.__cause__)
-        failure = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
+        failure = PromptFailureReceipt.from_error(caught.value.code, str(caught.value), caught.value.data)
         assert failure.notification_published and failure.failure.input_state.public_status == "not_sent"
         rows = owner.inputs.dispositions.read().unknown(frozenset({session}))
         assert len(rows) == 1 and not rows[0].has_native_binding
@@ -81,15 +81,15 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
     saved = native.session.read_bytes()
     native.provider.response_gate = asyncio.Event()
     acknowledgements = []
-    receive = PiRpcChannel.receive
+    decode = PiRpcChannel.decode_record
 
-    async def observed_response(channel, **options):
-        event = await receive(channel, **options)
+    def observed_response(raw, **options):
+        event = decode(raw, **options)
         if isinstance(event, pi.Response) and event.command is commands.Prompt:
             acknowledgements.append(event)
         return event
 
-    monkeypatch.setattr(PiRpcChannel, "receive", observed_response)
+    monkeypatch.setattr(PiRpcChannel, "decode_record", staticmethod(observed_response))
     async with native.open_owner(runtime_enabled=True) as (owner, session):
         turn = asyncio.create_task(owner.prompt(session, [TextContentBlock(type="text", text="first")]))
         attachment = canonical_agent(owner._comms, auto_wake=False)
@@ -130,7 +130,7 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
             else:
                 with pytest.raises(RequestError) as caught:
                     await asyncio.wait_for(turn, 30)
-                failure = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
+                failure = PromptFailureReceipt.from_error(caught.value.code, str(caught.value), caught.value.data)
                 assert failure.notification_published
             final = InputDispositions(owner.inputs.dispositions.path).read().rows
             assert len(final) == 2

@@ -92,7 +92,7 @@ async def test_turn_failure_preserves_exact_exception_cause_and_releases_state(
     with pytest.raises(RequestError) as caught:
         await owner.prompt(session, [{"type": "text", "text": "Work"}])
     assert caught.value.__cause__ is failure and failure.__cause__ is source
-    receipt = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
+    receipt = PromptFailureReceipt.from_error(caught.value.code, str(caught.value), caught.value.data)
     assert receipt.notification_published and receipt.failure.input_state.public_status == "not_sent"
     assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).busy
     assert not owner.inputs.backend_inboxes
@@ -164,7 +164,7 @@ async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, mo
         await owner.prompt(session, [{"type": "text", "text": "Work"}])
     assert isinstance(caught.value.__cause__, RuntimeError)
     assert str(caught.value.__cause__) == "execution failed"
-    receipt = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
+    receipt = PromptFailureReceipt.from_error(caught.value.code, str(caught.value), caught.value.data)
     errors = failure_facts(updates, RequestFailedUpdate)
     assert len(errors) == (2 if isinstance(prior, events.Error) else 1)
     from agent_comms.input_attempt import NotSentInput
@@ -215,7 +215,7 @@ async def test_compaction_fault_reaches_acp_client_without_original_send(
     with pytest.raises(RequestError) as caught:
         await owner.prompt(session, [{"type": "text", "text": "Original stays unknown"}])
     assert caught.value.__cause__ is failure and failure.__cause__ is source
-    receipt = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
+    receipt = PromptFailureReceipt.from_error(caught.value.code, str(caught.value), caught.value.data)
     assert len(attempts) == 1
     errors = failure_facts(updates, RequestFailedUpdate)
     assert len(errors) == 1 and receipt.failure == errors[0].failure
@@ -248,7 +248,7 @@ async def test_actual_provider_failure_reports_started_input_once_without_retry(
     with pytest.raises(RequestError) as caught:
         async with asyncio.timeout(30):
             await owner.prompt(session, [{"type": "text", "text": "Actual failed input"}])
-    receipt = PromptFailureReceipt.from_error(caught.value.code, caught.value.message, caught.value.data)
+    receipt = PromptFailureReceipt.from_error(caught.value.code, str(caught.value), caught.value.data)
     errors = failure_facts(updates, RequestFailedUpdate)
     assert len(errors) == 1
     assert receipt.notification_published and receipt.failure == errors[0].failure
