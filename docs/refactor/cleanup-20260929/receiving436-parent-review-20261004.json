@@ -30,10 +30,33 @@
     "preimages_absent": true
   },
   "public_operation": "NOT EXECUTED; current user client retained; quiet-window reply pending",
-  "next_private_purpose": "Sole Heis432 bounded affected row App with actual436 archive/readback/grant7d059665; whole actual436 floor restoration and handback required before publication",
+  "next_private_purpose": "NONE; sole432 affected App qualified, whole actual436 restoration independently verified, issued grant unchanged and separate lifecycle closed by Bohr; no successor loan inferred",
   "claim_limits": [
     "Original affected SDK/App/physical qualifiers retain their scopes",
     "No public delivery or whole-performance claim",
     "Parent review postprocessor list-vs-mapping error occurred after115 hash checks; canonical51 and27 gates subsequently compared directly without package changes or gate reruns"
-  ]
+  ],
+  "closed_private_purpose": {
+    "pr": 432,
+    "head": "f13f6b046ce31b67f379f8435861a7b99420f91d",
+    "merged": "fb0447639cdba02aee0342170600783d66dab6eb",
+    "required_debt_run": 37211084483,
+    "App_seconds": 12.781365682953037,
+    "whole_process_seconds": 15.539372983039357,
+    "App_exit": 0,
+    "raw_and_committed_keeper_pairs_verified": 9,
+    "restored_members": 1470,
+    "packages": 69,
+    "protected_keepers": 390,
+    "allUID_processes": 226,
+    "borrowers": 0,
+    "gaps": 0,
+    "owner_borrower_receipt_sha256": "aa598087d904451ded44f073f78765eb8b18b23495c3432ce676c6fff81ae392",
+    "independent_borrower_receipt_sha256": "055dc0cb3e161348223e5d102ce85066716ae6385ec5e99ac411c45c7b0b6c38",
+    "lifecycle_owner": "Bohr",
+    "lifecycle_path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/style22-Heis432-package-App-lifecycle.json",
+    "lifecycle_observed_sha256": "2df8439c9e05c170a415417311d45e239636aebb99d582718280a16216198229",
+    "issued_grant_sha256": "7d059665eb28af99c0c61a1b552600f00590111b6663083ae6a9d2c8e1d34ecb",
+    "frozen436_restaged": false
+  }
 }
