@@ -18,6 +18,7 @@ sys.path.insert(0, str(args.toad_tests))
 from runtime_fixture import ToadApp, wait_channel_roster
 from agent_comms.comms import Comms
 from agent_comms.presentation import MessageNotification
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch, ROOT_ID_ENV, PACKAGE_ENV
 from agent_comms.threads import Thread
 from toad.widgets.comms_sidebar import ChannelGroup
 
@@ -29,12 +30,15 @@ class InstalledApp(ToadApp):
 async def main():
     started = perf_counter()
     root = args.private_root
-    root.mkdir(parents=True, exist_ok=False)
+    root.mkdir(mode=0o700, parents=True, exist_ok=False)
     os.environ.update(XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),
                       XDG_DATA_HOME=str(root / 'data'), AGENT_COMMS_ROOT=str(root / 'wire'))
     comms = Comms(root / 'wire', private_initial_writes=True)
     root_id = comms.messaging.initialize_private_initial_protocol()
-    os.environ['AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID'] = root_id
+    launch = PrivateNkLaunch.from_environment(comms.root, {
+        ROOT_ID_ENV: root_id, PACKAGE_ENV: os.environ['AC_NATIVE_COPIED_PACKAGE']})
+    assert launch is not None
+    launch.apply_environment(os.environ)
     owner = root.name
     for name in (owner, 'stopped', 'archived'):
         source = root / (name + '.jsonl')
@@ -63,6 +67,7 @@ async def main():
               'human display acknowledgement leaves actor delivery pending']
     app = InstalledApp(project_dir=str(root))
     async with app.run_test(size=(120, 45)) as pilot:
+        await app.selected_session.wait_content_ready()
         sidebar = await wait_channel_roster(app, pilot, '#team')
         group = next(group for group in sidebar.query(ChannelGroup) if group.row.target_name == '#team')
         await sidebar.observation.sync()

@@ -1,0 +1,321 @@
+╭───────────────────── Traceback (most recent call last) ──────────────────────╮
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/agent_comms/private_n │
+│ k_entrypoint.py:50 in from_environment                                       │
+│                                                                              │
+│    47 │   │                                                                  │
+│    48 │   │   try:                                                           │
+│    49 │   │   │   root_id = WireRootIdText.decode(root_id)                   │
+│ ❱  50 │   │   │   native_package = AbsoluteRoutePathText.decode(package)     │
+│    51 │   │   except (TypeError, ValueError) as error:                       │
+│    52 │   │   │   raise PublicationActivationBlocked(                        │
+│    53 │   │   │   │   "private N/K owner requires exact root ID and absolute │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │ environment = environ({                                                  │ │
+│ │               │   'ANDROID_HOME': '/opt/android-sdk',                    │ │
+│ │               │   'ANDROID_NDK': '/opt/android-ndk',                     │ │
+│ │               │   'ANDROID_NDK_HOME': '/opt/android-ndk',                │ │
+│ │               │   'BROWSER': 'qutebrowser',                              │ │
+│ │               │   'CASROOT': '/usr',                                     │ │
+│ │               │   'CODE': '/home/ts/code',                               │ │
+│ │               │   'CODEX_CI': '1',                                       │ │
+│ │               │   'CODEX_PERMISSION_PROFILE': ':danger-full-access',     │ │
+│ │               │   'CODEX_SESSION_ID':                                    │ │
+│ │               '01a0d295-dfad-71f3-89f7-8a78d8917a73',                    │ │
+│ │               │   'CODEX_THREAD_ID':                                     │ │
+│ │               '01a0d295-dfad-71f3-89f7-8a78d8917a73',                    │ │
+│ │               │   ... +111                                               │ │
+│ │               })                                                         │ │
+│ │     package = None                                                       │ │
+│ │        root = PosixPath('/home/ts/.cache/agent-scratch/parent-c4-654-in… │ │
+│ │     root_id = 'cd96ca1eda814cc0a3bc9cf8d65480b2'                         │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/agent_comms/field_cod │
+│ ec.py:137 in decode                                                          │
+│                                                                              │
+│   134 │                                                                      │
+│   135 │   @classmethod                                                       │
+│   136 │   def decode(cls, value: object) -> object:                          │
+│ ❱ 137 │   │   return cls.from_text(FieldCodec.decode(str, value))            │
+│   138 │                                                                      │
+│   139 │   @classmethod                                                       │
+│   140 │   @abstractmethod                                                    │
+│                                                                              │
+│ ╭─── locals ───╮                                                             │
+│ │ value = None │                                                             │
+│ ╰──────────────╯                                                             │
+│                                                                              │
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/agent_comms/field_cod │
+│ ec.py:315 in decode                                                          │
+│                                                                              │
+│   312 │                                                                      │
+│   313 │   @classmethod                                                       │
+│   314 │   def decode(cls, target: type[T], data: object) -> T:               │
+│ ❱ 315 │   │   return cast(T, cls._decode(target, data))                      │
+│   316 │                                                                      │
+│   317 │   @classmethod                                                       │
+│   318 │   def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, │
+│                                                                              │
+│ ╭── locals ───╮                                                              │
+│ │ data = None │                                                              │
+│ ╰─────────────╯                                                              │
+│                                                                              │
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/agent_comms/field_cod │
+│ ec.py:536 in _decode                                                         │
+│                                                                              │
+│   533 │   │   │   return data                                                │
+│   534 │   │   if target is float and type(data) in (int, float) and math.isf │
+│   535 │   │   │   return data                                                │
+│ ❱ 536 │   │   raise ValueError(f"Expected {target}, received {type(data).__n │
+│   537                                                                        │
+│                                                                              │
+│ ╭─────── locals ────────╮                                                    │
+│ │           args = ()   │                                                    │
+│ │           data = None │                                                    │
+│ │         origin = None │                                                    │
+│ │ representation = None │                                                    │
+│ ╰───────────────────────╯                                                    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+ValueError: Expected <class 'str'>, received NoneType
+
+The above exception was the direct cause of the following exception:
+
+╭───────────────────── Traceback (most recent call last) ──────────────────────╮
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/toad/widgets/comms_si │
+│ debar.py:477 in on_mount                                                     │
+│                                                                              │
+│   474 │                                                                      │
+│   475 │   def on_mount(self) -> None:                                        │
+│   476 │   │   self.projection.mount()                                        │
+│ ❱ 477 │   │   self.observation.mount()                                       │
+│   478 │                                                                      │
+│   479 │   async def on_unmount(self) -> None:                                │
+│   480 │   │   await self.observation.close()                                 │
+│                                                                              │
+│ ╭─────── locals ────────╮                                                    │
+│ │ self = CommsSidebar() │                                                    │
+│ ╰───────────────────────╯                                                    │
+│                                                                              │
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/toad/sidebar_observat │
+│ ion.py:54 in mount                                                           │
+│                                                                              │
+│    51 │   │   if isinstance(screen, CommsScreen) and not screen.belongs_to_w │
+│    52 │   │   │   self.sidebar.display = False                               │
+│    53 │   │   │   return                                                     │
+│ ❱  54 │   │   service = app.coordination_access.service                      │
+│    55 │   │   self.service = service if root == service.root else wire(root) │
+│    56 │   │   self.sidebar.subscribe_core(app.session_tracker.events)        │
+│    57 │   │   self.sidebar.observe_core(app.events)                          │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │    app = InstalledApp(                                                   │ │
+│ │          │   title='InstalledApp',                                       │ │
+│ │          │   classes={                                                   │ │
+│ │          │   │   '-theme-ansi-dark',                                     │ │
+│ │          │   │   '-dark-mode',                                           │ │
+│ │          │   │   '-show-sessions-bar'                                    │ │
+│ │          │   },                                                          │ │
+│ │          │   pseudo_classes={'nocolor', 'dark', 'focus', 'ansi'}         │ │
+│ │          )                                                               │ │
+│ │   root = PosixPath('/home/ts/.cache/agent-scratch/parent-c4-654-install… │ │
+│ │ screen = WorkspaceScreen(id='workspace')                                 │ │
+│ │   self = <toad.sidebar_observation.SidebarObservation object at          │ │
+│ │          0x7f7acb847cb0>                                                 │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/toad/comms_root.py:82 │
+│  in service                                                                  │
+│                                                                              │
+│    79 │                                                                      │
+│    80 │   @property                                                          │
+│    81 │   def service(self) -> Comms:                                        │
+│ ❱  82 │   │   return self.require(RouteSelection.capture())                  │
+│    83 │                                                                      │
+│    84 │   def require(self, selected: RouteSelection) -> Comms:              │
+│    85 │   │   from agent_comms.comms import wire                             │
+│                                                                              │
+│ ╭─────────────────────────────── locals ───────────────────────────────╮     │
+│ │ self = <toad.comms_root.CoordinationAccess object at 0x7f7ad046af90> │     │
+│ ╰──────────────────────────────────────────────────────────────────────╯     │
+│                                                                              │
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/toad/comms_root.py:94 │
+│  in require                                                                  │
+│                                                                              │
+│    91 │   │   │   return observed.service                                    │
+│    92 │   │   with ExitStack() as acquisition:                               │
+│    93 │   │   │   acquisition.enter_context(selected.route.admit_client())   │
+│ ❱  94 │   │   │   service = wire(selected.route)                             │
+│    95 │   │   │   if service.root.resolve() != selected.root or RouteSelecti │
+│    96 │   │   │   │   raise ValueError("Comms route changed while opening th │
+│    97 │   │   │   self.custody.enter_context(acquisition.pop_all())          │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │ acquisition = <contextlib.ExitStack object at 0x7f7ad15dc1e0>            │ │
+│ │    observed = None                                                       │ │
+│ │    selected = RouteSelection(                                            │ │
+│ │               │   route=LocalRoute(                                      │ │
+│ │               │   │                                                      │ │
+│ │               root=PosixPath('/home/ts/.cache/agent-scratch/parent-c4-6… │ │
+│ │               │   ),                                                     │ │
+│ │               │                                                          │ │
+│ │               root=PosixPath('/home/ts/.cache/agent-scratch/parent-c4-6… │ │
+│ │               │   implicit=False                                         │ │
+│ │               )                                                          │ │
+│ │        self = <toad.comms_root.CoordinationAccess object at              │ │
+│ │               0x7f7ad046af90>                                            │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/agent_comms/comms.py: │
+│ 69 in wire                                                                   │
+│                                                                              │
+│   66 │                                                                       │
+│   67 │   route = resolve_comms_route(root)                                   │
+│   68 │   comms = Comms(route.root)                                           │
+│ ❱ 69 │   route.bind_owners(comms.owners)                                     │
+│   70 │   return comms                                                        │
+│   71                                                                         │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │ comms = <agent_comms.comms.Comms object at 0x7f7acb05b250>               │ │
+│ │  root = LocalRoute(                                                      │ │
+│ │         │                                                                │ │
+│ │         root=PosixPath('/home/ts/.cache/agent-scratch/parent-c4-654-ins… │ │
+│ │         )                                                                │ │
+│ │ route = LocalRoute(                                                      │ │
+│ │         │                                                                │ │
+│ │         root=PosixPath('/home/ts/.cache/agent-scratch/parent-c4-654-ins… │ │
+│ │         )                                                                │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/agent_comms/active_ro │
+│ ute.py:67 in bind_owners                                                     │
+│                                                                              │
+│    64 │   def bind_owners(self, owners: OwnerLifecycle) -> None:             │
+│    65 │   │   from .private_nk_entrypoint import PrivateNkLaunch             │
+│    66 │   │                                                                  │
+│ ❱  67 │   │   launch = PrivateNkLaunch.from_environment(self.root, os.enviro │
+│    68 │   │   if launch is not None:                                         │
+│    69 │   │   │   owners.pin_private_nk_launch(                              │
+│    70 │   │   │   │   launch.validated_root, launch.wire_root_id, launch.nat │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │ owners = <agent_comms.owner_lifecycle.OwnerLifecycle object at           │ │
+│ │          0x7f7acb0c4fc0>                                                 │ │
+│ │   self = LocalRoute(                                                     │ │
+│ │          │                                                               │ │
+│ │          root=PosixPath('/home/ts/.cache/agent-scratch/parent-c4-654-in… │ │
+│ │          )                                                               │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtim │
+│ e-native-style22-20261002/lib/python3.14/site-packages/agent_comms/private_n │
+│ k_entrypoint.py:52 in from_environment                                       │
+│                                                                              │
+│    49 │   │   │   root_id = WireRootIdText.decode(root_id)                   │
+│    50 │   │   │   native_package = AbsoluteRoutePathText.decode(package)     │
+│    51 │   │   except (TypeError, ValueError) as error:                       │
+│ ❱  52 │   │   │   raise PublicationActivationBlocked(                        │
+│    53 │   │   │   │   "private N/K owner requires exact root ID and absolute │
+│    54 │   │   │   ) from error                                               │
+│    55 │   │   if environment.get("PI_PROMPT"):                               │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │ environment = environ({                                                  │ │
+│ │               │   'ANDROID_HOME': '/opt/android-sdk',                    │ │
+│ │               │   'ANDROID_NDK': '/opt/android-ndk',                     │ │
+│ │               │   'ANDROID_NDK_HOME': '/opt/android-ndk',                │ │
+│ │               │   'BROWSER': 'qutebrowser',                              │ │
+│ │               │   'CASROOT': '/usr',                                     │ │
+│ │               │   'CODE': '/home/ts/code',                               │ │
+│ │               │   'CODEX_CI': '1',                                       │ │
+│ │               │   'CODEX_PERMISSION_PROFILE': ':danger-full-access',     │ │
+│ │               │   'CODEX_SESSION_ID':                                    │ │
+│ │               '01a0d295-dfad-71f3-89f7-8a78d8917a73',                    │ │
+│ │               │   'CODEX_THREAD_ID':                                     │ │
+│ │               '01a0d295-dfad-71f3-89f7-8a78d8917a73',                    │ │
+│ │               │   ... +111                                               │ │
+│ │               })                                                         │ │
+│ │     package = None                                                       │ │
+│ │        root = PosixPath('/home/ts/.cache/agent-scratch/parent-c4-654-in… │ │
+│ │     root_id = 'cd96ca1eda814cc0a3bc9cf8d65480b2'                         │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+╰──────────────────────────────────────────────────────────────────────────────╯
+PublicationActivationBlocked: private N/K owner requires exact root ID and 
+absolute reviewed package
+
+NOTE: 1 of 3 errors shown. Run with textual run --dev to see all errors.
+Traceback (most recent call last):
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/private_nk_entrypoint.py", line 50, in from_environment
+    native_package = AbsoluteRoutePathText.decode(package)
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/field_codec.py", line 137, in decode
+    return cls.from_text(FieldCodec.decode(str, value))
+                         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/field_codec.py", line 315, in decode
+    return cast(T, cls._decode(target, data))
+                   ~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/field_codec.py", line 536, in _decode
+    raise ValueError(f"Expected {target}, received {type(data).__name__}")
+ValueError: Expected <class 'str'>, received NoneType
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/c4_coordination_installed_ui.py", line 96, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-cleanup-live-integration-20260929/tests/c4_coordination_installed_ui.py", line 65, in main
+    async with app.run_test(size=(120, 45)) as pilot:
+               ~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 235, in __aexit__
+    await self.gen.athrow(value)
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/tests/runtime_fixture.py", line 78, in run_test
+    async with AsyncExitStack() as cleanup:
+               ~~~~~~~~~~~~~~^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 768, in __aexit__
+    raise exc
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 751, in __aexit__
+    cb_suppress = await cb(*exc_details)
+                  ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 235, in __aexit__
+    await self.gen.athrow(value)
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/tests/runtime_fixture.py", line 69, in _cleanup_on_exit
+    await callback(*args)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/tests/runtime_fixture.py", line 22, in stop_test_owners
+    comms = wire(root)
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/comms.py", line 69, in wire
+    route.bind_owners(comms.owners)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/active_route.py", line 67, in bind_owners
+    launch = PrivateNkLaunch.from_environment(self.root, os.environ)
+  File "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/private_nk_entrypoint.py", line 52, in from_environment
+    raise PublicationActivationBlocked(
+        "private N/K owner requires exact root ID and absolute reviewed package"
+    ) from error
+agent_comms.coordination_errors.PublicationActivationBlocked: private N/K owner requires exact root ID and absolute reviewed package
