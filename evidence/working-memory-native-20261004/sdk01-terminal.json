@@ -1,0 +1,24 @@
+{
+  "driver_source": "0270acd478f91b58e89ed2afa8a75943a429adb7",
+  "driver_sha256": "36ae173d40d05b5ed3d3ca6189ce52ed863c0f7c4ab195778141f53491e7d11e",
+  "producer_source": "fcbd30a1316ba6c1f4e39719591b39535425e946",
+  "artifact_manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+  "artifact_tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d",
+  "args": [
+    "node",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tests/native_turn_context_contract.mjs",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent",
+    "/home/ts/.cache/agent-scratch/working-memory627-system-spans-sdk01-20261004",
+    "--system-source-spans",
+    "--comparison-package",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent"
+  ],
+  "exit_code": 0,
+  "duration_seconds": 0.9894417780451477,
+  "stdout_sha256": "eeb6d1c4af3274fdded237974d1be2080adf773d239767ee6a3484c20e0c901d",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "scope": "Original authored SDK DefaultResourceLoader/session preview assembly and span/parity capture; no committed provider request",
+  "provider_requests": 0,
+  "native_inputs": 0,
+  "saved_user_session_changes": false
+}

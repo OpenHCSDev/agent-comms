@@ -1,0 +1,72 @@
+{
+  "producer_head": "fcbd30a1316ba6c1f4e39719591b39535425e946",
+  "builder_head": "7fa5d0ff842f0e902526a93054d10a9eff79dbee",
+  "manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+  "tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d",
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent",
+  "changed_members": [
+    {
+      "path": "dist/core/agent-session.d.ts",
+      "original_sha256": "d457ef09397b5e9e41697f9f56aa01f06caeef70e3e89af2b8e04362ed4eec80",
+      "new_sha256": "1ab936b4f516b9584f1c931794eb58db9707655fc6fb8693f99343245f0646ab"
+    },
+    {
+      "path": "dist/core/agent-session.js",
+      "original_sha256": "778c9632b877c0309ce54d7f24940b955d75c143f457071573b71c5136a2583b",
+      "new_sha256": "1040b542c2b58b1ac4843d8f16f602052893dffcd04c41d486cd99a2f5f72038"
+    },
+    {
+      "path": "dist/core/resource-loader.d.ts",
+      "original_sha256": "f7c1dac7b3d661dff5fbfe51d1b50dff12b4c4329ae29a280ae713740b162493",
+      "new_sha256": "2426d5a4f1d73f142be9e0a9aa582b134965ba37dc6f81e03282e092a0513ec3"
+    },
+    {
+      "path": "dist/core/resource-loader.js",
+      "original_sha256": "8e8a1bc1c5bc9e955f6a2314dd1db02071be56d48b1fea7b8b2cacb4fc9a0628",
+      "new_sha256": "7b7f59b805405a2e77c5579e57c4f40d9ed42c0f366c45d6bfdb7575c790cf93"
+    },
+    {
+      "path": "dist/core/skills.d.ts",
+      "original_sha256": "8230b7f16b693ce3fbdf814d537105b3539ce7c07ba6cfef9605bf35695cdf58",
+      "new_sha256": "b20faeea0427f73d756a5264c1a907631c701a1140d9d716290800ce87e46d86"
+    },
+    {
+      "path": "dist/core/skills.js",
+      "original_sha256": "3b7cc3997c630553eb88931de978e0db623ce51fbf7356e0ab922183885e208c",
+      "new_sha256": "d64e8c05c7932d377034820b1db0df45612afe64885c0765f8f348a12e1bc955"
+    },
+    {
+      "path": "dist/core/system-prompt.d.ts",
+      "original_sha256": "2d99ca582e7d9eed36e848b8e86a6d60572263032969372e39653009bf1f6e20",
+      "new_sha256": "8e8276bbabcd898136d431345611928626fad6b6f03ac572f1d8506e6ece326f"
+    },
+    {
+      "path": "dist/core/system-prompt.js",
+      "original_sha256": "4a57f022a27f2ae22d7d0c0d8f0ef4a63f869b878483699d4102055239bdea0a",
+      "new_sha256": "0391543cf703a93a0163b37b3ccebe53e0f12bff6f6162b86d56fb017fe49011"
+    },
+    {
+      "path": "dist/core/turn-context.d.ts",
+      "original_sha256": "e47a2ad3d14a5802e6736227ecfb7c5acce4e98733aeac66414ea8912e7e0aba",
+      "new_sha256": "d878289a4cd35eda8e7c49f0ef6925e2238fa4945d3c877ebe9d5f2615301f4a"
+    },
+    {
+      "path": "dist/core/turn-context.js",
+      "original_sha256": "372034dd4f5d6afa4fced26940ac886c7d0e7debb32d6c3cded7868f2e6ba906",
+      "new_sha256": "f42b792dea8cb7fd915c1c2fa5c2c7057be96a9dcd04171da7126d856a897417"
+    }
+  ],
+  "all_other_members_equal_immutable086": true,
+  "old086_tree_unchanged": true,
+  "same_fence_immutable086_donor": true,
+  "new_artifact_resources": {
+    "payload_logical_bytes": 138424885,
+    "single_link_files": 10,
+    "shared_files": 19180,
+    "exclusive_file_allocated_bytes": 286720
+  },
+  "regular_files": 19190,
+  "failed_assembly01": "Original offline locked extension cache absent; unpublished stage retired by original trap; log retained",
+  "replacement_serial_assembly": true,
+  "qualification": "Original patch/seal and whole-tree artifact proof only. Changed authored SDK span/parity acceptance pending Einstein driver; no installed/UI/model/provider/public claim."
+}

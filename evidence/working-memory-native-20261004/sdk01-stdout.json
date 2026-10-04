@@ -1,0 +1,50 @@
+{
+  "scope": "Original SDK source-only assembly/capture; no committed provider request",
+  "provider_requests": 0,
+  "native_inputs": 0,
+  "original_builder_byte_parity": true,
+  "cases": [
+    {
+      "name": "default",
+      "utf8_bytes": 3727,
+      "spans": 13,
+      "captured_values_and_request_id": true,
+      "journal_unchanged": true
+    },
+    {
+      "name": "custom-file",
+      "utf8_bytes": 1006,
+      "spans": 13,
+      "captured_values_and_request_id": true,
+      "journal_unchanged": true
+    },
+    {
+      "name": "unchanged-overrides",
+      "utf8_bytes": 1006,
+      "spans": 13,
+      "captured_values_and_request_id": true,
+      "journal_unchanged": true
+    },
+    {
+      "name": "changed-system",
+      "utf8_bytes": 1035,
+      "spans": 13,
+      "captured_values_and_request_id": true,
+      "journal_unchanged": true
+    },
+    {
+      "name": "changed-append",
+      "utf8_bytes": 3763,
+      "spans": 15,
+      "captured_values_and_request_id": true,
+      "journal_unchanged": true
+    },
+    {
+      "name": "literal-system",
+      "utf8_bytes": 1021,
+      "spans": 13,
+      "captured_values_and_request_id": true,
+      "journal_unchanged": true
+    }
+  ]
+}
