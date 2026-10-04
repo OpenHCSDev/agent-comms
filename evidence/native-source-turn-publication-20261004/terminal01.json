@@ -1,0 +1,47 @@
+{
+  "command": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/c3-turn-authority-fixtures-20261004/installed-controls.py",
+    "-o",
+    "addopts=",
+    "-q",
+    "-s",
+    "--basetemp",
+    "/home/ts/.cache/agent-scratch/mendel-native-source640-installed01/private",
+    "tests/test_maintenance_barrier.py::test_direct_claim_and_bind_denied_after_phase_ack_in_other_process",
+    "tests/test_turn_runner.py::test_turn_failure_preserves_exact_exception_cause_and_releases_state",
+    "tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done",
+    "tests/test_turn_runner.py::test_compaction_fault_reaches_acp_client_without_original_send",
+    "tests/test_turn_runner.py::test_actual_provider_failure_reports_started_input_once_without_retry",
+    "tests/test_acp_private_nk_delivery.py::test_acp_private_does_not_overlap_owner_turn",
+    "tests/test_acp_input_disposition.py::test_native_preflight_failure_is_visible_and_cannot_mark_started",
+    "tests/test_acp_input_disposition.py::test_late_owner_socket_observes_unknown_until_exact_native_start",
+    "tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[success]",
+    "tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[error]",
+    "tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[eof]",
+    "tests/test_runtime_goal_retry_running.py::test_retry_during_unrelated_turn_is_ready_once_without_overlap[exception]",
+    "tests/test_stack_retry_running.py::test_native_retry_waits_for_current_response_without_replaying_unknown",
+    "tests/test_atomic_turn_source_owner.py"
+  ],
+  "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+  "private_root": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed01",
+  "source_head": "c7f44d891c44e2f3c5720d09382cd6073ed43867",
+  "wheel_build_head": "2b3e08bb5fe4b754caa324da4343918db437eef8",
+  "native": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+  "external_provider_inputs": 0,
+  "public_inputs": 0,
+  "replayed_inputs": 0,
+  "timeout_seconds": 480,
+  "identity": {
+    "pid": 594024,
+    "start_time": 59285675
+  },
+  "outcome": {
+    "kind": "exited",
+    "code": 1
+  },
+  "returncode": 1,
+  "elapsed_seconds": 127.4879488759907,
+  "controller_retired": true,
+  "remaining_group_members": []
+}

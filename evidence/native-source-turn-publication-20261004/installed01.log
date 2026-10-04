@@ -1,0 +1,324 @@
+..{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed01/private/saved-native-owner0/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [{"pid": 594715, "start_time": 59286285}], "children_retired": true}
+.{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed01/private/saved-native-owner1/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [{"pid": 595756, "start_time": 59286893}], "children_retired": true}
+.{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed01/private/saved-native-owner2/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [{"pid": 597290, "start_time": 59287508}], "children_retired": true}
+F{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed01/private/saved-native-owner3/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [{"pid": 598688, "start_time": 59288186}], "children_retired": true}
+.{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed01/private/saved-native-owner4/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [{"pid": 599803, "start_time": 59288820}], "children_retired": true}
+F{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed01/private/saved-native-owner5/wire", "localhost_posts": 1, "native_input_proofs": 1, "children": [{"pid": 600715, "start_time": 59289440}], "children_retired": true}
+F{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed01/private/saved-native-owner6/wire", "localhost_posts": 1, "native_input_proofs": 1, "children": [{"pid": 601700, "start_time": 59290094}], "children_retired": true}
+.{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed01/private/saved-native-owner7/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [{"pid": 610300, "start_time": 59293829}], "children_retired": true}
+.{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed01/private/saved-native-owner8/wire", "localhost_posts": 1, "native_input_proofs": 1, "children": [{"pid": 611216, "start_time": 59294183}], "children_retired": true}
+.{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed01/private/saved-native-owner9/wire", "localhost_posts": 2, "native_input_proofs": 3, "children": [{"pid": 612478, "start_time": 59294599}], "children_retired": true}
+.{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed01/private/saved-native-owner10/wire", "localhost_posts": 2, "native_input_proofs": 3, "children": [{"pid": 614433, "start_time": 59295036}], "children_retired": true}
+.{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed01/private/saved-native-owner11/wire", "localhost_posts": 2, "native_input_proofs": 3, "children": [{"pid": 615617, "start_time": 59295523}], "children_retired": true}
+.{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed01/private/saved-native-owner12/wire", "localhost_posts": 2, "native_input_proofs": 3, "children": [{"pid": 619015, "start_time": 59296312}], "children_retired": true}
+.{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed01/private/saved-native-owner13/wire", "localhost_posts": 2, "native_input_proofs": 3, "children": [{"pid": 622166, "start_time": 59297208}], "children_retired": true}
+F{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed01/private/saved-native-owner14/wire", "localhost_posts": 2, "native_input_proofs": 3, "children": [{"pid": 623532, "start_time": 59297964}], "children_retired": true}
+....
+=================================== FAILURES ===================================
+_________ test_uncaught_failure_feedback_once_even_after_done[prior2] __________
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7f3af6873360>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7f3af83d6fd0>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3af683e0a0>
+prior = Done(text='specific provider failure', ok=False, reason_code=None, diagnostic=None)
+
+    @pytest.mark.parametrize(
+        "prior",
+        [
+            None,
+            events.Error("specific provider failure"),
+            events.Done("specific provider failure", False),
+        ],
+    )
+    async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, monkeypatch, prior):
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        original = native.session.read_bytes()
+    
+        async def stream(*args, **kwargs):
+            persistent = owner.turns.persistent_backends[session]
+            assert persistent.available and persistent.custody.child.proc.alive()
+            if prior is not None:
+                yield prior
+            raise RuntimeError("execution failed")
+    
+        monkeypatch.setattr(backend, "stream_agent_events", stream)
+        with pytest.raises(RequestError) as caught:
+            await owner.prompt(session, [{"type": "text", "text": "Work"}])
+        assert isinstance(caught.value.__cause__, RuntimeError)
+        assert str(caught.value.__cause__) == "execution failed"
+        receipt = PromptFailureReceipt.from_error(caught.value.code, str(caught.value), caught.value.data)
+        errors = failure_facts(updates, RequestFailedUpdate)
+>       assert len(errors) == (2 if isinstance(prior, events.Error) else 1)
+E       AssertionError: assert 2 == 1
+E        +  where 2 = len([RequestFailedUpdate(failure=RequestACPFailure(code=-32603, detail='specific provider failure', input_state=<class 'ag...03, detail='specific provider failure', input_state=<class 'agent_comms.input_attempt.NotSentInput'>, diagnostics=()))])
+
+tests/test_turn_runner.py:169: AssertionError
+____ test_actual_provider_failure_reports_started_input_once_without_retry _____
+
+prepared_owner = (<agent_comms.acp.CommsAgent object at 0x7f3af9070b90>, 'project', <native_backend_fixture.NativeBackendFixture object at 0x7f3af94cf650>)
+
+    async def test_actual_provider_failure_reports_started_input_once_without_retry(prepared_owner):
+        owner, session, native = prepared_owner
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        owner.on_connect(Client())
+        native.provider.status = 503
+        with pytest.raises(RequestError) as caught:
+            async with asyncio.timeout(30):
+                await owner.prompt(session, [{"type": "text", "text": "Actual failed input"}])
+        receipt = PromptFailureReceipt.from_error(caught.value.code, str(caught.value), caught.value.data)
+        errors = failure_facts(updates, RequestFailedUpdate)
+        assert len(errors) == 1
+        assert receipt.notification_published and receipt.failure == errors[0].failure
+        assert "loopback retryable failure" in errors[0].failure.detail
+        assert errors[0].failure.input_state.public_status == "started"
+        assert not failure_facts(updates, InputFailedUpdate)
+        assert native.provider.posts == 1  # failed original, zero seed/retry
+        saved = native.saved_inputs()
+        assert len(saved) == 2
+        # The owner adds its instruction/awareness prefix to the actual native prompt.
+        assert (
+>           sum(
+                block["text"].endswith("Actual failed input")
+                for message in saved
+                for block in message["content"]
+                if block["type"] == "text"
+            )
+            == 1
+        )
+
+tests/test_turn_runner.py:263: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+.0 = <list_iterator object at 0x7f3af9f8fc10>
+
+        sum(
+            block["text"].endswith("Actual failed input")
+            for message in saved
+            for block in message["content"]
+>           if block["type"] == "text"
+               ^^^^^^^^^^^^^
+        )
+        == 1
+    )
+E   TypeError: string indices must be integers, not 'str'
+
+tests/test_turn_runner.py:267: TypeError
+_________________ test_acp_private_does_not_overlap_owner_turn _________________
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f3af67b6690>
+
+    async def test_acp_private_does_not_overlap_owner_turn(native_backend):
+        native = native_backend
+        await native.author_history()
+        native.provider.text = '{"decision":"FULL"}'
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
+            comms = agent._comms
+            comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
+            async with native.original_input(agent, session, "Current human input") as turn:
+                sent = comms.messaging.send_message("sender", session, "Selected input after current turn")
+                assert await agent.inputs.drain_inbox(session) == 0
+                assert agent.turns.owns_turn(session, turn.turn_id)
+                assert native.provider.posts == 0
+            # The original lease's retirement, not a test map mutation, enables
+            # canonical selected TRIAGE/FULL on the same SDK-authored saved source.
+            # Runtime observation is an actual concurrent consumer; whichever
+            # original drain owns the admission performs these same two stages.
+            await agent.inputs.drain_inbox(session)
+            async with asyncio.timeout(30):
+                while native.provider.posts != 2 or agent.turns.turn_state(session).busy:
+>                   await asyncio.sleep(0.01)
+
+tests/test_acp_private_nk_delivery.py:597: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+delay = 0.01, result = None
+
+    async def sleep(delay, result=None):
+        """Coroutine that completes after a given time (in seconds)."""
+        if delay <= 0:
+            await __sleep0()
+            return result
+    
+        if math.isnan(delay):
+            raise ValueError("Invalid delay: NaN (not a number)")
+    
+        loop = events.get_running_loop()
+        future = loop.create_future()
+        h = loop.call_later(delay,
+                            futures._set_result_unless_cancelled,
+                            future, result)
+        try:
+>           return await future
+                   ^^^^^^^^^^^^
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:702: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f3af67b6690>
+
+    async def test_acp_private_does_not_overlap_owner_turn(native_backend):
+        native = native_backend
+        await native.author_history()
+        native.provider.text = '{"decision":"FULL"}'
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
+            comms = agent._comms
+            comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
+            async with native.original_input(agent, session, "Current human input") as turn:
+                sent = comms.messaging.send_message("sender", session, "Selected input after current turn")
+                assert await agent.inputs.drain_inbox(session) == 0
+                assert agent.turns.owns_turn(session, turn.turn_id)
+                assert native.provider.posts == 0
+            # The original lease's retirement, not a test map mutation, enables
+            # canonical selected TRIAGE/FULL on the same SDK-authored saved source.
+            # Runtime observation is an actual concurrent consumer; whichever
+            # original drain owns the admission performs these same two stages.
+            await agent.inputs.drain_inbox(session)
+>           async with asyncio.timeout(30):
+                       ^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_private_nk_delivery.py:595: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7f3af93b4c80>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:128 Optional awareness omitted; original delivered alone (ProjectionUnavailableError)
+____ test_native_retry_waits_for_current_response_without_replaying_unknown ____
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f3af6ff4d50>
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
+    async def test_native_retry_waits_for_current_response_without_replaying_unknown(native_backend):
+        native = native_backend
+        await native.author_history()
+        release, finish_goal = asyncio.Event(), asyncio.Event()
+        native.provider.response_gate = release
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+            comms = owner._comms
+            store = owner.turns.goals.open_goal_store()
+            goal = comms.goals.update_goal(
+                session, SetGoalAction(text="Finish native retry objective"), owner_store=store
+            )
+            reservation = store.reserve(goal.id, 1)
+            store.claim_launch(reservation)
+            reservation.fail(store, "Previous native goal attempt failed")
+            blocked = comms.goals.update_goal(
+                session,
+                BlockedGoalAction(
+                    expect=GoalPrecondition(goal_id=goal.id),
+                    block_reason="Previous native goal attempt failed",
+                ),
+            )
+            # This retained unconfirmed reservation is input evidence, never a
+            # source of a runnable prompt. It carries no fabricated native start.
+            owner.inputs.dispositions.record(
+                "acp:old-native-unknown", seq=None, owner=session,
+                admission=comms.registry.snapshot().admission_generations[session],
+                target=session, text="Uncertain old native input must never replay",
+            )
+            original = owner.inputs.dispositions.read().lookup("acp:old-native-unknown")
+            proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+            await proxy.subscribe()
+            turn = asyncio.create_task(proxy.request(
+                "prompt", prompt=[{"type": "text", "text": "Unrelated ordinary native request"}],
+            ))
+            try:
+                async with asyncio.timeout(30):
+                    while native.provider.posts != 1:
+                        assert not turn.done()
+                        await asyncio.sleep(0.01)
+                lease = comms.registry.require(session).require_turn_lease()
+                assert owner.turns.owns_turn(session, lease.turn_id)
+                assert session in owner.inputs.backend_inboxes
+                resumed = await proxy.request(
+                    "retry_goal", goal_id=goal.id, expected_revision=blocked.revision,
+                )
+                resumed_goal = FieldCodec.decode(Goal, resumed["goal"])
+                assert resumed_goal.state.active and resumed_goal.id == goal.id
+                generation = GoalAttemptStore(store.root).snapshot(goal.id)
+                assert (generation.number, generation.lifecycle, generation.attempt_id) == (
+                    2, ReadyGeneration(), None,
+                )
+                await owner.turns.goals.schedule_goal(session)
+                assert native.provider.posts == 1 and not owner.inputs.pending_turns.get(session)
+                # The original localhost response resource supplies both gates;
+                # no alternate model catalog, HTTP server or native event script.
+                native.provider.response_gate = finish_goal
+                release.set()
+                assert (await turn)["stopReason"] == "end_turn"
+                async with asyncio.timeout(30):
+                    while native.provider.posts != 2:
+                        await asyncio.sleep(0.01)
+                next_lease = comms.registry.require(session).require_turn_lease()
+                assert next_lease != lease and owner.turns.owns_turn(session, next_lease.turn_id)
+>               paused = await proxy.request("pause_goal")
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_stack_retry_running.py:82: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/runtime.py:360: in request
+    RuntimeRequest.decode(action).proxy_payload(
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.runtime_requests.RuntimeRequest'>, name = 'pause_goal'
+
+    @classmethod
+    def decode(cls, name: str) -> type[Self]:
+        try:
+            member = cls.__registry__[name]
+        except (KeyError, TypeError):
+>           raise ValueError(f"Unknown {cls.__name__} name: {name!r}") from None
+E           ValueError: Unknown RuntimeRequest name: 'pause_goal'
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/declared_family.py:123: ValueError
+=============================== warnings summary ===============================
+../../../../usr/lib/python3.14/site-packages/_pytest/config/__init__.py:1345
+  /usr/lib/python3.14/site-packages/_pytest/config/__init__.py:1345: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; pytest_asyncio
+    self._mark_plugins_for_rewrite(hook, disable_autoload)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_turn_runner.py::test_uncaught_failure_feedback_once_even_after_done[prior2]
+FAILED tests/test_turn_runner.py::test_actual_provider_failure_reports_started_input_once_without_retry
+FAILED tests/test_acp_private_nk_delivery.py::test_acp_private_does_not_overlap_owner_turn
+FAILED tests/test_stack_retry_running.py::test_native_retry_waits_for_current_response_without_replaying_unknown
+4 failed, 16 passed, 1 warning in 123.97s (0:02:03)

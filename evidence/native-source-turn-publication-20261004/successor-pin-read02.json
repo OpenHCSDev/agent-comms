@@ -1,0 +1,8 @@
+{
+  "initial_metadata_assertion": "FAILED: driver compared manifest file contents to its SHA, not a native/package failure; original tool result retained",
+  "corrected_manifest_sha256": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+  "installed_members_equal": 347,
+  "dependency_keeper_files_equal": 84,
+  "native_wholetrust": "Original read proof01 plus original NativePiRpcLaunch verification before each actual acquisition; unchanged package/source",
+  "qualification": "No initial metadata PASS claim; corrected read happened after controller launch"
+}

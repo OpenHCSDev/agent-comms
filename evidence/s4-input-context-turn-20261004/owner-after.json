@@ -1,0 +1,854 @@
+{
+  "revision": "2980b386f10c3f2a4aeb9f519e3422e7c9c9a507",
+  "modules": 734,
+  "parse_omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 322,
+      "name": "StartedInput",
+      "syntax": "ClassDef"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 81,
+      "name": "require_started",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 106,
+      "name": "matches_native",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 303,
+      "name": "matches_native",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 331,
+      "name": "require_started",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 81,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 331,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 116,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 314,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 343,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 317,
+      "name": "matches_native",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 316,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "line": 356,
+      "name": "matches_native",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 164,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 521,
+      "name": "require_started",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 139,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 140,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/native_input_record.py",
+      "line": 252,
+      "name": "require_recorded",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/native_input_record.py",
+      "line": 275,
+      "name": "require_recorded",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 112,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 370,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 448,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 449,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/thread_identity.py",
+      "line": 35,
+      "name": "require_recorded",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 366,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 47,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 69,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 70,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 604,
+      "name": "require_recorded",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 632,
+      "name": "require_recorded",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 609,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 610,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/turn_input_binding.py",
+      "line": 71,
+      "name": "matches_native",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 106,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 161,
+      "name": "resume_fork",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1079,
+      "name": "read",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 587,
+      "name": "source_delivery",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 185,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1358,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 257,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 280,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 658,
+      "name": "source_delivery",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 197,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 268,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 284,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 594,
+      "name": "source_delivery",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 595,
+      "name": "source_delivery",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 104,
+      "name": "resume_fork",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 519,
+      "name": "capture_input",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 648,
+      "name": "submitted_prompt",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 673,
+      "name": "source_delivery",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 737,
+      "name": "request_manifest",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 824,
+      "name": "observed_requests",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 947,
+      "name": "construction",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1083,
+      "name": "read",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 156,
+      "name": "read",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 999,
+      "name": "observed_requests",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 180,
+      "name": "read",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 999,
+      "name": "observed_requests",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1096,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1106,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 664,
+      "name": "matches_native",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 945,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1016,
+      "name": "observed_requests",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1140,
+      "name": "construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 545,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 850,
+      "name": "require_started",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1000,
+      "name": "observed_requests",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 77,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 663,
+      "name": "require_recorded",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_acp_failure.py",
+      "line": 126,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 132,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_provider_transport_feedback.py",
+      "line": 58,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_provider_transport_feedback.py",
+      "line": 110,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 283,
+      "name": "read",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 324,
+      "name": "read",
+      "syntax": "FunctionDef"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 106,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 109,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 543,
+      "name": "observed_requests",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1225,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1226,
+      "name": "construction",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1227,
+      "name": "construction",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 92,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 99,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 101,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 105,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 115,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 119,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 143,
+      "name": "submitted_prompt",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 144,
+      "name": "observed_requests",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 153,
+      "name": "observed_requests",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 154,
+      "name": "observed_requests",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 223,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 299,
+      "name": "read",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 306,
+      "name": "read",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 548,
+      "name": "observed_requests",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 549,
+      "name": "observed_requests",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 556,
+      "name": "observed_requests",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 567,
+      "name": "observed_requests",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 603,
+      "name": "observed_requests",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 630,
+      "name": "observed_requests",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 633,
+      "name": "observed_requests",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1230,
+      "name": "construction",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1231,
+      "name": "construction",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1232,
+      "name": "construction",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1233,
+      "name": "construction",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1248,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1274,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1277,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1287,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1289,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1294,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1435,
+      "name": "construction",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1577,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 227,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 259,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 261,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 264,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 267,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 333,
+      "name": "read",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 554,
+      "name": "observed_requests",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1082,
+      "name": "construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1087,
+      "name": "construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1234,
+      "name": "construction",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1235,
+      "name": "construction",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1284,
+      "name": "request_manifest",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 152,
+      "name": "observed_requests",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 159,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 256,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1094,
+      "name": "construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1109,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1143,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1437,
+      "name": "construction",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1598,
+      "name": "read",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 231,
+      "name": "source_delivery",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1095,
+      "name": "construction",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1436,
+      "name": "construction",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/test_retained_fork_first_input.py",
+      "line": 110,
+      "name": "StartedInput",
+      "syntax": "Name"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 184,
+      "name": "capture_input",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 103,
+      "name": "capture_input",
+      "syntax": "Attribute"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 360,
+      "name": "capture_input",
+      "syntax": "Attribute"
+    }
+  ],
+  "scope": "Python src/tests/tools; lexical declarations/references, not dynamic lease or JS source proof"
+}

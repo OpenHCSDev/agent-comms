@@ -1,0 +1,35 @@
+{
+  "command": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/c3-turn-authority-fixtures-20261004/installed-controls.py",
+    "-o",
+    "addopts=",
+    "-q",
+    "-s",
+    "--basetemp",
+    "/home/ts/.cache/agent-scratch/mendel-native-source640-installed03/private",
+    "tests/test_acp_private_nk_delivery.py::test_acp_private_does_not_overlap_owner_turn",
+    "tests/test_stack_retry_running.py::test_native_retry_waits_for_current_response_without_replaying_unknown"
+  ],
+  "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+  "private_root": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed03",
+  "source_head": "8c27ad4124745a71e7b1d3c069ae50f1483429e6",
+  "wheel_build_head": "2b3e08bb5fe4b754caa324da4343918db437eef8",
+  "native": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+  "external_provider_inputs": 0,
+  "public_inputs": 0,
+  "replayed_inputs": 0,
+  "timeout_seconds": 480,
+  "identity": {
+    "pid": 801828,
+    "start_time": 59420815
+  },
+  "outcome": {
+    "kind": "exited",
+    "code": 0
+  },
+  "returncode": 0,
+  "elapsed_seconds": 16.623298489023,
+  "controller_retired": true,
+  "remaining_group_members": []
+}

@@ -27,6 +27,7 @@ from agent_comms.pi_rpc import unique_fields
 from agent_comms.native_entries import NativeEntry
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_tools import CodingTool
+from agent_comms.pi_payloads import ReportedModel
 from agent_comms.message_reference import MessageReference
 from agent_comms.turn_context import FileProvenance, JournalProvenance, ToolCatalogSegment
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
@@ -77,6 +78,31 @@ class PairedRecallDesign:
         result['comparison_design'] = FieldCodec.encode(self)
         result['recall_inference'] = ScoredScenario.paired_inference(result['pairs'], self)
         return result
+
+    def model_alignment(self, alignment):
+        """Bind every observed selection to this supplied design.
+
+        Equal mixed-model sets in both arms are descriptive matches, not a
+        single-model design. Completion identities come from original journal
+        records; admissions borrow the already acquired diagnostic values.
+        Neither supplies a returned provider model or complete request capture.
+        """
+        for provider, model in alignment['completion_selection']['models']:
+            ReportedModel(provider=provider, id=model).require_selection(self.model)
+        models = tuple(point.model
+            for arm in alignment['input_requests'].values()
+            for request in arm['requests']
+            for point in request['budget']['observations'])
+        available = bool(models) and all(model is not None and model.display_name is not None
+                                         for model in models)
+        for model in models:
+            if model is not None and model.display_name is not None:
+                model.require_selection(self.model)
+        return {'evaluated': available,
+                'reason': 'All observed admission and completion selections match the supplied model'
+                          if available else 'Original admitted request model unavailable',
+                'scope': 'Observed original selections only; not complete capture, '
+                         'returned model, HTTP, capacity or study acceptance'}
 
     def construction_plan(self, sampling_seed: int):
         """Export prospective operands; never grant or launch a native turn.
@@ -312,6 +338,8 @@ class RecordedNativeProbes:
                 "captured_settings": configured,
                 "request_selection": request,
                 "completion_selection": completion,
+                "input_requests": {"candidate": a["input_request_measurements"],
+                                   "baseline": b["input_request_measurements"]},
                 "request_completion": terminals,
                 "sdk_manifest_changes": a["sdk_manifest"].changed_since(b["sdk_manifest"]),
                 "reason": "; ".join(unavailable) if unavailable else
@@ -594,8 +622,9 @@ class ScoredScenario(ScoreView):
         """Keep submitted SDK evidence distinct from labels and previews.
 
         The probe owns transform/source/refusal checks. This view only groups
-        its acquired observations against the frozen rounds. It cannot infer
-        an intended experimental arm or complete-history eligibility.
+        its acquired observations against the frozen rounds. An observed
+        constructor must agree with the declared arm; agreement cannot infer
+        complete transformed history or complete-history eligibility.
         """
         identities = tuple(item.identity for item in self.source.rounds)
 
@@ -610,6 +639,9 @@ class ScoredScenario(ScoreView):
                         for identity, original in evidence.items()}
         installations = {identity: original['construction']['condition_installation']
                          for identity, original in evidence.items()}
+        constructors = {identity: tuple(original.require_condition(self.condition.value)
+                                        for original in installation['installations'])
+                        for identity, installation in installations.items()}
         entry_selections = {identity: installation['entry_selection']
                             for identity, installation in installations.items()}
         admissions = {identity: original['construction']['request_budget']
@@ -619,6 +651,8 @@ class ScoredScenario(ScoreView):
         return {'evaluated': False, 'declared_condition': self.condition,
                 'bounded_sdk_application': group(applications),
                 'installed_sdk_source': group(installations),
+                'recorded_constructor_selection': group({identity: {'evaluated': bool(originals)}
+                    for identity, originals in constructors.items()}),
                 'sdk_entry_selection': group(entry_selections),
                 'native_request_admission': group(admissions),
                 'source_delivery': group(source_delivery),
@@ -667,14 +701,7 @@ class ScoredScenario(ScoreView):
                 'usage_records': len(available),
                 'expected_rounds': rounds, 'observed_rounds': observed_rounds,
                 'missing_rounds': missing_rounds,
-                'input_tokens': measured(usage.input for usage in available),
-                'output_tokens': measured(usage.output for usage in available),
-                'cache_read_tokens': measured(usage.cache_read for usage in available),
-                'cache_write_tokens': measured(usage.cache_write for usage in available),
-                'reported_total_tokens': measured(usage.total_tokens for usage in available),
-                'reasoning_tokens': measured(usage.reasoning for usage in available),
-                'normalized_cost': measured(usage.cost.total for usage in available
-                                           if usage.cost is not None)}
+                **{name: measured(values) for name, values in self.resource_metrics(available).items()}}
 
         return {'summaries': total(summaries), 'assistants': total(assistants),
                 'combined': total(summaries, assistants),
@@ -687,6 +714,87 @@ class ScoredScenario(ScoreView):
                          'observed subtotals do not estimate missing work or prove no summary work; '
                          'SDK-normalized cost is not billed spend; no unjournaled retries, '
                          'cache-saving comparison, HTTP accounting or end-to-end timing'}
+
+    @staticmethod
+    def resource_metrics(usages):
+        """Project original usage once; the same fields serve every comparison.
+
+        Output already includes reasoning. A missing cost or token field stays
+        absent; normalized cost never becomes billed spend.
+        """
+        usages = tuple(usages)
+        return {'input_tokens': tuple(usage.input for usage in usages),
+                'output_tokens': tuple(usage.output for usage in usages),
+                'cache_read_tokens': tuple(usage.cache_read for usage in usages),
+                'cache_write_tokens': tuple(usage.cache_write for usage in usages),
+                'reported_total_tokens': tuple(usage.total_tokens for usage in usages),
+                'reasoning_tokens': tuple(usage.reasoning for usage in usages),
+                'normalized_cost': tuple(usage.cost.total for usage in usages if usage.cost is not None)}
+
+    @staticmethod
+    def resource_difference(candidate, baseline):
+        """Compare complete observations, with zero distinct from unavailable."""
+        evaluated = candidate['evaluated'] and baseline['evaluated']
+        relative = evaluated and baseline['value'] != 0
+        return {'evaluated': evaluated, 'candidate': candidate, 'baseline': baseline,
+                'difference': candidate['value'] - baseline['value'] if evaluated else None,
+                'relative_reduction': {'evaluated': relative,
+                    'value': (baseline['value'] - candidate['value']) / baseline['value'] if relative else None,
+                    'reason': 'Original baseline is zero' if evaluated and not relative else
+                              'Complete original arm observations required' if not evaluated else
+                              'Reduction relative to the original baseline'}}
+
+    @classmethod
+    def paired_resources(cls, candidate, baseline):
+        """Compare the original totals already acquired by both arm readers.
+
+        Scope names come from recorded_resources; metric names come from its
+        usage projection. No second roster, reader or incomplete-arm estimate.
+        """
+        groups = {}
+        for name, original in candidate.items():
+            if name == 'scope':
+                continue
+            control = baseline[name]
+            if original['expected_rounds'] != control['expected_rounds']:
+                raise ValueError('Paired resources require the same frozen rounds')
+            groups[name] = {'candidate': original, 'baseline': control,
+                'metrics': {metric: cls.resource_difference(original[metric], control[metric])
+                            for metric in cls.resource_metrics(())}}
+        return {'groups': groups,
+                'scope': 'Descriptive paired original usage totals; SDK-normalized cost is not billing; '
+                         'summary and shared source-input scopes are not independent arm costs; '
+                         'no intervention, registered cost margin or end-to-end timing acceptance'}
+
+    @classmethod
+    def paired_resource_batch(cls, comparisons):
+        """Sum complete trajectory observations, never drop missing pairs.
+
+        The ratio is reduction in aggregate resources, not mean per-pair
+        percentages. Original pair details and partial subtotals stay visible.
+        """
+        def aggregate(samples):
+            supplied = tuple(item for item in samples if item['evaluated'])
+            subtotals = tuple(item['observed_value'] for item in samples
+                             if item['observed_value'] is not None)
+            complete = len(supplied) == len(samples)
+            return {'evaluated': complete,
+                    'value': sum(item['value'] for item in supplied) if complete else None,
+                    'expected_trajectories': len(samples), 'observed_trajectories': len(supplied),
+                    'observed_value': sum(subtotals) if subtotals else None}
+
+        groups = {}
+        for name in comparisons[0]['paired_resources']['groups']:
+            samples = tuple(pair['paired_resources']['groups'][name] for pair in comparisons)
+            groups[name] = {'trajectories': len(samples), 'samples': samples,
+                'metrics': {metric: cls.resource_difference(
+                    aggregate(tuple(sample['metrics'][metric]['candidate'] for sample in samples)),
+                    aggregate(tuple(sample['metrics'][metric]['baseline'] for sample in samples)))
+                    for metric in cls.resource_metrics(())}}
+        return {'groups': groups,
+                'scope': 'Aggregate descriptive paired original usage; missing trajectories keep totals unavailable; '
+                         'observed subtotals are not estimates; no billing, independence, '
+                         'registered margin, end-to-end timing or study acceptance'}
 
     def paired_quality(self, baseline, evidence, baseline_evidence, alignment):
         """Original alignment owns pairing; every frozen question stays visible."""
@@ -766,11 +874,9 @@ class ScoredScenario(ScoreView):
                 if not alignment['evaluated']:
                     unavailable.append(f"Pair {index + 1}, round {identity}: original alignment unavailable")
                     continue
-                # request_alignment already requires all admitted observations
-                # in both arms to match. Bind that selection to the supplied
-                # model through the same PiModel owner, never registry settings.
-                original = alignment['request_selection']['candidate']['observations'][0]
-                original.model.require_selection(design.model)
+                models = design.model_alignment(alignment)
+                if not models['evaluated']:
+                    unavailable.append(f"Pair {index + 1}, round {identity}: {models['reason']}")
             quality = pair['paired_quality']['unassisted_recall']
             frozen = pair['candidate']['measurements'].get(Measurement.RECALL.value)
             measured = quality['measurements']['candidate'].get(Measurement.RECALL.value)
@@ -1036,6 +1142,8 @@ class RecallScenario:
         return {"candidate": candidate, "baseline": baseline_result,
                 "alignment": alignment,
                 "paired_quality": score.paired_quality(control, original, baseline_original, alignment),
+                "paired_resources": score.paired_resources(candidate['recorded_resources'],
+                                                            baseline_result['recorded_resources']),
                 "condition_construction": {"evaluated": all(item['evaluated'] for item in constructions),
                     "candidate": constructions[0], "baseline": constructions[1],
                     "scope": "Matched construction requires both original arm relations; partial SDK evidence is not full eligibility"},
@@ -1055,6 +1163,7 @@ class RecallScenario:
                             for candidate, control in pairs)
         return {'scenario': self.identity, 'pairs': comparisons,
                 'paired_quality': ScoredScenario.paired_batch(comparisons),
+                'paired_resources': ScoredScenario.paired_resource_batch(comparisons),
                 'study_acceptance': {'evaluated': False,
                     'reason': 'Recorded pairs do not supply a registered design, verified '
                               'condition construction or complete cost/end-to-end journeys'}}

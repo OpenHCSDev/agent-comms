@@ -21,6 +21,7 @@ from agent_comms.queued_input import InitialInput
 from agent_comms.store_files import _store_lock
 from delivery_owner_fixture import canonical_agent
 from compaction_loopback import LoopbackProvider
+from native_proof_cases import read_proof_rows
 
 
 class NativeBackendFixture:
@@ -56,22 +57,55 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
         assert result.outcome.successful, result.stderr.decode()
         return FieldCodec.decode(NativeWitness, json.loads(result.stdout))
 
+    @staticmethod
+    async def attach_saved_owner(agent, *, project, session):
+        """Restore this saved declaration before acquiring its live process."""
+        def acquire():
+            comms = agent._comms
+            arguments = agent.sessions.agent_args
+            original = comms.threads.claim_thread(
+                agent.sessions.thread_name_for(str(project)), tags=frozenset({"acp"}),
+                worktree=str(project), start_at_latest=True,
+                model=arguments.model, thinking_level=arguments.thinking,
+                auto_title_pending=True,
+            )
+            # This original stopped-restoration producer commits membership;
+            # a reader or an active fixture must never invent participant rows.
+            comms.threads.restore_stopped(comms.registry.snapshot(), (original.name,))
+            owned = comms.owners.acquire_thread(original.name, owner_pid=os.getpid())
+            return comms.threads.attach_session(owned, str(session))
+
+        thread = await Coordination.run_worker(acquire)
+        await agent.sessions.bind_owned(thread, thread.name)
+        agent.inputs.ensure_live_drain(thread.name)
+        return thread.name
+
+    async def bind_saved_owner(self, agent, *, project, session):
+        """Acquire the restored SDK source's original attested native child."""
+        session_id = await self.attach_saved_owner(agent, project=project, session=session)
+        original = await Coordination.run_worker(partial(agent._comms.registry.require, session_id))
+        await agent.turns.prepare_selected_session(session_id, original)
+        child = agent.turns.persistent_backends[session_id].custody.child.proc
+        self.children.append(child)
+        return session_id
+
+    def native_arguments(self, options=("--no-tools",)):
+        """One external native argument declaration for saved/ACP consumers."""
+        return ("--provider", "response-local", "--model", "fixture", "--thinking", "off",
+                "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+                "--no-prompt-templates", *options)
+
     @asynccontextmanager
-    async def open_owner(self):
+    async def open_owner(self, *, runtime_enabled=False, auto_wake=False,
+                         native_options=("--no-tools",), client=None):
         """Acquire the real saved ACP owner and attested idle native child."""
         agent = canonical_agent(
-            Comms(self.root), auto_wake=False, agent_bin="pi",
-            agent_args=["--provider", "response-local", "--model", "fixture", "--thinking", "off",
-                        "--offline", "--no-extensions", "--no-skills", "--no-context-files",
-                        "--no-prompt-templates", "--no-tools"],
+            Comms(self.root), auto_wake=auto_wake, runtime_enabled=runtime_enabled, agent_bin="pi",
+            agent_args=self.native_arguments(native_options),
         )
+        agent.on_connect(client)
         try:
-            session_id = (await agent.new_session(cwd=str(self.project))).session_id
-            original = agent._comms.registry.require(session_id)
-            attached = agent._comms.threads.attach_session(original, str(self.session))
-            await agent.turns.prepare_selected_session(session_id, attached)
-            child = agent.turns.persistent_backends[session_id].custody.child.proc
-            self.children.append(child)
+            session_id = await self.bind_saved_owner(agent, project=self.project, session=self.session)
             yield agent, session_id
         finally:
             await agent.shutdown()
@@ -124,20 +158,7 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
         async with asyncio.timeout(25):
             async for event in backend.stream_agent_events(
                 "pi",
-                [
-                    "--provider",
-                    "response-local",
-                    "--model",
-                    "fixture",
-                    "--thinking",
-                    "off",
-                    "--offline",
-                    "--no-extensions",
-                    "--no-skills",
-                    "--no-context-files",
-                    "--no-prompt-templates",
-                    "--no-tools",
-                ],
+                self.native_arguments(),
                 text,
                 str(self.project),
                 session_file=str(self.session),
@@ -244,4 +265,12 @@ async def native_backend_fixture(tmp_path):
             for task in tuple(connections):
                 task.cancel()
             await asyncio.gather(*connections, return_exceptions=True)
-            assert all(not child.alive() for child in owner.children)
+            assert all(child.retired for child in owner.children)
+            print(json.dumps({
+                "saved_native_fixture": str(root),
+                "localhost_posts": provider.posts,
+                "native_input_proofs": len(read_proof_rows(session))
+                    if Path(str(session) + ".input-proof").is_file() else 0,
+                "children": [FieldCodec.encode(child.identity) for child in owner.children],
+                "children_retired": True,
+            }))

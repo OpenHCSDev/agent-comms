@@ -19,6 +19,7 @@ from .errors import RelationViolationError
 from .native_admission_rules import (
     GoalRegistryAdmissionCheck,
     GoalRegistryIdentityCheck,
+    RegistryAdmissionCheck,
     RegistryIdentityCheck,
 )
 from .registry_document import RegistrySnapshot
@@ -98,9 +99,12 @@ class RegistryOwner:
         owner.require_snapshot(snapshot, reason)
         return owner
 
-    def _require_current(self, actual: Thread, admission: int | None, reason: str) -> None:
+    def _require_current(
+        self, actual: Thread, admission: int | None, reason: str,
+        check: type[RegistryIdentityCheck],
+    ) -> None:
         try:
-            self.check_type(
+            check(
                 expected=self.thread,
                 actual=actual,
                 expected_admission=self.admission_generation,
@@ -111,18 +115,39 @@ class RegistryOwner:
             raise StaleFence(f"{reason}: {error}") from error
 
     def require_snapshot(self, snapshot: RegistrySnapshot, reason: str) -> None:
+        self._snapshot_owner(snapshot, reason, self.check_type)
+
+    def _snapshot_owner(
+        self, snapshot: RegistrySnapshot, reason: str,
+        check: type[RegistryIdentityCheck],
+    ) -> Thread:
         try:
             actual = snapshot.require_active(self.thread.name)
         except RelationViolationError as error:
             raise StaleFence(reason) from error
-        self._require_current(actual, snapshot.admission_generations.get(self.thread.name), reason)
+        self._require_current(actual, snapshot.admission_generations.get(self.thread.name), reason, check)
+        return actual
+
+    def require_source_snapshot(self, snapshot: RegistrySnapshot) -> Thread:
+        """Observe this admitted turn's source without admitting another input.
+
+        Goal authority belongs to input admission. A legitimate goal change
+        during this turn does not revoke its source observation; the exact
+        lease, process, admission and source/configuration must still match.
+        """
+        self.require_active_turn()
+        return self._snapshot_owner(
+            snapshot, "Native source owner changed before publication", RegistryAdmissionCheck,
+        )
 
     def require_registry(self, registry: Registration) -> None:
         try:
             actual, admission = registry.live_owner_with_admission(self.thread.name)
         except (RelationViolationError, ValueError) as error:
             raise StaleFence("recipient registry owner stopped or changed") from error
-        self._require_current(actual, admission, "recipient registry owner stopped or changed")
+        self._require_current(
+            actual, admission, "recipient registry owner stopped or changed", self.check_type,
+        )
 
 
 class GoalLaunchOwner(RegistryOwner):

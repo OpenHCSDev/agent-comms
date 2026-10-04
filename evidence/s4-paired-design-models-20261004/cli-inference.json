@@ -1,0 +1,39 @@
+{
+  "recall_inference": {
+    "evaluated": false,
+    "expected_trajectories": 2,
+    "observed_trajectories": 0,
+    "reasons": [
+      "Pair 1, round r1: original alignment unavailable",
+      "Pair 1, round r2: original alignment unavailable",
+      "Pair 1, round r3: original alignment unavailable",
+      "Pair 1: complete unassisted recall unavailable",
+      "Pair 2, round r1: original alignment unavailable",
+      "Pair 2, round r2: original alignment unavailable",
+      "Pair 2, round r3: original alignment unavailable",
+      "Pair 2: complete unassisted recall unavailable"
+    ],
+    "method": "Paired trajectory percentile bootstrap with outward empirical order statistics",
+    "confidence": 0.95,
+    "margin": -0.02,
+    "bootstrap_samples": 1000,
+    "bootstrap_seed": 17,
+    "scope": "Conditional recall inference on supplied complete trajectories; no registration, independence, intervention, cost, timing or study acceptance grant"
+  },
+  "comparison_design": {
+    "oracle": {
+      "kind": "file",
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-paired-design-models/oracle.json",
+      "sha256": "71a415b30200f49736fdcf2656cf95ee10c33857ef9625b2e6dfb9c18d908a35"
+    },
+    "candidate": "task-memory",
+    "baseline": "bounded",
+    "model": "original/model",
+    "sample_count": 2,
+    "confidence": 0.95,
+    "recall_margin": -0.02,
+    "bootstrap_samples": 1000,
+    "bootstrap_seed": 17
+  },
+  "scope": "Selected fields of original CLI output; complete raw stdout remains at the receipt raw_root with its original hash"
+}

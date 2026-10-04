@@ -1,0 +1,10 @@
+.{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed03/private/saved-native-owner0/wire", "localhost_posts": 1, "native_input_proofs": 1, "children": [{"pid": 802018, "start_time": 59421278}], "children_retired": true}
+.{"saved_native_fixture": "/home/ts/.cache/agent-scratch/mendel-native-source640-installed03/private/saved-native-owner1/wire", "localhost_posts": 2, "native_input_proofs": 3, "children": [{"pid": 803701, "start_time": 59422062}], "children_retired": true}
+
+=============================== warnings summary ===============================
+../../../../usr/lib/python3.14/site-packages/_pytest/config/__init__.py:1345
+  /usr/lib/python3.14/site-packages/_pytest/config/__init__.py:1345: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; pytest_asyncio
+    self._mark_plugins_for_rewrite(hook, disable_autoload)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2 passed, 1 warning in 13.53s

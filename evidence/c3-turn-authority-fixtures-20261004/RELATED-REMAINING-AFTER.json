@@ -1,0 +1,1128 @@
+{
+  "revision": "bc960bf18bb602569f2e08100f6b8840a422429d",
+  "parser": "original audit.findings.Package.load",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 316,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 365,
+      "omissions": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 181,
+      "node": "AsyncFunctionDef",
+      "source": "@handles(events.Error)"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 224,
+      "node": "AsyncFunctionDef",
+      "source": "@handles(events.Done)"
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 191,
+      "node": "Attribute",
+      "source": "document.shared_state"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 318,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 90,
+      "node": "Attribute",
+      "source": "native.execution.source_assignment_ids"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 362,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "src/agent_comms/execution_store.py",
+      "line": 143,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "src/agent_comms/execution_store.py",
+      "line": 115,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 363,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True, kw_only=True)"
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 128,
+      "node": "Name",
+      "source": "UpdateGoalRuntimeRequest"
+    },
+    {
+      "path": "src/agent_comms/goal_states.py",
+      "line": 143,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 176,
+      "node": "FunctionDef",
+      "source": "def shared_state(self, keys: tuple[str, ...]) -> type[InputAttempt] | None:"
+    },
+    {
+      "path": "src/agent_comms/native_input_record.py",
+      "line": 93,
+      "node": "FunctionDef",
+      "source": "def source_assignment_ids(self, db, input_id) -> tuple[str, ...]:"
+    },
+    {
+      "path": "src/agent_comms/native_input_record.py",
+      "line": 179,
+      "node": "Attribute",
+      "source": "self.source_assignment_ids"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 494,
+      "node": "Attribute",
+      "source": "document.shared_state"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 513,
+      "node": "Attribute",
+      "source": "self.progress.report_failure"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 178,
+      "node": "Attribute",
+      "source": "self.execution.source_assignment_ids"
+    },
+    {
+      "path": "src/agent_comms/response_conversation.py",
+      "line": 54,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "src/agent_comms/response_conversation.py",
+      "line": 38,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "src/agent_comms/routing.py",
+      "line": 133,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "src/agent_comms/routing.py",
+      "line": 134,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 317,
+      "node": "ClassDef",
+      "source": "@dataclass(frozen=True, kw_only=True)"
+    },
+    {
+      "path": "src/agent_comms/schedule_rules.py",
+      "line": 79,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "src/agent_comms/selected_source_batch.py",
+      "line": 107,
+      "node": "FunctionDef",
+      "source": "def response_messages(self, text: str, sender: str) -> tuple[Message, ...]:"
+    },
+    {
+      "path": "src/agent_comms/selected_source_batch.py",
+      "line": 61,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "src/agent_comms/selected_source_batch.py",
+      "line": 89,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 292,
+      "node": "Attribute",
+      "source": "row.execution.source_assignment_ids"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 208,
+      "node": "Attribute",
+      "source": "participant.batch.response_messages"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 124,
+      "node": "AsyncFunctionDef",
+      "source": "async def report_failure(self, error: Exception) -> None:"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 354,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "src/agent_comms/wake.py",
+      "line": 182,
+      "node": "FunctionDef",
+      "source": "def derive_exact_reply_target(message: Message | None) -> str | None:"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 194,
+      "node": "AsyncFunctionDef",
+      "source": "@asynccontextmanager"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 184,
+      "node": "FunctionDef",
+      "source": "def saved_inputs(self):"
+    },
+    {
+      "path": "tests/native_context_reader_journey.py",
+      "line": 46,
+      "node": "Attribute",
+      "source": "fixture.saved_inputs"
+    },
+    {
+      "path": "tests/native_context_reader_journey.py",
+      "line": 152,
+      "node": "Attribute",
+      "source": "fixture.saved_inputs"
+    },
+    {
+      "path": "tests/native_context_reader_journey.py",
+      "line": 167,
+      "node": "Name",
+      "source": "native_backend_fixture"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 94,
+      "node": "Attribute",
+      "source": "original.execution.source_assignment_ids"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 108,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 731,
+      "node": "Attribute",
+      "source": "inputs[0].execution.source_assignment_ids"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 1262,
+      "node": "Attribute",
+      "source": "reserved[0].execution.source_assignment_ids"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 1331,
+      "node": "Attribute",
+      "source": "row.execution.source_assignment_ids"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 236,
+      "node": "Attribute",
+      "source": "row.execution.source_assignment_ids"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 615,
+      "node": "Attribute",
+      "source": "row.execution.source_assignment_ids"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 789,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1205,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 765,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 998,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1545,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 141,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 121,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 196,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 593,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 134,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 49,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 116,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 129,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 85,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 113,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 195,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 158,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 25,
+      "node": "Name",
+      "source": "native_backend_fixture"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 53,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 56,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 90,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 136,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_backend_native_output.py",
+      "line": 30,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_backend_native_output.py",
+      "line": 56,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_backend_native_output.py",
+      "line": 115,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_backend_native_output.py",
+      "line": 144,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_backend_native_watchdog.py",
+      "line": 23,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_backend_native_watchdog.py",
+      "line": 147,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_backend_native_watchdog.py",
+      "line": 60,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 59,
+      "node": "Name",
+      "source": "native_backend_fixture"
+    },
+    {
+      "path": "tests/test_coordination_response.py",
+      "line": 111,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "tests/test_goal_block_reason.py",
+      "line": 151,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 158,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 239,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 278,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 301,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 325,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 259,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 159,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 279,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 326,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_goal_history.py",
+      "line": 43,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_history.py",
+      "line": 96,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_history.py",
+      "line": 117,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_history.py",
+      "line": 149,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_input_review.py",
+      "line": 117,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_mentions.py",
+      "line": 197,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 141,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 118,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 113,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 145,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 171,
+      "node": "Name",
+      "source": "UpdateGoalRuntimeRequest"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 172,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 177,
+      "node": "Name",
+      "source": "UpdateGoalRuntimeRequest"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 189,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "line": 177,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_owner_pause.py",
+      "line": 24,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_owner_pause.py",
+      "line": 61,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 281,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 37,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 214,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 242,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 316,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 202,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_resume.py",
+      "line": 221,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "line": 73,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 286,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 475,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 596,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 556,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_goals.py",
+      "line": 36,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goals.py",
+      "line": 63,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_goals.py",
+      "line": 92,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_mentions.py",
+      "line": 29,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "tests/test_native_arguments.py",
+      "line": 164,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 191,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 573,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 442,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 512,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 734,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 91,
+      "node": "Attribute",
+      "source": "original.execution.source_assignment_ids"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 88,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 152,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 168,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 297,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 361,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 237,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 355,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 143,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 189,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 238,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 84,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 144,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 86,
+      "node": "Attribute",
+      "source": "owner.saved_inputs"
+    },
+    {
+      "path": "tests/test_native_tool_declarations.py",
+      "line": 151,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_outbound_native_journey.py",
+      "line": 137,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 28,
+      "node": "Attribute",
+      "source": "document.shared_state"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 29,
+      "node": "Attribute",
+      "source": "document.shared_state"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 30,
+      "node": "Attribute",
+      "source": "document.shared_state"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 31,
+      "node": "Attribute",
+      "source": "document.shared_state"
+    },
+    {
+      "path": "tests/test_preflight_feedback.py",
+      "line": 55,
+      "node": "Attribute",
+      "source": "after.shared_state"
+    },
+    {
+      "path": "tests/test_project.py",
+      "line": 119,
+      "node": "Name",
+      "source": "native_backend_fixture"
+    },
+    {
+      "path": "tests/test_restart_queue.py",
+      "line": 214,
+      "node": "Attribute",
+      "source": "fixture.saved_inputs"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 58,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_runtime_goal_edit.py",
+      "line": 28,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 74,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 436,
+      "node": "Attribute",
+      "source": "progress.report_failure"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 414,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_execution_native.py",
+      "line": 146,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 229,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 81,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 143,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 151,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_observation_native.py",
+      "line": 161,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 230,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_selected_source_batch.py",
+      "line": 88,
+      "node": "Attribute",
+      "source": "stage.execution.source_assignment_ids"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 562,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 114,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 132,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 147,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 166,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 198,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 242,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 256,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 335,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 352,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 370,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 226,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 416,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 633,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 61,
+      "node": "Attribute",
+      "source": "row.execution.source_assignment_ids"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 83,
+      "node": "Name",
+      "source": "PausedGoalAction"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 91,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 263,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 66,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 120,
+      "node": "Attribute",
+      "source": "native.saved_inputs"
+    },
+    {
+      "path": "tests/test_wake.py",
+      "line": 103,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "tests/test_wake.py",
+      "line": 115,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "tests/test_wake.py",
+      "line": 386,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "tests/test_wake.py",
+      "line": 391,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "tests/test_wake.py",
+      "line": 413,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    },
+    {
+      "path": "tests/test_wake.py",
+      "line": 381,
+      "node": "Name",
+      "source": "derive_exact_reply_target"
+    }
+  ]
+}

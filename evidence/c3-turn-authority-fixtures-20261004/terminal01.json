@@ -1,0 +1,11 @@
+{
+  "started": 1791111187.147257,
+  "finished": 1791111190.8965926,
+  "seconds": 3.7493367195129395,
+  "returncode": 4,
+  "source_head": "51ce17b544c58482fc4155d97a3e254a0790749c",
+  "log": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/c3-turn-authority-fixtures-20261004/installed01.log",
+  "scratch": "/home/ts/.cache/agent-scratch/mendel-c3-turn-authority633-installed01",
+  "scope": "SerialchangedfixtureSDK/native/localhost; externalprovider/public/replay0",
+  "native_inputs": "actualcontrolledfixtureinputs; counts in originalprivatejournals/assertions, notzero claim"
+}

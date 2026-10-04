@@ -1,0 +1,88 @@
+{
+  "scope": "Read completed639 native SDK event through original public projection owner and changed probe",
+  "implementation": "aaf54d81",
+  "recorded_probe": {
+    "session": {
+      "sessionId": "01a106d2-1002-75cf-b904-9cf7dccdd91c",
+      "sessionFile": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-sdk-selection-admission-source/rpc-publication/sdk/sessions/2026-10-04T12-09-52-387Z_01a106d2-1002-75cf-b904-9cf7dccdd91c.jsonl"
+    },
+    "input_id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "answer_entry_id": "2a0e88d7",
+    "checkpoint": null,
+    "sdk_context": {
+      "kind": "file",
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-sdk-selection-admission-source/rpc-publication/contexts/context-f2a7bb302a0cd22770c8805508f62bb6aefa8a75d042df9612f7af5bcd300114.json",
+      "sha256": "d8e265cf25b0ab649fbd857dff530339e10fa22cd15a1e46fe0bd7229ccd96e6"
+    },
+    "context_manifest": {
+      "kind": "file",
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-sdk-selection-admission-source/rpc-publication/original-manifest.json",
+      "sha256": "64c6ac438e905bf5e209ca4aa918683c537acf845a5cd866bd63a4deba2d4f99"
+    },
+    "sdk_segment_bytes": {
+      "kind": "file",
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-sdk-selection-admission-source/rpc-publication/contexts/segments-f2a7bb302a0cd22770c8805508f62bb6aefa8a75d042df9612f7af5bcd300114.json",
+      "sha256": "0a4734b074b7e91736e799c3614d774bf791b598994ed4fedb8ccfe93b143614"
+    },
+    "submitted_inputs": null,
+    "fork_journal": null,
+    "request_observations": null,
+    "condition_observation": {
+      "kind": "file",
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-sdk-selection-admission-source/rpc-publication/observation.jsonl",
+      "sha256": "73f2e18d69eb603accc82f9db4b934342442b927a5d45a1a5db5a3cc1c7b3e95"
+    },
+    "sdk_observation": {
+      "kind": "file",
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-sdk-wire-public-projection/original-emitted-event.json",
+      "sha256": "4016f354259d9764cfd2c82991a3ecfa05ac0bd9911b7e7843d7293d152c5ac0"
+    }
+  },
+  "request_id": "8a5954f1-f0af-4b22-8f8e-8fbd3dac78b0",
+  "sdk_segments": 5,
+  "public_capture_roots": 2,
+  "sdk_bytes_verified": true,
+  "converter_request_binding": true,
+  "original_sdk_entry_selection": {
+    "evaluated": true,
+    "observations": [
+      {
+        "evaluated": true,
+        "source": {
+          "kind": "journal",
+          "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-sdk-selection-admission-source/rpc-publication/sdk/sessions/2026-10-04T12-09-52-387Z_01a106d2-1002-75cf-b904-9cf7dccdd91c.jsonl",
+          "entries": [
+            "06159ebf",
+            "d3f34f65",
+            "f7d65d8b",
+            "0967dff3",
+            "2dc97fd9"
+          ]
+        },
+        "original_message_entries": [
+          "06159ebf",
+          "d3f34f65",
+          "f7d65d8b"
+        ],
+        "selected_message_entries": [
+          "06159ebf",
+          "d3f34f65",
+          "f7d65d8b"
+        ],
+        "unselected_message_entries": [],
+        "all_original_message_entries_selected": true,
+        "scope": "Original SDK entry-based construction before conversion; not complete transformed content, provider token capacity, HTTP bytes or a registered intervention"
+      }
+    ],
+    "scope": "SDK selected source before this original input; source selection is distinct from transform/request admission and provider capacity"
+  },
+  "original_hashes_verified": 19,
+  "new_native_processes": 0,
+  "new_inputs": 0,
+  "provider_calls": 0,
+  "packages": 0,
+  "active_observer_hook_exercised": false,
+  "enrolled_ACP_wire_publication_qualified": false,
+  "capacity_qualified": false,
+  "study_qualified": false
+}
