@@ -1,41 +1,27 @@
-## Current: corrected442 merged; ordinary440 live; receiving successor follows — 2026-10-04
+## Current integration and live acceptance — 2026-10-04
 
-Parent merged exact442 b791d03f as cb9bd5c89e821f45b53d465d38d11894336fa406.
-Required run37239181602 independently names that final head and passed.
-All13 new result keeper hashes and all17 historical keeper hashes were matched;
-source/tests/tools/pins are byte-equal the executed4449 control checkpoint.
-The corrected same-App saved/wire29-check result remains10.636214859900065s.
-Sch owns444 normal actual-main receiving with corrected wheel ec36, after exact
-source/build-input relations and a fresh eligible-holder purpose. Old8acf is
-historical. Current public334/ordinary440 is unchanged; merge is not installation
-or a second App run. Heis's next443 projection work is a separate Draft/source
-branch and must not be used as the frozen442 qualification source.
+This section is the current delivery state. The records below preserve earlier
+source, execution and disposition evidence; their old pending statuses do not
+replace this section. The full original goal remains active.
 
-Bohr independently closed442 lifecycle a5687788/readback865c545a. Parent matched
-both SHA values:1470 bytes/modes/readlinks,69 origins and390 protected originals
-are exact, fresh230-process holder references/gaps are zero, and19 shared native
-public-owner environment references remain preserved. No second launch or new
-holder purpose follows from closure.
+| Work | Verified state | Next actual boundary |
+| --- | --- | --- |
+| Original named backlog | Core262/270/272 and ToAd50/110/120/121/123/124 merges, including original T2 deletion08bc602, are ancestors of actual Corea38c06de and ToAdcb9bd5c8. Closed271/53/116/122 retain their documented superseded scopes. | Preserve those features in the complete current installed workflow; do not restart competing implementation. |
+| Ordinary live runtime | Public334/current440 remains unchanged; ordinary isolated display/Undo/channel/return passed all18 checks in62.444762s. | Parent owns the next receiving publication and ordinary default acceptance. This is not complete continuous workflow or performance proof. |
+| Corrected native history/checkpoint | 441 and corrected442 merged. One original App/two control owners passed29 checks in10.6362148599s. Independent1470/69/390 restoration and whole purpose close verified. | Sch444 receives corrected ec36, not historical8acf. No repeated App is needed for unchanged qualified source. |
+| Ordinary receiving444 | Source union matches actual merged442; retained Core5f/ToAdec36/Text73d/NRA8d assets verified. Parent matched all51 prepared canonical files and modes. | Sch normally follows merged Corea38c06de and updates its one changed canonical publisher member. Bohr supplies the fresh specific existing-holder preparation purpose; no old closed W6 loan or public334 access. |
+| W6 authentic annotation | One localhost ACP input completed; original leased request, file ranges and two contained sentence spans acquired. Run ended before labels/App on sentence-versus-whole-file oracle. Whole holder and7a execution purpose independently closed; request/source preserved. | Einstein owns corrected GUI continuation from the retained request with zero further input, plus separate historical read/search/export, worker/schema and W7/W8 acceptance. Full W6 is not Ready. |
+| S4 configured source | 662 exact7559bfe merged as Corea38c06de after exact required Debt success. Configured Sol/HIGH task-memory fork returned its distinct answer; strict SDK-to-wire measurement refused tool-catalog projection. Whole THIN540/086 execution purpose independently closed. | Arendt owns complete configured measurement with corrected original JSON-boundary capture. Authored correction passed; no corrected configured run, matched study, HTTP/capacity or fullS4 claim. |
+| Preparation/performance | Heis443 source projects both speculative paths through original CategoryProjection, preserving transport intervals/rounds and source/demand retirement. Source reviewed; no runtime qualification. | Heis owns affected installed prefetch/continuous reader acceptance and full velocity/reversal/growing-End/warm4/16/32/64 scope. Native RichVisual attribution remains unresolved; no CPU/smoothness claim. |
+| Resources | Latest measured home7.4GiB/root6.2GiB free, RAM available10.4GiB, swap used16GiB. Parent generated outputs56MB are retained proofs, not GiB growth. | Bohr owns cleanup and producer closure. Rollouts are excluded; no duplicate builds, new environments or invented caps. |
 
-W6 authentic GUI source4341e0a61f6/productbee4062e is separately prepared.
-Parent read the complete controlaaf668c3 and matched operands3714dbe1/new ToAd
-wheel57bf33d9. It uses original open_owner once, explicit authored system-file
-loading and one localhost ACP input; actual sealed request/source spans and
-contains_span supply the two ranges. Original GUI USER corrections must traverse
-ACP, stored effective HumanLabel and section refresh. Controlled ModelLabel rows
-remain uncalibrated/defaultOFF. This is source approval for a future exact
-eligible-holder purpose plus matching7a custody, not an execution or historical
-ReferenceNode pass. Prior03/04/90s results remain unchanged. The new W6 wheel is
-not the corrected442 ordinary wheel; its newer normal-main merge still belongs
-to Einstein's eventual integration.
+ParentDocs432 stays Draft: its APPEND_SYSTEM change is a forced package asset
+and is not byte-equal to retained5f. It must not silently enter the receiving
+package relation. Existing public source/history/auth/UNKNOWN and consumed
+operators remain protected. Exact required Debt governs merge; broad CI remains
+deferred and is not claimed passed.
 
-Arendt662 published0ccac82b/source0ac59 and received distinct THIN540
-execution/import-only purpose1dcfe620. Parent matched the immutable issued hash
-and actual command: one terse selected Sol/HIGH task-memory input on an SDK fork
-of the existing completedcut3, with original InstalledSource/archive declaration.
-Public334's interpreter is only a snapshot decoder. No compaction, UNKNOWN replay,
-package change or30-pair/USD75 study is authorized. Sch086 renewal is required
-before native execution; no functional result is claimed from the grant.
+## Historical integration evidence
 
 Parent retired its unused standalone channel_recovery_physical_journey wrapper.
 The original ToAd ChannelLifetimeJourney/review_channel_lifetime owns that
