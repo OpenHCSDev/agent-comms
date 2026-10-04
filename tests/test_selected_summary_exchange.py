@@ -22,6 +22,7 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_records import SelectedSummarySource
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.pi_vocabulary import ManualCompactionReason
 from agent_comms.selected_source import SessionRevision
 from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown, SelectedSummarySlot
 
@@ -95,6 +96,7 @@ async def retained_summary(native_backend):
             owner=owner,
             expected_package=expected_package,
             tokens_before=preparation.tokens_before,
+            reason=ManualCompactionReason,
             **options,
         )
 
@@ -616,6 +618,7 @@ async def test_retained_native_summary_preserves_source_and_blocks_replay(native
                 custom_instructions="Preserve the two original retained questions",
                 idle_timeout_seconds=15,
                 on_event=observed,
+                reason=ManualCompactionReason,
             )
         assert isinstance(result, SummarySummarizedData)
         assert result.result.summary.strip()
@@ -641,6 +644,7 @@ async def test_retained_native_summary_preserves_source_and_blocks_replay(native
                 owner=owner,
                 expected_package=package,
                 tokens_before=preparation.tokens_before,
+                reason=ManualCompactionReason,
             )
         assert native.provider.posts == calls
         assert native.session.read_bytes() == before

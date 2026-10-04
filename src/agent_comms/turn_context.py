@@ -16,6 +16,7 @@ from .message_reference import MessageReference
 from .goals import Goal
 from .native_session_reopen import NativeSessionIdentity
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
+from .thread_status import ThreadStatus
 
 if TYPE_CHECKING:
     from .input_attempt import StoredInput
@@ -177,7 +178,7 @@ class InstructionFile:
 
 @dataclass(frozen=True)
 class SegmentManifest:
-    kind: str
+    kind: type[ContextSegment]
     provenance: tuple[Provenance, ...]
     sha256: str
     utf8_bytes: int
@@ -201,7 +202,7 @@ class SegmentManifest:
             yield from contributor.source_membership()
 
     def public_description(self) -> str:
-        return f"{self.kind.replace('_', ' ').title()} · {self.tokens} estimated tokens"
+        return f"{self.kind.public_title()} · {self.tokens} estimated tokens"
 
     def selected_contributor(self, positions: tuple[int, ...]) -> SegmentManifest:
         selected = self
@@ -248,7 +249,7 @@ class SegmentManifest:
         return await read_reference(self)
 
     def recorded_parts(self) -> tuple[SegmentManifest, ...]:
-        return ContextSegment.decode(self.kind).recorded_parts(self)
+        return self.kind.recorded_parts(self)
 
     def requested_parts(self) -> tuple[SegmentManifest, ...]:
         return tuple(part for part in self.recorded_parts() if not part.public_text_recorded)
@@ -295,8 +296,12 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
     @abstractmethod
     def text(self) -> str: ...
 
+    @classmethod
+    def public_title(cls) -> str:
+        return cls.declared_name.replace("_", " ").title()
+
     def public_description(self) -> str:
-        return self.declared_name.replace("_", " ").title()
+        return self.public_title()
 
     def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
         return ()
@@ -311,7 +316,7 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
 
     def source_ranges(self) -> tuple[ContributionCoordinates, ...]:
         return (ContributionCoordinates.capture(
-            self.declared_name, self.provenance, 0, self.public_text()),)
+            type(self), self.provenance, 0, self.public_text()),)
 
     def public_spans(self) -> tuple[ContextSpan, ...]:
         """Address public sentences within this owner's original source ranges."""
@@ -332,7 +337,7 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
     def manifest(self, tokens: int) -> SegmentManifest:
         raw = self.text().encode()
         return SegmentManifest(
-            self.declared_name, self.provenance, hashlib.sha256(raw).hexdigest(), len(raw), tokens
+            type(self), self.provenance, hashlib.sha256(raw).hexdigest(), len(raw), tokens
         )
 
     def source_membership(self):
@@ -345,14 +350,14 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
 
     def contribution(self, offset: int, text: str, images=()) -> InputContributionCoordinates:
         raw = text.encode()
-        return InputContributionCoordinates(self.declared_name, self.provenance, offset,
+        return InputContributionCoordinates(type(self), self.provenance, offset,
                                  len(raw), hashlib.sha256(raw).hexdigest())
 
 
 @dataclass(frozen=True)
 class ContributionCoordinates:
     """Byte coordinates and proof in one owner's rendered public value."""
-    kind: str
+    kind: type[ContextSegment]
     provenance: tuple[Provenance, ...]
     offset: int
     length: int
@@ -445,7 +450,7 @@ class MeasuredNativeSegment(ContextSegment):
 
     def measured_manifest(self):
         # The SDK measures/hashes its exact original JSON representation.
-        return SegmentManifest(self.declared_name, self.provenance,
+        return SegmentManifest(type(self), self.provenance,
                                self.sha256, self.utf8_bytes, self.tokens, self.contributors,
                                source_spans=self.assembly_ranges())
 
@@ -456,7 +461,7 @@ class MeasuredNativeSegment(ContextSegment):
         return self.measured_manifest()
 
     def matches_recorded(self, original: SegmentManifest) -> bool:
-        return (self.declared_name == original.kind and self.sha256 == original.sha256
+        return (self.__class__ is original.kind and self.sha256 == original.sha256
                 and self.utf8_bytes == original.utf8_bytes)
 
     def source_membership(self):
@@ -507,7 +512,7 @@ class SystemLayerSegment(MeasuredNativeSegment):
     def source_ranges(self) -> tuple[ContributionCoordinates, ...]:
         # Old captures prove whole wording, not attribution to today's files.
         return self.source_spans or (ContributionCoordinates.capture(
-            self.declared_name, (*self.provenance, UnattributedProvenance()), 0, self.content),)
+            type(self), (*self.provenance, UnattributedProvenance()), 0, self.content),)
 
     def provider_value(self):
         return self.content
@@ -532,7 +537,7 @@ class NativeMessages:
     def recorded_parts(cls, original: SegmentManifest) -> tuple[SegmentManifest, ...]:
         # SDK capture emits one same-kind child per provider message. A single
         # message's logical input-range annotations have other declared kinds.
-        if all(part.kind == cls.declared_name for part in original.contributors):
+        if all(part.kind is cls for part in original.contributors):
             return original.contributors
         return ()
 
@@ -553,7 +558,7 @@ class NativeMessages:
         for index, message in enumerate(self.messages):
             text = PiMessage.from_wire(message).text
             provenance = parts[index].provenance if parts else self.provenance
-            ranges.append(ContributionCoordinates.capture(self.declared_name, provenance, offset, text))
+            ranges.append(ContributionCoordinates.capture(type(self), provenance, offset, text))
             offset += len(text.encode("utf-8")) + 1
         return tuple(ranges)
 
@@ -602,7 +607,7 @@ class ToolCatalogSegment(MeasuredNativeSegment):
         spans = []
         for tool in self.tools:
             text = json.dumps(tool, ensure_ascii=False, separators=(",", ":"))
-            coordinates = ContributionCoordinates.capture(self.declared_name, self.provenance, offset, text)
+            coordinates = ContributionCoordinates.capture(type(self), self.provenance, offset, text)
             spans.append(ContextSpan(self.sha256, coordinates))
             offset += coordinates.length + 1
         return tuple(spans)
@@ -643,7 +648,7 @@ class PeerState:
     """A projection of original roster declarations, not copied presence state."""
 
     name: str
-    status: str
+    status: type[ThreadStatus]
     activity: str
     activity_detail: str
 
@@ -651,7 +656,7 @@ class PeerState:
     def from_view(cls, view: ThreadView) -> PeerState:
         return cls(
             view.thread.name,
-            view.status.declared_name,
+            type(view.status),
             view.activity.state.value,
             view.activity.detail,
         )

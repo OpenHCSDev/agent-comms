@@ -41,11 +41,11 @@ class RetainedSegment(ContextSegment):
 
     def inspection(self) -> dict[str, object]:
         """Authored constraints retain their exact source and narrower export scope."""
-        return dict(kind=self.declared_name, text=self.text(),
-                    provenance=FieldCodec.encode(self.provenance), input_supplied=False,
+        return dict(kind=type(self), text=self.text(),
+                    provenance=self.provenance, input_supplied=False,
                     authored=dict(scope="authored declarations and their original pinned inputs only",
-                                  sources=FieldCodec.encode(self.scope.sources),
-                                  facts=FieldCodec.encode(self.retained)),
+                                  sources=self.scope.sources,
+                                  facts=self.retained),
                     export_scope="current authored declarations only; never goal, unpinned input, native artifact or failure state")
 
     def export(self, destination: Path | str, *, overwrite: bool = False):

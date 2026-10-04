@@ -17,7 +17,9 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from itertools import chain
 import json
+from math import ceil, floor, isfinite
 from pathlib import Path
+from random import Random
 from statistics import mean
 
 from agent_comms.field_codec import FieldCodec
@@ -26,13 +28,54 @@ from agent_comms.native_entries import NativeEntry
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_tools import CodingTool
 from agent_comms.message_reference import MessageReference
-from agent_comms.turn_context import JournalProvenance, ToolCatalogSegment
+from agent_comms.turn_context import FileProvenance, JournalProvenance, ToolCatalogSegment
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 
 
 @dataclass(frozen=True)
 class RecordedAnswers:
     rounds: dict[str, dict[str, str]]
+
+
+@dataclass(frozen=True)
+class PairedRecallDesign:
+    """Supplied analysis parameters, not preregistration or spending authority.
+
+    The original oracle file owns questions and round membership. Original
+    native admission owns model selection. This value owns only the requested
+    comparison and inference parameters; it cannot reconstruct missing facts.
+    """
+    oracle: FileProvenance
+    candidate: Condition
+    baseline: Condition
+    model: str
+    sample_count: int
+    confidence: float
+    recall_margin: float
+    bootstrap_samples: int
+    bootstrap_seed: int
+
+    def __post_init__(self):
+        if self.candidate == self.baseline:
+            raise ValueError("A comparison design requires distinct conditions")
+        if not self.model or self.sample_count < 2:
+            raise ValueError("A comparison design requires a model and at least two trajectories")
+        if not isfinite(self.confidence) or not 0 < self.confidence < 1:
+            raise ValueError("Confidence must be finite and strictly between zero and one")
+        if not isfinite(self.recall_margin) or not -1 <= self.recall_margin <= 1:
+            raise ValueError("Recall margin must be finite and between minus one and one")
+        if self.bootstrap_samples < ceil(2 / (1 - self.confidence)):
+            raise ValueError("Bootstrap samples must represent both requested interval tails")
+
+    def compare(self, pairs):
+        """Read supplied originals through the existing comparison algorithm."""
+        if len(pairs) != self.sample_count:
+            raise ValueError("Recorded pair count differs from the supplied design")
+        scenario = RecordedNativeCheckpoint.read_record(self.oracle, RecallScenario)
+        result = scenario.compare_native_pairs(self.candidate, pairs, self.baseline)
+        result['comparison_design'] = FieldCodec.encode(self)
+        result['recall_inference'] = ScoredScenario.paired_inference(result['pairs'], self)
+        return result
 
 
 @dataclass(frozen=True)
@@ -496,43 +539,57 @@ class ScoredScenario(ScoreView):
                                     for identity, original in evidence.items()},
                     recall_scope="Original recorded answers; tool-assisted answers are task quality, not unassisted recall. Authored answers are scorer controls"))
 
-    @staticmethod
-    def recorded_resources(checkpoints, evidence):
+    def recorded_resources(self, checkpoints, evidence):
         """Total acquired original completions, never estimates or billing.
 
         A missing usage/counter leaves that metric unavailable. Summary and
         assistant records remain separate so shared cuts cannot be hidden in a
-        paired cost comparison. Output already includes reported reasoning;
+        paired cost comparison. Frozen rounds own completeness, not the subset
+        of supplied records. Output already includes reported reasoning;
         neither tokens nor cost is reconstructed from component counters.
         """
-        summaries = tuple(report['summary_usage']['usage']
-            if report['summary_usage']['evaluated'] else None
-            for report in checkpoints.values())
-        assistants = tuple(step['usage']['value'] for original in evidence.values()
-            for step in original['model_steps'])
+        rounds = tuple(round_.identity for round_ in self.source.rounds)
+        summaries = {identity: (report['summary_usage']['usage']
+            if report['summary_usage']['evaluated'] else None,)
+            for identity, report in checkpoints.items()}
+        assistants = {identity: tuple(step['usage']['value']
+            for step in original['model_steps']) for identity, original in evidence.items()}
 
-        def metric(values, expected):
+        def metric(values, expected, complete_rounds):
             supplied = tuple(value for value in values if value is not None)
-            complete = expected > 0 and len(supplied) == expected
+            complete = complete_rounds and expected > 0 and len(supplied) == expected
             return {'evaluated': complete, 'value': sum(supplied) if complete else None,
-                    'observed_records': len(supplied), 'expected_records': expected}
+                    'observed_records': len(supplied),
+                    'expected_records': expected if complete_rounds else None,
+                    'observed_value': sum(supplied) if supplied else None}
 
-        def total(records):
+        def total(*groups):
+            records = tuple(chain.from_iterable(records for group in groups for records in group.values()))
+            observed_rounds = tuple(identity for identity in rounds
+                                    if all(group.get(identity) for group in groups))
+            missing_rounds = tuple(identity for identity in rounds if identity not in observed_rounds)
+            def measured(values):
+                return metric(values, len(records), not missing_rounds)
+
             available = tuple(record for record in records if record is not None)
             return {'records': len(records),
                 'usage_records': len(available),
-                'input_tokens': metric((usage.input for usage in available), len(records)),
-                'output_tokens': metric((usage.output for usage in available), len(records)),
-                'cache_read_tokens': metric((usage.cache_read for usage in available), len(records)),
-                'cache_write_tokens': metric((usage.cache_write for usage in available), len(records)),
-                'reported_total_tokens': metric((usage.total_tokens for usage in available), len(records)),
-                'reasoning_tokens': metric((usage.reasoning for usage in available), len(records)),
-                'normalized_cost': metric((usage.cost.total for usage in available
-                                           if usage.cost is not None), len(records))}
+                'expected_rounds': rounds, 'observed_rounds': observed_rounds,
+                'missing_rounds': missing_rounds,
+                'input_tokens': measured(usage.input for usage in available),
+                'output_tokens': measured(usage.output for usage in available),
+                'cache_read_tokens': measured(usage.cache_read for usage in available),
+                'cache_write_tokens': measured(usage.cache_write for usage in available),
+                'reported_total_tokens': measured(usage.total_tokens for usage in available),
+                'reasoning_tokens': measured(usage.reasoning for usage in available),
+                'normalized_cost': measured(usage.cost.total for usage in available
+                                           if usage.cost is not None)}
 
         return {'summaries': total(summaries), 'assistants': total(assistants),
-                'combined': total((*summaries, *assistants)),
+                'combined': total(summaries, assistants),
                 'scope': 'Original journaled summary and assistant completions only; '
+                         'complete totals require observations for every frozen round; '
+                         'observed subtotals do not estimate missing work or prove no summary work; '
                          'SDK-normalized cost is not billed spend; no unjournaled retries, '
                          'cache-saving comparison, HTTP accounting or end-to-end timing'}
 
@@ -596,6 +653,57 @@ class ScoredScenario(ScoreView):
                 'scope': 'One descriptive recall rate per recorded trajectory; '
                          'no confidence interval, registered margin, intervention or independence grant'}
         return groups
+
+    @staticmethod
+    def paired_inference(comparisons, design: PairedRecallDesign):
+        """One sample is a complete unassisted trajectory, not a source cut.
+
+        This conditional paired bootstrap describes supplied records. Neither
+        a file nor an interval proves preregistration, randomization, independent
+        sampling, correct interventions, billed cost or end-to-end acceptance.
+        Missing and assisted recall cannot be dropped to improve the interval.
+        """
+        if len(comparisons) != design.sample_count:
+            raise ValueError("Inference pair count differs from the supplied design")
+        samples, unavailable = [], []
+        for index, pair in enumerate(comparisons):
+            for identity, alignment in pair['alignment'].items():
+                if not alignment['evaluated']:
+                    unavailable.append(f"Pair {index + 1}, round {identity}: original alignment unavailable")
+                    continue
+                # request_alignment already requires all admitted observations
+                # in both arms to match. Bind that selection to the supplied
+                # model through the same PiModel owner, never registry settings.
+                original = alignment['request_selection']['candidate']['observations'][0]
+                original.model.require_selection(design.model)
+            quality = pair['paired_quality']['unassisted_recall']
+            frozen = pair['candidate']['measurements'].get(Measurement.RECALL.value)
+            measured = quality['measurements']['candidate'].get(Measurement.RECALL.value)
+            rate = quality['recall_rate_difference']
+            if (not frozen or not frozen['questions'] or not measured
+                    or measured['questions'] != frozen['questions'] or not rate['evaluated']):
+                unavailable.append(f"Pair {index + 1}: complete unassisted recall unavailable")
+            else:
+                samples.append(rate['value'])
+        result = {
+            'evaluated': not unavailable, 'expected_trajectories': design.sample_count,
+            'observed_trajectories': len(samples), 'reasons': unavailable,
+            'method': 'Paired trajectory percentile bootstrap with outward empirical order statistics',
+            'confidence': design.confidence, 'margin': design.recall_margin,
+            'bootstrap_samples': design.bootstrap_samples, 'bootstrap_seed': design.bootstrap_seed,
+            'scope': 'Conditional recall inference on supplied complete trajectories; '
+                     'no registration, independence, intervention, cost, timing or study acceptance grant',
+        }
+        if unavailable:
+            return result
+        random = Random(design.bootstrap_seed)
+        resampled = sorted(mean(random.choices(samples, k=len(samples)))
+                           for _ in range(design.bootstrap_samples))
+        tail = (1 - design.confidence) / 2
+        lower = resampled[floor(tail * (len(resampled) - 1))]
+        upper = resampled[ceil((1 - tail) * (len(resampled) - 1))]
+        return dict(result, mean_recall_rate_difference=mean(samples),
+                    lower=lower, upper=upper, meets_recall_margin=lower >= design.recall_margin)
 
 
 @dataclass(frozen=True)
@@ -970,7 +1078,9 @@ def main() -> None:
     parser.add_argument("--compare-recorded-run", type=Path,
                         help="Independent original control; requires --recorded-run")
     parser.add_argument("--baseline-condition", type=Condition, choices=tuple(Condition),
-                        default=Condition.BOUNDED)
+                        help="Control label for an unplanned recorded comparison")
+    parser.add_argument("--comparison-design", type=Path,
+                        help="PairedRecallDesign for --recorded-pairs; owns oracle, conditions and inference parameters, never launches a study")
     recorded.add_argument("--native-checkpoint", type=Path,
                           help="RecordedNativeCheckpoint reference to an original managed cut")
     parser.add_argument("--fork-journal", type=Path,
@@ -983,7 +1093,7 @@ def main() -> None:
                         help="Original ancestor cut; reports source changes, not revision authority")
     recorded.add_argument("--probe-prompts", action="store_true")
     parser.add_argument(
-        "--condition", type=Condition, choices=tuple(Condition), default=Condition.BOUNDED
+        "--condition", type=Condition, choices=tuple(Condition)
     )
     args = parser.parse_args()
     if (args.fork_journal is None) != (args.fork_session is None):
@@ -998,31 +1108,43 @@ def main() -> None:
         parser.error("--previous-checkpoint requires --native-checkpoint")
     if args.compare_recorded_run is not None and args.recorded_run is None:
         parser.error("--compare-recorded-run requires --recorded-run")
+    if args.comparison_design is not None:
+        if args.recorded_pairs is None:
+            parser.error("--comparison-design requires --recorded-pairs")
+        if any(value is not None for value in (args.scenario_file, args.condition, args.baseline_condition)):
+            parser.error("The comparison design owns its oracle and condition labels")
+    condition = args.condition or Condition.BOUNDED
+    baseline_condition = args.baseline_condition or Condition.BOUNDED
     scenario = RecallScenario.read(args.scenario_file) if args.scenario_file else coding_scenario()
     result = scenario.public()
     if args.probe_prompts:
         result = {item.identity: item.probe_text() for item in scenario.rounds}
     if args.answers is not None:
-        result = scenario.score(args.condition, decode_answers(args.answers.read_text())).public()
+        result = scenario.score(condition, decode_answers(args.answers.read_text())).public()
     if args.native_probes is not None:
         probes = FieldCodec.decode(RecordedNativeProbes, {
             "rounds": json.loads(args.native_probes.read_text(), object_pairs_hook=unique_fields)
         })
-        result = scenario.score_native(args.condition, probes)
+        result = scenario.score_native(condition, probes)
     if args.recorded_run is not None:
         probes = FieldCodec.decode(RecordedNativeProbes, json.loads(
             args.recorded_run.read_text(), object_pairs_hook=unique_fields
         ))
         if args.compare_recorded_run is None:
-            result = scenario.score_native(args.condition, probes)
+            result = scenario.score_native(condition, probes)
         else:
             baseline = FieldCodec.decode(RecordedNativeProbes, json.loads(
                 args.compare_recorded_run.read_text(), object_pairs_hook=unique_fields))
-            result = scenario.compare_native(args.condition, probes, args.baseline_condition, baseline)
+            result = scenario.compare_native(condition, probes, baseline_condition, baseline)
     if args.recorded_pairs is not None:
         pairs = FieldCodec.decode(tuple[tuple[RecordedNativeProbes, RecordedNativeProbes], ...],
             json.loads(args.recorded_pairs.read_text(), object_pairs_hook=unique_fields))
-        result = scenario.compare_native_pairs(args.condition, pairs, args.baseline_condition)
+        if args.comparison_design is None:
+            result = scenario.compare_native_pairs(condition, pairs, baseline_condition)
+        else:
+            design = FieldCodec.decode(PairedRecallDesign, json.loads(
+                args.comparison_design.read_text(), object_pairs_hook=unique_fields))
+            result = design.compare(pairs)
     if args.native_checkpoint is not None:
         checkpoint = FieldCodec.decode(RecordedNativeCheckpoint, json.loads(
             args.native_checkpoint.read_text(), object_pairs_hook=unique_fields
@@ -1038,7 +1160,7 @@ def main() -> None:
                     result = checkpoint.condition_source(session, evidence)
         else:
             result = checkpoint.inspect(previous)
-    print(json.dumps(result, indent=2))
+    print(json.dumps(FieldCodec.encode(result), indent=2))
 
 
 if __name__ == "__main__":

@@ -27,7 +27,7 @@ keywords = ["agents", "coordination", "message-bus", "acp", "multi-agent"]
 
 dependencies = [
     "metaclass-registry>=0.1.0",
-    "nominal-refactor-audit @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor.git@d392c5e4cd189ce1203127a746337ad498a0330d#subdirectory=skills/refactor-audit",
+    "nominal-refactor-audit @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor.git@9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10#subdirectory=skills/refactor-audit",
 ]
 
 [project.optional-dependencies]

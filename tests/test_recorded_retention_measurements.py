@@ -36,9 +36,9 @@ from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.threads import Thread
 from agent_comms.turn_context import (
     ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, RecordedContextTurn,
-    SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment,
+    SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment, ToolCatalogSegment,
 )
-from compaction_retention_fixture import Condition, Measurement, Question, RecallRound, RecallScenario, RecordedAnswers, RecordedNativeProbes, ScoredScenario, coding_scenario
+from compaction_retention_fixture import Condition, Measurement, PairedRecallDesign, Question, RecallRound, RecallScenario, RecordedAnswers, RecordedNativeProbes, ScoredScenario, coding_scenario
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 from selected_summary_cases import manual_summary_record
 from test_task_decisions import admit
@@ -171,6 +171,61 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertFalse(unavailable['mean_recall_rate_difference']['evaluated'])
         self.assertIsNone(unavailable['mean_recall_rate_difference']['value'])
 
+    def test_paired_inference_keeps_complete_samples_and_original_model_selection(self):
+        # Detect selection of only favorable/assisted subsets, cut-level
+        # pseudoreplication, and admission models replaced by registry labels.
+        oracle = FileProvenance(str(self.root / 'oracle.json'), '0' * 64)
+        design = PairedRecallDesign(oracle, Condition.TASK_MEMORY, Condition.BOUNDED,
+            'original/model', 2, 0.95, -0.02, 1000, 17)
+        scenario = RecallScenario('paired', (RecallRound('r1', ('source',), (
+            Question('q', 'Source?', 'source', 'oracle'),)),))
+        correct = scenario.score(Condition.BOUNDED, RecordedAnswers({'r1': {'q': 'source'}}))
+        lost = scenario.score(Condition.TASK_MEMORY, RecordedAnswers({'r1': {'q': 'lost'}}))
+        support = {'r1': {'answer_support': {'unassisted_recall': True}}}
+        progress = RequestProgress('request', 'session', 'input', 1, 2, '3',
+            1, 0, 0, 0, 'budget_admission', model=ReportedModel(provider='original', id='model'))
+        alignment = {'r1': {'evaluated': True, 'request_selection': {
+            'candidate': {'observations': (progress,)}}}}
+
+        def comparison(candidate, evidence=support):
+            return {'candidate': candidate.public(), 'alignment': alignment,
+                'paired_quality': candidate.paired_quality(correct, evidence, support, alignment)}
+
+        pairs = (comparison(lost), comparison(correct))
+        result = ScoredScenario.paired_inference(pairs, design)
+        self.assertEqual((result['mean_recall_rate_difference'], result['lower'], result['upper']),
+                         (-0.5, -1, 0))
+        self.assertFalse(result['meets_recall_margin'])
+        assisted = comparison(correct, {'r1': {'answer_support': {'unassisted_recall': False}}})
+        for incomplete in (assisted, dict(pairs[1], alignment={'r1': {'evaluated': False}})):
+            missing = ScoredScenario.paired_inference((pairs[0], incomplete), design)
+            self.assertFalse(missing['evaluated'])
+            self.assertNotIn('lower', missing)
+        with self.assertRaisesRegex(ValueError, 'model does not match'):
+            ScoredScenario.paired_inference(pairs, replace(design, model='another/model'))
+        with self.assertRaisesRegex(ValueError, 'pair count'):
+            ScoredScenario.paired_inference(pairs[:1], design)
+
+    def test_supplied_design_binds_original_oracle_and_rejects_invalid_parameters(self):
+        # Detect changed oracle bytes or an omitted sample before native reads;
+        # decoding a supplied file is never a preregistration/approval grant.
+        path = self.root / 'oracle.json'
+        raw = json.dumps(FieldCodec.encode(coding_scenario())).encode()
+        path.write_bytes(raw)
+        design = PairedRecallDesign(FileProvenance(str(path), hashlib.sha256(raw).hexdigest()),
+            Condition.TASK_MEMORY, Condition.BOUNDED, 'original/model', 2, 0.95, -0.02, 1000, 17)
+        self.assertEqual(FieldCodec.decode(PairedRecallDesign, FieldCodec.encode(design)), design)
+        with self.assertRaisesRegex(ValueError, 'pair count'):
+            design.compare(())
+        path.write_bytes(raw + b' ')
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            design.compare((None, None))
+        for changed in ({'sample_count': 1}, {'model': ''}, {'confidence': float('nan')},
+                        {'recall_margin': float('inf')}, {'bootstrap_samples': 2},
+                        {'baseline': design.candidate}):
+            with self.subTest(changed=changed), self.assertRaises(ValueError):
+                replace(design, **changed)
+
     def test_admitted_budget_requires_original_request_and_turn_correlation(self):
         # Prevent same-input/time guesses and historical capacity fabrication.
         owner = Thread('original', frozenset(), str(self.root), created_at=12)
@@ -196,16 +251,37 @@ class RecordedMeasurementTests(unittest.TestCase):
         revised = replace(observed, requested_output_tokens=20, admitted_output_tokens=10)
         selected = capture(({'acquisition': {}}, publication(replace(observed, request_id='other')),
                             publication(observed), publication(revised)))
-        result = selected.request_budget(manifest)
+        observations = selected.observed_request(manifest)
+        result = selected.request_budget(observations)
         self.assertTrue(result['evaluated'])
         self.assertEqual(result['observations'], (observed, revised))
-        self.assertFalse(selected.request_budget(replace(manifest, request_id=None))['evaluated'])
-        self.assertFalse(probe.request_budget(manifest)['evaluated'])
+        self.assertFalse(selected.request_budget(selected.observed_request(replace(manifest, request_id=None)))['evaluated'])
+        self.assertFalse(probe.request_budget(probe.observed_request(manifest))['evaluated'])
         for changed in (replace(observed, session_id='other'), replace(observed, input_id='b' * 32)):
             with self.assertRaises(ValueError):
-                capture((publication(changed),)).request_budget(manifest)
+                capture((publication(changed),)).observed_request(manifest)
         with self.assertRaises(ValueError):
-            capture((publication(observed, replace(lease, turn_id='other')),)).request_budget(manifest)
+            capture((publication(observed, replace(lease, turn_id='other')),)).observed_request(manifest)
+
+        # Timing and budget borrow the same acquisition. Different stages and
+        # real zero callback counters must not be lost or become whole-turn time.
+        headers = replace(observed, stage='headers', elapsed_ms=35, observed_at_ms=36)
+        first = replace(observed, stage='first_event', elapsed_ms=40, observed_at_ms=41)
+        end = replace(observed, stage='stream_end', elapsed_ms=60, observed_at_ms=61,
+                      callback_ms=3, callback_count=2, callback_max_ms=2)
+        selected = capture(tuple(publication(point) for point in (observed, headers, first, end)))
+        with patch.object(RecordedNativeCheckpoint, 'read_json_lines',
+                          wraps=RecordedNativeCheckpoint.read_json_lines) as reads:
+            acquired = selected.observed_request(manifest)
+            timing = selected.request_timing(acquired)
+            budget = selected.request_budget(acquired)
+        self.assertEqual(reads.call_count, 1)
+        self.assertEqual(timing['observations'], (observed, headers, first, end))
+        self.assertEqual(budget['observations'], (observed,))
+        self.assertIs(budget['observations'][0], timing['observations'][0])
+        self.assertEqual(timing['observations'][0].callback_ms, 0)
+        self.assertFalse(timing['whole_turn_evaluated'])
+        self.assertFalse(selected.request_timing(())['evaluated'])
 
     def test_model_steps_keep_tool_step_usage_and_distinguish_missing_from_zero(self):
         # Prevent final-answer-only accounting from hiding earlier tool-step
@@ -242,7 +318,9 @@ class RecordedMeasurementTests(unittest.TestCase):
         cuts = {'cut': {'summary_usage': {'evaluated': True, 'usage': summary}}}
         evidence = {'cut': {'model_steps': tuple({'usage': {'value': usage}}
                                              for usage in (assistant, zero))}}
-        observed = ScoredScenario.recorded_resources(cuts, evidence)
+        round_ = replace(coding_scenario().rounds[0], identity='cut')
+        scored = RecallScenario('resource-control', (round_,)).score(Condition.TASK_MEMORY, RecordedAnswers({}))
+        observed = scored.recorded_resources(cuts, evidence)
         combined = observed['combined']
         self.assertEqual(combined['records'], 3)
         self.assertEqual(combined['reported_total_tokens']['value'], 38)
@@ -257,14 +335,51 @@ class RecordedMeasurementTests(unittest.TestCase):
         # Detect a perfect zero inferred from absent summary/usage/fields.
         cuts = {'cut': {'summary_usage': {'evaluated': False}}}
         evidence = {'cut': {'model_steps': ({'usage': {'value': None}},)}}
-        unavailable = ScoredScenario.recorded_resources(cuts, evidence)['combined']
+        round_ = replace(coding_scenario().rounds[0], identity='cut')
+        scored = RecallScenario('resource-control', (round_,)).score(Condition.TASK_MEMORY, RecordedAnswers({}))
+        unavailable = scored.recorded_resources(cuts, evidence)['combined']
         self.assertEqual(unavailable['records'], 2)
         self.assertEqual(unavailable['usage_records'], 0)
         self.assertFalse(unavailable['normalized_cost']['evaluated'])
         self.assertIsNone(unavailable['normalized_cost']['value'])
-        empty = ScoredScenario.recorded_resources({}, {})['combined']
+        empty = scored.recorded_resources({}, {})['combined']
         self.assertEqual(empty['records'], 0)
         self.assertFalse(empty['reported_total_tokens']['evaluated'])
+
+    def test_resource_totals_keep_missing_frozen_rounds_and_observed_subtotals(self):
+        # Missing cuts/probes cannot turn a partial trajectory into a complete
+        # cheap total. Actual reported zero is preserved independently.
+        scenario = coding_scenario()
+        scored = scenario.score(Condition.TASK_MEMORY, RecordedAnswers({}))
+        identities = tuple(round_.identity for round_ in scenario.rounds)
+        summary = SummaryUsage(input=0, output=0, cache_read=0, cache_write=0,
+            total_tokens=0, reasoning=0, cost=SummaryCost(0, 0, 0, 0, 0))
+        assistant = PiUsage(input=0, output=0, cache_read=0, cache_write=0,
+            total_tokens=0, reasoning=0, cost=PiCost(total=0))
+        cuts = {identities[0]: {'summary_usage': {'evaluated': True, 'usage': summary}}}
+        evidence = {identities[0]: {'model_steps': ({'usage': {'value': assistant}},)}}
+        partial = scored.recorded_resources(cuts, evidence)
+        for group in partial['summaries'], partial['assistants'], partial['combined']:
+            self.assertEqual(group['expected_rounds'], identities)
+            self.assertEqual(group['observed_rounds'], identities[:1])
+            self.assertEqual(group['missing_rounds'], identities[1:])
+            for name in ('input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_write_tokens',
+                         'reported_total_tokens', 'reasoning_tokens', 'normalized_cost'):
+                self.assertFalse(group[name]['evaluated'])
+                self.assertIsNone(group[name]['value'])
+                self.assertIsNone(group[name]['expected_records'])
+                self.assertEqual(group[name]['observed_value'], 0)
+        cuts.update({identity: cuts[identities[0]] for identity in identities[1:]})
+        cut_complete = scored.recorded_resources(cuts, evidence)
+        self.assertTrue(cut_complete['summaries']['normalized_cost']['evaluated'])
+        self.assertFalse(cut_complete['combined']['normalized_cost']['evaluated'])
+        evidence.update({identity: {'model_steps': ()} for identity in identities[1:]})
+        self.assertEqual(scored.recorded_resources(cuts, evidence)['assistants']['missing_rounds'], identities[1:])
+        evidence.update({identity: evidence[identities[0]] for identity in identities[1:]})
+        complete = scored.recorded_resources(cuts, evidence)
+        self.assertTrue(complete['combined']['normalized_cost']['evaluated'])
+        self.assertEqual(complete['combined']['normalized_cost']['value'], 0)
+        self.assertEqual(complete['combined']['normalized_cost']['expected_records'], 6)
 
     def test_original_tool_pair_does_not_award_proposal_or_constraint_credit(self):
         # Prevent invented action success from an answer, an unrelated SDK
@@ -358,7 +473,7 @@ class RecordedMeasurementTests(unittest.TestCase):
                 source=NativeSessionIdentity(source, str(self.root / f'{source}.jsonl')),
                 source_revision=revision, revision=revision, prefix_digest=TextDigest.of('fixture prefix'), entry_count=1)
             manifest = ContextManifest(owner.incarnation, turn,
-                (SegmentManifest('tool_catalog', (JournalProvenance(probe.session.session_file, ('original',)),),
+                (SegmentManifest(ToolCatalogSegment, (JournalProvenance(probe.session.session_file, ('original',)),),
                     'c' * 64, 10, 2),), 'native', request_id='request')
             return {'construction': {'fork': fork, 'sdk_manifest': manifest,
                 'request_budget': {'evaluated': True, 'observations': (point,)},
@@ -487,7 +602,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         turn = RecordedContextTurn(TurnId('turn'), TurnIdentity(owner.incarnation, 1))
         probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
         def manifest(path, entries):
-            segment = SegmentManifest('transcript', (JournalProvenance(path, entries),),
+            segment = SegmentManifest(TranscriptSegment, (JournalProvenance(path, entries),),
                                       'b' * 64, 20, 5)
             return ContextManifest(owner.incarnation, turn, (segment,), 'counter')
         with NativeEntry.open_evidence(self.session) as evidence:

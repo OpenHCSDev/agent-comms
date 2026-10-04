@@ -1,0 +1,1073 @@
+{
+  "head": "d6119e7c",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 311,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 364,
+      "omissions": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "omissions": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 16,
+      "role": "import",
+      "source": "from .agent_events import CompactionEvent"
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 155,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 181,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 188,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 201,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 217,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True, kw_only=True)"
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 238,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 253,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True, kw_only=True)"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 14,
+      "role": "import",
+      "source": "from .wake_policy import BoundedTriageWake, Engagement, FullWake, PassiveWake, WakePolicy"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 121,
+      "role": "declaration",
+      "source": "@property"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 170,
+      "role": "declaration",
+      "source": "@property"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 205,
+      "role": "declaration",
+      "source": "@property"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 222,
+      "role": "declaration",
+      "source": "@property"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 239,
+      "role": "declaration",
+      "source": "@property"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 280,
+      "role": "declaration",
+      "source": "@property"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 306,
+      "role": "consumer",
+      "source": "mode.engage(execution_id, target)"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 390,
+      "role": "consumer",
+      "source": "mode.engage(execution_id, target)"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 41,
+      "role": "import",
+      "source": "from .turn_context import InputContributionCoordinates"
+    },
+    {
+      "path": "src/agent_comms/compaction_result.py",
+      "line": 10,
+      "role": "import",
+      "source": "from .agent_events import ManualCompactionEnd, CompactionSkipped"
+    },
+    {
+      "path": "src/agent_comms/compaction_result.py",
+      "line": 12,
+      "role": "import",
+      "source": "from .owner_compaction_provider import OwnerSummaryOutcome"
+    },
+    {
+      "path": "src/agent_comms/compaction_result.py",
+      "line": 66,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/compaction_result.py",
+      "line": 73,
+      "role": "declaration",
+      "source": "@property"
+    },
+    {
+      "path": "src/agent_comms/compaction_result.py",
+      "line": 46,
+      "role": "consumer",
+      "source": "ManualCompactionEnd(aborted=False, summary=self.summary)"
+    },
+    {
+      "path": "src/agent_comms/compaction_result.py",
+      "line": 74,
+      "role": "consumer",
+      "source": "CompactionSkipped(reason='adaptive', explanation=self.error)"
+    },
+    {
+      "path": "src/agent_comms/compaction_result.py",
+      "line": 88,
+      "role": "consumer",
+      "source": "ManualCompactionEnd(aborted=True, summary=self.error)"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 16,
+      "role": "import",
+      "source": "from .agent_events import CompactionEvent"
+    },
+    {
+      "path": "src/agent_comms/coordination_schema.py",
+      "line": 15,
+      "role": "import",
+      "source": "from agent_comms.wake_policy import WakePolicy"
+    },
+    {
+      "path": "src/agent_comms/goal_mentions.py",
+      "line": 12,
+      "role": "import",
+      "source": "from .goals import GoalMentionBinding, GoalMentionSource, LimitExceededMentionBinding, MalformedMentionBinding, SelfMentionBinding, AliasMentionBinding, UnknownMentionBinding, NonExecutableMentionBinding, ResolvedMentionBinding"
+    },
+    {
+      "path": "src/agent_comms/goals.py",
+      "line": 17,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True, kw_only=True)"
+    },
+    {
+      "path": "src/agent_comms/goals.py",
+      "line": 43,
+      "role": "import",
+      "source": "from .relationships import GoalMentionDiagnostic"
+    },
+    {
+      "path": "src/agent_comms/goals.py",
+      "line": 96,
+      "role": "import",
+      "source": "from .relationships import GoalDerivedContact, GoalMentionDiagnostic"
+    },
+    {
+      "path": "src/agent_comms/goals.py",
+      "line": 98,
+      "role": "consumer",
+      "source": "GoalMentionDiagnostic(owner.name, goal.id, source.text_revision, self.token, 'stale_incarnation')"
+    },
+    {
+      "path": "src/agent_comms/goals.py",
+      "line": 46,
+      "role": "consumer",
+      "source": "GoalMentionDiagnostic(owner.name, goal.id, source.text_revision, self.token, self.declared_name)"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 13,
+      "role": "import",
+      "source": "from .compaction_result import CompactionResult, RefusedCompactionResult"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 47,
+      "role": "consumer",
+      "source": "RefusedCompactionResult('Compaction instructions are invalid.')"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 51,
+      "role": "consumer",
+      "source": "RefusedCompactionResult('Wait for the current response before compacting.')"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 54,
+      "role": "consumer",
+      "source": "RefusedCompactionResult('Wait for the current response before compacting.')"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 58,
+      "role": "consumer",
+      "source": "RefusedCompactionResult('This thread has no saved session to compact.')"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 85,
+      "role": "consumer",
+      "source": "RefusedCompactionResult(str(error))"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 74,
+      "role": "consumer",
+      "source": "events.CompactionStart(reason='manual')"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 90,
+      "role": "consumer",
+      "source": "events.ManualCompactionEnd(aborted=True)"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 22,
+      "role": "import",
+      "source": "from .pi_vocabulary import CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 8,
+      "role": "import",
+      "source": "from .turn_context import ContextManifest, ContextSegment, ContextSourceText, MeasuredNativeSegment, PreviewProvenance, Provenance, SegmentManifest, TurnContext"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 58,
+      "role": "import",
+      "source": "from .turn_context import ContextSegment, InstructionFile, ResourceProvenance, TurnContext, WireProvenance"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 40,
+      "role": "import",
+      "source": "from .pi_vocabulary import CompactionReason, ThresholdCompactionReason"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 116,
+      "role": "consumer",
+      "source": "SelectedSummarySlot(owner.name, prepared.witness.session_id, request_observer=partial(record_request_progress, self.journal.path.parent, owner.require_turn_lease())).run_selected_summary(persistent, self.journal, prepared.witness, SelectedSummarySource(source=source, selected=selected, settings=settings.summary_settings(), retained=captured.retained), owner=owner, expected_package=package, tokens_before=prepared.tokens_before, custom_instructions=instructions, future_queue=self.boundary.future_queue, native_reader=self.boundary.native_reader, on_event=on_event, reason=reason)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 19,
+      "role": "import",
+      "source": "from .owner_compaction_provider import NativeSummary"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 29,
+      "role": "import",
+      "source": "from .compaction_result import CompactionResult, RefusedCompactionResult"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 104,
+      "role": "import",
+      "source": "from .compaction_result import RefusedCompactionResult"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 106,
+      "role": "consumer",
+      "source": "RefusedCompactionResult('Selected native history has no complete safe compaction cut')"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "line": 10,
+      "role": "import",
+      "source": "from .agent_events import CompactionEnd"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "line": 22,
+      "role": "declaration",
+      "source": "class OwnerSummaryOutcome(ABC):"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "line": 52,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "line": 33,
+      "role": "declaration",
+      "source": "@property"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "line": 72,
+      "role": "declaration",
+      "source": "@property"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_provider.py",
+      "line": 73,
+      "role": "consumer",
+      "source": "CompactionEnd(reason='adaptive', summary=self.text)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 14,
+      "role": "import",
+      "source": "from .agent_events import AgentEvent, CompactionSkipped, CompactionStart"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 18,
+      "role": "import",
+      "source": "from .compaction_result import CompactionResult, RefusedCompactionResult"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 22,
+      "role": "import",
+      "source": "from .owner_compaction_provider import NativeSummary, OwnerSummaryOutcome"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 27,
+      "role": "import",
+      "source": "from .pi_vocabulary import CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 56,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 64,
+      "role": "declaration",
+      "source": "@property"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 65,
+      "role": "consumer",
+      "source": "CompactionSkipped(reason='adaptive', explanation=f'Selected native compaction skipped: {self.reason}. Original context preserved.')"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 76,
+      "role": "consumer",
+      "source": "RefusedCompactionResult(self.completion_event.explanation)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 135,
+      "role": "consumer",
+      "source": "RefusedCompactionResult('Authored subtask boundary changed; optional compaction skipped')"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 137,
+      "role": "consumer",
+      "source": "CompactionStart(reason='adaptive')"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_settings.py",
+      "line": 11,
+      "role": "import",
+      "source": "from .pi_vocabulary import CompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 19,
+      "role": "import",
+      "source": "from .pi_vocabulary import ThinkingLevel, CompactionReason, ThresholdCompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 25,
+      "role": "import",
+      "source": "from .turn_context import InputContributionCoordinates, SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 15,
+      "role": "import",
+      "source": "from .pi_vocabulary import CompactionReason, UnknownCompactionReason"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 228,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True, kw_only=True)"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 275,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True, kw_only=True)"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 301,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True, kw_only=True)"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 246,
+      "role": "consumer",
+      "source": "events.CompactionEnd(reason=self.reason.declared_name, aborted=not completed, summary=self.result.display_summary if completed else None, context_used=None, will_retry=self.will_retry is True)"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 291,
+      "role": "consumer",
+      "source": "events.CompactionProgress(reason=self.reason.declared_name, operation_id=self.operation_id, text=self.text, chunk_index=self.chunk_index, source=self.source)"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 311,
+      "role": "consumer",
+      "source": "events.CompactionStart(reason=self.reason.declared_name)"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 205,
+      "role": "import",
+      "source": "from .owner_compaction_runtime import SelectedSummaryDecline"
+    },
+    {
+      "path": "src/agent_comms/pi_summary_payloads.py",
+      "line": 207,
+      "role": "consumer",
+      "source": "SelectedSummaryDecline(journal.summaries.get(self.operation_id), identity, self.reason)"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 121,
+      "role": "declaration",
+      "source": "class CompactionReason(DeclaredFamily, affix='CompactionReason'):"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 175,
+      "role": "import",
+      "source": "from .compaction_result import RefusedCompactionResult"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 179,
+      "role": "consumer",
+      "source": "RefusedCompactionResult(f'Optional subtask compaction skipped: {data.reason}')"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 143,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True, slots=True)"
+    },
+    {
+      "path": "src/agent_comms/retained_context.py",
+      "line": 13,
+      "role": "import",
+      "source": "from .turn_context import ContextSegment, OwnerProvenance, WireProvenance"
+    },
+    {
+      "path": "src/agent_comms/selected_actions.py",
+      "line": 27,
+      "role": "declaration",
+      "source": "def mode(self, owner: CodingToolOwner) -> NativeToolMode | None:"
+    },
+    {
+      "path": "src/agent_comms/selected_actions.py",
+      "line": 70,
+      "role": "declaration",
+      "source": "def mode(self, owner):"
+    },
+    {
+      "path": "src/agent_comms/selected_actions.py",
+      "line": 84,
+      "role": "declaration",
+      "source": "def mode(self, owner: CodingToolOwner) -> NativeToolMode:"
+    },
+    {
+      "path": "src/agent_comms/selected_actions.py",
+      "line": 72,
+      "role": "consumer",
+      "source": "action.mode(owner.for_original(assignment, action.operation_id()))"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 11,
+      "role": "import",
+      "source": "from .agent_events import CompactionEvent, NativePhaseChanged"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 18,
+      "role": "import",
+      "source": "from .pi_vocabulary import CompactionReason, ThresholdCompactionReason"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 17,
+      "role": "import",
+      "source": "from .agent_events import AgentEvent, CompactionSummaryProgress"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 76,
+      "role": "declaration",
+      "source": "async def run_selected_summary(self, persistent: PersistentPiSession, journal: CompactionJournal, witness: NativeWitness, source: SelectedSummarySource, *, owner: Thread, expected_package: Path, tokens_before: int, custom_instructions: str | None=None, fresh_session: FreshPrivateSession | None=None, admission_generation: int | None=None, future_queue: FutureInputQueue | None=None, native_reader: NativeEvidenceRead | None=None, idle_timeout_seconds: float=MODEL_WAIT_TIMEOUT_SECONDS, on_event: Callable[[AgentEvent], Awaitable[None]] | None=None, reason: str='adaptive') -> SelectedSummaryData:"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 174,
+      "role": "consumer",
+      "source": "CompactionSummaryProgress(reason=reason, operation_id=operation, text=event.text, source=event.source)"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 68,
+      "role": "declaration",
+      "source": "def mode(self, owner):"
+    },
+    {
+      "path": "src/agent_comms/selected_triage.py",
+      "line": 104,
+      "role": "consumer",
+      "source": "SelectedAttempt.engage(participant, created)"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 151,
+      "role": "declaration",
+      "source": "@classmethod"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 292,
+      "role": "consumer",
+      "source": "SelectedAttempt.engage(participant, created)"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 257,
+      "role": "consumer",
+      "source": "action.mode(tools)"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 46,
+      "role": "import",
+      "source": "from .turn_context import InputContributionCoordinates"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 170,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 275,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True, kw_only=True)"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 323,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 485,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 513,
+      "role": "import",
+      "source": "from .wake_policy import WakePolicy"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 304,
+      "role": "consumer",
+      "source": "SegmentManifest(self.declared_name, self.provenance, hashlib.sha256(raw).hexdigest(), len(raw), tokens)"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 318,
+      "role": "consumer",
+      "source": "InputContributionCoordinates(self.declared_name, self.provenance, offset, len(raw), hashlib.sha256(raw).hexdigest())"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 368,
+      "role": "consumer",
+      "source": "SegmentManifest(self.declared_name, self.provenance, self.sha256, self.utf8_bytes, self.tokens, self.contributors)"
+    },
+    {
+      "path": "src/agent_comms/wake.py",
+      "line": 18,
+      "role": "import",
+      "source": "from .wake_policy import BoundedTriageWake, FullWake, PassiveWake, WakePolicy"
+    },
+    {
+      "path": "src/agent_comms/wake_injection.py",
+      "line": 25,
+      "role": "import",
+      "source": "from .wake_policy import WakePolicy"
+    },
+    {
+      "path": "src/agent_comms/wake_policy.py",
+      "line": 21,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/wake_policy.py",
+      "line": 55,
+      "role": "declaration",
+      "source": "@dataclass(frozen=True)"
+    },
+    {
+      "path": "src/agent_comms/wake_policy.py",
+      "line": 30,
+      "role": "declaration",
+      "source": "@property"
+    },
+    {
+      "path": "src/agent_comms/wake_policy.py",
+      "line": 63,
+      "role": "declaration",
+      "source": "def engage(self, execution_id: str, target: str) -> Engagement:"
+    },
+    {
+      "path": "src/agent_comms/wake_policy.py",
+      "line": 88,
+      "role": "declaration",
+      "source": "def engage(self, execution_id, target):"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 24,
+      "role": "import",
+      "source": "from agent_comms.agent_events import CompactionSummaryProgress"
+    },
+    {
+      "path": "tests/guards/test_pi_vocabulary_ownership.py",
+      "line": 9,
+      "role": "import",
+      "source": "from agent_comms.pi_vocabulary import CompactionReason, PiStopReason, ThinkingLevel"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 45,
+      "role": "import",
+      "source": "from agent_comms.compaction_result import RefusedCompactionResult"
+    },
+    {
+      "path": "tests/test_acp_compact_command.py",
+      "line": 16,
+      "role": "import",
+      "source": "from agent_comms.compaction_result import CommittedCompactionResult, RefusedCompactionResult"
+    },
+    {
+      "path": "tests/test_acp_compact_command.py",
+      "line": 111,
+      "role": "consumer",
+      "source": "RefusedCompactionResult('uncertain compaction')"
+    },
+    {
+      "path": "tests/test_acp_compaction_activity.py",
+      "line": 32,
+      "role": "consumer",
+      "source": "ae.CompactionStart(reason='threshold')"
+    },
+    {
+      "path": "tests/test_acp_compaction_activity.py",
+      "line": 34,
+      "role": "consumer",
+      "source": "ae.CompactionProgress(chunk_index=2)"
+    },
+    {
+      "path": "tests/test_acp_compaction_activity.py",
+      "line": 40,
+      "role": "consumer",
+      "source": "ae.CompactionEnd(aborted=aborted, summary='saved summary')"
+    },
+    {
+      "path": "tests/test_acp_compaction_activity.py",
+      "line": 65,
+      "role": "consumer",
+      "source": "ae.CompactionStart(reason='threshold')"
+    },
+    {
+      "path": "tests/test_acp_extension.py",
+      "line": 36,
+      "role": "import",
+      "source": "from agent_comms.agent_events import CompactionStart"
+    },
+    {
+      "path": "tests/test_acp_extension.py",
+      "line": 74,
+      "role": "consumer",
+      "source": "CompactionStart()"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 1637,
+      "role": "consumer",
+      "source": "ae.CompactionProgress(reason='threshold', operation_id='auto-native', chunk_index=0, source=CompactionSourceProgress(0, 1000, 'history', 1000, 1250))"
+    },
+    {
+      "path": "tests/test_compaction_progress.py",
+      "line": 59,
+      "role": "consumer",
+      "source": "events.CompactionSummaryProgress(operation_id='native-job', text='leaf summary', source=heartbeat)"
+    },
+    {
+      "path": "tests/test_compaction_result.py",
+      "line": 9,
+      "role": "import",
+      "source": "from agent_comms.agent_events import ManualCompactionEnd"
+    },
+    {
+      "path": "tests/test_compaction_result.py",
+      "line": 10,
+      "role": "import",
+      "source": "from agent_comms.compaction_result import CommittedCompactionResult, CompactionResult, RefusedCompactionResult"
+    },
+    {
+      "path": "tests/test_compaction_result.py",
+      "line": 35,
+      "role": "consumer",
+      "source": "RefusedCompactionResult('actual provider reason')"
+    },
+    {
+      "path": "tests/test_compaction_result.py",
+      "line": 22,
+      "role": "consumer",
+      "source": "RefusedCompactionResult('provider disconnected; no replay')"
+    },
+    {
+      "path": "tests/test_compaction_result.py",
+      "line": 31,
+      "role": "consumer",
+      "source": "ManualCompactionEnd(aborted=False, summary='summary')"
+    },
+    {
+      "path": "tests/test_compaction_result.py",
+      "line": 36,
+      "role": "consumer",
+      "source": "ManualCompactionEnd(aborted=True, summary=refused.error)"
+    },
+    {
+      "path": "tests/test_compaction_result.py",
+      "line": 50,
+      "role": "consumer",
+      "source": "ManualCompactionEnd(aborted=True, summary=self.detail)"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 14,
+      "role": "import",
+      "source": "from agent_comms.turn_context import ContextManifest, ContextSourceText, FileProvenance, JournalProvenance, NativeProvenance, PreviewProvenance, RecordedContextTurn, SegmentManifest, SystemLayerSegment, TranscriptSegment, TurnContext"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 331,
+      "role": "import",
+      "source": "from agent_comms.wake_policy import WakePolicy"
+    },
+    {
+      "path": "tests/test_coordination_store.py",
+      "line": 74,
+      "role": "import",
+      "source": "from agent_comms.wake_policy import BoundedTriageWake, FullWake, PassiveWake, WakePolicy"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 21,
+      "role": "import",
+      "source": "from agent_comms.agent_events import CompactionStart, CompactionEnd"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 601,
+      "role": "import",
+      "source": "from agent_comms.owner_compaction_provider import NativeSummary"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 667,
+      "role": "consumer",
+      "source": "NativeSummary(source.retained.text + '\\n\\nControlled SDK commit.', None, None)"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 33,
+      "role": "import",
+      "source": "from agent_comms.owner_compaction_provider import NativeSummary"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 652,
+      "role": "consumer",
+      "source": "NativeSummary(captured.retained.text + '\\n\\nNow stale', None, None)"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 713,
+      "role": "consumer",
+      "source": "NativeSummary(captured.retained.text + '\\n\\nSynthetic provider-free summary', None, None)"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 951,
+      "role": "consumer",
+      "source": "NativeSummary(captured.retained.text + '\\n\\n' + f'Synthetic round {round_index}; goal-e2e; not a semantic retention claim', None, None)"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 14,
+      "role": "import",
+      "source": "from agent_comms.owner_compaction_provider import NativeSummary"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 120,
+      "role": "consumer",
+      "source": "NativeSummary('selected output', None, None)"
+    },
+    {
+      "path": "tests/test_owner_compaction_runtime.py",
+      "line": 65,
+      "role": "consumer",
+      "source": "NativeSummary('worker lifetime control, no provider', None, None)"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 68,
+      "role": "consumer",
+      "source": "pi.CompactionStart()"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 71,
+      "role": "consumer",
+      "source": "pi.CompactionEnd()"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 36,
+      "role": "import",
+      "source": "from agent_comms.turn_context import ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, RecordedContextTurn, SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 380,
+      "role": "consumer",
+      "source": "SegmentManifest('transcript', (JournalProvenance(path, entries),), 'b' * 64, 20, 5)"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 251,
+      "role": "consumer",
+      "source": "SegmentManifest('tool_catalog', (JournalProvenance(probe.session.session_file, ('original',)),), 'c' * 64, 10, 2)"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 15,
+      "role": "import",
+      "source": "from agent_comms.compaction_result import CommittedCompactionResult, RefusedCompactionResult"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 58,
+      "role": "consumer",
+      "source": "ae.CompactionStart('test')"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 59,
+      "role": "consumer",
+      "source": "ae.CompactionProgress(chunk_index=1)"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 61,
+      "role": "consumer",
+      "source": "ae.CompactionEnd(summary='summary')"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 76,
+      "role": "consumer",
+      "source": "ae.CompactionStart('test')"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 77,
+      "role": "consumer",
+      "source": "ae.CompactionEnd(aborted=True)"
+    },
+    {
+      "path": "tests/test_s3_legality_behavior.py",
+      "line": 29,
+      "role": "import",
+      "source": "from agent_comms.wake_policy import WakePolicy"
+    },
+    {
+      "path": "tests/test_selected_source_batch.py",
+      "line": 56,
+      "role": "import",
+      "source": "from agent_comms.agent_events import CompactionStart, CompactionSummaryProgress, CompactionEnd"
+    },
+    {
+      "path": "tests/test_selected_source_batch.py",
+      "line": 65,
+      "role": "import",
+      "source": "from agent_comms.wake_policy import WakePolicy"
+    },
+    {
+      "path": "tests/test_selected_source_batch.py",
+      "line": 57,
+      "role": "consumer",
+      "source": "CompactionStart()"
+    },
+    {
+      "path": "tests/test_selected_source_batch.py",
+      "line": 57,
+      "role": "consumer",
+      "source": "CompactionSummaryProgress(text='Partial original summary')"
+    },
+    {
+      "path": "tests/test_selected_source_batch.py",
+      "line": 58,
+      "role": "consumer",
+      "source": "CompactionEnd(summary='Committed original summary')"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 90,
+      "role": "consumer",
+      "source": "slot.run_selected_summary(native.persistent, journal, preparation.witness, source, owner=owner, expected_package=expected_package, tokens_before=preparation.tokens_before, **options)"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 608,
+      "role": "consumer",
+      "source": "slot.run_selected_summary(native.persistent, journal, preparation.witness, envelope, owner=owner, expected_package=package, tokens_before=preparation.tokens_before, custom_instructions='Preserve the two original retained questions', idle_timeout_seconds=15, on_event=observed)"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 636,
+      "role": "consumer",
+      "source": "slot.run_selected_summary(native.persistent, journal, preparation.witness, envelope, owner=owner, expected_package=package, tokens_before=preparation.tokens_before)"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 406,
+      "role": "consumer",
+      "source": "slot.run_selected_summary(persistent, journal, preparation.witness, dict(source=manual_source(session), selected=selected.to_wire(), settings=dict(reserveTokens=2048, keepRecentTokens=1024), retained=FieldCodec.encode(RetainedTaskFacts(()))), expected_package=package, tokens_before=preparation.tokens_before, idle_timeout_seconds=20)"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 360,
+      "role": "consumer",
+      "source": "slot.run_selected_summary(persistent, journal, preparation.witness, dict(source=manual_source(session), selected=selected.to_wire(), settings=dict(reserveTokens=2048, keepRecentTokens=1024), retained=FieldCodec.encode(RetainedTaskFacts(()))), expected_package=package, tokens_before=preparation.tokens_before, idle_timeout_seconds=20)"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 15,
+      "role": "import",
+      "source": "from agent_comms.agent_events import CompactionSummaryProgress"
+    },
+    {
+      "path": "tests/test_stack_persistent_compaction.py",
+      "line": 26,
+      "role": "import",
+      "source": "from agent_comms.agent_events import ManualCompactionEnd"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 605,
+      "role": "import",
+      "source": "from agent_comms.compaction_result import RefusedCompactionResult"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 616,
+      "role": "consumer",
+      "source": "RefusedCompactionResult('No complete optional cut')"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 10,
+      "role": "import",
+      "source": "from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 319,
+      "role": "import",
+      "source": "from agent_comms.wake_policy import WakePolicy"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 22,
+      "role": "consumer",
+      "source": "SegmentManifest('transcript', (source,), hashlib.sha256(b'PRIVATE INPUT').hexdigest(), 13, 4)"
+    }
+  ],
+  "ambiguity": "Lexical names are ownership leads, not proof of runtime resolution; source bodies and original codecs were read. No native API change."
+}

@@ -1,0 +1,10 @@
+{
+  "matching_attempt_processes": [],
+  "other_process_permission_gaps": [
+    1786010,
+    1786012,
+    3699396
+  ],
+  "not_allUID_clearance": true,
+  "native_original_fixture_and_whole_App_returned": true
+}

@@ -87,14 +87,14 @@ def test_response_extension_decodes_transitions_and_projects_without_catalog_edi
         state = FieldCodec.decode(ResponseState, {"kind": "reviewed"})
         assert state.may_become(SilentResponse())
         tag = ResponseState.decode("reviewed")
-        assert tag.publication() == "reviewed"
+        assert tag is ReviewedResponse
         projection = ProjectedExecution(
             PendingExecution,
             ExecutionOrigin.WIRE,
             False,
             None,
             False,
-            tag.publication(),
+            (tag,),
         )
         assert _valid_projection(
             FieldCodec.encode(AvailableRecoveryProjection("owner", 0, projection, None, None)),
@@ -131,7 +131,7 @@ async def test_execution_extension_is_stored_transitioned_and_read_over_gateway_
             )
             assert isinstance(store.snapshots.get("e").execution.lifecycle, PendingExecution)
             projection = ProjectedExecution(
-                type(record.lifecycle), record.origin, False, None, False, None
+                type(record.lifecycle), record.origin, False, None, False, ()
             )
             result = await _through_socket(
                 AvailableRecoveryProjection("owner", 1, projection, None, None)

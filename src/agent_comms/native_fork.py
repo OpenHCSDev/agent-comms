@@ -15,7 +15,7 @@ from .compaction_records import NativeForkCreation
 class ForkSessionRequest(SessionHelperRequest):
     cwd: str
     directory: str | None = None
-    creation_kind: str = field(default=NativeForkCreation.declared_name, kw_only=True)
+    creation_kind: type[NativeForkCreation] = field(default=NativeForkCreation, kw_only=True)
 
 
 class ForkSessionHelper(PiHelper):

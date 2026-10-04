@@ -210,9 +210,10 @@ class TestDeclaredTargetActions:
                             '--arguments', '{"new_name":"renamed"}')
         assert code == 0 and renamed['name'] == 'renamed'
         code, refused = cli(tmp_path, 'target-action', '--target', '#renamed', '--operation', 'delete-tag')
-        assert code == 1 and 'Delete tag' in refused['error']
+        assert code == 1 and 'Remove #renamed' in refused['error']
         code, deleted = cli(tmp_path, 'target-action', '--target', '#renamed', '--operation', 'delete-tag', '--confirmed')
-        assert code == 0 and deleted['deleted_tag'] == 'renamed'
+        assert code == 0 and deleted['tag'] == 'renamed' and deleted['removed_tag']
+        assert deleted['removed_threads'] == []
         _, detail = cli(tmp_path, 'thread', '--name', 'tagged')
         assert detail['tags'] == ['first']
         _, builtins = cli(tmp_path, 'target-actions', '--target', '#all')

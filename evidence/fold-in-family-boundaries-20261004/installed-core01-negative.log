@@ -1,0 +1,70 @@
+.........F....F..                                                        [100%]
+=================================== FAILURES ===================================
+_______ test_owner_pause_survives_reopen_and_explains_stale_model_report _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/f4-core-installed-20261004/test-output/test_owner_pause_survives_reop0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f923700faf0>
+
+    def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, monkeypatch):
+        comms = wire(tmp_path)
+        comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
+        goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))
+        comms.goals.update_goal(
+            "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
+        )
+        reopened = wire(tmp_path)
+        paused = reopened.registry.require("worker").goal
+        assert paused.state.declared_name == "paused"
+        assert reopened.registry.require("worker").goal.state.pause_source.declared_name == "owner"
+        assert "paused_by" not in paused.to_wire()
+>       assert reopened.views.list_threads()[0]["goal"]["state"]["source"]["kind"] == "owner"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_owner_pause.py:30: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/history_views.py:527: in list_threads
+    pending = self.bus.pending_counts_all(tuple(threads))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/message_bus.py:163: in pending_counts_all
+    name: sum(counts.values()) for name, counts in self._pending_projection(names).items()
+                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/message_bus.py:217: in _pending_projection
+    decode = partial(DeliveryMessage.from_wire, root_id=metadata.root_id)
+                                                        ^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = WireMetadata(last_seq=0, admission_after_seq=0, access=WritableAccess(), writer_protocol_version=None, wire_root_id=None, claim_envelopes_version=None, checkpoint_version=None, checkpoint_seal=None)
+
+    @property
+    def root_id(self) -> str:
+        if self.wire_root_id is None:
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_metadata.py:193: RelationViolationError
+________ test_new_member_owns_wire_and_behavior_without_dispatch_edits _________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9236ff8050>
+
+    def test_new_member_owns_wire_and_behavior_without_dispatch_edits(monkeypatch):
+        monkeypatch.setattr(CompactionResult, "__registry__", dict(CompactionResult.__registry__))
+    
+        @dataclass(frozen=True)
+        class ObservedCompactionResult(CompactionResult):
+            detail: str
+    
+            def terminal_event(self):
+                return ManualCompactionEnd(aborted=True, summary=self.detail)
+    
+            def prompt_response(self):
+                raise RequestError(-32603, self.detail, {"reason": self.detail})
+    
+>       outcome = ObservedCompactionResult("observation")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: Can't instantiate abstract class ObservedCompactionResult without an implementation for abstract methods 'adaptive_result', 'require_prepared'
+
+tests/test_compaction_result.py:55: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_goal_owner_pause.py::test_owner_pause_survives_reopen_and_explains_stale_model_report
+FAILED tests/test_compaction_result.py::test_new_member_owns_wire_and_behavior_without_dispatch_edits
+2 failed, 15 passed in 6.86s

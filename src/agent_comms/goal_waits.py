@@ -241,7 +241,7 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
             )
             return GoalExecution(GoalExecutionState.STANDBY, goal.id, targets, inactive)
         return GoalExecution(
-            GoalExecutionState(goal.state.execution_name),
+            GoalExecutionState.for_domain_state(goal.state),
             goal.id,
             block_reason=goal.state.reason,
         )

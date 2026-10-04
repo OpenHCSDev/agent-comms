@@ -22,6 +22,7 @@ from agent_comms.coordination_tables.publications import canonical_publication_k
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.threads import Thread
+from agent_comms.wake_policy import FullWake
 from agent_comms.wake_candidate_index import (
     ProjectionRebuildRequiredError,
     ProjectionUnavailableError,
@@ -86,7 +87,7 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
         required_through_seq=message.seq,
     )
     assert len(selected.entries) == 1
-    assert selected.entries[0].wake_mode == "full"
+    assert selected.entries[0].wake_mode is FullWake
     assert selected.entries[0].source_seq == message.seq
     assert not selected.has_more
     assert (

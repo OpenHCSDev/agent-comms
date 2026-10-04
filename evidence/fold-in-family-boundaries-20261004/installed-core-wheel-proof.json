@@ -1,0 +1,12 @@
+{
+  "core_head": "3b3855305c7f1f3aa0cefee25110a4791633a42e",
+  "core_wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/f4-core-installed-20261004/wheels/agent_comms-0.1.0-py3-none-any.whl",
+  "core_sha256": "6043867ce1d713a8e63f28ca2a9aee186bd74f7219d6928cfcabde2c444f5615",
+  "core_python_members": 311,
+  "audit_head": "9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10",
+  "audit_wheel": "/home/ts/wt/nra-skill-publish-20261002/.artifacts/family-flattened-collector-20261004/wheels/nominal_refactor_audit-0.1.0-py3-none-any.whl",
+  "audit_sha256": "8d489731728ebf9f7e0f90ef2b14e7e3b5d2f90ed82bd8b1482d735f82869886",
+  "audit_python_members": 10,
+  "native_processes": 0,
+  "provider_inputs": 0
+}
