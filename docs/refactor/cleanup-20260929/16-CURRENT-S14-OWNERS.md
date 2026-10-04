@@ -2164,12 +2164,12 @@ unchanged and awaits normal client closure.
 
 ### Next ordinary receiving source only
 
-Sch444 c769e212 prepares the qualified441442 successor using retained ToAd8acf,
+Sch444 1d37c589 prepares the merged corrected442 successor using retained ToAdec36,
 Core5f, Text73d, NRA8d and native086. Current Coread7e package/build inputs are
 byte-equal to the retained347-member Core wheel; its ordinary canonical tool
 change is retained_index_writer. This is not installed or public acceptance.
-Actual merged441442 source and full wheel metadata equality must be confirmed
-before stage. A fresh Bohr eligible-holder purpose follows W6 actual whole
+Actual main442cb9 source and all319 corrected ToAd wheel assets are confirmed
+equal; the receiving PR remains Draft and has no package purpose. A fresh Bohr eligible-holder purpose follows W6 actual whole
 closure; no public334 loan, rebuilt wheel, global extension or unqualifiedW6
 product is inferred. Original440 operator remains consumed once.
 
@@ -2196,3 +2196,32 @@ with its actual W1 provenance, rather than assuming a file on disk was included.
 The fixture's original isolation flags and declared source custody remain intact.
 This is a source contract finding, not an observed native defect or an input
 submission; the matching preview proof still cannot replace a leased request.
+
+### Actual authentic W6 input and remaining GUI work
+
+The sole authentic GUI purpose2f2 ended1 in11.148575s before App creation.
+Its original ACP input completed: one localhost post, one native input proof,
+leased request and two file-attributed sentence spans with contains_span checks.
+The control then compared concatenated sentence text with the entire file,
+including newline separators. ContributionCoordinates.sentences intentionally
+omits whitespace-only spans; this is a control oracle error, not a demonstrated
+native defect. Controlled label insertion and GUI correction were not reached.
+Einstein owns the sentence/file-range correction and continuation from the
+retained authentic request, without another input or replay. The owner reports
+1470 floor members,69 origins and390 protected members restored, no extra assets
+or sockets, runner/native children retired. Independent Bohr closure is still
+pending; the mutable lifecycle remains open and gives no receiving access.
+
+### Actual configured S4 input and observer correction
+
+Arendt662 current28d58f25 retains the configured task-memory input's terminal
+answer and original35.036150s reader refusal. The selected Sol/HIGH request
+reached budget admission and finished; original source remained unchanged and
+native children closed. The strict reader refused only the tool catalog public
+projection: debugger by-value capture turned function members into empty objects,
+whereas the emitter's JSON boundary omits them. The shared observer now captures
+JSON.parse(JSON.stringify(event.context)) at the original emission breakpoint.
+One authored publication control qualifies that correction; configured execution
+after the correction has not run. No second input, reader relaxation, complete
+construction/capacity/study claim follows. Arendt owns this integration; Bohr's
+THIN540 lifecycle remains open pending independent whole handback.
