@@ -1,0 +1,173 @@
+F....F...FF...F                                                          [100%]
+=================================== FAILURES ===================================
+_____________ test_stopped_and_archived_are_explicit_view_filters ______________
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/parent-c4-snapshot-20261004/test_stopped_and_archived_are_0')
+
+    def test_stopped_and_archived_are_explicit_view_filters(tmp_path):
+        comms = wire(tmp_path)
+        for name in ("active", "stopped", "archived"):
+            comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
+        comms.owners.stop("stopped")
+        comms.owners.stop("archived")
+        comms.threads.archive("archived")
+        comms.registry.declare(Thread("human", frozenset({"team"}), str(tmp_path), role=ThreadRole.USER))
+    
+        def names(snapshot):
+            return {view.thread.name for view in snapshot.threads}
+    
+        def members(snapshot):
+            return next(view.members for view in snapshot.channels if view.channel.name == "#team")
+    
+>       default = comms.views.viewer_snapshot(str(tmp_path))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_visibility_views.py:24: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/history_views.py:360: in viewer_snapshot
+    unread=self.bus.pending_counts(captured_viewer), channel_unread=display_unread,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/message_bus.py:159: in pending_counts
+    return self._pending_projection([name])[name]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/message_bus.py:217: in _pending_projection
+    decode = partial(DeliveryMessage.from_wire, root_id=metadata.root_id)
+                                                        ^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = WireMetadata(last_seq=0, admission_after_seq=0, access=WritableAccess(), writer_protocol_version=None, wire_root_id=None, claim_envelopes_version=None, checkpoint_version=None, checkpoint_seal=None)
+
+    @property
+    def root_id(self) -> str:
+        if self.wire_root_id is None:
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_metadata.py:193: RelationViolationError
+___________ test_reopened_viewer_snapshot_decodes_only_appended_rows ___________
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/parent-c4-snapshot-20261004/test_reopened_viewer_snapshot_0')
+
+    def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
+        comms = wire(tmp_path)
+        comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
+        comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+        for number in range(100):
+            comms.messaging.send("bob", "#team", f"message {number}")
+        expected = comms.views.viewer_snapshot(str(tmp_path))
+        assert expected.channel_unread["#team"] == 100
+    
+        fresh = wire(tmp_path)
+        with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
+>           assert fresh.views.viewer_snapshot(str(tmp_path)) == expected
+E           AssertionError: assert CoordinationS...r_notice=None) == CoordinationS...r_notice=None)
+E             
+E             Omitting 10 identical items, use -vv to show
+E             Differing attributes:
+E             ['threads']
+E             
+E             Drill down into differing attribute threads:
+E               threads: (ThreadView(thread=Thread(name='alice', tags=frozenset({'team'}), worktree='/home/ts/.cache/agent-scratch/parent-c4-snapshot-20261004/test_reopened_viewer_snapshot_0', created_at=1791133884.0934236, session_file=None, title=None, parent=None, task=None, process_identity=None, model=None, thinking_level=None, goal=None, previous_worktrees=(), auto_title_pending=False, role=<ThreadRole.AGENT: 'agent'>, execution=<class 'agent_comms.thread_exec...
+E             
+E             ...Full output truncated (3 lines hidden), use '-vv' to show
+
+tests/test_viewer_snapshot_index.py:28: AssertionError
+_______ test_mounted_coordination_snapshot_reopens_without_scanning_bus ________
+
+wired = <agent_comms.comms.Comms object at 0x7fcfae702b10>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fcfae8b0130>
+
+    def test_mounted_coordination_snapshot_reopens_without_scanning_bus(wired, monkeypatch):
+        wired.messaging.send("PR111", "#base", "channel activity")
+        wired.messaging.send("PR111", "fixer", "direct activity")
+        expected = wired.views.coordination_snapshot()
+        fresh = wire(wired.root)
+    
+        def forbidden_scan():
+            raise AssertionError("mounted snapshot reparsed historical bus rows")
+    
+        monkeypatch.setattr(fresh.bus.log, '_iter_log_unlocked', forbidden_scan)
+>       assert fresh.views.coordination_snapshot() == expected
+E       AssertionError: assert CoordinationS...r_notice=None) == CoordinationS...r_notice=None)
+E         
+E         Omitting 10 identical items, use -vv to show
+E         Differing attributes:
+E         ['threads']
+E         
+E         Drill down into differing attribute threads:
+E           threads: (ThreadView(thread=Thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1', created_at=1791133889.3824248, session_file=None, title=None, parent=None, task=None, process_identity=None, model=None, thinking_level=None, goal=None, previous_worktrees=(), auto_title_pending=False, role=<ThreadRole.AGENT: 'agent'>, execution=<class 'agent_comms.thread_execution.NativeThreadExecution'>, active_turn=None, channel_scope_generation=0, turn...
+E         
+E         ...Full output truncated (3 lines hidden), use '-vv' to show
+
+tests/test_threads_scaling.py:105: AssertionError
+_______ test_thread_listing_validates_registry_per_snapshot_not_per_row ________
+
+wired = <agent_comms.comms.Comms object at 0x7fcfae703950>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fcfaeaf4130>
+
+    def test_thread_listing_validates_registry_per_snapshot_not_per_row(wired, monkeypatch):
+        for index in range(30):
+            wired.registry.declare(Thread(f"peer-{index}", frozenset(), f"/peer-{index}"))
+        checks = 0
+        store_type = type(wired.registry.store)
+        verify = store_type.private_guard_unlocked
+    
+        def counted_verify(store):
+            nonlocal checks
+            checks += 1
+            return verify(store)
+    
+        monkeypatch.setattr(store_type, "private_guard_unlocked", counted_verify)
+>       rows = wired.views.list_threads()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_threads_scaling.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/history_views.py:476: in list_threads
+    pending = self.bus.pending_counts_all(tuple(threads))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/message_bus.py:163: in pending_counts_all
+    name: sum(counts.values()) for name, counts in self._pending_projection(names).items()
+                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/message_bus.py:217: in _pending_projection
+    decode = partial(DeliveryMessage.from_wire, root_id=metadata.root_id)
+                                                        ^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = WireMetadata(last_seq=0, admission_after_seq=0, access=WritableAccess(), writer_protocol_version=None, wire_root_id=None, claim_envelopes_version=None, checkpoint_version=None, checkpoint_seal=None)
+
+    @property
+    def root_id(self) -> str:
+        if self.wire_root_id is None:
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_metadata.py:193: RelationViolationError
+___ test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery ___
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/parent-c4-snapshot-20261004/test_mark_read_clears_thread_d0')
+
+    def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp_path):
+        comms = wire(tmp_path)
+        source = tmp_path / "sender.jsonl"
+        source.touch()
+        answer(source, "Saved reply")
+        comms.registry.declare(Thread("sender", frozenset({"ci"}), str(tmp_path), session_file=str(source)))
+        comms.registry.declare(Thread("receiver", frozenset({"ci"}), str(tmp_path)))
+        viewer = comms.messaging.user_identity(str(tmp_path)).name
+        comms.messaging.send("sender", "receiver", "Agent inbox remains unread")
+        comms.messaging.send("sender", viewer, "Human DM")
+        comms.messaging.send("sender", "#ci", "Channel message")
+    
+        before = comms.views.viewer_snapshot(str(tmp_path))
+>       assert before.thread_unread["sender"] == before.unread["sender"] == 1
+E       assert 0 == 1
+
+tests/test_user_view_mark_read.py:32: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_visibility_views.py::test_stopped_and_archived_are_explicit_view_filters
+FAILED tests/test_viewer_snapshot_index.py::test_reopened_viewer_snapshot_decodes_only_appended_rows
+FAILED tests/test_threads_scaling.py::test_mounted_coordination_snapshot_reopens_without_scanning_bus
+FAILED tests/test_threads_scaling.py::test_thread_listing_validates_registry_per_snapshot_not_per_row
+FAILED tests/test_user_view_mark_read.py::test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery
+5 failed, 10 passed in 10.29s

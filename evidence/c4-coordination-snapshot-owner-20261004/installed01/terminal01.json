@@ -1,0 +1,14 @@
+{
+  "seconds": 2.6868799419607967,
+  "outcome": {
+    "kind": "exited",
+    "code": 1
+  },
+  "successful": false,
+  "controller": {
+    "pid": 2375254,
+    "start_time": 61157749
+  },
+  "original_BoundedRun_cleanup_joined": true,
+  "private_root": "/home/ts/.cache/agent-scratch/parent-c4-654-installed01-20261004"
+}
