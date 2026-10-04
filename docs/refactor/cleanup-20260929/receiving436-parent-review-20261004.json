@@ -1,0 +1,39 @@
+{
+  "source_head": "4e0d3d9ab68d229ee5ad6c95e468b40412de976f",
+  "merged": "82639679fa82a4c370f5e5b9821001b0ead19d52",
+  "required_debt_run": 37209073696,
+  "required_debt": "SUCCESS",
+  "ready_path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/native-ingress638640633-context417-receiving-20261004/new-publication436/ready-receipt.json",
+  "ready_sha256": "8796ce30c748b25adfa2b02f09f551d9921225df753544d18047e87d9a558c42",
+  "artifact_hashes_verified": 115,
+  "canonical_core_source": "1a520528dfa8d5e5e1ebb13913fed3ccb3514376",
+  "canonical_operator_files_compared_to_git": 51,
+  "actual_qualified_gate_files_verified": 27,
+  "installed_source_assets": 942,
+  "native_forced_assets": 3,
+  "packages": 69,
+  "native_manifest": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+  "source_proof_sha256": "6eea036fe4ed9a19dba1467381fbed8f3ecc584e9c4808db9249da8893b6bcc1",
+  "activation_sha256": "a4a284bc3376cb0d648ed1cb272bfe9010377efb553b63ee6e874961a3e1fe57",
+  "publication_receipt_absent": true,
+  "preimages_absent": true,
+  "public_guard": {
+    "scope": "Original read-only436 cohort/idle/client guard; no publisher called",
+    "public_effects": 0,
+    "cohort": "PASS",
+    "owners": 19,
+    "idle": "PASS",
+    "guard": "REFUSED",
+    "reason": "Unretired or unclassified client: exact process ProcessIdentity(pid=1001594, start_time=59543565)",
+    "exception": "RuntimeError",
+    "publication_receipt_absent": true,
+    "preimages_absent": true
+  },
+  "public_operation": "NOT EXECUTED; current user client retained; quiet-window reply pending",
+  "next_private_purpose": "Sole Heis432 bounded affected row App with actual436 archive/readback/grant7d059665; whole actual436 floor restoration and handback required before publication",
+  "claim_limits": [
+    "Original affected SDK/App/physical qualifiers retain their scopes",
+    "No public delivery or whole-performance claim",
+    "Parent review postprocessor list-vs-mapping error occurred after115 hash checks; canonical51 and27 gates subsequently compared directly without package changes or gate reruns"
+  ]
+}

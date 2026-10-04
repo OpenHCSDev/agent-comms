@@ -1,4 +1,18 @@
-## Current: ingress, retry and fixture closure merged; one receiving successor — 2026-10-04
+## Current: receiving436 reviewed; public quiet window remains — 2026-10-04
+
+Toad436 exact4e0d3d9a merged82639679 after Debt37209073696 passed. Parent independently matched all115 frozen artifact hashes, all51 operators to Core1a Git, and all27 original affected gate files. Installed942 source assets plus3 forced native assets, normal69 dependencies, native086 trust and equal native/checkpoint schemas are recorded. One Core58a install advanced the seven qualified ingress/retry runtime assets; unchanged Toad5002/Text73d/NRA8d were reused. No unchanged SDK/App/provider/movie acceptance was repeated. All274 old artifacts and PREFIXactivation/proof remain byte-equal. Parent review is recorded in receiving436-parent-review-20261004.json.
+
+The original fresh read-only guard passed the full cohort and all19 idle owners, then refused the open user Toad client1001594/birth59543565. Its argv is toad, cwd/home/ts, with no separate private root. No client signal, owner restart, publisher, receipt or public preimage has occurred. Tristan has been asked to close Toad when ready; there is no guard polling or automatic cutover. This preserves the reviewed build for the original once-only publication and default terminal/ACP/native/history acceptance.
+
+Independent message-style/history work continues. Parent authorized only the existing affected432 App while that client is open. Bohr archived ACTUAL436 (1470 members,4029397 bytes, SHAe6f27830), verified202 all-UID zero references/gaps, and issued soleHeis432 grant7d059665. Core1a/Text59/NRA9a/native086 and69 dependencies stay unchanged; only its changed Toad wheel and one affected App are allowed. All115+274/PREFIXactivation remain frozen; Heis must restore the WHOLE actual436 floor and close the purpose before public publication. No parallel Sch writer, extra environment, native copy, provider or movie.
+
+Toad4370f09 mergedd176 and43896cf mergedf980 at their exact green ratchets. The original runtime_fixture finalizer retains closed SDK fork journals only after teardown/terminal capture and borrower clearance. A real mounted different filesystem is required before copying and again before source replacement. Destination publication uses an exclusive hard link, refusing existing files and dangling aliases. Temporary-filesystem refusal/exclusive-publication controls are qualified; original archival execution is not claimed. Bohr's separate89 moved ten historical copies with original paths/bytes preserved, freeing412999680 exclusive HOME bytes. Codex rollout/session cleanup remains excluded from this workflow.
+
+Textual6223f8655e merged777232c8 after Debt37208981654; one CI literal now matches actual Toad main's Core1a pin, with no product/wheel/control repeat. Core64532657abe merged8c0f1a09 after Debt37209618106. Existing paired design checks every observed admitted model and completion through PiModel, deleting final-request-only inference; original nine raw keepers match. Its five controls/ten subtests and missing-trajectory CLI are private/source scope only. Runtime/native/tools remain unchanged and the30-pair/USD75 study remains unapproved.
+
+The full integration and performance goal remains active. Current delivery is merged and staged, not publicly installed or terminal-verified. Parent awaits the real quiet window and the actual432 handback; other working-memory/S4 source owners continue independently.
+
+## Historical: ingress, retry and fixture closure merged; one receiving successor — 2026-10-04
 
 Core64383943d merged9df after exact Debt37204617540 passed. ReviewedRetainedSummaryCohort checks the typed target, source proof and authentic artifacts; the redundant activation-storage-location predicate is deleted. Original route, five default links, native trust, schemas, owner audience and client admission remain required.
 
