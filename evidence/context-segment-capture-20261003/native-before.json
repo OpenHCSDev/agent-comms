@@ -1,0 +1,414 @@
+{
+  "revision": "31862909ffc9faab71d5835974c29b4a33c2d7ee",
+  "parser": "existing Node Acorn 8.18.0",
+  "roots": [
+    "stack/",
+    "tests/"
+  ],
+  "parsed": 47,
+  "omissions": [],
+  "declarations": [
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 75,
+      "class": "NativeInputClaim",
+      "methods": [
+        "constructor",
+        "capture",
+        "observe"
+      ]
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 99,
+      "class": "ContextSegment",
+      "methods": [
+        "constructor",
+        "manifest",
+        "full",
+        "publicationValues",
+        "matches",
+        "recordedValues"
+      ]
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 125,
+      "class": "NativeMessages",
+      "base": "ContextSegment",
+      "methods": [
+        "constructor",
+        "tokens",
+        "payload",
+        "render",
+        "publicationValues",
+        "recordedValues"
+      ]
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 150,
+      "class": "TurnContext",
+      "methods": [
+        "constructor",
+        "capture",
+        "next",
+        "project",
+        "fullSource",
+        "recordedSegment",
+        "recentSource",
+        "render",
+        "manifest",
+        "observation",
+        "full"
+      ]
+    }
+  ],
+  "references": [
+    {
+      "file": "stack/native-request-input.mjs",
+      "line": 8,
+      "member": "matches"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 27,
+      "member": "matches"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 52,
+      "member": "provenance"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 56,
+      "member": "capture"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 58,
+      "member": "provenance"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 59,
+      "member": "capture"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 62,
+      "member": "matches"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 67,
+      "member": "provenance"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 79,
+      "member": "capture"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 91,
+      "member": "provenance"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 93,
+      "member": "manifest"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 102,
+      "member": "provenance"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 104,
+      "member": "contributors"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 108,
+      "member": "provenance"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 110,
+      "member": "contributors"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 112,
+      "member": "manifest"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 113,
+      "member": "full"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 115,
+      "member": "manifest"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 135,
+      "member": "full"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 137,
+      "member": "provenance"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 194,
+      "member": "contributors"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 194,
+      "member": "contributors"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 195,
+      "member": "contributors"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 196,
+      "member": "contributors"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 196,
+      "member": "manifest"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 199,
+      "member": "provenance"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 200,
+      "member": "provenance"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 206,
+      "member": "capture"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 218,
+      "member": "capture"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 230,
+      "member": "matches"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 236,
+      "member": "recordedValues"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 237,
+      "member": "manifest"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 265,
+      "member": "manifest"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 269,
+      "member": "manifest"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 270,
+      "member": "publicationValues"
+    },
+    {
+      "file": "stack/native-turn-context.mjs",
+      "line": 272,
+      "member": "full"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 49,
+      "member": "capture"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 50,
+      "member": "full"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 59,
+      "member": "capture"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 61,
+      "member": "provenance"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 68,
+      "member": "capture"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 80,
+      "member": "provenance"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 81,
+      "member": "provenance"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 82,
+      "member": "manifest"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 89,
+      "member": "manifest"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 90,
+      "member": "contributors"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 100,
+      "member": "full"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 101,
+      "member": "full"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 103,
+      "member": "contributors"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 105,
+      "member": "provenance"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 108,
+      "member": "full"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 109,
+      "member": "full"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 111,
+      "member": "contributors"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 120,
+      "member": "capture"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 121,
+      "member": "manifest"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 122,
+      "member": "contributors"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 123,
+      "member": "contributors"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 124,
+      "member": "contributors"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 129,
+      "member": "full"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 151,
+      "member": "manifest"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 152,
+      "member": "manifest"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 152,
+      "member": "provenance"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 172,
+      "member": "manifest"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 218,
+      "member": "observation"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 219,
+      "member": "observation"
+    },
+    {
+      "file": "tests/native_turn_context_contract.mjs",
+      "line": 220,
+      "member": "full"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 27,
+      "member": "full"
+    },
+    {
+      "file": "tests/retained_native_conditions.mjs",
+      "line": 68,
+      "member": "capture"
+    },
+    {
+      "file": "tests/summary_prefix_native_observer.mjs",
+      "line": 160,
+      "member": "provenance"
+    }
+  ]
+}
