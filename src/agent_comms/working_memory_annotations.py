@@ -4,7 +4,6 @@ from __future__ import annotations
 from .coordination_tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
 from .working_memory_labels import CalibrationReport, ClassifierVersion, HumanLabel, ModelLabel, QuestionVersion
 from .working_memory_requests import CompletedAnnotationOutcome, DisclosureRequest, SubmittedAnnotationOutcome
-from .working_memory_questions import KindQuestion
 
 
 class PreviouslyRequestedAnnotation(ValueError):
@@ -43,16 +42,20 @@ class WorkingMemoryAnnotations:
             return CalibrationReport(question, classifier, tuple(cases))
 
     def for_segment(self, segment, classifier: ClassifierVersion) -> tuple[ModelLabel, ...]:
-        """Read original meaning answers for one authenticated segment digest."""
-        question = QuestionVersion.current(KindQuestion)
+        """Read the complete effective answer family at its original addresses.
+
+        A kind answer does not replace its obligation, scope or fulfillment
+        evidence. Different question versions remain different recorded facts;
+        reading a segment never substitutes today's question definition.
+        """
         with self.session.read():
             rows = SpanAnnotationsRow.select(self.session._connection, order_by=("id",),
-                segment_digest=segment.sha256, question=question.question,
-                question_version=question.sha256, classifier=classifier.classifier,
+                segment_digest=segment.sha256, classifier=classifier.classifier,
                 classifier_pin=classifier.pin)
             grouped = {}
             for row in rows:
-                key = tuple(self.address(row.label.span, question, classifier).values())
+                label = row.label
+                key = tuple(self.address(label.span, label.question, label.classifier).values())
                 grouped.setdefault(key, []).append(row)
             return tuple(SpanAnnotationsRow.effective(tuple(originals))
                          for originals in grouped.values())
