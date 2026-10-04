@@ -66,3 +66,22 @@ SDK/provider/public operation run for656. Existing540 and086 purposes remain
 closed. Final bounded installed reservation/refusal/cancellation + actual saved
 SDK/OwnedTurn cleanup awaits fresh purpose; prior655 evidence cannot qualify
 this expanded source.
+
+## Whole source checkpoint97fc173d
+
+Original after Package:316 production/365 tests, zero omissions. All former
+run_owned_input/pending_followups consumers removed;37 declaration/call sites
+recorded, including the embedded original child source. InputDrain486 lines
+(previous547); this comes from shared reservation ownership and original-only
+lifecycle semantics, not methods moved into a size mixin. Current production
+95 deleted/114 added across four existing modules. NativeBackendFixture
+uses the same original reserve owner;13 related fixture consumers migrate.
+
+One focused control was added AFTER implementation for the concrete scope-exit
+cancellation gap: original input transferred but dispatch not entered. It must
+retain its one NotSent row, no native binding and no live queued grant. Existing
+owner readmission/postdispatch failure controls stay intact. None of these
+checks has run for656 yet; final bounded installed batch remains required.
+
+No full C4 live/latency claim from AST or source size. Parent's current
+HistoryViews/presentation/diagnostics scopes remain disjoint.

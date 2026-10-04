@@ -1,0 +1,333 @@
+{
+  "revision": "97fc173d41fe14f46937af4ba2bfe895d8d87462",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 316,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 365,
+      "omissions": []
+    }
+  ],
+  "sizes": {
+    "src/agent_comms/input_disposition.py::InputDispositions": 156,
+    "src/agent_comms/input_drain.py::InputDrain": 486,
+    "src/agent_comms/queued_input.py::QueuedInput": 186,
+    "src/agent_comms/queued_input.py::InitialInput": 53
+  },
+  "sites": [
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 226,
+      "kind": "declaration",
+      "name": "InputDispositions",
+      "bases": [
+        "LockedStore[InputDocument]"
+      ],
+      "members": [
+        "record_type",
+        "empty",
+        "bus_key",
+        "record",
+        "record_originals",
+        "reserve_turn",
+        "reserve_originals",
+        "_transition",
+        "bind",
+        "bind_originals",
+        "started",
+        "settle_unbound",
+        "review_for_goal",
+        "dismiss_historical"
+      ]
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 274,
+      "kind": "call",
+      "expression": "self.reserve_originals"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 57,
+      "kind": "declaration",
+      "name": "InputDrain",
+      "bases": [
+        "FutureInputQueue"
+      ],
+      "members": [
+        "__init__",
+        "clear_queued_inputs",
+        "queue_binding",
+        "queue_state",
+        "emit_queue_state",
+        "emit_input_started",
+        "emit_input_disposition",
+        "emit_input_delivery_changed",
+        "replay_unknown_inputs",
+        "input_keys",
+        "awaiting_input_keys",
+        "ensure_live_drain",
+        "observe",
+        "drain_inbox",
+        "_private_observation_revision",
+        "_observe_private_revision",
+        "_drain_private_if_changed",
+        "drain_owned_inbox",
+        "background_wakes_disabled",
+        "drain_count",
+        "accept_followup",
+        "bind_native_turn",
+        "future_inputs",
+        "send_now",
+        "close",
+        "input_started",
+        "input_refused",
+        "continue_in_project",
+        "finish_original_inputs",
+        "finish_turn_inputs"
+      ]
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 365,
+      "kind": "call",
+      "expression": "QueuedInput.reserve"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 70,
+      "kind": "declaration",
+      "name": "QueuedInput",
+      "bases": [],
+      "members": [
+        "key",
+        "accepted_id",
+        "queue_items",
+        "source",
+        "capture",
+        "require_capacity",
+        "reserve",
+        "bind_turn",
+        "immediate",
+        "deferred",
+        "dispatch",
+        "require_live_source",
+        "current",
+        "require_handoff",
+        "future_receipt",
+        "after_clear",
+        "restore_after_turn"
+      ]
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 258,
+      "kind": "declaration",
+      "name": "InitialInput",
+      "bases": [
+        "QueuedInput"
+      ],
+      "members": [
+        "require_capacity",
+        "run",
+        "finish",
+        "require_live_source",
+        "after_clear",
+        "restore_after_turn",
+        "accepted_id"
+      ]
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 137,
+      "kind": "call",
+      "expression": "inputs.dispositions.reserve_originals"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 142,
+      "kind": "call",
+      "expression": "dispositions.reserve_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 258,
+      "kind": "call",
+      "expression": "InitialInput.run"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 268,
+      "kind": "call",
+      "expression": "InitialInput.run"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 118,
+      "kind": "call",
+      "expression": "InitialInput.reserve"
+    },
+    {
+      "path": "tests/test_acp_goal_original_input.py",
+      "line": 81,
+      "kind": "call",
+      "expression": "InitialInput.run"
+    },
+    {
+      "path": "tests/test_acp_goal_original_input.py",
+      "line": 154,
+      "kind": "call",
+      "expression": "InitialInput.run"
+    },
+    {
+      "path": "tests/test_acp_goal_original_input.py",
+      "line": 123,
+      "kind": "call",
+      "expression": "InitialInput.run"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 213,
+      "kind": "embedded_child_source",
+      "expression": "InitialInput.run(original owner inputs); explicit parsed original hard-exit child"
+    },
+    {
+      "path": "tests/test_captured_input_dispatch.py",
+      "line": 40,
+      "kind": "call",
+      "expression": "InitialInput.run"
+    },
+    {
+      "path": "tests/test_captured_input_dispatch.py",
+      "line": 60,
+      "kind": "call",
+      "expression": "InitialInput.run"
+    },
+    {
+      "path": "tests/test_captured_input_dispatch.py",
+      "line": 83,
+      "kind": "call",
+      "expression": "InitialInput.run"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 76,
+      "kind": "call",
+      "expression": "InitialInput.run"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 86,
+      "kind": "call",
+      "expression": "InitialInput.run"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 118,
+      "kind": "call",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 177,
+      "kind": "call",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 184,
+      "kind": "call",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 210,
+      "kind": "call",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 258,
+      "kind": "call",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 113,
+      "kind": "call",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 78,
+      "kind": "call",
+      "expression": "store.reserve_turn"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 83,
+      "kind": "call",
+      "expression": "store.reserve_turn"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 188,
+      "kind": "call",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 178,
+      "kind": "call",
+      "expression": "QueuedInput.capture"
+    },
+    {
+      "path": "tests/test_stack_channel_delivery.py",
+      "line": 118,
+      "kind": "call",
+      "expression": "InitialInput.run"
+    },
+    {
+      "path": "tests/test_stack_inbox_output.py",
+      "line": 230,
+      "kind": "call",
+      "expression": "InitialInput.run"
+    },
+    {
+      "path": "tests/test_stack_native_compaction.py",
+      "line": 391,
+      "kind": "call",
+      "expression": "InitialInput.run"
+    },
+    {
+      "path": "tests/test_stack_persistent_compaction.py",
+      "line": 248,
+      "kind": "call",
+      "expression": "InitialInput.run"
+    },
+    {
+      "path": "tests/test_stack_persistent_compaction.py",
+      "line": 253,
+      "kind": "call",
+      "expression": "InitialInput.run"
+    },
+    {
+      "path": "tests/test_stack_persistent_compaction.py",
+      "line": 325,
+      "kind": "call",
+      "expression": "InitialInput.run"
+    },
+    {
+      "path": "tests/test_stack_send_now.py",
+      "line": 326,
+      "kind": "call",
+      "expression": "InitialInput.run"
+    }
+  ],
+  "retired_consumers": [],
+  "ambiguity": "Dynamic attribute resolution remains semantic source reading, not an AST execution proof. Embedded hard-exit Python explicitly read/parsed."
+}
