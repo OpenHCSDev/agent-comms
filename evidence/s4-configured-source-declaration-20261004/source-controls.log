@@ -1,0 +1,9 @@
+test_file_wheel_and_remaining_command_reach_original_validator (test_configured_installed_source_arguments.ConfiguredInstalledSourceArguments.test_file_wheel_and_remaining_command_reach_original_validator) ... ok
+test_imported_location_and_origin_remain_required (test_configured_installed_source_arguments.ConfiguredInstalledSourceArguments.test_imported_location_and_origin_remain_required) ... ok
+test_missing_declaration_refuses_at_cli_boundary (test_configured_installed_source_arguments.ConfiguredInstalledSourceArguments.test_missing_declaration_refuses_at_cli_boundary) ... ok
+test_vcs_origin_uses_same_source_declaration (test_configured_installed_source_arguments.ConfiguredInstalledSourceArguments.test_vcs_origin_uses_same_source_declaration) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.035s
+
+OK

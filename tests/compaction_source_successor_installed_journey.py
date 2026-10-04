@@ -59,8 +59,9 @@ def ordinary_source():
 
 @asynccontextmanager
 async def configured_saved_agent(stage, package, source_file, receiver, receipt, *,
+                                 core_source: InstalledSource,
                                  capture_source=ordinary_source, observe_launch=unchanged_launch,
-                                 continuation=None, core_source: InstalledSource | None = None,
+                                 continuation=None,
                                  core_artifacts: tuple[ReviewedArtifact, ...] = ()):
     """Acquire one configured saved fork and close its original child on every exit."""
     import agent_comms
@@ -68,8 +69,7 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
     checkout = Path(__file__).resolve().parents[1]
     assert installed.is_relative_to(Path(sys.prefix))
     direct = json.loads(distribution('agent-comms').read_text('direct_url.json'))
-    revision = (direct['vcs_info']['commit_id'] if core_source is None else
-                core_source.require_package('agent_comms', installed, direct, core_artifacts))
+    revision = core_source.require_package('agent_comms', installed, direct, core_artifacts)
     # The installed Core source and the current private fixture have different
     # release identities. Verify the former against its original Git declaration,
     # never an overlay or a mutable current-checkout approximation.
@@ -169,7 +169,7 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
 async def run(stage, package, source_file, *, capture_source=ordinary_source,
               observe_launch=unchanged_launch,
               probe_marker='SOURCE529_DISTINCT_AFTER_COMMIT',
-              core_source: InstalledSource | None = None,
+              core_source: InstalledSource,
               core_artifacts: tuple[ReviewedArtifact, ...] = ()):
     receipt = {'complete': False, 'public_inputs': 0, 'input_replays': 0,
                'installed_UI': False, 'acceptance_scope': 'configured SDK/ACP/native saved-source compaction and distinct input'}
@@ -220,4 +220,9 @@ async def run(stage, package, source_file, *, capture_source=ordinary_source,
 
 
 if __name__=='__main__':
-    asyncio.run(run(Path(sys.argv[1]).absolute(), Path(sys.argv[2]).resolve(), Path(sys.argv[3]).resolve()))
+    from publish_retained_summary import InstalledSource
+
+    source, artifacts, arguments = InstalledSource.command_arguments(sys.argv[1:])
+    stage, package, original = map(Path, arguments)
+    asyncio.run(run(stage.absolute(), package.resolve(), original.resolve(),
+                    core_source=source, core_artifacts=artifacts))

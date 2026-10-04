@@ -1,0 +1,53 @@
+{
+  "revision": "ad7e582f3e7536d3b76f95ec6da1e1fd8122ee20",
+  "modules": 737,
+  "unparsed": [],
+  "sites": [
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 61,
+      "declaration": "configured_saved_agent"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 72,
+      "call": "core_source.require_package"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 189,
+      "call": "configured_saved_agent"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 47,
+      "declaration": "condition_application"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 82,
+      "call": "configured_saved_agent"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 168,
+      "call": "configured_saved_agent"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 278,
+      "call": "configured_saved_agent"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 395,
+      "call": "condition_application"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 148,
+      "declaration": "require_package"
+    }
+  ],
+  "limit": "Lexical Python references; runtime injection and JavaScript source are not resolved."
+}

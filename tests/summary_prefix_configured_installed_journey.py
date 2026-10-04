@@ -61,7 +61,7 @@ def observe_native_requests(package, observation, *, contexts=None, summaries=No
             yield observe_launch
 
 
-async def main(stage, package, original_python):
+async def main(stage, package, original_python, *, core_source, core_artifacts=()):
     from original_owner_capture import CurrentTypedCapture
     from compaction_source_successor_installed_journey import run
 
@@ -79,6 +79,7 @@ async def main(stage, package, original_python):
         with observe_native_requests(package, observation) as observe_launch:
             await run(stage, package, original_file,
                       capture_source=capture_source, observe_launch=observe_launch,
+                      core_source=core_source, core_artifacts=core_artifacts,
                       probe_marker=f'SOURCE527_{stage.name.upper().replace("-", "_")}_AFTER_COMMIT')
         records = [json.loads(line) for line in observation.read_text().splitlines()]
         assert not any(r.get('observerFailed') or r.get('unqualifiedRouteCancelledBeforeRequest') for r in records)
@@ -113,4 +114,9 @@ async def main(stage, package, original_python):
 if __name__ == '__main__':
     # A venv interpreter symlink is a launch capability. Resolving it to the
     # shared UV executable discards the original installed package environment.
-    asyncio.run(main(Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve(), Path(sys.argv[3]).absolute()))
+    from publish_retained_summary import InstalledSource
+
+    source, artifacts, arguments = InstalledSource.command_arguments(sys.argv[1:])
+    stage, package, original = map(Path, arguments)
+    asyncio.run(main(stage.resolve(), package.resolve(), original.absolute(),
+                     core_source=source, core_artifacts=artifacts))

@@ -1,0 +1,213 @@
+{
+  "revision": "0ac59fc338da1ef48fb1536af0467105205d4294",
+  "modules": 738,
+  "unparsed": [],
+  "sites": [
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 61,
+      "declaration": "configured_saved_agent",
+      "keyword_only": [
+        "core_source",
+        "capture_source",
+        "observe_launch",
+        "continuation",
+        "core_artifacts"
+      ]
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 72,
+      "call": "core_source.require_package",
+      "keywords": []
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 225,
+      "call": "InstalledSource.command_arguments",
+      "keywords": []
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 189,
+      "call": "configured_saved_agent",
+      "keywords": [
+        "capture_source",
+        "observe_launch",
+        "core_source",
+        "core_artifacts"
+      ]
+    },
+    {
+      "path": "tests/session_coverage_configured_journey.py",
+      "line": 22,
+      "imports": [
+        "run"
+      ]
+    },
+    {
+      "path": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 66,
+      "imports": [
+        "run"
+      ]
+    },
+    {
+      "path": "tests/summary_prefix_configured_installed_journey.py",
+      "line": 119,
+      "call": "InstalledSource.command_arguments",
+      "keywords": []
+    },
+    {
+      "path": "tests/test_configured_installed_source_arguments.py",
+      "line": 32,
+      "call": "InstalledSource.command_arguments",
+      "keywords": []
+    },
+    {
+      "path": "tests/test_configured_installed_source_arguments.py",
+      "line": 51,
+      "call": "source.require_package",
+      "keywords": []
+    },
+    {
+      "path": "tests/test_configured_installed_source_arguments.py",
+      "line": 54,
+      "call": "source.require_package",
+      "keywords": []
+    },
+    {
+      "path": "tests/test_configured_installed_source_arguments.py",
+      "line": 57,
+      "call": "replace(source, byte_equal=False).require_package",
+      "keywords": []
+    },
+    {
+      "path": "tests/test_configured_installed_source_arguments.py",
+      "line": 66,
+      "call": "InstalledSource.command_arguments",
+      "keywords": []
+    },
+    {
+      "path": "tests/test_configured_installed_source_arguments.py",
+      "line": 75,
+      "call": "InstalledSource.command_arguments",
+      "keywords": []
+    },
+    {
+      "path": "tests/test_configured_installed_source_arguments.py",
+      "line": 40,
+      "call": "decoded.require_package",
+      "keywords": []
+    },
+    {
+      "path": "tests/test_configured_installed_source_arguments.py",
+      "line": 44,
+      "call": "decoded.require_package",
+      "keywords": []
+    },
+    {
+      "path": "tests/test_configured_installed_source_arguments.py",
+      "line": 70,
+      "call": "decoded.require_package",
+      "keywords": []
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 32,
+      "imports": [
+        "configured_saved_agent",
+        "digest"
+      ]
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 47,
+      "declaration": "condition_application",
+      "keyword_only": [
+        "core_source",
+        "core_artifacts"
+      ]
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 141,
+      "declaration": "request_construction",
+      "keyword_only": [
+        "core_source",
+        "core_artifacts"
+      ]
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 394,
+      "call": "InstalledSource.command_arguments",
+      "keywords": []
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 83,
+      "call": "configured_saved_agent",
+      "keywords": [
+        "capture_source",
+        "observe_launch",
+        "core_source",
+        "core_artifacts"
+      ]
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 170,
+      "call": "configured_saved_agent",
+      "keywords": [
+        "capture_source",
+        "observe_launch",
+        "core_source",
+        "core_artifacts"
+      ]
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 281,
+      "call": "configured_saved_agent",
+      "keywords": [
+        "capture_source",
+        "observe_launch",
+        "continuation",
+        "core_source",
+        "core_artifacts"
+      ]
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 399,
+      "call": "request_construction",
+      "keywords": [
+        "core_source",
+        "core_artifacts"
+      ]
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 404,
+      "call": "condition_application",
+      "keywords": [
+        "core_source",
+        "core_artifacts"
+      ]
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 144,
+      "declaration": "command_arguments",
+      "keyword_only": []
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 167,
+      "declaration": "require_package",
+      "keyword_only": []
+    }
+  ],
+  "limit": "Lexical Python references; runtime injection and JavaScript resolution remain semantic source reads."
+}

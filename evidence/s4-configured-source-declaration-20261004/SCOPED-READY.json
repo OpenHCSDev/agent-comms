@@ -1,0 +1,20 @@
+{
+  "state": "Scoped Ready; corrected configured capture remains unfinished",
+  "source_head": "28d58f25a4a7d03435c636eefc1f7229894ca23a",
+  "debt": {
+    "run": 37240665353,
+    "head": "28d58f25a4a7d03435c636eefc1f7229894ca23a",
+    "conclusion": "SUCCESS"
+  },
+  "native086_claim": "CLOSED by original Sch after original keeper receipt readback; no next execution",
+  "thin540_claim": "Whole Arendt claim returned; Bohr final privileged borrower census complete, lifecycle closure owned by Bohr",
+  "original_borrower_receipt": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Arendt662-configured-source-final-borrowers.json",
+  "original_borrower_receipt_sha256": "6bed16ebe5b54e7bf3cf59ff85c96c7e89ff41f588768c9649f6f92582994346",
+  "all_uid_processes": 228,
+  "permission_gaps": [],
+  "holder_refs": 0,
+  "private_output_refs": 0,
+  "unchanged_public_native_environment_refs": 19,
+  "next_execution_permission_inferred": false,
+  "provider_resend": false
+}

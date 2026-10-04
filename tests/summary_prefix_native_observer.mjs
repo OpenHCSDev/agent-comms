@@ -145,7 +145,10 @@ if (output && packageRoot) {
             if (publicationPoint && params.hitBreakpoints.includes(publicationPoint.breakpointId)) {
                 const original = await post('Debugger.evaluateOnCallFrame', {
                     callFrameId:frame.callFrameId,
-                    expression:"event.context",
+                    // Capture the emitter's JSON boundary in the child. CDP's
+                    // direct by-value projection turns callbacks into {}, which
+                    // would invent tool fields absent from the emitted event.
+                    expression:"JSON.parse(JSON.stringify(event.context))",
                     returnByValue:true,
                 });
                 if (original.exceptionDetails) throw new Error('Original SDK emitted observation unavailable');

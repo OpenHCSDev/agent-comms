@@ -1,0 +1,25 @@
+{
+  "source_head": "0ac59fc338da1ef48fb1536af0467105205d4294",
+  "configured_execution": "not started; holder and native execution purposes not yet issued",
+  "source_controls": "4 passed in 0.035s",
+  "AST_before_modules": 737,
+  "AST_after_modules": 738,
+  "AST_parse_omissions": [],
+  "AST_limit": "Lexical Python references; JavaScript owner semantics read separately, dynamic dispatch not resolved.",
+  "installed_core_head": "c656a64c4887fae14227b1e0a04a2b263bdaeade",
+  "installed_source_declaration": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/installed-core656.private.json",
+  "installed_source_declaration_sha256": "c061daa0c451ff6398e426d9c84cdca54f33f4fc29b5dac0b413b2dc34e99c15",
+  "original_wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+  "original_wheel_sha256": "5f1667ce64c58d67e153850be91dfb669ea9e347218f8d845937a1c12c778a9c",
+  "original_checkpoint": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-three-cuts-configured01/cut-3-checkpoint.private.json",
+  "original_checkpoint_sha256": "682af599361a028ec1b9e03941940376cd07d26c032b38c8685a6d5eb0897ee7",
+  "command": "env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tests:tools/cutover /home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python tests/three_cut_retention_configured_journey.py /home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured01 /home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent /home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python --installed-source /home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/installed-core656.private.json --archive /home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl 5f1667ce64c58d67e153850be91dfb669ea9e347218f8d845937a1c12c778a9c --condition-application task-memory /home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-three-cuts-configured01/cut-3-checkpoint.private.json > /home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured01.log 2>&1",
+  "cwd": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002",
+  "output": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured01",
+  "terminal_receipt": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured01/application/receipt.json",
+  "keepers": {
+    "owner-before.json": "b99185ab9494d19ae219fe7d1651c8cf1c7dd2a9adbeef85ac335fd19b6e3227",
+    "owner-after.json": "01a9e907954d053b212bc8537ae137b4a7188da7624490d8ffc22b26b285a972",
+    "source-controls.log": "9d99f79287d089c5d8550b4442e38448e7ac278322a9f7484fd2a0ad0c8f62a3"
+  }
+}

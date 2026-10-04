@@ -1,0 +1,62 @@
+{
+  "native_terminal": {
+    "input_id": "765d6c5bf157fe2ec9d5102b0cf9e74e",
+    "answer": "48f9dc14",
+    "terminal": true,
+    "provider": "openai-codex",
+    "model": "gpt-6.1-sol",
+    "public_reply": "controller exact marker asserted before reader failure"
+  },
+  "request_id": "1f0f7c06-d587-424c-a6ff-ce60333956c9",
+  "stages": [
+    "preparing",
+    "callback",
+    "callback_end",
+    "budget_admission",
+    "connecting",
+    "connected",
+    "dispatch",
+    "first_event",
+    "callback",
+    "callback_end",
+    "first_delta_consumed",
+    "stream_end",
+    "callback",
+    "callback_end",
+    "finished"
+  ],
+  "budget": [
+    {
+      "requestId": "1f0f7c06-d587-424c-a6ff-ce60333956c9",
+      "sessionId": "01a10903-a4c3-7654-9ad0-dac539ec84d1",
+      "inputId": "765d6c5bf157fe2ec9d5102b0cf9e74e",
+      "startedAtMs": 1791152615712,
+      "observedAtMs": 1791152615916,
+      "monotonicNs": "628255093686953",
+      "elapsedMs": 204.515877,
+      "callbackMs": 0.091473,
+      "callbackCount": 1,
+      "callbackMaxMs": 0.091473,
+      "stage": "budget_admission",
+      "transport": "",
+      "attempt": 0,
+      "status": null,
+      "responseId": null,
+      "callback": "",
+      "model": {
+        "kind": "reported",
+        "contextWindow": 272000,
+        "provider": "openai-codex",
+        "id": "gpt-6.1-sol",
+        "name": "GPT-6.1 Sol",
+        "maxTokens": 128000
+      },
+      "estimatedInputTokens": 43653,
+      "availableTokens": 228347,
+      "outputTokenField": "max_output_tokens",
+      "minimumOutputTokens": 1
+    }
+  ],
+  "native_fulltrust_postrun": true,
+  "reader_qualification": "refused; original CDP emitted-value capture differs at tool catalog functions; raw negative unchanged"
+}
