@@ -73,8 +73,7 @@ class MutatesSession:
         session.rejected_commands.append(
             events.Error(
                 reason_code="steering_command_rejected",
-                command=self.declared_name,
-                id=self.id,
+                command=self,
                 text=f"Mid-turn {self.declared_name} is not supported.",
             )
         )

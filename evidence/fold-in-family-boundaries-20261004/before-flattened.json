@@ -1,0 +1,432 @@
+[
+  {
+    "repo": "Core",
+    "head": "28c8de1ccd75338ececf19b23b68a2346c80ca1b",
+    "parsed": 311,
+    "omissions": [],
+    "sites": [
+      {
+        "path": "src/agent_comms/assignment_states.py",
+        "line": 99,
+        "count": 1,
+        "expression": "sql_literal(cls().mode.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/assignment_states.py",
+        "line": 270,
+        "count": 1,
+        "expression": "sql_literal(member.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/channel_coding_tools.py",
+        "line": 44,
+        "count": 1,
+        "expression": "return self.tool.declared_name"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 653,
+        "count": 1,
+        "expression": "option('--execution', default=ExternalThreadExecution, parser_default=ExternalThreadExecution.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 212,
+        "count": 1,
+        "expression": "subparsers.add_parser(cls.declared_name, help=cls.help)"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 930,
+        "count": 1,
+        "expression": "dict(kind=segment.declared_name, provenance=FieldCodec.encode(segment.provenance), tokens=count, text=segment.text())"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 869,
+        "count": 1,
+        "expression": "history.get('tables', {}).get(SelectedSummaryAttempt.declared_name, ())"
+      },
+      {
+        "path": "src/agent_comms/compaction_publications.py",
+        "line": 21,
+        "count": 1,
+        "expression": "CompactionPublication.select(db, where=\"session_file=? AND json_extract(state, '$.kind')=? ORDER BY rowid LIMIT 32\", parameters=(canonical, PendingPublication.declared_name))"
+      },
+      {
+        "path": "src/agent_comms/compaction_records.py",
+        "line": 289,
+        "count": 1,
+        "expression": "type(self).update(db, where=\"operation_id=? AND json_extract(state, '$.kind')=?\", parameters=(self.operation_id, self.state.declared_name), state=target)"
+      },
+      {
+        "path": "src/agent_comms/config_options.py",
+        "line": 101,
+        "count": 1,
+        "expression": "SessionConfigOptionSelect(id=self.declared_name, name=self.title, description=self.description, category=self.category, type='select', current_value=selected, options=choices)"
+      },
+      {
+        "path": "src/agent_comms/coordinated_runtime_schema.py",
+        "line": 56,
+        "count": 1,
+        "expression": "db.execute('SELECT name,sql FROM sqlite_master WHERE name=?', (NativeRuntimeSchemaMeta.declared_name,))"
+      },
+      {
+        "path": "src/agent_comms/coordination_cohort.py",
+        "line": 383,
+        "count": 1,
+        "expression": "sql_literal(member.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/coordination_response.py",
+        "line": 195,
+        "count": 1,
+        "expression": "db.execute('SELECT name,sql FROM sqlite_master WHERE name=?', (ResponseSchemaMeta.declared_name,))"
+      },
+      {
+        "path": "src/agent_comms/coordination_schema.py",
+        "line": 117,
+        "count": 1,
+        "expression": "_sql_values((member.declared_name,))"
+      },
+      {
+        "path": "src/agent_comms/coordination_schema.py",
+        "line": 99,
+        "count": 1,
+        "expression": "_sql_values((member.declared_name,))"
+      },
+      {
+        "path": "src/agent_comms/coordination_schema.py",
+        "line": 109,
+        "count": 1,
+        "expression": "_sql_values((member.declared_name,))"
+      },
+      {
+        "path": "src/agent_comms/coordination_tables/assignments.py",
+        "line": 147,
+        "count": 1,
+        "expression": "return self.lifecycle.declared_name"
+      },
+      {
+        "path": "src/agent_comms/coordination_tables/assignments.py",
+        "line": 151,
+        "count": 1,
+        "expression": "return self.lifecycle.mode.declared_name"
+      },
+      {
+        "path": "src/agent_comms/coordination_tables/attempts.py",
+        "line": 126,
+        "count": 1,
+        "expression": "return self.lifecycle.declared_name"
+      },
+      {
+        "path": "src/agent_comms/coordination_tables/executions.py",
+        "line": 165,
+        "count": 1,
+        "expression": "return self.lifecycle.declared_name"
+      },
+      {
+        "path": "src/agent_comms/coordination_tables/responses.py",
+        "line": 54,
+        "count": 1,
+        "expression": "return self.lifecycle.declared_name"
+      },
+      {
+        "path": "src/agent_comms/exporting.py",
+        "line": 35,
+        "count": 1,
+        "expression": "return self.declared_name"
+      },
+      {
+        "path": "src/agent_comms/field_codec.py",
+        "line": 298,
+        "count": 1,
+        "expression": "return value.declared_name"
+      },
+      {
+        "path": "src/agent_comms/goal_states.py",
+        "line": 109,
+        "count": 1,
+        "expression": "return self.declared_name"
+      },
+      {
+        "path": "src/agent_comms/goals.py",
+        "line": 29,
+        "count": 1,
+        "expression": "return self.declared_name"
+      },
+      {
+        "path": "src/agent_comms/goals.py",
+        "line": 46,
+        "count": 1,
+        "expression": "GoalMentionDiagnostic(owner.name, goal.id, source.text_revision, self.token, self.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/native_fork.py",
+        "line": 18,
+        "count": 1,
+        "expression": "field(default=NativeForkCreation.declared_name, kw_only=True)"
+      },
+      {
+        "path": "src/agent_comms/obligation_states.py",
+        "line": 32,
+        "count": 1,
+        "expression": "return cls.declared_name"
+      },
+      {
+        "path": "src/agent_comms/optional_awareness_projection.py",
+        "line": 155,
+        "count": 1,
+        "expression": "return (self.assignment.wire_seq, self.assignment.message_id, self.assignment.lifecycle.mode.declared_name, self.receipt.exact_target)"
+      },
+      {
+        "path": "src/agent_comms/pi_commands.py",
+        "line": 74,
+        "count": 1,
+        "expression": "events.Error(reason_code='steering_command_rejected', command=self.declared_name, id=self.id, text=f'Mid-turn {self.declared_name} is not supported.')"
+      },
+      {
+        "path": "src/agent_comms/pi_events.py",
+        "line": 47,
+        "count": 1,
+        "expression": "return CompactionReason.from_external(value).declared_name"
+      },
+      {
+        "path": "src/agent_comms/pi_events.py",
+        "line": 657,
+        "count": 1,
+        "expression": "return owner.declared_name"
+      },
+      {
+        "path": "src/agent_comms/pi_events.py",
+        "line": 246,
+        "count": 1,
+        "expression": "events.CompactionEnd(reason=self.reason.declared_name, aborted=not completed, summary=self.result.display_summary if completed else None, context_used=None, will_retry=self.will_retry is True)"
+      },
+      {
+        "path": "src/agent_comms/pi_events.py",
+        "line": 291,
+        "count": 1,
+        "expression": "events.CompactionProgress(reason=self.reason.declared_name, operation_id=self.operation_id, text=self.text, chunk_index=self.chunk_index, source=self.source)"
+      },
+      {
+        "path": "src/agent_comms/pi_events.py",
+        "line": 311,
+        "count": 1,
+        "expression": "events.CompactionStart(reason=self.reason.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/pi_payloads.py",
+        "line": 259,
+        "count": 1,
+        "expression": "return self.declared_name"
+      },
+      {
+        "path": "src/agent_comms/pi_payloads.py",
+        "line": 428,
+        "count": 1,
+        "expression": "return PiStopReason.from_external(value).declared_name"
+      },
+      {
+        "path": "src/agent_comms/private_bus_checkpoint.py",
+        "line": 447,
+        "count": 1,
+        "expression": "db.execute('SELECT name,sql FROM sqlite_master WHERE name=?', (cls.declared_name,))"
+      },
+      {
+        "path": "src/agent_comms/retained_context.py",
+        "line": 44,
+        "count": 1,
+        "expression": "dict(kind=self.declared_name, text=self.text(), provenance=FieldCodec.encode(self.provenance), input_supplied=False, authored=dict(scope='authored declarations and their original pinned inputs only', sources=FieldCodec.encode(self.scope.sources), facts=FieldCodec.encode(self.retained)), export_scope='current authored declarations only; never goal, unpinned input, native artifact or failure state')"
+      },
+      {
+        "path": "src/agent_comms/todos.py",
+        "line": 404,
+        "count": 1,
+        "expression": "_TodoTable(Todo.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/todos.py",
+        "line": 279,
+        "count": 1,
+        "expression": "sql_literal(member.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/todos.py",
+        "line": 297,
+        "count": 1,
+        "expression": "sql_literal(member.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 304,
+        "count": 1,
+        "expression": "SegmentManifest(self.declared_name, self.provenance, hashlib.sha256(raw).hexdigest(), len(raw), tokens)"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 318,
+        "count": 1,
+        "expression": "InputContributionCoordinates(self.declared_name, self.provenance, offset, len(raw), hashlib.sha256(raw).hexdigest())"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 368,
+        "count": 1,
+        "expression": "SegmentManifest(self.declared_name, self.provenance, self.sha256, self.utf8_bytes, self.tokens, self.contributors)"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 495,
+        "count": 1,
+        "expression": "cls(view.thread.name, view.status.declared_name, view.activity.state.value, view.activity.detail)"
+      },
+      {
+        "path": "src/agent_comms/typed_table.py",
+        "line": 440,
+        "count": 1,
+        "expression": "_identifier(cls.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/typed_table.py",
+        "line": 505,
+        "count": 1,
+        "expression": "_identifier(self.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/typed_table.py",
+        "line": 253,
+        "count": 1,
+        "expression": "_identifier(self.target.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/typed_table.py",
+        "line": 427,
+        "count": 1,
+        "expression": "_identifier(target.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/typed_table.py",
+        "line": 483,
+        "count": 1,
+        "expression": "_identifier(cls.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/typed_table.py",
+        "line": 546,
+        "count": 1,
+        "expression": "_identifier(cls.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/wake_policy.py",
+        "line": 31,
+        "count": 1,
+        "expression": "WakePolicy.decode(self.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/wake_policy.py",
+        "line": 64,
+        "count": 1,
+        "expression": "Engagement.decode(self.declared_name)"
+      },
+      {
+        "path": "src/agent_comms/wake_policy.py",
+        "line": 40,
+        "count": 1,
+        "expression": "sql_literal(member.declared_name)"
+      }
+    ]
+  },
+  {
+    "repo": "Toad",
+    "head": "901771fc58b44996824c52711a1a352e3844dc3d",
+    "parsed": 288,
+    "omissions": [],
+    "sites": [
+      {
+        "path": "src/toad/acp/status.py",
+        "line": 38,
+        "count": 1,
+        "expression": "cls.decode(call.status or PendingToolCallStatus.declared_name)"
+      },
+      {
+        "path": "src/toad/agent_schema.py",
+        "line": 45,
+        "count": 1,
+        "expression": "return value.declared_name"
+      },
+      {
+        "path": "src/toad/application_actions.py",
+        "line": 30,
+        "count": 1,
+        "expression": "Binding(cls.key, cls.declared_name, cls.description, tooltip=cls.tooltip, show=cls.show, priority=cls.priority, system=cls.system, group=cls.group, key_display=cls.key_display)"
+      },
+      {
+        "path": "src/toad/conversation_markdown.py",
+        "line": 50,
+        "count": 1,
+        "expression": "parser.add_render_rule(cls.declared_name, native_rule, fmt=ProjectTokenRenderer.__output__)"
+      },
+      {
+        "path": "src/toad/db.py",
+        "line": 126,
+        "count": 1,
+        "expression": "db.execute(\"SELECT 1 FROM sqlite_master WHERE type='table' AND name=?\", (Session.declared_name,))"
+      },
+      {
+        "path": "src/toad/goal_interaction.py",
+        "line": 188,
+        "count": 1,
+        "expression": "agent.update_goal(action.declared_name, text)"
+      },
+      {
+        "path": "src/toad/mcp_commands.py",
+        "line": 39,
+        "count": 1,
+        "expression": "return self.declared_name"
+      },
+      {
+        "path": "src/toad/mcp_commands.py",
+        "line": 56,
+        "count": 1,
+        "expression": "return ('trust', self.declared_name)"
+      },
+      {
+        "path": "src/toad/mcp_commands.py",
+        "line": 64,
+        "count": 1,
+        "expression": "return ('calls', self.declared_name)"
+      },
+      {
+        "path": "src/toad/navigation_preparation.py",
+        "line": 55,
+        "count": 1,
+        "expression": "CommsViewKey(str(root), self.owner_mode, me, self.kind.declared_name, target)"
+      },
+      {
+        "path": "src/toad/screens/store.py",
+        "line": 145,
+        "count": 1,
+        "expression": "pill(agent.kind.declared_name, '$primary-muted 50%', '$text-primary', filled=not self.app.theme.startswith('ansi-'))"
+      },
+      {
+        "path": "src/toad/session_admission.py",
+        "line": 135,
+        "count": 1,
+        "expression": "CommsScreen(project_path=self.project, owner_mode=key.owner_mode, me=key.me, target=key.target, kind=self.kind.declared_name, recovery_root=self.recovery_root, wire_root=key.root)"
+      },
+      {
+        "path": "src/toad/widgets/comms_chat.py",
+        "line": 122,
+        "count": 1,
+        "expression": "return self.conversation_kind.declared_name"
+      },
+      {
+        "path": "src/toad/widgets/comms_transfer.py",
+        "line": 112,
+        "count": 1,
+        "expression": "self.app.run_worker(partial(self.execute, selected, request), group=request.declared_name, exclusive=True, exit_on_error=False)"
+      }
+    ]
+  }
+]

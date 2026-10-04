@@ -244,7 +244,7 @@ class CompactionEnd(ReasonedCompaction):
         session.usage.invalidate()
         yield session.context_info()
         yield events.CompactionEnd(
-            reason=self.reason.declared_name,
+            reason=self.reason,
             aborted=not completed,
             summary=self.result.display_summary if completed else None,
             context_used=None,
@@ -289,7 +289,7 @@ class CompactionProgress(PiEvent):
                 response_id=str(session.usage.response_index), usage=self.usage
             )
         yield events.CompactionProgress(
-            reason=self.reason.declared_name,
+            reason=self.reason,
             operation_id=self.operation_id,
             text=self.text,
             chunk_index=self.chunk_index,
@@ -308,7 +308,7 @@ class CompactionStart(ReasonedCompaction):
         session.watchdog.progress()
         session.usage.invalidate()
         yield session.context_info()
-        yield events.CompactionStart(reason=self.reason.declared_name)
+        yield events.CompactionStart(reason=self.reason)
 
 
 @dataclass(frozen=True, kw_only=True)

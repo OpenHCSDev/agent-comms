@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.thread_identity import TurnId, TurnIdentity
-from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext
+from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment
 from agent_comms.pi_commands import Prompt
 from agent_comms.image_inputs import ImageInput
 from agent_comms.wire_record import WireRecord, ObservationWireRecord, ContextManifestWireObservation
@@ -19,7 +19,7 @@ from agent_comms.bus_publication import stable_thread_lookup
 
 def manifest(owner, generation=1):
     source=OwnerProvenance(owner.incarnation, 'original-input-source')
-    segment=SegmentManifest('transcript',(source,),hashlib.sha256(b'PRIVATE INPUT').hexdigest(),13,4)
+    segment=SegmentManifest(TranscriptSegment,(source,),hashlib.sha256(b'PRIVATE INPUT').hexdigest(),13,4)
     return ContextManifest(owner.incarnation,RecordedContextTurn(TurnId('original-turn'),TurnIdentity(owner.incarnation,generation)),(segment,),'pi.estimateTokens')
 
 
@@ -306,7 +306,7 @@ def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp
     for source in rendered.contributions:
         assert hashlib.sha256(raw[source.offset:source.offset+source.length]).hexdigest() == source.sha256
     assert sum(source.length for source in rendered.contributions) == len(raw)
-    assert next(source for source in rendered.contributions if source.kind == 'user_input').images == (0,)
+    assert next(source for source in rendered.contributions if source.kind is UserInputSegment).images == (0,)
     command = Prompt(input_id='a'*32, message=rendered.text, images=images,
                      context_contributions=rendered.contributions)
     decoded = Prompt.from_wire(command.to_rpc())

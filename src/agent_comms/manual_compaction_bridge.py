@@ -13,6 +13,7 @@ from .compaction_errors import CompactionJournalError
 from .compaction_result import CompactionResult, RefusedCompactionResult
 from .coordinator import Coordination
 from .native_input_owner import RegistryOwner
+from .pi_vocabulary import ManualCompactionReason
 from .turn_phase import CompactionPhase, PublishingPhase
 
 if TYPE_CHECKING:
@@ -71,7 +72,9 @@ async def compact_context(
                 runner.turn_tasks[session_id] = task
                 await runner.transition_turn(session_id, turn_lease, CompactionPhase(resume=PublishingPhase()))
                 started = True
-                await runner.effects._emit_event(session_id, events.CompactionStart(reason="manual"))
+                await runner.effects._emit_event(
+                    session_id, events.CompactionStart(reason=ManualCompactionReason)
+                )
                 from .owner_compaction_manual import compact_manual_owner
 
                 prepared = await runner.prepare_selected_session(session_id, thread)

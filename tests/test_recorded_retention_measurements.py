@@ -35,7 +35,7 @@ from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.threads import Thread
 from agent_comms.turn_context import (
     ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, RecordedContextTurn,
-    SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment,
+    SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment, ToolCatalogSegment,
 )
 from compaction_retention_fixture import Condition, Measurement, Question, RecordedAnswers, RecordedNativeProbes, ScoredScenario, coding_scenario
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
@@ -248,7 +248,7 @@ class RecordedMeasurementTests(unittest.TestCase):
                 source=NativeSessionIdentity(source, str(self.root / f'{source}.jsonl')),
                 source_revision=revision, revision=revision, prefix_digest=TextDigest.of('fixture prefix'), entry_count=1)
             manifest = ContextManifest(owner.incarnation, turn,
-                (SegmentManifest('tool_catalog', (JournalProvenance(probe.session.session_file, ('original',)),),
+                (SegmentManifest(ToolCatalogSegment, (JournalProvenance(probe.session.session_file, ('original',)),),
                     'c' * 64, 10, 2),), 'native', request_id='request')
             return {'construction': {'fork': fork, 'sdk_manifest': manifest,
                 'request_budget': {'evaluated': True, 'observations': (point,)},
@@ -377,7 +377,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         turn = RecordedContextTurn(TurnId('turn'), TurnIdentity(owner.incarnation, 1))
         probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
         def manifest(path, entries):
-            segment = SegmentManifest('transcript', (JournalProvenance(path, entries),),
+            segment = SegmentManifest(TranscriptSegment, (JournalProvenance(path, entries),),
                                       'b' * 64, 20, 5)
             return ContextManifest(owner.incarnation, turn, (segment,), 'counter')
         with NativeEntry.open_evidence(self.session) as evidence:
