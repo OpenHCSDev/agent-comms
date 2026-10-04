@@ -1,0 +1,562 @@
+{
+  "78e9db33": {
+    "revision": "78e9db33",
+    "parsed": 11,
+    "omitted": [],
+    "sites": [
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 8,
+        "kind": "ImportSpecifier",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 8,
+        "kind": "ImportSpecifier",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 9,
+        "kind": "ImportSpecifier",
+        "name": "armInstalledNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 135,
+        "kind": "CallExpression",
+        "name": "uncompactedMetadata"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 234,
+        "kind": "CallExpression",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 258,
+        "kind": "CallExpression",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 269,
+        "kind": "CallExpression",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 272,
+        "kind": "CallExpression",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 274,
+        "kind": "CallExpression",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 280,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 290,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 292,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 295,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 304,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 311,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 342,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 440,
+        "kind": "CallExpression",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 445,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 447,
+        "kind": "CallExpression",
+        "name": "armInstalledNativeCondition"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 45,
+        "kind": "CallExpression",
+        "name": "captureCompactionWitness"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 54,
+        "kind": "CallExpression",
+        "name": "keptMetadata"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 55,
+        "kind": "CallExpression",
+        "name": "entryMessages"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 57,
+        "kind": "CallExpression",
+        "name": "captureCompactionWitness"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 119,
+        "kind": "FunctionDeclaration",
+        "name": "armInstalledNativeCondition"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 125,
+        "kind": "CallExpression",
+        "name": "captureCompactionWitness"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 148,
+        "kind": "FunctionDeclaration",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 156,
+        "kind": "CallExpression",
+        "name": "captureCompactionWitness"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 161,
+        "kind": "CallExpression",
+        "name": "prefixContext"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 168,
+        "kind": "CallExpression",
+        "name": "captureCompactionWitness"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 175,
+        "kind": "FunctionDeclaration",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 179,
+        "kind": "CallExpression",
+        "name": "captureCompactionWitness"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 183,
+        "kind": "FunctionDeclaration",
+        "name": "construction"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 184,
+        "kind": "CallExpression",
+        "name": "prefixContext"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 195,
+        "kind": "CallExpression",
+        "name": "construction"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 202,
+        "kind": "CallExpression",
+        "name": "uncompactedMetadata"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 203,
+        "kind": "CallExpression",
+        "name": "construction"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 203,
+        "kind": "CallExpression",
+        "name": "entryMessages"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 206,
+        "kind": "CallExpression",
+        "name": "keptMetadata"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 207,
+        "kind": "CallExpression",
+        "name": "construction"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 207,
+        "kind": "CallExpression",
+        "name": "entryMessages"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 209,
+        "kind": "CallExpression",
+        "name": "construction"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 222,
+        "kind": "CallExpression",
+        "name": "captureCompactionWitness"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 263,
+        "kind": "CallExpression",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 264,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 265,
+        "kind": "CallExpression",
+        "name": "armInstalledNativeCondition"
+      }
+    ]
+  },
+  "c660e469": {
+    "revision": "c660e469",
+    "parsed": 11,
+    "omitted": [],
+    "sites": [
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 8,
+        "kind": "ImportSpecifier",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 8,
+        "kind": "ImportSpecifier",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 9,
+        "kind": "ImportSpecifier",
+        "name": "armInstalledNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 135,
+        "kind": "CallExpression",
+        "name": "uncompactedMetadata"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 234,
+        "kind": "CallExpression",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 258,
+        "kind": "CallExpression",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 269,
+        "kind": "CallExpression",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 272,
+        "kind": "CallExpression",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 274,
+        "kind": "CallExpression",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 280,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 290,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 292,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 295,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 304,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 311,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 342,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 440,
+        "kind": "CallExpression",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 445,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/native_turn_context_contract.mjs",
+        "line": 447,
+        "kind": "CallExpression",
+        "name": "armInstalledNativeCondition"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 45,
+        "kind": "CallExpression",
+        "name": "captureCompactionWitness"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 54,
+        "kind": "CallExpression",
+        "name": "keptMetadata"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 55,
+        "kind": "CallExpression",
+        "name": "entryMessages"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 57,
+        "kind": "CallExpression",
+        "name": "captureCompactionWitness"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 119,
+        "kind": "FunctionDeclaration",
+        "name": "armInstalledNativeCondition"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 125,
+        "kind": "CallExpression",
+        "name": "captureCompactionWitness"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 149,
+        "kind": "FunctionDeclaration",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 157,
+        "kind": "CallExpression",
+        "name": "captureCompactionWitness"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 162,
+        "kind": "CallExpression",
+        "name": "prefixContext"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 169,
+        "kind": "CallExpression",
+        "name": "captureCompactionWitness"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 176,
+        "kind": "FunctionDeclaration",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 180,
+        "kind": "CallExpression",
+        "name": "captureCompactionWitness"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 184,
+        "kind": "FunctionDeclaration",
+        "name": "construction"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 185,
+        "kind": "CallExpression",
+        "name": "prefixContext"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 196,
+        "kind": "CallExpression",
+        "name": "construction"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 201,
+        "kind": "FunctionDeclaration",
+        "name": "entryConstruction"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 206,
+        "kind": "CallExpression",
+        "name": "construction"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 206,
+        "kind": "CallExpression",
+        "name": "entryMessages"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 212,
+        "kind": "CallExpression",
+        "name": "uncompactedMetadata"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 213,
+        "kind": "CallExpression",
+        "name": "entryConstruction"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 216,
+        "kind": "CallExpression",
+        "name": "keptMetadata"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 217,
+        "kind": "CallExpression",
+        "name": "entryConstruction"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 219,
+        "kind": "CallExpression",
+        "name": "construction"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 232,
+        "kind": "CallExpression",
+        "name": "captureCompactionWitness"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 273,
+        "kind": "CallExpression",
+        "name": "constructNativeConditions"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 274,
+        "kind": "CallExpression",
+        "name": "applyNativeCondition"
+      },
+      {
+        "path": "tests/retained_native_conditions.mjs",
+        "line": 275,
+        "kind": "CallExpression",
+        "name": "armInstalledNativeCondition"
+      }
+    ]
+  }
+}

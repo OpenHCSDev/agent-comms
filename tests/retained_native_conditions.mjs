@@ -139,6 +139,7 @@ export function armInstalledNativeCondition(session,construction,output,inputId)
         const transformed=previous ? await previous.call(session.agent,messages,signal) : messages;
         return {messages:transformed,observation:{condition:construction.condition,
             source_witness:construction.source_witness,
+            entry_selection:construction.entry_selection,
             construction_context_sha256:construction.context_sha256,
             source_prefix_count:count,source_prefix_sha256:sourcePrefix,
             source_message_count:messages.length}};
@@ -197,14 +198,23 @@ export async function constructNativeConditions(session, packagePath, boundedSou
             checkpoint_session:boundedSource.checkpoint_session,
             native_entry_id:boundedSource.native_entry_id});
     }
+    async function entryConstruction(entries) {
+        // This selection and raw SDK conversion share the acquired entry set.
+        // A manifest's broad attribution or mutable ReadyContext messages alone
+        // cannot reconstruct this observation later. Retain references, not a
+        // second message payload or selection algorithm.
+        return construction(Array.from(SessionContext.entryMessages(entries.values())),entries,{
+            entry_selection:{kind:'journal',path:witness.sessionFile,
+                entries:entries.map(entry=>entry.id)}});
+    }
     const constructors={
         'full-context':async()=>{
             const entries=Array.from(store.uncompactedMetadata(manager.getLeafId()),meta=>store.get(meta.id));
-            return construction(Array.from(SessionContext.entryMessages(entries.values())),entries);
+            return entryConstruction(entries);
         },
         'recent-only':async()=>{
             const entries=Array.from(store.keptMetadata(manager.getLeafId()),meta=>store.get(meta.id));
-            return construction(Array.from(SessionContext.entryMessages(entries.values())),entries);
+            return entryConstruction(entries);
         },
         'task-memory':()=>construction(Array.from(session.storedContext.messages(session.agent)),
             Array.from(manager.buildContextEntries())),
