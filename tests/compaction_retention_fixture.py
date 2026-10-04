@@ -646,6 +646,8 @@ class ScoredScenario(ScoreView):
                             for identity, installation in installations.items()}
         narratives = {identity: installation['narrative_source']
                       for identity, installation in installations.items()}
+        prefixes = {identity: installation['constructed_prefix']
+                    for identity, installation in installations.items()}
         admissions = {identity: original['construction']['request_budget']
                       for identity, original in evidence.items()}
         capacity = {identity: original['construction']['source_coverage']['full_context_capacity']
@@ -659,6 +661,11 @@ class ScoredScenario(ScoreView):
                     for identity, originals in constructors.items()}),
                 'sdk_entry_selection': group(entry_selections),
                 'installed_narrative_source': group(narratives),
+                'constructed_source_prefix': {**group(prefixes),
+                    'preserved_rounds':tuple(identity for identity in identities
+                        if identity in prefixes and prefixes[identity]['evaluated'] and prefixes[identity]['preserved']),
+                    'changed_rounds':tuple(identity for identity in identities
+                        if identity in prefixes and prefixes[identity]['evaluated'] and not prefixes[identity]['preserved'])},
                 'native_request_admission': group(admissions),
                 'sdk_probe_input_presence': {**group(inputs),
                     'present_rounds': tuple(identity for identity in identities

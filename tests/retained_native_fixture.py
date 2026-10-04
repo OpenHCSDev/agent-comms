@@ -458,6 +458,8 @@ class RecordedConditionInstallation:
     # An original constructor resource, not inferred from its condition label.
     narrative_source: FileProvenance | None = field(default=None,
         metadata={"wire_omit_default": True})
+    construction_manifest: NativeContextManifestData | None = field(default=None,
+        metadata={"wire_omit_default": True})
 
     def require_narrative_source(self, source: FileProvenance):
         if self.narrative_source != source:
@@ -486,7 +488,61 @@ class RecordedConditionInstallation:
             raise ValueError('Installed SDK source is not an ancestor of the original input')
         if not 0 <= self.source_prefix_count <= self.source_message_count:
             raise ValueError('Installed SDK source counts differ from its observed transform')
-        return evidence.branch(self.source_witness.leaf_id, prefix)
+        ancestry=evidence.branch(self.source_witness.leaf_id, prefix)
+        if self.construction_manifest is not None:
+            if self.construction_manifest.request_id is not None:
+                raise ValueError('Constructed source observation is a request, not the original prefix')
+            available=evidence.entry_index(ancestry)
+            for segment in self.construction_manifest.segments:
+                self.source_witness.require_same_session(segment.native_identity())
+                for source in segment.source_membership():
+                    for identity in source.native_identities():
+                        self.source_witness.require_same_session(identity)
+                    if any(entry not in available for entry in source.journal_entries(self.source_witness)):
+                        raise ValueError('Constructed source coordinates are outside the original installation ancestry')
+        return ancestry
+
+    @staticmethod
+    def message_partition(segments):
+        """Use the SDK's complete message parts, never annotation children."""
+        parts=[]
+        coordinates=[]
+        for index,segment in enumerate(segments):
+            if not issubclass(segment.kind,NativeMessages):
+                continue
+            messages=segment.recorded_parts()
+            if not messages:
+                return {'evaluated':False,'reason':'Original complete SDK message partition not captured'}
+            parts.extend(messages)
+            coordinates.extend((index,position) for position in range(len(messages)))
+        return {'evaluated':True,'parts':tuple(parts),'coordinates':tuple(coordinates)}
+
+    def constructed_prefix(self, request_partition, binding):
+        """Compare the entire acquired construction against this SDK request.
+
+        Grouping may change when the fresh input is appended. Individual SDK
+        parts preserve the original order and exact kind/byte digest/size.
+        Extension changes are observations, not a reason to reject native input.
+        """
+        if self.construction_manifest is None:
+            return {'evaluated':False,'reason':'Original constructor segment manifest not captured'}
+        construction=self.message_partition(self.construction_manifest.segments)
+        if not construction['evaluated']:
+            return construction
+        if not request_partition['evaluated']:
+            return request_partition
+        expected=construction['parts']
+        actual=request_partition['parts'][:len(expected)]
+        preserved=len(actual)==len(expected) and all(
+            (a.kind,a.sha256,a.utf8_bytes)==(b.kind,b.sha256,b.utf8_bytes)
+            for a,b in zip(expected,actual))
+        return {'evaluated':binding['evaluated'],'preserved':preserved,
+            'constructed_messages':len(expected),'request_messages':len(request_partition['parts']),
+            'construction_coordinates':construction['coordinates'],
+            'request_coordinates':request_partition['coordinates'][:len(expected)],
+            'original_parts':expected,'request_parts':actual,'message_binding':binding,
+            'scope':'Complete ordered constructor message partition compared with the captured SDK request prefix; '
+                    'requires original transform/converter/request binding; not HTTP bytes, capacity or a matched study'}
 
     def source_selection(self, identity, ancestry):
         """Describe the observed SDK entry selection, never provider capacity."""
@@ -607,8 +663,10 @@ class RecordedNativeProbe:
             if row.get('stage')=='installed-transform-applied' and row['input_id']==self.input_id)
         unavailable = {'evaluated': False, 'reason': 'Original SDK journal entry selection unavailable'}
         narrative = {'evaluated': False, 'reason': 'Original installed narrative source and matching SDK bytes unavailable'}
+        prefix = {'evaluated':False,'reason':'Original constructor and bound SDK request partition unavailable'}
         if not originals:
             return {'evaluated':False,'installations':(), 'entry_selection':unavailable, 'narrative_source':narrative,
+                'constructed_prefix':prefix,
                 'reason':'Original installed-source hook observation unavailable'}
         selections = tuple(original.source_selection(self.session,
             original.require_original(self,evidence,branch,context)) for original in originals)
@@ -620,12 +678,18 @@ class RecordedNativeProbe:
             'scope':'SDK selected source before this original input; source selection is distinct '
                     'from transform/request admission and provider capacity'}
         observation = {'observation': self.condition_observation,
-                       'installations': originals, 'entry_selection': selection, 'narrative_source':narrative}
+                       'installations': originals, 'entry_selection': selection, 'narrative_source':narrative,
+                       'constructed_prefix':prefix}
         if not serialized['evaluated'] or manifest is None:
             return dict(observation, evaluated=False,
                         reason='Original matching SDK request bytes unavailable')
         applications=tuple(FieldCodec.encode(original) for original in originals)
         binding=self.condition_message_binding(records,applications,serialized,manifest)
+        partition=RecordedConditionInstallation.message_partition(manifest.segments)
+        prefixes=tuple(original.constructed_prefix(partition,binding) for original in originals)
+        prefix={'evaluated':all(value['evaluated'] for value in prefixes),'observations':prefixes}
+        if prefix['evaluated']:
+            prefix['preserved']=all(value['preserved'] for value in prefixes)
         referenced=tuple(original for original in originals if original.narrative_source is not None)
         if (self.checkpoint is not None and self.fork_journal is not None and
                 referenced):
@@ -644,6 +708,7 @@ class RecordedNativeProbe:
             else:
                 narrative=source
         observation['narrative_source']=narrative
+        observation['constructed_prefix']=prefix
         return dict(observation, evaluated=binding['evaluated'], message_binding=binding,
             scope='Original installed source entered configured transform and converter/request; '
                   'constructor tag is observed metadata, not matched-arm, HTTP or capacity proof')

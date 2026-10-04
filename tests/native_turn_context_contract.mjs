@@ -243,7 +243,7 @@ try {
         assert.deepEqual(conditions['task-memory'].context, provider);
         for (const name of ['full-context','recent-only','task-memory']) {
             const observed=conditions[name];
-            assert.deepEqual(observed.manifest.identity, full.identity);
+            assert.deepEqual(observed.identity, full.identity);
             assert(observed.manifest.segments.every(segment=>segment.provenance.some(source=>source.kind==='preview')));
         }
         assert.equal(conditions.bounded.evaluated, false);
@@ -264,7 +264,7 @@ try {
         assert(JSON.stringify(bounded.context).includes('Original kept question'));
         assert.deepEqual(bounded.context.systemPrompt,provider.systemPrompt);
         assert.deepEqual(bounded.context.tools,provider.tools);
-        assert.deepEqual(bounded.manifest.identity,full.identity);
+        assert.deepEqual(bounded.identity,full.identity);
         assert.deepEqual(bounded.narrative_source,source.source);
         assert.deepEqual((await constructNativeConditions(session,pkg,
             {evaluated:false,reason:'Original narrative unavailable'})).bounded,

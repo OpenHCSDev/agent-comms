@@ -271,10 +271,17 @@ class InputDispositions(LockedStore[InputDocument]):
 
         row = ReservedInput(f"turn:{turn.value}", None, owner, admission, owner, text)
 
-        document = self.record_originals(row, custody=custody)
-        if document.rows[row.key] is not row:
-            raise RelationViolationError("Original turn input was already reserved")
+        document = self.reserve_originals(row, custody=custody)
         return SingleInputBatch(document.originals((row.key,)))
+
+    def reserve_originals(
+        self, *originals: ReservedInput, custody: ExitStack,
+    ) -> InputDocument:
+        """Require fresh originals, retaining the exact publication and rollback."""
+        document = self.record_originals(*originals, custody=custody)
+        if any(document.rows[row.key] is not row for row in originals):
+            raise RelationViolationError("Input reservation already exists")
+        return document
 
     def _transition(self, key: str, change) -> bool:
         changed = False

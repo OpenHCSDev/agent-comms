@@ -1,0 +1,11 @@
+{
+  "controller": {
+    "pid": 3089287,
+    "start_time": 61581507
+  },
+  "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+  "installed_core": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "pytest": "/usr/lib/python3.14/site-packages/pytest/__init__.py",
+  "started": 1791140176.8943841,
+  "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent"
+}
