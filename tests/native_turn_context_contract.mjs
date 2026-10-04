@@ -6,7 +6,7 @@ import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {constructNativeConditions,applyNativeCondition,
-    transformBoundedNativeCondition,armBoundedNativeCondition} from './retained_native_conditions.mjs';
+    transformBoundedNativeCondition,armBoundedNativeCondition,armInstalledNativeCondition} from './retained_native_conditions.mjs';
 
 const [pkg, suppliedRoot] = process.argv.slice(2);
 const root=resolve(suppliedRoot);
@@ -70,7 +70,7 @@ try {
         tools:session.agent.state.tools};
     const captured=await TurnContext.capture(session,provider);
     const full=captured.full();
-    if (process.argv.includes('--condition-agent-loop')) {
+    if ((process.argv.includes('--condition-agent-loop') || process.argv.includes('--installed-condition-loop'))) {
         console.log(JSON.stringify(await observeConditionLoop(session,pkg,root,compaction,before)));
     } else {
     // End validation for capture ownership: compare the unchanged public
@@ -376,10 +376,18 @@ async function observeConditionLoop(session,pkg,root,compaction,before) {
         source:{kind:'file',path:new URL(import.meta.url).pathname,
             sha256:hashFile(new URL(import.meta.url))}};
     const observation=join(root,'application-observation.jsonl');
-    const inputId='d'.repeat(32);
+    const installed=process.argv.includes('--installed-condition-loop');
     const originalTransform=session.agent.transformContext;
-    const restore=armBoundedNativeCondition(session,pkg,source,
-        transformBoundedNativeCondition,observation,inputId);
+    const originalMessages=Array.from(session.storedContext.messages(session.agent));
+    const constructions=installed ? await constructNativeConditions(session,pkg,source) : {};
+    const selections=installed ? Object.values(constructions) : [undefined];
+    const results=[];
+    try {
+    for (const [index,construction] of selections.entries()) {
+    if (construction) await applyNativeCondition(session,pkg,construction);
+    const inputId='d'.repeat(31)+index.toString(16);
+    const restore=construction ? armInstalledNativeCondition(session,construction,observation,inputId)
+        : armBoundedNativeCondition(session,pkg,source,transformBoundedNativeCondition,observation,inputId);
     const events=[],progress=[];
     let manifest,transportCalls=0;
     try {
@@ -420,10 +428,17 @@ async function observeConditionLoop(session,pkg,root,compaction,before) {
     } finally {restore();}
     assert.equal(session.agent.transformContext,originalTransform);
     assert.deepEqual(readFileSync(session.sessionFile),before);
-    return {scope:'Authored original SDK agent-loop/inspector/onContextReady plumbing',
-        provider_calls:0,submitted_prompts:0,controlled_streams:transportCalls,
+    results.push({condition:construction?.condition, input_id:inputId,manifest,events,progress,
+        controlled_streams:transportCalls});
+    }
+    } finally {session.storedContext.install(session.agent,originalMessages);}
+    assert.deepEqual(session.agent.state.messages,originalMessages);
+    return {scope:'Authored original SDK installation/agent-loop/inspector/onContextReady plumbing',
+        provider_calls:0,submitted_prompts:0,
+        controlled_streams:results.reduce((total,result)=>total+result.controlled_streams,0),
         native_claim_minted:false,journal_bytes_unchanged:true,hook_restored:true,
-        identity,input_id:inputId,manifest,events,progress};
+        installed_conditions:installed ? results.length : 0,canonical_messages_restored:true,
+        identity,results};
 }
 
 function hashFile(path) {
