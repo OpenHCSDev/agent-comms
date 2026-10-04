@@ -2,13 +2,12 @@
 
 The authoritative current installation, active owners, actual verification and remaining defects are recorded once in [16-CURRENT-S14-OWNERS.md](16-CURRENT-S14-OWNERS.md), under its newest dated heading. The full original goal remains active. The dated entries below are historical evidence, not the current live state.
 
-Current public delivery is original436:19 relaunched owners, five defaults,
-same root/native086 identity readback verified. Remaining acceptance is the
-actual continuous default UI/workflow. C4 source closure is merged658 and all
-seven changed656 cases qualified; latest merged product is a separate future
-receiver, not silently installed. W6 App remains unqualified after its successor
-timeout, with source investigation active. Full performance, S4 and W7/W8 remain
-open; see the current owner section above for concrete source and evidence.
+Use the newest current-owner section linked above for installation and acceptance.
+The historical436 entry below must not override public440 or its later ordinary
+display verification. Remaining requirements are full performance/workflow,
+W6 installed worker/UI/schema and W7/W8, full S4, and the original cutover writer
+source/consumer qualification. Their current owners, actual evidence and next
+actions are recorded there; source closure and live acceptance remain distinct.
 
 ## Historical delivery update — 2026-10-02T12:14Z
 
