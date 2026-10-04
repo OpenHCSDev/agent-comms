@@ -1,0 +1,840 @@
+{
+  "CLI_exit": 0,
+  "trajectories": 2,
+  "groups": {
+    "summaries": {
+      "trajectories": 2,
+      "metrics": {
+        "input_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "output_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "cache_read_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "cache_write_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "reported_total_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "reasoning_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "normalized_cost": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        }
+      }
+    },
+    "assistants": {
+      "trajectories": 2,
+      "metrics": {
+        "input_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "output_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "cache_read_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "cache_write_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "reported_total_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "reasoning_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "normalized_cost": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        }
+      }
+    },
+    "combined": {
+      "trajectories": 2,
+      "metrics": {
+        "input_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "output_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "cache_read_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "cache_write_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "reported_total_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "reasoning_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "normalized_cost": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        }
+      }
+    },
+    "source_inputs": {
+      "trajectories": 2,
+      "metrics": {
+        "input_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "output_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "cache_read_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "cache_write_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "reported_total_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "reasoning_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "normalized_cost": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        }
+      }
+    },
+    "recorded_workflow": {
+      "trajectories": 2,
+      "metrics": {
+        "input_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "output_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "cache_read_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "cache_write_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "reported_total_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "reasoning_tokens": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        },
+        "normalized_cost": {
+          "evaluated": false,
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          },
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_value": null
+          }
+        }
+      }
+    }
+  },
+  "study_acceptance": {
+    "evaluated": false,
+    "reason": "Recorded pairs do not supply a registered design, verified condition construction or complete cost/end-to-end journeys"
+  }
+}

@@ -5,7 +5,7 @@ import hashlib
 import json
 from collections import Counter
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass, fields, replace
+from dataclasses import dataclass, field, fields, replace
 from itertools import chain
 from pathlib import Path
 from typing import Annotated, Literal
@@ -29,7 +29,7 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.pi_payloads import StateData, ToolResultMessage
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_rpc import unique_fields
-from agent_comms.native_turn_context import NativeContextData
+from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.request_progress import RequestProgress
 from agent_comms.turn_lease import TurnLeaseFence
@@ -441,6 +441,10 @@ class RecordedConditionInstallation:
     source_message_count: int
     message_count: int
     agent_messages_sha256: str
+    # Optional original private observation. Older records and constructors
+    # which borrow live SDK messages do not prove a journal entry selection.
+    entry_selection: JournalProvenance | None = field(default=None,
+        metadata={"wire_omit_default": True})
 
     def require_original(self, probe, evidence, branch, context):
         if self.input_id != probe.input_id:
@@ -454,6 +458,27 @@ class RecordedConditionInstallation:
             raise ValueError('Installed SDK source is not an ancestor of the original input')
         if not 0 <= self.source_prefix_count <= self.source_message_count:
             raise ValueError('Installed SDK source counts differ from its observed transform')
+        return evidence.branch(self.source_witness.leaf_id, prefix)
+
+    def source_selection(self, identity, ancestry):
+        """Describe the observed SDK entry selection, never provider capacity."""
+        if self.entry_selection is None:
+            return {'evaluated': False,
+                'reason': 'Original SDK journal entry selection was not captured'}
+        selected = self.entry_selection.journal_entries(identity)
+        available = tuple(entry.require_entry_id() for entry in ancestry)
+        selected_set = set(selected)
+        if len(selected_set) != len(selected) or tuple(
+                entry for entry in available if entry in selected_set) != selected:
+            raise ValueError('SDK selected entries are not an ordered subset of the original construction ancestry')
+        messages = tuple(entry.require_entry_id() for entry in ancestry if entry.is_message)
+        return {'evaluated': True, 'source': self.entry_selection,
+            'original_message_entries': messages,
+            'selected_message_entries': tuple(entry for entry in messages if entry in selected_set),
+            'unselected_message_entries': tuple(entry for entry in messages if entry not in selected_set),
+            'all_original_message_entries_selected': all(entry in selected_set for entry in messages),
+            'scope': 'Original SDK entry-based construction before conversion; not complete transformed content, '
+                     'provider token capacity, HTTP bytes or a registered intervention'}
 
 
 @dataclass(frozen=True)
@@ -475,6 +500,9 @@ class RecordedNativeProbe:
     # Original diagnostic publication, not a reconstructed request or budget.
     request_observations: FileProvenance | None = None
     condition_observation: FileProvenance | None = None
+    # The original emitted SDK event, before its public-text wire projection.
+    # Historical captures did not retain it; do not synthesize its values.
+    sdk_observation: FileProvenance | None = None
 
     @classmethod
     def capture_input(cls,service,owner,session,row,contexts,output,checkpoint=None,condition_observation=None):
@@ -499,13 +527,15 @@ class RecordedNativeProbe:
             return FileProvenance(str(path),hashlib.sha256(path.read_bytes()).hexdigest())
 
         observed=request_observation_path(service.root,row.turn_id)
+        sdk_observed=contexts/f'observation-{context.request_generation}-{context.llm_context_digest}.json'
         return cls(session,row.native_id,answer.id,checkpoint,
             original(contexts/f'context-{context.llm_context_digest}.json'),
             pin('manifest',manifest),original(contexts/f'segments-{context.llm_context_digest}.json'),
             pin('inputs',InputDispositions(service.root/InputDispositions.filename).read()),
             fork_journal=service.root/'compaction-commits.sqlite3',
             request_observations=original(observed) if observed.is_file() else None,
-            condition_observation=original(condition_observation) if condition_observation is not None else None)
+            condition_observation=original(condition_observation) if condition_observation is not None else None,
+            sdk_observation=original(sdk_observed) if sdk_observed.is_file() else None)
 
     def condition_records(self):
         """Acquire this original observation resource once for both questions."""
@@ -550,19 +580,27 @@ class RecordedNativeProbe:
         """Join an observed installed source to the same original SDK request."""
         originals=tuple(FieldCodec.decode(RecordedConditionInstallation,row) for row in records
             if row.get('stage')=='installed-transform-applied' and row['input_id']==self.input_id)
+        unavailable = {'evaluated': False, 'reason': 'Original SDK journal entry selection unavailable'}
         if not originals:
-            return {'evaluated':False,'reason':'Original installed-source hook observation unavailable'}
-        if not serialized['evaluated'] or manifest is None:
-            return {'evaluated':False,'reason':'Original matching SDK request bytes unavailable'}
-        for original in originals:
-            original.require_original(self,evidence,branch,context)
+            return {'evaluated':False,'entry_selection':unavailable,
+                'reason':'Original installed-source hook observation unavailable'}
+        selections = tuple(original.source_selection(self.session,
+            original.require_original(self,evidence,branch,context)) for original in originals)
         if not any(row.get('stage')=='installed-transform-restored'
                    and row['input_id']==self.input_id for row in records):
             raise ValueError('Original installed-source hook has not retired')
+        selection = {'evaluated':all(value['evaluated'] for value in selections),
+            'observations':selections,
+            'scope':'SDK selected source before this original input; source selection is distinct '
+                    'from transform/request admission and provider capacity'}
+        if not serialized['evaluated'] or manifest is None:
+            return {'evaluated':False,'entry_selection':selection,
+                'reason':'Original matching SDK request bytes unavailable'}
         applications=tuple(FieldCodec.encode(original) for original in originals)
         binding=self.condition_message_binding(records,applications,serialized,manifest)
         return {'evaluated':binding['evaluated'],'observation':self.condition_observation,
             'installations':originals,'message_binding':binding,
+            'entry_selection':selection,
             'scope':'Original installed source entered configured transform and converter/request; '
                     'constructor tag is observed metadata, not matched-arm, HTTP or capacity proof'}
 
@@ -683,8 +721,21 @@ class RecordedNativeProbe:
         if data is None or self.context_manifest is None:
             return None
         manifest = RecordedNativeCheckpoint.read_record(self.context_manifest, ContextManifest)
-        if (data.counter != manifest.counter
-                or tuple(segment.measured_manifest() for segment in data.segments) != manifest.segments):
+        # Raw SDK manifests and wire-public manifests are different views of
+        # the same original event. Only that event owns which values were
+        # captured: never reconstruct its selection from today's SDK/preview.
+        if self.sdk_observation is not None:
+            observed = NativeContextManifestData.from_wire(
+                RecordedNativeCheckpoint.read_json(self.sdk_observation))
+            if observed.for_turn(manifest.thread, manifest.turn) != manifest:
+                raise ValueError("Recorded wire public projection differs from its original SDK observation")
+            counter, segments = observed.counter, observed.segments
+        else:
+            # Exact raw metadata proves its existing narrower relation. Missing
+            # event evidence cannot authorize a different public projection.
+            counter, segments = manifest.counter, manifest.segments
+        if (data.counter != counter
+                or tuple(segment.measured_manifest() for segment in data.segments) != segments):
             raise ValueError("Recorded SDK payload differs from its original context manifest")
         # Existing NativeProvenance identifies this exact request, not merely a
         # same-session get_context preview. Counter/segment metadata alone do not.

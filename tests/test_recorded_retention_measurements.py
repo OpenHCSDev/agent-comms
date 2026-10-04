@@ -22,7 +22,7 @@ from agent_comms.native_entries import MessageEntry, NativeEntry
 from agent_comms.native_input_record import NativeInputCommit
 from agent_comms.native_pi import NativeContextRecord, NativePiUnavailable
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.native_turn_context import NativeContextData
+from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
 from agent_comms.native_tools import ReadTool, WriteTool
 from agent_comms.pi_summary_payloads import SummaryCost, SummaryUsage
 from agent_comms.pi_payloads import AssistantMessage, PiCost, PiUsage, ToolCallContent, ToolResultMessage, UserMessage
@@ -545,6 +545,80 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertEqual(empty['records'], 0)
         self.assertFalse(empty['reported_total_tokens']['evaluated'])
 
+    def test_paired_resources_compare_original_totals_without_zero_or_billing_credit(self):
+        # Prevent two consumers from choosing different completeness/ratio
+        # policies, lost source-input work, or output plus reasoning double count.
+        round_ = replace(coding_scenario().rounds[0], identity='cut')
+        scored = RecallScenario('paired-resources', (round_,)).score(
+            Condition.TASK_MEMORY, RecordedAnswers({}))
+        summary = SummaryUsage(input=20, output=8, cache_read=0, cache_write=0, total_tokens=28,
+            cost=SummaryCost(0, 0, 0, 0, 0))
+        cuts = {'cut': {'summary_usage': {'evaluated': True, 'usage': summary}}}
+        candidate = scored.recorded_resources(cuts, {'cut': {'model_steps': (
+            {'usage': {'value': PiUsage(input=4, output=6, total_tokens=10,
+                reasoning=2, cost=PiCost(total=0.25))}},)}}, {})
+        baseline = scored.recorded_resources(cuts, {'cut': {'model_steps': (
+            {'usage': {'value': PiUsage(input=8, output=8, total_tokens=16,
+                reasoning=3, cost=PiCost(total=1))}},)}}, {})
+        paired = scored.paired_resources(candidate, baseline)
+        self.assertEqual(set(paired['groups']), set(candidate) - {'scope'})
+        combined = paired['groups']['combined']
+        self.assertIs(combined['candidate'], candidate['combined'])
+        self.assertIs(combined['baseline'], baseline['combined'])
+        cost = combined['metrics']['normalized_cost']
+        self.assertEqual(cost['difference'], -0.75)
+        self.assertEqual(cost['relative_reduction']['value'], 0.75)
+        self.assertEqual(combined['metrics']['output_tokens']['difference'], -2)
+        self.assertFalse(combined['metrics']['cache_read_tokens']['evaluated'])
+        self.assertIsNone(combined['metrics']['cache_read_tokens']['difference'])
+        workflow = paired['groups']['recorded_workflow']['metrics']['normalized_cost']
+        self.assertFalse(workflow['evaluated'])
+        self.assertIsNone(workflow['difference'])
+        self.assertEqual(workflow['candidate']['observed_value'], 0.25)
+        zero = paired['groups']['summaries']['metrics']['normalized_cost']
+        self.assertTrue(zero['evaluated'])
+        self.assertEqual(zero['difference'], 0)
+        self.assertFalse(zero['relative_reduction']['evaluated'])
+        self.assertIsNone(zero['relative_reduction']['value'])
+        changed = {**baseline, 'summaries': {**baseline['summaries'], 'expected_rounds': ('other',)}}
+        with self.assertRaisesRegex(ValueError, 'same frozen rounds'):
+            scored.paired_resources(candidate, changed)
+
+    def test_paired_resource_batch_keeps_all_trajectories_and_uses_aggregate_denominator(self):
+        # Missing samples cannot be dropped for a cheap mean; ratio of total
+        # resources is distinct from averaging per-pair percentages.
+        round_ = replace(coding_scenario().rounds[0], identity='cut')
+        scored = RecallScenario('resource-batch', (round_,)).score(
+            Condition.TASK_MEMORY, RecordedAnswers({}))
+        def original(cost):
+            return scored.recorded_resources({}, {'cut': {'model_steps': (
+                {'usage': {'value': PiUsage(input=0, output=0, total_tokens=0,
+                    cost=PiCost(total=cost))}},)}}, {})
+        pairs = tuple({'paired_resources': scored.paired_resources(original(a), original(b))}
+                      for a, b in ((0.25, 1), (1, 3)))
+        batch = scored.paired_resource_batch(pairs)
+        cost = batch['groups']['assistants']['metrics']['normalized_cost']
+        self.assertTrue(cost['evaluated'])
+        self.assertEqual(cost['candidate']['value'], 1.25)
+        self.assertEqual(cost['baseline']['value'], 4)
+        self.assertEqual(cost['relative_reduction']['value'], 0.6875)
+        self.assertEqual(cost['candidate']['expected_trajectories'], 2)
+        self.assertEqual(len(batch['groups']['assistants']['samples']), 2)
+        missing = {'paired_resources': scored.paired_resources(
+            scored.recorded_resources({}, {}, {}), original(3))}
+        partial = scored.paired_resource_batch((pairs[0], missing))
+        cost = partial['groups']['assistants']['metrics']['normalized_cost']
+        self.assertFalse(cost['evaluated'])
+        self.assertIsNone(cost['difference'])
+        self.assertIsNone(cost['relative_reduction']['value'])
+        self.assertEqual(cost['candidate']['observed_value'], 0.25)
+        self.assertEqual(cost['candidate']['observed_trajectories'], 1)
+        self.assertEqual(cost['candidate']['expected_trajectories'], 2)
+        tokens = batch['groups']['assistants']['metrics']['reported_total_tokens']
+        self.assertTrue(tokens['evaluated'])
+        self.assertEqual(tokens['difference'], 0)
+        self.assertFalse(tokens['relative_reduction']['evaluated'])
+
     def test_resource_totals_keep_missing_frozen_rounds_and_observed_subtotals(self):
         # Missing cuts/probes cannot turn a partial trajectory into a complete
         # cheap total. Actual reported zero is preserved independently.
@@ -979,6 +1053,49 @@ class RecordedMeasurementTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'artifact changed'):
             probe.read_sdk_context()
 
+    def test_public_manifest_uses_original_event_projection_without_reconstructing_values(self):
+        # Prevent a valid public projection from failing raw metadata equality,
+        # and prevent absent/tampered event evidence from granting that projection.
+        context = NativeContextRecord('a' * 32, self.identity.session_id, 'input', 1, 'b' * 64)
+        owner = Thread('original-owner', frozenset(), str(self.root))
+        turn = RecordedContextTurn(TurnId('original-turn'), TurnIdentity(owner.incarnation, 1))
+        content = 'Original public system contribution λ'
+        raw = json.dumps(content, ensure_ascii=False, separators=(',', ':')).encode()
+        segment = SystemLayerSegment(content=content, tokens=12,
+            sha256=hashlib.sha256(raw).hexdigest(), utf8_bytes=len(raw),
+            provenance=(NativeProvenance(self.identity, 1, context.llm_context_digest),))
+        data = NativeContextData('original-counter', self.identity, (segment,))
+        emitted = NativeContextManifestData(data.counter, (segment.measured_manifest(),),
+            request_id='original-request', values=(segment,))
+        manifest = emitted.for_turn(owner.incarnation, turn)
+        probe = RecordedNativeProbe(self.identity, context.input_id, 'answer',
+            sdk_context=self.artifact('original-sdk.json', data.to_wire()),
+            context_manifest=self.artifact('original-wire.json', manifest),
+            sdk_observation=self.artifact('original-event.json', emitted.to_wire()))
+        self.assertEqual(FieldCodec.decode(RecordedNativeProbe, FieldCodec.encode(probe)), probe)
+        acquired = probe.read_sdk_context()
+        self.assertEqual(probe.request_manifest(context, acquired), manifest)
+        self.assertEqual(manifest.segments[0].captured_text, (content,))
+        with self.assertRaisesRegex(ValueError, 'SDK payload differs'):
+            replace(probe, sdk_observation=None).request_manifest(context, acquired)
+        for changed in (replace(manifest, request_id='another-request'),
+                        replace(manifest, counter='another-counter'),
+                        replace(manifest, segments=(segment.measured_manifest(),)),
+                        replace(manifest, segments=(replace(manifest.segments[0],
+                            captured_text=('Forged public contribution',)),))):
+            with self.subTest(changed=changed), self.assertRaisesRegex(ValueError, 'wire public projection'):
+                replace(probe, context_manifest=self.artifact(
+                    'changed-wire.json', changed)).request_manifest(context, acquired)
+        with self.assertRaisesRegex(ValueError, 'SDK payload differs'):
+            probe.request_manifest(context, replace(acquired, segments=(replace(segment, tokens=13),)))
+        with self.assertRaisesRegex(ValueError, 'wire public projection'):
+            replace(probe, sdk_observation=self.artifact('changed-event.json',
+                replace(emitted, values=(replace(segment, content='Altered original value'),)).to_wire())
+                ).request_manifest(context, acquired)
+        Path(probe.sdk_observation.path).write_text('{}')
+        with self.assertRaisesRegex(ValueError, 'artifact changed'):
+            probe.request_manifest(context, acquired)
+
     def test_submitted_condition_keeps_partial_transform_without_claiming_request_binding(self):
         # Detect a completed transform being promoted to a submitted SDK
         # request when its converter is absent. Only the upstream fork-source
@@ -1037,7 +1154,9 @@ class RecordedMeasurementTests(unittest.TestCase):
         # real converter result. A transform may reduce messages legitimately;
         # its output count must not be confused with the installed prefix count.
         prefix = ({'type': 'session', 'id': self.identity.session_id},
-                  {'type': 'message', 'id': 'source',
+                  {'type': 'message', 'id': 'prior',
+                   'message': {'role': 'user', 'content': 'Earlier original source'}},
+                  {'type': 'message', 'id': 'source', 'parentId': 'prior',
                    'message': {'role': 'user', 'content': 'Original installed source'}})
         self.session.write_text(''.join(json.dumps(row) + '\n' for row in prefix))
         self.session.chmod(0o600)
@@ -1075,6 +1194,37 @@ class RecordedMeasurementTests(unittest.TestCase):
                                                  manifest, (row, conversion, restored))
             self.assertTrue(complete['evaluated'])
             self.assertEqual(complete['installations'], (installed,))
+            self.assertFalse(complete['entry_selection']['evaluated'])
+            self.assertNotIn('entry_selection', row)  # Historical absence stays absent.
+            for selection, selected, unselected in (
+                    (('prior', 'source'), ('prior', 'source'), ()),
+                    (('source',), ('source',), ('prior',)),
+                    ((), (), ('prior', 'source'))):
+                observed = replace(installed, entry_selection=JournalProvenance(
+                    str(self.session), selection))
+                selected_row = FieldCodec.encode(observed)
+                self.assertEqual(FieldCodec.decode(RecordedConditionInstallation, selected_row), observed)
+                result = probe.installed_condition(evidence, branch, context, serialized,
+                    manifest, (selected_row, conversion, restored))
+                observation, = result['entry_selection']['observations']
+                self.assertTrue(observation['evaluated'])
+                self.assertEqual(observation['selected_message_entries'], selected)
+                self.assertEqual(observation['unselected_message_entries'], unselected)
+                self.assertEqual(observation['all_original_message_entries_selected'], not unselected)
+                # Original selection remains known even without matching request bytes.
+                no_request = probe.installed_condition(evidence, branch, context,
+                    {'evaluated': False}, None, (selected_row, restored))
+                self.assertFalse(no_request['evaluated'])
+                self.assertEqual(no_request['entry_selection'], result['entry_selection'])
+            for selection in (('source', 'prior'), ('source', 'source'), ('input',)):
+                with self.subTest(selection=selection), self.assertRaisesRegex(ValueError, 'ordered subset'):
+                    probe.installed_condition(evidence, branch, context, serialized, manifest,
+                        (FieldCodec.encode(replace(installed, entry_selection=JournalProvenance(
+                            str(self.session), selection))), conversion, restored))
+            with self.assertRaises(ValueError):
+                probe.installed_condition(evidence, branch, context, serialized, manifest,
+                    (FieldCodec.encode(replace(installed, entry_selection=JournalProvenance(
+                        str(self.root / 'another.jsonl'), ('source',)))), conversion, restored))
             with self.assertRaisesRegex(ValueError, 'has not retired'):
                 probe.installed_condition(evidence, branch, context, serialized,
                                           manifest, (row, conversion))
@@ -1100,7 +1250,8 @@ class RecordedMeasurementTests(unittest.TestCase):
         identities = tuple(item.identity for item in scenario.rounds)
         unavailable = {identity: {'evaluated': False} for identity in identities}
         original = {'construction': {'condition_application': {'evaluated': True},
-            'condition_installation': {'evaluated': False},
+            'condition_installation': {'evaluated': False, 'entry_selection': {'evaluated': False}},
+            'request_budget': {'evaluated': True},
             'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
         partial = scored.condition_construction({identities[0]: original}, unavailable)
         self.assertFalse(partial['evaluated'])
@@ -1115,6 +1266,9 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertTrue(observed['bounded_sdk_application']['evaluated'])
         self.assertTrue(observed['source_delivery']['evaluated'])
         self.assertFalse(observed['installed_sdk_source']['evaluated'])
+        self.assertFalse(observed['sdk_entry_selection']['evaluated'])
+        self.assertTrue(observed['native_request_admission']['evaluated'])
+        self.assertEqual(partial['native_request_admission']['unavailable_rounds'], identities[1:])
         self.assertFalse(observed['full_history_capacity']['evaluated'])
         self.assertFalse(observed['evaluated'])
         for condition in Condition:
@@ -1123,7 +1277,8 @@ class RecordedMeasurementTests(unittest.TestCase):
             self.assertFalse(labelled['evaluated'])
         partial_application = {'construction': {'condition_application': {
             'evaluated': False, 'transform': {'evaluated': True}},
-            'condition_installation': {'evaluated': False},
+            'condition_installation': {'evaluated': False, 'entry_selection': {'evaluated': False}},
+            'request_budget': {'evaluated': True},
             'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
         self.assertEqual(scored.condition_construction(
             {**evidence, identities[0]: partial_application}, delivered)
@@ -1132,7 +1287,9 @@ class RecordedMeasurementTests(unittest.TestCase):
         # a supplied experimental label or its intended source selection.
         original['construction']['source_coverage']['full_context_capacity'] = {'evaluated': True}
         self.assertTrue(scored.condition_construction(evidence, delivered)['full_history_capacity']['evaluated'])
-        original['construction']['condition_installation'] = {'evaluated': True}
+        original['construction']['condition_installation'] = {
+            'evaluated': True, 'entry_selection': {'evaluated': True}}
+        self.assertTrue(scored.condition_construction(evidence, delivered)['sdk_entry_selection']['evaluated'])
         self.assertTrue(scored.condition_construction(evidence, delivered)['installed_sdk_source']['evaluated'])
         self.assertFalse(scored.condition_construction(evidence, delivered)['evaluated'])
 

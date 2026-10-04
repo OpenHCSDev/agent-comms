@@ -610,11 +610,17 @@ class ScoredScenario(ScoreView):
                         for identity, original in evidence.items()}
         installations = {identity: original['construction']['condition_installation']
                          for identity, original in evidence.items()}
+        entry_selections = {identity: installation['entry_selection']
+                            for identity, installation in installations.items()}
+        admissions = {identity: original['construction']['request_budget']
+                      for identity, original in evidence.items()}
         capacity = {identity: original['construction']['source_coverage']['full_context_capacity']
                     for identity, original in evidence.items()}
         return {'evaluated': False, 'declared_condition': self.condition,
                 'bounded_sdk_application': group(applications),
                 'installed_sdk_source': group(installations),
+                'sdk_entry_selection': group(entry_selections),
+                'native_request_admission': group(admissions),
                 'source_delivery': group(source_delivery),
                 'full_history_capacity': group(capacity),
                 'reason': 'Original condition selection and complete-history eligibility are not supplied by a label or SDK preview',
@@ -661,14 +667,7 @@ class ScoredScenario(ScoreView):
                 'usage_records': len(available),
                 'expected_rounds': rounds, 'observed_rounds': observed_rounds,
                 'missing_rounds': missing_rounds,
-                'input_tokens': measured(usage.input for usage in available),
-                'output_tokens': measured(usage.output for usage in available),
-                'cache_read_tokens': measured(usage.cache_read for usage in available),
-                'cache_write_tokens': measured(usage.cache_write for usage in available),
-                'reported_total_tokens': measured(usage.total_tokens for usage in available),
-                'reasoning_tokens': measured(usage.reasoning for usage in available),
-                'normalized_cost': measured(usage.cost.total for usage in available
-                                           if usage.cost is not None)}
+                **{name: measured(values) for name, values in self.resource_metrics(available).items()}}
 
         return {'summaries': total(summaries), 'assistants': total(assistants),
                 'combined': total(summaries, assistants),
@@ -681,6 +680,87 @@ class ScoredScenario(ScoreView):
                          'observed subtotals do not estimate missing work or prove no summary work; '
                          'SDK-normalized cost is not billed spend; no unjournaled retries, '
                          'cache-saving comparison, HTTP accounting or end-to-end timing'}
+
+    @staticmethod
+    def resource_metrics(usages):
+        """Project original usage once; the same fields serve every comparison.
+
+        Output already includes reasoning. A missing cost or token field stays
+        absent; normalized cost never becomes billed spend.
+        """
+        usages = tuple(usages)
+        return {'input_tokens': tuple(usage.input for usage in usages),
+                'output_tokens': tuple(usage.output for usage in usages),
+                'cache_read_tokens': tuple(usage.cache_read for usage in usages),
+                'cache_write_tokens': tuple(usage.cache_write for usage in usages),
+                'reported_total_tokens': tuple(usage.total_tokens for usage in usages),
+                'reasoning_tokens': tuple(usage.reasoning for usage in usages),
+                'normalized_cost': tuple(usage.cost.total for usage in usages if usage.cost is not None)}
+
+    @staticmethod
+    def resource_difference(candidate, baseline):
+        """Compare complete observations, with zero distinct from unavailable."""
+        evaluated = candidate['evaluated'] and baseline['evaluated']
+        relative = evaluated and baseline['value'] != 0
+        return {'evaluated': evaluated, 'candidate': candidate, 'baseline': baseline,
+                'difference': candidate['value'] - baseline['value'] if evaluated else None,
+                'relative_reduction': {'evaluated': relative,
+                    'value': (baseline['value'] - candidate['value']) / baseline['value'] if relative else None,
+                    'reason': 'Original baseline is zero' if evaluated and not relative else
+                              'Complete original arm observations required' if not evaluated else
+                              'Reduction relative to the original baseline'}}
+
+    @classmethod
+    def paired_resources(cls, candidate, baseline):
+        """Compare the original totals already acquired by both arm readers.
+
+        Scope names come from recorded_resources; metric names come from its
+        usage projection. No second roster, reader or incomplete-arm estimate.
+        """
+        groups = {}
+        for name, original in candidate.items():
+            if name == 'scope':
+                continue
+            control = baseline[name]
+            if original['expected_rounds'] != control['expected_rounds']:
+                raise ValueError('Paired resources require the same frozen rounds')
+            groups[name] = {'candidate': original, 'baseline': control,
+                'metrics': {metric: cls.resource_difference(original[metric], control[metric])
+                            for metric in cls.resource_metrics(())}}
+        return {'groups': groups,
+                'scope': 'Descriptive paired original usage totals; SDK-normalized cost is not billing; '
+                         'summary and shared source-input scopes are not independent arm costs; '
+                         'no intervention, registered cost margin or end-to-end timing acceptance'}
+
+    @classmethod
+    def paired_resource_batch(cls, comparisons):
+        """Sum complete trajectory observations, never drop missing pairs.
+
+        The ratio is reduction in aggregate resources, not mean per-pair
+        percentages. Original pair details and partial subtotals stay visible.
+        """
+        def aggregate(samples):
+            supplied = tuple(item for item in samples if item['evaluated'])
+            subtotals = tuple(item['observed_value'] for item in samples
+                             if item['observed_value'] is not None)
+            complete = len(supplied) == len(samples)
+            return {'evaluated': complete,
+                    'value': sum(item['value'] for item in supplied) if complete else None,
+                    'expected_trajectories': len(samples), 'observed_trajectories': len(supplied),
+                    'observed_value': sum(subtotals) if subtotals else None}
+
+        groups = {}
+        for name in comparisons[0]['paired_resources']['groups']:
+            samples = tuple(pair['paired_resources']['groups'][name] for pair in comparisons)
+            groups[name] = {'trajectories': len(samples), 'samples': samples,
+                'metrics': {metric: cls.resource_difference(
+                    aggregate(tuple(sample['metrics'][metric]['candidate'] for sample in samples)),
+                    aggregate(tuple(sample['metrics'][metric]['baseline'] for sample in samples)))
+                    for metric in cls.resource_metrics(())}}
+        return {'groups': groups,
+                'scope': 'Aggregate descriptive paired original usage; missing trajectories keep totals unavailable; '
+                         'observed subtotals are not estimates; no billing, independence, '
+                         'registered margin, end-to-end timing or study acceptance'}
 
     def paired_quality(self, baseline, evidence, baseline_evidence, alignment):
         """Original alignment owns pairing; every frozen question stays visible."""
@@ -1030,6 +1110,8 @@ class RecallScenario:
         return {"candidate": candidate, "baseline": baseline_result,
                 "alignment": alignment,
                 "paired_quality": score.paired_quality(control, original, baseline_original, alignment),
+                "paired_resources": score.paired_resources(candidate['recorded_resources'],
+                                                            baseline_result['recorded_resources']),
                 "condition_construction": {"evaluated": all(item['evaluated'] for item in constructions),
                     "candidate": constructions[0], "baseline": constructions[1],
                     "scope": "Matched construction requires both original arm relations; partial SDK evidence is not full eligibility"},
@@ -1049,6 +1131,7 @@ class RecallScenario:
                             for candidate, control in pairs)
         return {'scenario': self.identity, 'pairs': comparisons,
                 'paired_quality': ScoredScenario.paired_batch(comparisons),
+                'paired_resources': ScoredScenario.paired_resource_batch(comparisons),
                 'study_acceptance': {'evaluated': False,
                     'reason': 'Recorded pairs do not supply a registered design, verified '
                               'condition construction or complete cost/end-to-end journeys'}}

@@ -1,0 +1,330 @@
+{
+  "src": {
+    "modules": 316,
+    "omissions": [],
+    "sites": []
+  },
+  "tests": {
+    "modules": 365,
+    "omissions": [],
+    "sites": [
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 505,
+        "name": "ScoredScenario",
+        "syntax": "ClassDef"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 81,
+        "name": "construction_plan",
+        "syntax": "FunctionDef"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 631,
+        "name": "recorded_resources",
+        "syntax": "FunctionDef"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 730,
+        "name": "paired_batch",
+        "syntax": "FunctionDef"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 1025,
+        "name": "compare_native",
+        "syntax": "FunctionDef"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 1045,
+        "name": "compare_native_pairs",
+        "syntax": "FunctionDef"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 996,
+        "name": "ScoredScenario",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 1242,
+        "name": "construction_plan",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 1277,
+        "name": "construction_plan",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 76,
+        "name": "compare_native_pairs",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 682,
+        "name": "recorded_workflow",
+        "syntax": "Constant"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 1000,
+        "name": "ScoredScenario",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 1278,
+        "name": "construction_plan",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 78,
+        "name": "ScoredScenario",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 1019,
+        "name": "ScoredScenario",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 1057,
+        "name": "paired_batch",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 1236,
+        "name": "construction_plan",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 1269,
+        "name": "compare_native",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 1274,
+        "name": "compare_native_pairs",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 1054,
+        "name": "compare_native",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 1057,
+        "name": "ScoredScenario",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/compaction_retention_fixture.py",
+        "line": 565,
+        "name": "recorded_resources",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 485,
+        "name": "recorded_resources",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 509,
+        "name": "recorded_resources",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 514,
+        "name": "recorded_workflow",
+        "syntax": "Constant"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 560,
+        "name": "recorded_resources",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 572,
+        "name": "recorded_resources",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 578,
+        "name": "recorded_resources",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 918,
+        "name": "compare_native",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 98,
+        "name": "construction_plan",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 105,
+        "name": "construction_plan",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 112,
+        "name": "construction_plan",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 302,
+        "name": "compare_native_pairs",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 327,
+        "name": "paired_batch",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 331,
+        "name": "paired_batch",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 357,
+        "name": "ScoredScenario",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 514,
+        "name": "recorded_resources",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 519,
+        "name": "recorded_resources",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 539,
+        "name": "recorded_resources",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 544,
+        "name": "recorded_resources",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 107,
+        "name": "construction_plan",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 108,
+        "name": "construction_plan",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 327,
+        "name": "ScoredScenario",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 331,
+        "name": "ScoredScenario",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 363,
+        "name": "ScoredScenario",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 367,
+        "name": "ScoredScenario",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 369,
+        "name": "ScoredScenario",
+        "syntax": "Name"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 513,
+        "name": "recorded_workflow",
+        "syntax": "Constant"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 512,
+        "name": "recorded_workflow",
+        "syntax": "Constant"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 524,
+        "name": "recorded_workflow",
+        "syntax": "Constant"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 576,
+        "name": "recorded_resources",
+        "syntax": "Attribute"
+      },
+      {
+        "path": "tests/test_recorded_retention_measurements.py",
+        "line": 523,
+        "name": "recorded_resources",
+        "syntax": "Attribute"
+      }
+    ]
+  },
+  "tools": {
+    "modules": 53,
+    "omissions": [],
+    "sites": []
+  }
+}

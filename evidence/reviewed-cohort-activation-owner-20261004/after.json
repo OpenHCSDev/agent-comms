@@ -1,0 +1,69 @@
+{
+  "head": "daf0692dc32bfd978d052a9013c79d423b6db930",
+  "parser": "Original refactor_audit.Package",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 316,
+      "unparsed": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "unparsed": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 41,
+      "kind": "owner",
+      "source": "class ReviewedArtifact:\n    path: Annotated[Path, PathText]\n    sha256: str\n\n    def require_original(self):\n        if digest(self.path) != self.sha256:\n            raise RuntimeError(f'Reviewed artifact changed: {self.path}')"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 51,
+      "kind": "owner",
+      "source": "class CohortActivation:\n    \"\"\"The existing verify.py artifact format, including its fourth dependency.\"\"\"\n    stage: Annotated[Path, PathText]\n    pins: dict[str, str]\n    sdk: str\n    textual_diff_view: str\n    native_package: Annotated[Path, PathText]\n    state: str\n    staging_receipt: Annotated[Path, PathText]\n    bins: dict[str, str]\n    native_cli: str\n    native_manifest: str\n    native_tree: str\n    native_configuration_note: str\n\n    def source_heads(self):\n        # This scalar is the ORIGINAL producer's declared fourth dependency,\n        # not an inferred omission, alternate pin list or dropped proof row.\n        return {**self.pins, 'textual_diff_view': self.textual_diff_view}"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 160,
+      "kind": "owner",
+      "source": "class InstalledSourceProof:\n    state: str\n    prefix: Annotated[Path, PathText]\n    sources: tuple[InstalledSource, ...]\n    native_package: Annotated[Path, PathText]\n    native_cli: str\n    native_manifest: str\n    native_tree: str\n    native_full_trust: bool\n    sdk: str\n    package_count: int\n    packages: tuple[tuple[str, str], ...]\n    requirements_sha256: str\n    protected_old_prefix_files: int\n    protected_old_prefix_files_unchanged: bool\n    public_install_changed: bool\n    new_native_build: bool\n    source_overlay: bool\n    dependency_bypass: bool\n    journey_owners: tuple[str, ...]\n    journey_assessment: str\n    archive_artifacts: tuple[ReviewedArtifact, ...] = field(\n        default=(), metadata={'wire_omit_default': True})\n\n    def require_activation(self, activation: CohortActivation):\n        actual = {source.module: source.head for source in self.sources}\n        if len(actual) != len(self.sources) or actual != activation.source_heads():\n            raise RuntimeError('Source proof differs from the complete activation dependencies')\n        if self.prefix != activation.stage or self.sdk != activation.sdk:\n            raise RuntimeError('Source proof names another prefix/SDK')\n        if (self.native_package, self.native_manifest, self.native_tree) != (\n                activation.native_package, activation.native_manifest, activation.native_tree):\n            raise RuntimeError('Source proof names another native artifact')\n        for source in self.sources:\n            source.require_original(self.archive_artifacts)\n        if not self.native_full_trust or self.source_overlay or self.dependency_bypass:\n            raise RuntimeError('Package/source/native trust is incomplete')"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 200,
+      "kind": "owner",
+      "source": "class ReviewedRetainedSummaryCohort:\n    target: Annotated[Path, PathText]\n    source_interpreter: Annotated[Path, PathText]\n    current_prefix: Annotated[Path, PathText]\n    original_route: ActiveRoute\n    native: Annotated[Path, PathText]\n    activation: ReviewedArtifact\n    source_proof: ReviewedArtifact\n    actual_gates: tuple[ReviewedArtifact, ...]\n\n    def require_original(self):\n        if self.original_route.root != ROOT:\n            raise RuntimeError('This reviewed one-use publisher names another public root')\n        if sys.executable != str(self.target / 'bin/python'):\n            raise RuntimeError('Use the reviewed target interpreter')\n        if not self.source_interpreter.is_absolute() or not self.source_interpreter.is_file():\n            raise RuntimeError('Authentic source interpreter is required')\n        self.activation.require_original()\n        self.source_proof.require_original()\n        activation = FieldCodec.decode(CohortActivation, json.loads(self.activation.path.read_text()))\n        if activation.stage != self.target:\n            raise RuntimeError('Activation names another source cohort')\n        if activation.sdk != '0.12.1' or activation.native_package != self.native:\n            raise RuntimeError('Activation names another SDK/native pair')\n        if activation.staging_receipt != self.source_proof.path:\n            raise RuntimeError('Activation names another source proof')\n        proof = FieldCodec.decode(InstalledSourceProof, json.loads(self.source_proof.path.read_text()))\n        proof.require_activation(activation)\n        gates = {gate.path for gate in self.actual_gates}\n        if not gates or len(gates) != len(self.actual_gates) or gates.intersection(\n                (self.activation.path, self.source_proof.path)):\n            raise RuntimeError('Distinct reviewed actual installed journey gates are required')\n        for gate in self.actual_gates:\n            gate.require_original()\n        verify_native_package(self.native)\n        self.require_publication_originals()\n\n    def require_publication_originals(self):\n        if read_active_route() != self.original_route:\n            raise RuntimeError('Original active route changed; recapture/review required')\n        for command in COMMANDS:\n            if (LINKS / command).readlink() != self.current_prefix / 'bin' / command:\n                raise RuntimeError('Original default changed; recapture/review required')\n            if not (self.target / 'bin' / command).is_file():\n                raise RuntimeError('Reviewed target entrypoint is missing')\n            temporary = LINKS / (command + '.retained-summary-publish')\n            if temporary.exists() or temporary.is_symlink():\n                raise RuntimeError('Original publication attempt requires review')\n\n    def publish(self, directory: int):\n        self.require_publication_originals()\n        target_route = replace(self.original_route, native_package=self.native)\n        _publish_active_route_locked(target_route, active_route_path(), directory,\n                                     expected=self.original_route)\n        for command in COMMANDS:\n            link = LINKS / command\n            if link.readlink() != self.current_prefix / 'bin' / command:\n                raise RuntimeError('Default changed during publication; remain stopped')\n            temporary = LINKS / (command + '.retained-summary-publish')\n            temporary.symlink_to(self.target / 'bin' / command)\n            temporary.replace(link)\n        fsync_directory(LINKS)\n        if read_active_route() != target_route:\n            raise RuntimeError('Target route readback differs')"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 438,
+      "kind": "consumer",
+      "source": "cohort.require_original()"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 316,
+      "kind": "consumer",
+      "source": "self.cohort.require_original()"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 345,
+      "kind": "consumer",
+      "source": "self.cohort.require_original()"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset_controls.py",
+      "line": 101,
+      "kind": "consumer",
+      "source": "ReviewedRetainedSummaryCohort(base / 'future-target', Path(sys.executable),\n    base / 'current', ActiveRoute(base, 'f' * 32, base / 'native'), base / 'native',\n    artifact, artifact, ())"
+    }
+  ],
+  "dynamic_resolution": "Lexical named cohort constructors and cohort receivers; generic dynamic receivers are not claimed resolved",
+  "competing_storage_predicate": 0,
+  "typed_stage_predicate": 1
+}

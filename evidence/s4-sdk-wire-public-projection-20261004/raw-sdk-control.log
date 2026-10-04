@@ -1,0 +1,6 @@
+test_sdk_presence_requires_original_request_and_unchanged_bytes (test_recorded_retention_measurements.RecordedMeasurementTests.test_sdk_presence_requires_original_request_and_unchanged_bytes) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.039s
+
+OK

@@ -1,0 +1,30 @@
+{
+  "qualified_implementation": "aaf54d81efa1b6f3c36e000f12057662cdb29d56",
+  "scope": "Private recorded event/SDK/public projection reader; new live capture hook source-only",
+  "raw_sha256": {
+    ".artifacts/s4-sdk-wire-public-projection/original-emitted-event.json": "4016f354259d9764cfd2c82991a3ecfa05ac0bd9911b7e7843d7293d152c5ac0",
+    ".artifacts/s4-sdk-wire-public-projection/read-original.py": "d42cfafdd531e16db2b127a097a0b89c4c15a4ec00879fec1455cc6619c57e83",
+    ".artifacts/s4-sdk-wire-public-projection/original-reader-result.json": "10b2569acc80d8909ca9e8eb048ff146ed3fb049c1814487986396695a8de087",
+    ".artifacts/s4-sdk-wire-public-projection/original-reader.log": "509a089d0e11ef9306743a60d4fbffa90419e7404c1a9330be7a9c735137a791",
+    ".artifacts/s4-sdk-wire-public-projection/raw-sdk-control.log": "9c21fe76b80963ce06aa50e8b704e9b7f0e40a52f6f8e1bfbc5597db4863a11d",
+    ".artifacts/s4-sdk-wire-public-projection/first-selector-refusal.log": "ea55d7962ccc028e940ecb283fadadc4d71540630bf0abbc31b853f5bc2166d5",
+    ".artifacts/s4-sdk-wire-public-projection/before.json": "0acf319a266d90ba62cd051b01c661f3845e5bfe14721277c4ce458445775226",
+    ".artifacts/s4-sdk-wire-public-projection/after.json": "5f7a6ec39392eecdf6275b6d004cfe15fa12ec36536a9456760c866743515d64",
+    ".artifacts/s4-sdk-wire-public-projection/emitter-source.json": "e9977952c1b5f41ef38ed2b56bfaf79d6f52c6e0b4c7f21d44a93e989ba8d31c"
+  },
+  "changed_projection_control_passed": true,
+  "unchanged_raw_sdk_control_passed": true,
+  "selector_negative_preserved": true,
+  "original_639_hashes_unchanged": 19,
+  "runtime_native_tools_delta": 0,
+  "new_native_processes": 0,
+  "new_inputs": 0,
+  "providers": 0,
+  "new_environments": 0,
+  "package_or_native_loans": 0,
+  "active_observer_hook_qualified": false,
+  "configured_provider_qualified": false,
+  "enrolled_ACP_wire_publication_qualified": false,
+  "capacity_qualified": false,
+  "study_qualified": false
+}

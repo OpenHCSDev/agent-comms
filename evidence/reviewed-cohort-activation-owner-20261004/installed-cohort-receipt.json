@@ -1,0 +1,73 @@
+{
+  "state": "PASS",
+  "source_head": "daf0692dc32bfd978d052a9013c79d423b6db930",
+  "installed_core": "5e3f68c5825e80ffe52ba431082a8c13a78428f9",
+  "cohort": {
+    "target": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002",
+    "source_interpreter": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/bin/python",
+    "current_prefix": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534",
+    "original_route": {
+      "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "wire_root_id": "e206f3766e60451a989ca34df0e2a94b",
+      "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2ea0a4d4ff2e3628/node_modules/@earendil-works/pi-coding-agent",
+      "version": 1
+    },
+    "native": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+    "activation": {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/context637-tool430-native59-receiving-20261004/candidate-activation.json",
+      "sha256": "6ad772fb79d673749cb0bd4204b7b31d1f145b856ab8afe6eedd393f95323d5f"
+    },
+    "source_proof": {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/context637-tool430-native59-receiving-20261004/source-proof.json",
+      "sha256": "8bca0c63a66d33fa72bad3aa64a0f5e3ba7544b8eefa70279fbc6e02b092cec6"
+    },
+    "actual_gates": [
+      {
+        "path": "/home/ts/wt/comms-field-codec-closure-20260928/evidence/context-segment-loading-20261004/installed-current-preview/terminal-receipt.json",
+        "sha256": "d563c70131bb2c211d4629e389fe26b6c5ba416ec33c4a9d2dfdc23be66b497b"
+      },
+      {
+        "path": "/home/ts/wt/comms-field-codec-closure-20260928/evidence/context-segment-loading-20261004/installed-current-preview/app-receipt.json",
+        "sha256": "2c8b4c75860231dabb89d3459389aa436f576a25b01cc8f11da1a33c8b4d8916"
+      },
+      {
+        "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/evidence/tool-subtree-publication-lifetime-20261004/installed-app-terminal.json",
+        "sha256": "3191e810ee21effc21145de91108f905058d6d5ea8ef8de661e87a119e452b55"
+      },
+      {
+        "path": "/home/ts/wt/toad-regression-widget-cost-20261001/evidence/recorded-context-reader-20261004/installed13/terminal-receipt.json",
+        "sha256": "4fafc68653effcd2b7dc90ef41fad37812fbeef58b3f052b7a30b7dd95dcaf7c"
+      },
+      {
+        "path": "/home/ts/wt/toad-regression-widget-cost-20261001/evidence/recorded-context-reader-20261004/installed14/terminal-receipt.json",
+        "sha256": "38e10b67db032655ad341d004554e5a76ebdd4a4e9d6d06840ae274fec882bc0"
+      }
+    ]
+  },
+  "installed_git_assets": 942,
+  "forced_native_assets": [
+    {
+      "source": "stack/pi-native.sha256",
+      "installed": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/_native/pi-native.sha256",
+      "sha256": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872"
+    },
+    {
+      "source": "stack/native-compaction-commit-child.mjs",
+      "installed": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/_native/native-compaction-commit-child.mjs",
+      "sha256": "186abb2f107b40327ff6410749727e83c9dd9df1487ade76051565544ec0a2a8"
+    },
+    {
+      "source": ".pi/APPEND_SYSTEM.md",
+      "installed": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/_native/APPEND_SYSTEM.md",
+      "sha256": "0646119d5a8668f37f40580a1c7a3fdbedb9a66c5fcf4eb2f57b1cfc8afb3c2a"
+    }
+  ],
+  "protected_original431": 159,
+  "protected_original431_unchanged": true,
+  "candidate_activation_outside_prefix": true,
+  "package_restaged": false,
+  "public_effects": false,
+  "publisher_called": false,
+  "audience_or_client_admission_called": false,
+  "app_sdk_provider_launched": false
+}
