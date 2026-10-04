@@ -16,6 +16,7 @@ from agent_comms.private_path import PrivateFileRole, TrustedAncestorRole
 from agent_comms.store_files import _atomic_write_text
 from publish_openhcs_recovery import digest, fsync_directory
 from publish_retained_summary import ReviewedArtifact
+from routing_recovery import write_original
 
 
 @dataclass(frozen=True)
@@ -38,10 +39,13 @@ class GlobalSourceInstall(ABC):
 
     def install(self):
         self.require_original()
-        _atomic_write_text(self.destination, self.source.path.read_text(),
-                           fsync_parent=True, mode=self.installation_mode())
+        self.publish_source()
         if digest(self.destination) != self.source.sha256:
             raise RuntimeError(f'Installed global source differs: {self.destination}')
+
+    def publish_source(self) -> None:
+        _atomic_write_text(self.destination, self.source.path.read_bytes().decode("utf-8"),
+                           fsync_parent=True, mode=self.installation_mode())
 
     def installation_mode(self) -> int:
         return PrivateFileRole.permissions
@@ -64,13 +68,18 @@ class ReplaceGlobalSource(GlobalSourceInstall):
     def retain_original(self, directory):
         self.require_original()
         preimage = directory / self.destination.name
-        _atomic_write_text(preimage, self.destination.read_text(), fsync_parent=True)
+        write_original(preimage, self.destination.read_bytes())
+        fsync_directory(directory)
         if digest(preimage) != self.original.sha256:
             raise RuntimeError('Global source changed while preserving its preimage')
 
 
 @dataclass(frozen=True)
 class CreateGlobalSource(GlobalSourceInstall):
+    def publish_source(self) -> None:
+        write_original(self.destination, self.source.path.read_bytes())
+        fsync_directory(self.destination.parent)
+
     def require_destination(self):
         if self.destination.exists() or self.destination.is_symlink():
             raise RuntimeError(f'New source destination already exists: {self.destination}')
