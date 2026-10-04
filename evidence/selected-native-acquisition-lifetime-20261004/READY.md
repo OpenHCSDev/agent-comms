@@ -50,13 +50,13 @@ or a new configured ACP/provider/UI journey. No13/98-second speed claim.
 
 ## Normal integration and handback
 
-Current main33851e9d includes accepted603+605 union and607. Its three609-touched
-production files are byte-identical to the pre609 base605; normal joining cannot
-replace this qualified implementation. Other owners' source/native pins remain
+Normal main33851e9d integration completed at b1cc38f7. It includes accepted
+603+605 union and607. All three609-touched production files remain byte-identical
+to qualified100682; integration.json records their exact SHA256 values. Other owners' source/native pins remain
 their accepted cohorts, not qualified by this native89 receipt. No repeat control
 is needed solely for unchanged609 source. Public414 remains parent-owned.
 
-Thin540 package loan will return to Bohr after publication of this receipt;
+Thin540 package loan is released with publication of this receipt;
 all original595/control06/configured599/603/540 data remain protected. No future
 CODE borrower/build requirement is retained after handback. Test-only derived
 SDK copy is held for original review; no UNKNOWN or original data is disposed.
