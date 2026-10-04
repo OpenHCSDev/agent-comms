@@ -82,3 +82,18 @@ re-decode. Runnable and standby remain distinct execution facts. Unresolved ment
 diagnostics carry the original GoalMentionBinding declaration, while the separate
 stale-incarnation diagnostic stays explicit; the unused resolution string property
 and its fixture consumers are deleted. No stored goal/binding format changes.
+
+## Original external result boundaries (after normal F1 65ee381b join)
+
+Context and retained-context producers return original context declarations,
+manifests, provenance and authored facts. F1's existing `encode_result` and
+ToolRequest JSON boundary own their serialization; feature producers no longer
+serialize those values before returning them. Compaction status uses the original
+SelectedSummaryAttempt typed session selection inside CompactionJournal's existing
+read-only lifetime, removing the serialized table-name/dictionary round trip.
+
+The two granted argparse emissions use FieldCodec at the actual framework
+boundary. ACP catalog IDs, native payload stop-reason/command normalization,
+coding-tool wire names, export strings and SQLite scalar parameters use the same
+codec at their original external boundaries. Their wire strings remain unchanged.
+No target-action encoder, catalog or lifecycle producer is replaced.

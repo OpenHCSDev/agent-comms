@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from . import agent_events as events
 from . import turn_failure as failures
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec
 from .compaction_progress import CompactionSourceProgress
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .request_progress import RequestProgress
@@ -44,7 +45,7 @@ class PiEvent(PiPayload, DeclaredFamily):
         if key == "message" and target is PiMessage and value is None:
             return {"kind": AbsentMessage.declared_name}
         if key == "reason" and target == type[CompactionReason]:
-            return CompactionReason.from_external(value).declared_name
+            return FieldCodec.encode(CompactionReason.from_external(value))
         if target is PiToolResult:
             return PiToolResult.normalize_wire(value)
         return super().normalize_field(target, key, value, record)
@@ -654,7 +655,7 @@ class Response(PiEvent):
         if owner.strict_response and set(record) != {"id", "type", "command", "success", "data"}:
             raise ValueError("Unexpected selected response envelope")
         if key == "command":
-            return owner.declared_name
+            return FieldCodec.encode(owner)
         if key == "data":
             return (
                 {"kind": MissingData.declared_name}

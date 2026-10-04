@@ -20,6 +20,7 @@ from .claim_admission import (
     verify_selected_wake,
 )
 from .comms import Comms
+from .field_codec import FieldCodec
 from .envelope_claim_transitions import (
     ClaimOwner,
     WakeAdmission,
@@ -41,7 +42,7 @@ class CodingCall(NativeToolCall):
 
     @property
     def name(self) -> str:
-        return self.tool.declared_name
+        return FieldCodec.encode(type(self.tool))
 
     def commit_terminal(self, is_error: bool, directory: Path, input_id: str) -> None:
         record_selected_terminal(directory, self.slot(input_id), self.slot(input_id))

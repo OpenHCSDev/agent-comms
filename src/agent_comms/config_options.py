@@ -23,6 +23,7 @@ from . import backend
 from .comms import Comms
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .owner_launch import RestartEnvironment
 from .pending_requests import PendingRequests
@@ -99,7 +100,7 @@ class CatalogConfigOption(ConfigOption):
                 value=selected, name=configured if configured is not None else "Not configured"
             ), *choices]
         return SessionConfigOptionSelect(
-            id=self.declared_name,
+            id=FieldCodec.encode(type(self)),
             name=self.title,
             description=self.description,
             category=self.category,

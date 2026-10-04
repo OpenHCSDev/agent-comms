@@ -29,7 +29,7 @@ class Engagement(DeclaredFamily, affix="Engagement"):
     @property
     def mode(self) -> WakePolicy:
         return next(policy() for policy in WakePolicy.members_with(WakePolicy)
-                    if policy.active and policy.engagement_type() is type(self))
+                    if policy.active and policy.engagement_type() is self.__class__)
 
     @property
     @abstractmethod
