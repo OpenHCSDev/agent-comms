@@ -1,0 +1,88 @@
+{
+  "status": "SOURCE/PACKAGED ONLY; no holder/native purpose issued and no imports/stage/runs",
+  "source_product": "46124bbdc9dcec39e944eb64067d9c85f3508c0e",
+  "product_changes": "Six production files; only controls/docs added after c10e8088",
+  "control_sha256": {
+    "tests/test_goal_selection_owner.py": "ac0f68e4b527ab031f2fd162cf835882e37a68db4aab95051450ef0e85c5bb30",
+    "tests/test_goal_selection_native.py": "c2cda1d7b6abd45ce482826b0a9bf23eeda78aaa89eaeb8009fac91f83dc2dab",
+    "tests/goal_owner_fixture.py": "437f76cd6bc3f5dc1efeed77402f50ad95ec44d8023b63b8013e2889ab537803",
+    "tests/native_backend_fixture.py": "a4cb188d5b472f5445cc8ba653137075455907c8e06cf0e95eb01793c4ce7575",
+    "tests/compaction_loopback.py": "064e3e6658841746a2a15e8d2c41cea78c283a931d7b92cf1953877ad88821ea",
+    "tests/delivery_owner_fixture.py": "b03ab1801372c8d45e6cdbf91ebd2e7013ffeec9485e392e45d0479606caae5f",
+    "tests/test_backend_native_lifecycle.py": "0bd1745a76ccb7538227d0fe895f10dd03747dfeb24e7a3b55b3fbbd97adbe6b"
+  },
+  "proposed_existing_prefix": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002",
+  "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-goal-selection675-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_status": "ONE normal cached Hatchling1.28 wheel built; all355 Git/local/ZIP equal; not installed",
+  "canonical": {
+    "argv": [
+      "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+      "-B",
+      "-c",
+      "import pathlib,sys,agent_comms; assert pathlib.Path(agent_comms.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()); sys.path.append('/usr/lib/python3.14/site-packages'); import pytest; raise SystemExit(pytest.main(['-o', 'addopts=', '-o', 'pythonpath=', '-p', 'no:cacheprovider', '--basetemp', '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/canonical01/authored', '--junitxml', '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/canonical01/results.xml', '-q', 'tests/test_goal_selection_owner.py']))"
+    ],
+    "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+    "environment": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONPATH": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests",
+      "PI_COMPACTION_TEST_PACKAGE": null,
+      "AGENT_COMMS_ROOT": null
+    },
+    "expected_distinct_cases": 6,
+    "scope": "New original canonical_goal_wire root only; actual registry leases, goal commands and certified reply source. Zero native/provider/public inputs.",
+    "output": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/canonical01"
+  },
+  "actual_settlement": {
+    "argv": [
+      "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+      "-B",
+      "-c",
+      "import pathlib,sys,agent_comms; assert pathlib.Path(agent_comms.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()); sys.path.append('/usr/lib/python3.14/site-packages'); import pytest; raise SystemExit(pytest.main(['-o', 'addopts=', '-o', 'pythonpath=', '-p', 'no:cacheprovider', '--basetemp', '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/native01/authored', '--junitxml', '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/native01/results.xml', '-q', 'tests/test_goal_selection_native.py']))"
+    ],
+    "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+    "environment": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONPATH": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests",
+      "PI_COMPACTION_TEST_PACKAGE": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent",
+      "AGENT_COMMS_ROOT": null
+    },
+    "expected_distinct_cases": 2,
+    "scope": "Unchanged NativeBackendFixture SDK-authored seed/open_owner + actual TurnRunner autonomous input and localhost HTTP; same-ID later progress and independent replacement. No fabricated Done/stream/mock native child; original fixture cleanup required.",
+    "expected_native_inputs": 2,
+    "expected_localhost_posts": 2,
+    "external_provider_inputs": 0,
+    "public_inputs": 0,
+    "output": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/native01",
+    "native_manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+    "native_tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d",
+    "authority": "NEW literal Sch matching 7a immutable artifact READ/execution required; no renewed purpose issued yet. Old086 loans do not match."
+  },
+  "preserve": "All old/authentic saved roots, auth, source/history/inputs/UNKNOWN untouched; authored new roots/evidence retained through handback.",
+  "remaining_dependencies": [
+    "Bohr fresh eligible existing540 package/import/execution purpose before access.",
+    "NEW literal Sch matching7a READ/execution before native jobs."
+  ],
+  "harness_limits": "Unchanged conftest deferred candidate-maintenance hook remains a test-harness condition; does not qualify global scheduling. Installed agent_comms is imported before pytest, pytest pythonpath override is empty; only original test helper directory enters PYTHONPATH. System pytest appended after installed application paths with no dependency writes.",
+  "handback": "Actual controller/native identities, joined fixture child retirement, groups/sockets absent, original package/metadata/keepers unchanged/restored, independent Bohr whole-purpose closure. No subsequent loan implied.",
+  "supersedes": {
+    "proposal": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/c3-original-owner-boundaries-20261005/PROPOSED-INSTALLED-OPERANDS.json",
+    "sha256": "5553285120e8faf53a04ee9f03159699a6ee9a6b2781cdfb0466356ac9c0da4e",
+    "scope": "Effective wheel/native tuple correction only; original stale 086 proposal preserved. Control/helper bytes/argv otherwise unchanged."
+  },
+  "wheel_sha256": "a685578e439aa2f7010219aa6032ae7e7307a68393e6d6adbb084563f39f43c5",
+  "wheel_bytes": 901686,
+  "asset_count": 355,
+  "wheel_proof": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-goal-selection675-wheel-20261005/wheel-source-proof.json",
+  "wheel_proof_sha256": "fa564c573cd777e6fa9487da6b544a736d3ce957150194dc22086c9d8c9352a9",
+  "stage_argv": [
+    "uv",
+    "pip",
+    "install",
+    "--python",
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "--no-deps",
+    "--no-cache",
+    "--reinstall",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-goal-selection675-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl"
+  ]
+}

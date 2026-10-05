@@ -100,3 +100,19 @@ provider request to advance the same goal or replace it through canonical
 commands; settlement must preserve the changed record and never apply the
 old permit to a replacement. SDK-authored seed rows are distinct from the
 one actual localhost native input per case.
+
+## Effective packaged tuple
+
+The initial proposed native 086 operand was stale and is preserved unchanged
+in `PROPOSED-INSTALLED-OPERANDS.json`. Current source and its actual forced
+manifest declare native 7a, tree `0d7ff54a...`. The append-only
+`EFFECTIVE-INSTALLED-OPERANDS.json` corrects only that tuple and binds the one
+authorized normal cached Hatchling 1.28 wheel (`WHEEL.json`): all 355
+application assets equal Git, local source and ZIP, including the three
+forced resources; metadata is retained in the full source proof.
+
+The corrected tuple is not an artifact execution grant. The prefix remains
+unborrowed; a fresh Bohr package/import/execution purpose and a NEW literal
+Sch matching 7a READ/execution purpose are needed. No install/import/test/
+native/provider job has occurred. No source, control or old proposal bytes
+were changed to conceal the stale native operand.

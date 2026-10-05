@@ -1,0 +1,24 @@
+{
+  "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-goal-selection675-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "a685578e439aa2f7010219aa6032ae7e7307a68393e6d6adbb084563f39f43c5",
+  "wheel_bytes": 901686,
+  "source": "46124bbdc9dcec39e944eb64067d9c85f3508c0e",
+  "asset_count": 355,
+  "native": {
+    "manifest_sha256": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+    "declared_tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d",
+    "artifact_read_or_execution": false
+  },
+  "pyproject_sha256": "000139ce7da800c73574db2cd2e99af5afb63795f94f38d532e03af4b1423ad7",
+  "backend": {
+    "name": "hatchling",
+    "version": "1.28.0",
+    "path": "/home/ts/.cache/uv/archive-v0/RgcgNn7xR1Zs9HSF",
+    "build_module": "/home/ts/.cache/uv/archive-v0/RgcgNn7xR1Zs9HSF/hatchling/build.py"
+  },
+  "source_proof": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-goal-selection675-wheel-20261005/wheel-source-proof.json",
+  "source_proof_sha256": "fa564c573cd777e6fa9487da6b544a736d3ce957150194dc22086c9d8c9352a9",
+  "effective_operands": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/c3-original-owner-boundaries-20261005/EFFECTIVE-INSTALLED-OPERANDS.json",
+  "effective_operands_sha256": "dfae3c4fa6f7a7185cc8b618368688c1af3a26c87ace541f25c8e0f562eb1070",
+  "qualification": "Artifact/source proof only. Holder/native purposes not issued. No install/runtime/test/provider/public operation."
+}
