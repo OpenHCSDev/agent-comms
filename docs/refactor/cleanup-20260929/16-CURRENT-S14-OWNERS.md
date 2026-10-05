@@ -2616,3 +2616,45 @@ controls. No installed prefix or runtime purpose is inferred; all current
 candidate/public files and frozen negative/accepted receipts remain protected.
 This preparation makes the subsequent installed motion check ready without
 claiming fast loading or measured frame improvements.
+
+## Recorded source acceptance and paired rendering preparation
+
+Arendt671's same completed configured02 input now passes the recorded source
+and request association read in6.647768527s: nine certified original wire
+references, five wording relations and all11 required retained facts occur in
+the exact original serialized SDK envelope. Parent verified all25 named keeper
+hashes, including17 original preimages and three source operands. Bohr's actual
+CLOSED lifecycleea90ba13 preserves347 Core assets,94 keepers,69 metadata files,
+10 distributions and truthful original file-wheel origin; fresh249 UID holder
+references/gaps are zero. The old controller exit1, STARTED state, probe and
+refusals remain unchanged. This proves recorded SDK-input construction, not
+HTTP delivery, model recall, capacity or comparative study.
+
+Kepler's combined Text63/64 branch08e3dd6b now has one normal file wheel487baca7.
+Parent verified all266 local/ZIP assets against its inventory, tracked source
+equality and exact dependency/Python requirements equality to original Text59.
+The deleted cached Poetry backend was recovered as a pinned2.2.1 distribution
+in owned scratch; no environment or installed prefix was changed. Its original
+backend version was not recorded, so that recovery is not asserted byte-equal
+to the deleted cache. Original26 geometry and seven callback source checks are
+retained without repetition. Heis451 binds the actual published combined Text
+source and current schema10 Core0ed355 before the final paired ToAd wheel;
+old Text180 and Corea38/5f are not changed-source qualifiers.
+
+Parent's recorder review found that original history scroll_gestures uses held
+PageUp/PageDown/reversal/End; existing wheel gestures cover only the sidebar.
+Heis owns extending that same journey/action family to real message-body wheel
+input and its original phase-correlated frame-delivery analysis. The existing
+click_history target and writer timeline already provide the native input and
+observation owners. No new recorder or source test substitutes for physical
+motion/frame-time acceptance, and no recording or holder purpose is inferred.
+
+Kepler452 source16ae4aac fixes the450 watcher handoff family: queued
+DirectoryChanged delivery leaves the original watcher invalidation pending;
+only its currently bound Conversation consumes it. Conversation's duplicate
+directory flag and unused watching projection are deleted, and event, terminal
+and turn consumers use the same owner. Parent traced the original event carrier
+subscription retirement, handlerless MainScreen rebind and project-tree refresh
+consumer. Heis remains first-paint450 integration owner and integrates the
+disjoint contribution normally. The source correction remains unqualified in
+an installed App; no watcher process or accepted journey was repeated.
