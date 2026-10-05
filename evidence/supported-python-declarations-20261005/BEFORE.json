@@ -1,0 +1,222 @@
+{
+  "collector": "original audit.findings.Package",
+  "revision": "78d14b8b28fc6da227bd2f1e47b3ed95b36fc4f1",
+  "parsed": 316,
+  "omissions": [],
+  "eager_modules": [
+    "src/agent_comms/__init__.py",
+    "src/agent_comms/acp_request_consumer.py",
+    "src/agent_comms/attempt_start.py",
+    "src/agent_comms/collaboration_ledger.py",
+    "src/agent_comms/command.py",
+    "src/agent_comms/compaction_errors.py",
+    "src/agent_comms/compaction_progress.py",
+    "src/agent_comms/compaction_result.py",
+    "src/agent_comms/context_segments/__init__.py",
+    "src/agent_comms/context_segments/awareness.py",
+    "src/agent_comms/context_segments/response.py",
+    "src/agent_comms/coordination_errors.py",
+    "src/agent_comms/coordination_tables/__init__.py",
+    "src/agent_comms/delivery_failure.py",
+    "src/agent_comms/delivery_presentation.py",
+    "src/agent_comms/durable_turn.py",
+    "src/agent_comms/goal_attempt_identity.py",
+    "src/agent_comms/jsonl_stream.py",
+    "src/agent_comms/login.py",
+    "src/agent_comms/mentions.py",
+    "src/agent_comms/message_reference.py",
+    "src/agent_comms/native_file_artifact.py",
+    "src/agent_comms/native_revision_text.py",
+    "src/agent_comms/native_turn_context.py",
+    "src/agent_comms/recovery_states.py",
+    "src/agent_comms/registration_inheritance.py",
+    "src/agent_comms/request_progress.py",
+    "src/agent_comms/response_conversation.py",
+    "src/agent_comms/restart_refusals.py",
+    "src/agent_comms/retained_context.py",
+    "src/agent_comms/schedule_rules.py",
+    "src/agent_comms/sealed.py",
+    "src/agent_comms/selected_source_batch.py",
+    "src/agent_comms/session_load.py",
+    "src/agent_comms/text_digest.py",
+    "src/agent_comms/transcript_merge.py",
+    "src/agent_comms/transcript_outcomes.py",
+    "src/agent_comms/transcript_routes.py",
+    "src/agent_comms/triage_native_sources.py",
+    "src/agent_comms/turn_goal_permission.py",
+    "src/agent_comms/worker.py"
+  ],
+  "eager_class_or_typeonly_method_references": [
+    {
+      "path": "src/agent_comms/mentions.py",
+      "line": 50,
+      "method": "candidates",
+      "annotation": "Sequence[MentionCandidate]",
+      "reference": "MentionCandidate",
+      "type_checking_only": false,
+      "class_line": 14
+    },
+    {
+      "path": "src/agent_comms/mentions.py",
+      "line": 50,
+      "method": "candidates",
+      "annotation": "tuple[MentionCandidate, ...]",
+      "reference": "MentionCandidate",
+      "type_checking_only": false,
+      "class_line": 14
+    },
+    {
+      "path": "src/agent_comms/transcript_outcomes.py",
+      "line": 34,
+      "method": "contains",
+      "annotation": "CompactionOutcomeCursor",
+      "reference": "CompactionOutcomeCursor",
+      "type_checking_only": false,
+      "class_line": 9
+    },
+    {
+      "path": "src/agent_comms/transcript_outcomes.py",
+      "line": 37,
+      "method": "at",
+      "annotation": "CompactionOutcomeCursor",
+      "reference": "CompactionOutcomeCursor",
+      "type_checking_only": false,
+      "class_line": 9
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 94,
+      "method": "input_display",
+      "annotation": "InputDisplay | None",
+      "reference": "InputDisplay",
+      "type_checking_only": false,
+      "class_line": 33
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 126,
+      "method": "revision",
+      "annotation": "TranscriptRouteRevision",
+      "reference": "TranscriptRouteRevision",
+      "type_checking_only": false,
+      "class_line": 114
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 170,
+      "method": "for_session",
+      "annotation": "_SessionRoutes",
+      "reference": "_SessionRoutes",
+      "type_checking_only": false,
+      "class_line": 72
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 174,
+      "method": "input_bindings",
+      "annotation": "dict[str, InputDisplay]",
+      "reference": "InputDisplay",
+      "type_checking_only": false,
+      "class_line": 33
+    }
+  ],
+  "post311_syntax_declarations": [
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 54,
+      "declaration": "NativeCommitObservation",
+      "type_parameters": [
+        "T"
+      ]
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 66,
+      "declaration": "PendingNativeCommit",
+      "type_parameters": [
+        "T"
+      ]
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 75,
+      "declaration": "ObservedNativeCommit",
+      "type_parameters": [
+        "T"
+      ]
+    }
+  ],
+  "construction_and_reflection_consumers": [
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 294,
+      "call": "get_type_hints(type(bound))"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 308,
+      "call": "get_type_hints(cls)"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 357,
+      "call": "get_type_hints(cls)"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 401,
+      "call": "get_type_hints(member)"
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "line": 253,
+      "call": "get_type_hints(declaration, include_extras=True)"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_request.py",
+      "line": 150,
+      "call": "NativeCommitIdentity(commit_id, self.payload_digest, self.metadata_digest)"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 71,
+      "call": "ObservedNativeCommit(event)"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 173,
+      "call": "PendingNativeCommit()"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 174,
+      "call": "PendingNativeCommit()"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 425,
+      "call": "ObservedNativeCommit(event)"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 297,
+      "call": "CompactionOutcomeCursor.capture(self.root, thread, session_file, registry)"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 438,
+      "call": "CompactionOutcomeCursor.capture(receipt_root, thread, session_file, registry)"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 484,
+      "call": "CompactionOutcomeCursor.capture(self.root, thread, session_file, registry)"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 295,
+      "call": "get_type_hints(cls, include_extras=True)"
+    }
+  ],
+  "limit": "Class references are candidates; scope/order and runtime definition resolved by complete source reading, not AST alone."
+}

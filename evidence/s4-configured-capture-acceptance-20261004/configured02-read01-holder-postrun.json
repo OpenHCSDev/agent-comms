@@ -1,0 +1,50 @@
+{
+  "complete": true,
+  "installed_assets_equal": 347,
+  "nonCore_original_keepers_equal": 94,
+  "metadata_equal": 69,
+  "distributions": {
+    "pydantic_core": "2.46.5",
+    "typing-inspection": "0.4.4",
+    "metaclass-registry": "0.2.1",
+    "annotated-types": "0.8.0",
+    "typing_extensions": "4.15.0",
+    "pydantic": "2.13.5",
+    "packaging": "26.2",
+    "agent-comms": "0.1.0",
+    "nominal-refactor-audit": "0.1.0",
+    "agent-client-protocol": "0.12.1"
+  },
+  "recorded_original_hashes_equal": {
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02/application/condition-observation.jsonl": "b00d20e9ad4f9e60b5728278c0577e26609bbdcedfba0275014ebf424cfb9611",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02/application/probe-119d18523df3babc6f7018e67193a15d-inputs.private.json": "c798bb55c5f90739e6dd57d9935244ae55d6625a0ba1df62c7eb3273d25425d0",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02/application/probe-119d18523df3babc6f7018e67193a15d-manifest.private.json": "ff4749b0df744217a529f4da1e75da9655c3d1d6ebd4880d2f94a0a11c33334f",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02/application/sdk-contexts/context-38ab2c556cb90bf5e6e81e8d3460a050ed17b28708f32163baf23bb94f60a42e.json": "2168b32688df076a7c8fe8160687169401c718849c06747c4b2fefd80d39681d",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02/application/sdk-contexts/observation-1-38ab2c556cb90bf5e6e81e8d3460a050ed17b28708f32163baf23bb94f60a42e.json": "058d768e9a4eaa0999e826325f1724acfc6b1a9bf7f659178b113383f2ed97c7",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02/application/sdk-contexts/segments-38ab2c556cb90bf5e6e81e8d3460a050ed17b28708f32163baf23bb94f60a42e.json": "1ed784036341a92cc9246c46a7209b12b4dbbeb094237e56b2471dba79a568c0",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02/application/wire/compaction-commits.sqlite3": "5fb79a1e01b759535787abfa5548030482ddbae01d711ddb131f1393e0f88c94",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02/application/wire/diagnostics/1da3db6ad51542e4bbb1ce68cad651a3.requests.jsonl": "4c1444e08f36175be657e0f1af56d6e4b9b2ca16545621bbff390d5b46b1c7d0",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-three-cuts-configured01/cut-3-registry.private.json": "464a532f07003c4f69dfb65f3dfe605fdd6040baa5a56d5bbc50a34377c79ac7",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-three-cuts-configured01/forks/2026-10-03T02-09-56-587Z_01a0ff86-736c-73a6-904d-43705c3b9d71.jsonl": "962aa1f648187ea267b2c584addb91cbdf79a824933e0ca9b67b39e69ec29192",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-three-cuts-configured01/wire/bus.jsonl": "f050cb6c97e65bcf3473d0d34365bef9a1a2353054144a00f66a3e2182e10bcf",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-three-cuts-configured01/wire/compaction-commits.sqlite3": "5f33a71c3ab7d24d31576c0d1dc49684745867c03d5155ee9f6d059b8911294f"
+  },
+  "source_hashes_equal": {
+    "tests/retained_native_fixture.py": "8f01cad6cbc0bb4c755b6351cf6837c207879a03132e33ca4c55159ffbcc55d6",
+    "tests/test_recorded_retention_measurements.py": "3f8b4da60c8fe1dce59f6c6bd60b88103bcebef4da037957fbccf6b2efcec443"
+  },
+  "wheel_sha256": "5f1667ce64c58d67e153850be91dfb669ea9e347218f8d845937a1c12c778a9c",
+  "reader_identity": {
+    "pid": 3014580,
+    "pgid": 3014502,
+    "proc_stat": "3014580 (python) R 3014502 3014502 3014502 0 -1 4194304 15 0 0 0 0 0 0 0 20 0 1 0 63739462 27938816 33 18446744073709551615 4337664 33413636 140723001172080 0 0 0 0 0 0 0 0 0 17 9 0 0 0 0 0 25165824 33413636 907780096 140723001179451 140723001181925 140723001181925 140723001188236 0\n"
+  },
+  "reader_joined": true,
+  "reader_proc_absent": true,
+  "native_SDK_observer_controller_processes_started": 0,
+  "new_inputs": 0,
+  "provider_calls": 0,
+  "whole_540_read_import_claim_returned": true,
+  "independent_privileged_census_and_lifecycle_close_owner": "Bohr",
+  "issued_grant_sha256": "eba64fa56658882f2ea6749b45beba8ff9a6310e70d2e1e4533fffcfeda85db4"
+}

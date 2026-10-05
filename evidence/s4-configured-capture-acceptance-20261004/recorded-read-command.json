@@ -1,0 +1,32 @@
+{
+  "source_head": "b0eaef047c45b400d127b02e1c9e1dbaa137ed55",
+  "command": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "-c",
+    "from dataclasses import replace\nfrom pathlib import Path\nimport json,hashlib\nfrom agent_comms.field_codec import FieldCodec\nfrom retained_native_fixture import RecordedNativeCheckpoint,RecordedNativeProbe\noriginal=Path(\"/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02/application/recorded-probe.private.json\")\noutput=Path(\"/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02-read01\")\noutput.mkdir(mode=0o700,exist_ok=False)\nraw=original.read_bytes()\nprobe=FieldCodec.decode(RecordedNativeProbe,json.loads(raw))\nassert probe.input_id==\"119d18523df3babc6f7018e67193a15d\"\n# Old probe and old reference remain untouched. Capture the original completed,\n# unfiltered observer stream as a NEW post-terminal measurement declaration.\nreference=RecordedNativeCheckpoint.snapshot_observation(Path(probe.condition_observation.path),output/\"completed-condition.private.jsonl\")\nread_probe=replace(probe,condition_observation=reference)\ndef record(name,value):\n path=output/name\n path.write_text(json.dumps(FieldCodec.encode(value),ensure_ascii=False)+\"\\n\")\n path.chmod(0o600)\nrecord(\"postterminal-probe.private.json\",read_probe)\nmeasured=read_probe.observe()\nrecord(\"measurement.private.json\",measured)\nc=measured[\"construction\"]\nassert measured[\"answer_text\"].strip()==\"ORIGINAL_INSTALLED_S4_APPLICATION_CONFIGURED02_VERIFIED\"\nassert c[\"serialized_sdk_source\"][\"evaluated\"]\nassert c[\"condition_installation\"][\"evaluated\"]\nfor installed in c[\"condition_installation\"][\"installations\"]:\n installed.require_condition(\"task-memory\")\nassert c[\"request_budget\"][\"evaluated\"] and c[\"request_completion\"][\"evaluated\"]\nassert original.read_bytes()==raw\nrecord(\"receipt.json\",{\"complete\":True,\"input_id\":probe.input_id,\"original_probe_sha256\":hashlib.sha256(raw).hexdigest(),\"postterminal_observation\":reference,\"scope\":\"Same completed configured02 input read through corrected original owners; newly sealed final observer measurement, not acceptance of the old changed FileProvenance or original exit1 controller\",\"new_inputs\":0,\"provider_calls\":0,\"SDK_processes\":0,\"original_probe_unchanged\":True,\"HTTP_capacity_recall_study\":False})\nprint(json.dumps({\"complete\":True,\"new_inputs\":0,\"provider_calls\":0,\"SDK_processes\":0,\"output\":str(output)}))\n"
+  ],
+  "environment": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "tests:tools/cutover"
+  },
+  "cwd": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002",
+  "output": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02-read01",
+  "terminal_receipt": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02-read01/receipt.json",
+  "original_probe": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02/application/recorded-probe.private.json",
+  "original_probe_sha256": "0c519d7a2bb05a49201c30ad6cb0ca1634d61fa2297b090bf2f5cf2866411e47",
+  "original_condition_final_sha256": "b00d20e9ad4f9e60b5728278c0577e26609bbdcedfba0275014ebf424cfb9611",
+  "installed_source_declaration": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/installed-core656.private.json",
+  "installed_source_declaration_sha256": "c061daa0c451ff6398e426d9c84cdca54f33f4fc29b5dac0b413b2dc34e99c15",
+  "checkpoint": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-three-cuts-configured01/cut-3-checkpoint.private.json",
+  "checkpoint_sha256": "682af599361a028ec1b9e03941940376cd07d26c032b38c8685a6d5eb0897ee7",
+  "source_sha256": {
+    "tests/retained_native_fixture.py": "8f01cad6cbc0bb4c755b6351cf6837c207879a03132e33ca4c55159ffbcc55d6",
+    "tests/test_recorded_retention_measurements.py": "3f8b4da60c8fe1dce59f6c6bd60b88103bcebef4da037957fbccf6b2efcec443"
+  },
+  "purpose": "Request NEW bounded THIN540 import/read-only purpose. No SDK/native/controller/observer launch, artifact access, public root, input, provider, tool or study. Read same original configured02 records through existing reader; newly seal final raw observer into separately named measurement declaration. Preserve original probe/rawrefusal/InputDoc/source.",
+  "execution": "not started; no holder loan inferred",
+  "native086_lease_needed": false,
+  "native_reason": "No native artifact is read or executed; only retained serialized SDK/manifest/native-journal evidence and installed Python decoders.",
+  "holder_mutation": false,
+  "original347_94_69_10_origin_unchanged_required": true
+}

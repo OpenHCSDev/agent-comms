@@ -1,0 +1,31 @@
+{
+  "source_head": "3455dafa2ae372fe7c2cfb1e92c3a61633087fa6",
+  "parsed_modules": 997,
+  "parse_omissions": [
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "error": "invalid syntax (tracked_turn.py, line 54)"
+    }
+  ],
+  "sites": [
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 297,
+      "kind": "declaration",
+      "name": "capture_for_probe"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1324,
+      "kind": "caller",
+      "expression": "self.checkpoint.capture_for_probe(self.session, evidence, self.fork_journal, source)"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1329,
+      "kind": "parent comparison",
+      "expression": "user.parent_id != checkpoint['native_entry_id']"
+    }
+  ],
+  "limit": "Lexical AST sites using existing NRA parser; no dynamic dispatch proof. Product/native policy remains unchanged."
+}

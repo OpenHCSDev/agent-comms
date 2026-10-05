@@ -1,0 +1,57 @@
+{
+  "parser": "Python3.14 AST over both changed modules, alongside original existing NRA997-module census",
+  "sites": [
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 127,
+      "declaration": "snapshot_observation"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 311,
+      "declaration": "capture_for_probe"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 645,
+      "declaration": "capture_input"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 1351,
+      "call": "self.checkpoint.capture_for_probe(self.session, evidence, self.fork_journal, source, user)"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 673,
+      "call": "RecordedNativeCheckpoint.snapshot_observation(observed, output / f'probe-{row.native_id}-requests.private.jsonl')"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 675,
+      "call": "RecordedNativeCheckpoint.snapshot_observation(condition_observation, output / f'probe-{row.native_id}-condition.private.jsonl')"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 114,
+      "call": "RecordedNativeCheckpoint.snapshot_observation(source, destination)"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 122,
+      "call": "RecordedNativeCheckpoint.snapshot_observation(source, destination)"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 105,
+      "call": "self.checkpoint.capture_for_probe(self.identity, evidence, None, evidence, originals[key])"
+    },
+    {
+      "file": "tests/test_recorded_retention_measurements.py",
+      "line": 101,
+      "call": "self.checkpoint.capture_for_probe(self.identity, evidence, None, evidence, originals[key])"
+    }
+  ],
+  "parse_omissions": [],
+  "dynamic_resolution": "Not established by lexical references"
+}

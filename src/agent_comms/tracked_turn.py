@@ -12,7 +12,7 @@ from contextlib import AsyncExitStack, contextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from . import pi_commands as commands
 from . import pi_events as pi
@@ -51,7 +51,10 @@ if TYPE_CHECKING:
     from .private_send_admission import PrivateSendAdmission
 
 
-class NativeCommitObservation[T](ABC):
+T = TypeVar("T")
+
+
+class NativeCommitObservation(ABC, Generic[T]):
     """Observed original native receipts, without granting admission or replay."""
 
     observed = False
@@ -63,7 +66,7 @@ class NativeCommitObservation[T](ABC):
         raise NativePiUnavailable("Native Pi repeated the input commitment")
 
 
-class PendingNativeCommit[T](NativeCommitObservation[T]):
+class PendingNativeCommit(NativeCommitObservation[T]):
     def require(self) -> T:
         raise NativePiUnavailable("Native Pi did not commit a tracked model context")
 
@@ -72,7 +75,7 @@ class PendingNativeCommit[T](NativeCommitObservation[T]):
 
 
 @dataclass(frozen=True)
-class ObservedNativeCommit[T](NativeCommitObservation[T]):
+class ObservedNativeCommit(NativeCommitObservation[T]):
     event: T
     observed = True
 
