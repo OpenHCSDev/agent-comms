@@ -41,7 +41,11 @@ head to Heis, who normally adopted it in951242a6 and retained his disjoint
 launch timestamp. This is integration-branch source, not MAIN or runtime acceptance.
 This identifies a recorder deadline conflict; it does not prove why the App had
 not exited. Changed full-workflow runtime acceptance remains unrun. No second
-launch or deadline increase is authorized.
+launch or deadline increase is authorized under consumed06. Heis published fresh07
+proposal14f045f7 at7898cceb with only the recorder changed among20 helpers; all
+product/build inputs still match retained union25dae/2ece. Bohr has issued
+fresh07 purpose43b54ee0, stage only. Proof and the one full-motion run wait for
+their original fresh authority and actual bindings; no runtime result is claimed.
 
 466 SessionView03 passed the actual mounted check in6.138s: cancellation before
 entry, same-source resume, three coalesced requests and joined close/App and
@@ -60,7 +64,16 @@ DTO03e1db2e bind all953 assets/full69/truthful origins; native READ-only trust1d
 passed without starting native processes. The original266 protected files,
 2157 other67 records, bootstrap2 and PREFIX activation are unchanged. Parent
 matched all five normalized inventory digests and the terminal process is absent.
-Canonical/cohort preparation is the next step; publication remains unexecuted.
+Canonical51, qualification189, typed cohort and readback preparation now all passed.
+Actual source and target declarations/checkpoints are equal; the original types
+selected PreserveRuntimeInstallation and PreserveOwnerRuntime. Parent verified
+all107 frozen file hashes, lengths and modes plus whole3a6b references. Final471
+cd84e3ba is normally merged4d123a59. The positive candidate remains frozen for
+Parent; receipt/preimages are absent and the commands have not executed. Sch
+returned package/import/preparation and native/source READ claims. Bohr is
+finishing the independent existing5c99 candidate/census closure. Fresh matching
+keeper authority and original live client admission remain required before the
+one publication; no stage, build or accepted worker check is repeated.
 The selected Core3931/Toad289f cohort is deliberate and does not claim latest
 MAIN681/470 source equality. This separate delivery does not hold Heis's scrolling work.
 
