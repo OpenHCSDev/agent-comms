@@ -1,0 +1,78 @@
+{
+  "classification": "runtime/declaration-original-source-carry",
+  "stores": [
+    {
+      "kind": "coordination",
+      "original_sha256": "aefcb9ef6dd7e98e41ce7165481dfa36b17d333c2e7a0db44882a4fd4a611f20",
+      "candidate_sha256": "0eafe73518b987e8b20e1fa86c109141b85101ac506adbd72d22b6733295adcf",
+      "evidence": {
+        "original_release": [
+          9,
+          3,
+          3,
+          6
+        ],
+        "target_release": [
+          10,
+          3,
+          3,
+          6
+        ],
+        "original_ddl_sha256": "dd514809eb1c920762facb2e2548e2ec70b42a28bae5b5800efd167c9e28252b",
+        "target_ddl_sha256": "e06d2dbf9e3656dd648aa0e33d2734fd1ea1195ccf015477828f1d900496a0c7",
+        "created_empty_tables": [
+          "annotation_requests",
+          "span_annotations"
+        ],
+        "rebuilt_tables": [
+          "schema_meta"
+        ],
+        "original_identity_rows_sha256": "ce5bbf6b8d45d1e3e8a5a0c513364fe59d23c2c91407f5761b4f50a601ef65db",
+        "autoincrement_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "unchanged_rows_sha256": "0bec1abad812fa01c508f42bc22e72176a7ef30acfe854563ae1161e11b50235",
+        "original_rows": {
+          "wake_claims": 0,
+          "execution_claims": 0,
+          "participants": 3,
+          "participant_aliases": 3,
+          "owner_generations": 3,
+          "attempts": 0,
+          "replay_assessments": 0,
+          "current_executions": 3,
+          "executions": 0,
+          "schema_meta": 1,
+          "publication_intents": 0,
+          "publication_receipts": 0,
+          "connectivity": 0,
+          "recovery_audit": 0,
+          "obligations": 0,
+          "native_runtime_schema_meta": 1,
+          "native_runtime_input": 0,
+          "current_native_cursor": 0,
+          "native_runtime_triage_sources": 0,
+          "cohort_schema_meta": 1,
+          "claim_batch_receipts": 0,
+          "claim_batch_members": 0,
+          "cohort_delivery_receipts": 0,
+          "awareness_schema_meta": 1,
+          "awareness_claim_generations": 0,
+          "response_schema_meta": 1,
+          "publication_append_dispatches": 0
+        }
+      }
+    },
+    {
+      "kind": "prompt_binding",
+      "original_sha256": "f2f41017e6a5a08cb28f54459497611aa4954df344e68412e47cb96603ba6c60",
+      "candidate_sha256": "f2f41017e6a5a08cb28f54459497611aa4954df344e68412e47cb96603ba6c60",
+      "evidence": {
+        "original_bindings": 0,
+        "unchanged_rows_sha256": "4bbd1d616b30ea13201011677e084c298ef983928654dfeae0f2123df6bba190"
+      }
+    }
+  ],
+  "original_preimages": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/original-preimages",
+  "retired": [],
+  "reconstructed_proofs": 0,
+  "input_replays": 0
+}

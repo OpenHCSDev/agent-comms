@@ -16,7 +16,7 @@ from agent_comms.compaction_records import CompactionOperation, NativeForkCreati
 from agent_comms.field_codec import FieldCodec, FieldRepresentation, PathText
 from agent_comms.input_disposition import InputDocument, InputDispositions
 from agent_comms.input_attempt import InputAttempt, MissingInput
-from agent_comms.native_entries import ManagedCompactionEntry, MessageEntry, NativeEntry, NativeEvidenceRead, ThinkingLevelChangeEntry
+from agent_comms.native_entries import CompactionEntry, ManagedCompactionEntry, MessageEntry, NativeEntry, NativeEvidenceRead, ThinkingLevelChangeEntry
 from agent_comms.native_input_record import NativeInputIdText
 from agent_comms.native_pi import NativeContextProof, NativeContextRecord
 from agent_comms.native_compaction_request import NativeIntent
@@ -123,6 +123,20 @@ class RecordedNativeCheckpoint:
             raise ValueError("Recorded measurement artifact changed")
         return raw
 
+    @staticmethod
+    def snapshot_observation(source: Path, destination: Path):
+        """Seal original appendable observation bytes before pinning a file.
+
+        Native diagnostics and inspector completion can append after a probe.
+        A FileProvenance names an immutable captured value, not that writer's
+        later contents. Preserve the raw bytes without filtering or recoding.
+        """
+        raw = source.read_bytes()
+        with destination.open('xb') as stream:
+            stream.write(raw)
+        destination.chmod(0o600)
+        return FileProvenance(str(destination), hashlib.sha256(raw).hexdigest())
+
     @classmethod
     def read_json(cls, reference: FileProvenance):
         return json.loads(cls.read_bytes(reference), object_pairs_hook=unique_fields)
@@ -195,6 +209,7 @@ class RecordedNativeCheckpoint:
             "selected_model": FieldCodec.encode(attempt.request.selected),
             "settings": FieldCodec.encode(attempt.request.settings),
             "summary_usage": self.summary_usage(entry),
+            "scoped_facts": self.scoped_facts(attempt),
             "summary_narrative": assembly.observe() if assembly is not None else {
                 "evaluated": False, "reason": "Original pre-pack summary assembly not captured"},
             "revision_mass": {
@@ -294,37 +309,61 @@ class RecordedNativeCheckpoint:
                 raise ValueError('Captured SDK request does not contain the original bounded narrative')
         return constructed
 
-    def capture_for_probe(self,session,evidence,fork_journal,source):
-        """A probe may follow the original cut or its corroborated SDK child."""
+    def capture_for_probe(self,session,evidence,fork_journal,source,input_entry):
+        """Corroborate the latest cut on this original input's acquired branch.
+
+        A completed cut may already contain subsequent messages when forked.
+        Those messages preserve the cut's applicability; another compaction or
+        another branch does not. Fork inheritance still needs its original
+        creation and exact parent/child source evidence.
+        """
         if self.reference.session_file==session.session_file:
-            return self.capture(session,evidence)
-        if fork_journal is None:
-            raise ValueError('Inherited checkpoint probe requires its original fork journal')
-        creation,_,captured=self._fork_capture(fork_journal,evidence,source)
-        creation.require_same_session(session)
+            captured=self.capture(session,evidence)
+        else:
+            if fork_journal is None:
+                raise ValueError('Inherited checkpoint probe requires its original fork journal')
+            creation,_,captured=self._fork_capture(fork_journal,evidence,source)
+            creation.require_same_session(session)
+        branch=evidence.branch(input_entry.require_entry_id(),evidence.entries)
+        cuts=tuple(entry for entry in branch if isinstance(entry,CompactionEntry))
+        if not cuts or cuts[-1]!=captured[1]:
+            raise ValueError('Recorded checkpoint is not the latest compaction on its original input branch')
         return captured
 
     def inspect(self, previous: RecordedNativeCheckpoint | None = None):
-        """Read a checkpoint or adjacent-cut difference without a new model input.
+        """Read a checkpoint or original ancestor interval without new input.
 
         The optional previous reference is external evaluation input. It neither
         selects a live source nor carries native lifecycle/admission state.
         """
         with self.original_source() as (session, evidence):
-            current_attempt, current_entry, covered, assembly = self.capture(session, evidence)
-            report = self._report(current_attempt, current_entry, covered, assembly)
+            current = self.capture(session, evidence)
+            report = self._report(*current)
             if previous is not None:
-                previous_attempt, previous_entry, _, _ = previous.capture(session, evidence)
-                branch = evidence.branch(current_entry.id, evidence.entries)
-                if previous_entry.id == current_entry.id or previous_entry not in branch:
-                    raise ValueError("Checkpoint comparison requires distinct original ancestor cuts")
-                report["revision_mass"] = self.revision_from(previous, previous_attempt, current_attempt)
-                report["source_changes"] = {
-                    "previous": FieldCodec.encode(previous_attempt.identity),
-                    "current": FieldCodec.encode(current_attempt.identity),
-                    **current_attempt.request.retained.changed_from(previous_attempt.request.retained),
-                }
+                report.update(self.compare_acquired(previous,
+                    previous.capture(session, evidence), current, evidence))
             return report
+
+    def compare_acquired(self, previous, before, after, evidence):
+        """Compare the two already corroborated original cuts once.
+
+        This owns source ancestry and the original retained-fact difference.
+        The frozen scenario separately owns which interval was requested; an
+        observed wider interval cannot fill a missing adjacent-round measure.
+        """
+        prior_attempt, prior_entry, _, _ = before
+        current_attempt, current_entry, _, _ = after
+        branch = evidence.branch(current_entry.id, evidence.entries)
+        if prior_entry.id == current_entry.id or prior_entry not in branch:
+            raise ValueError("Checkpoint comparison requires distinct original ancestor cuts")
+        return {
+            "revision_mass": self.revision_from(previous, prior_attempt, current_attempt),
+            "source_changes": {
+                "previous": FieldCodec.encode(prior_attempt.identity),
+                "current": FieldCodec.encode(current_attempt.identity),
+                **current_attempt.request.retained.changed_from(prior_attempt.request.retained),
+            },
+        }
 
     def authored_scope(self, attempt):
         """Acquire the original captured scope and certify its authored rows.
@@ -338,12 +377,13 @@ class RecordedNativeCheckpoint:
         owner = snapshot.require_active(attempt.request.source.incarnation.name)
         if attempt.request.source.incarnation.resolved(snapshot) != owner.incarnation:
             raise ValueError("Authored evidence belongs to another original owner")
+        messages = tuple(message for fact in attempt.request.retained.facts
+                         for message in fact.wire_sources())
         with WireLog(self.wire).certified_read() as source:
-            for fact in attempt.request.retained.facts:
-                for message in fact.authored_sources():
-                    delivery, = source.references((message.reference,))
-                    if delivery.message != message:
-                        raise ValueError("Retained authored fact differs from its original publication")
+            deliveries = source.references(tuple(message.reference for message in messages))
+            for message, delivery in zip(messages, deliveries, strict=True):
+                if delivery.message != message:
+                    raise ValueError("Retained wire source differs from its original publication")
         return snapshot, owner
 
     @staticmethod
@@ -414,15 +454,41 @@ class RecordedNativeCheckpoint:
 
 
     def scoped_facts(self, attempt):
-        """Read original captured configuration and scoped Decision publications."""
+        """Read captured configuration and original retained source references.
+
+        The existing task attachment resolves a declaration's original wording;
+        a pin's own body is not its USER subject. These references describe the
+        retained payload, not a delivered native input or submitted request.
+        """
         captured = self.authored_scope(attempt)
         if captured is None:
             return {"evaluated": False, "reason": "Original scope/publications unavailable",
-                    "configured_settings": {"evaluated": False}}
+                    "configured_settings": {"evaluated": False},
+                    "retained_publications": {"evaluated": False,
+                        "reason": "Original scope/publications unavailable"}}
         snapshot, owner = captured
         retained = attempt.request.retained
         declarations = self.authored_lineages(retained, owner, snapshot, DecisionTaskFact)
-        return {"evaluated": True, "scope": "Original scoped Decision alternatives only",
+        originals = {message.reference: message for fact in retained.facts
+                     for message in fact.wire_sources()}
+        authored = {message.reference: message for fact in retained.facts
+                    for message in fact.authored_sources()}
+        return {"evaluated": True,
+                "scope": "Original captured configuration, retained publications and scoped Decision alternatives",
+                "retained_publications": {
+                    "evaluated": bool(originals),
+                    "references": tuple(originals),
+                    "source_digest": retained.source_digest.value,
+                    "authored_wordings": tuple({
+                        "declaration": message.reference,
+                        "wording": message.task.original_wording_context_source(
+                            retained.original_text_source(message)),
+                    } for message in authored.values()),
+                    "reason": "Original retained wire rows corroborated" if originals
+                              else "No retained wire publications to measure",
+                    "scope": "Exact retained publications and original wording references; "
+                             "not native input delivery, request presence, HTTP bytes or recall",
+                },
                 "configured_settings": {"evaluated": owner.model is not None and owner.thinking_level is not None,
                                         "model": owner.model, "thinking": FieldCodec.encode(owner.thinking_level),
                                         "scope": "Captured registry configuration, not provider-reported request selection"},
@@ -645,8 +711,10 @@ class RecordedNativeProbe:
             pin('manifest',manifest),original(contexts/f'segments-{context.llm_context_digest}.json'),
             pin('inputs',InputDispositions(service.root/InputDispositions.filename).read()),
             fork_journal=service.root/'compaction-commits.sqlite3',
-            request_observations=original(observed) if observed.is_file() else None,
-            condition_observation=original(condition_observation) if condition_observation is not None else None,
+            request_observations=RecordedNativeCheckpoint.snapshot_observation(observed,
+                output/f'probe-{row.native_id}-requests.private.jsonl') if observed.is_file() else None,
+            condition_observation=RecordedNativeCheckpoint.snapshot_observation(condition_observation,
+                output/f'probe-{row.native_id}-condition.private.jsonl') if condition_observation is not None else None,
             sdk_observation=original(sdk_observed) if sdk_observed.is_file() else None)
 
     def condition_records(self):
@@ -955,8 +1023,14 @@ class RecordedNativeProbe:
                 "final_transport_evaluated": False,
                 "scope": "Original captured serializations match every SDK measured segment; not HTTP bytes, provider token counts or intervention proof"}
 
-    def prompt_presence(self, retained, texts, captured):
-        """Measure envelope presence in the borrowed original SDK capture."""
+    def prompt_presence(self, retained, texts, captured, *, publications):
+        """Measure envelope bytes and bind their original publication sources.
+
+        Publication evidence comes from the same acquired checkpoint. Missing
+        wire evidence does not erase observed SDK bytes or infer their source.
+        A complete envelope match binds those references to this original SDK
+        request, not to an HTTP payload, earlier native stimulus or model recall.
+        """
         if not captured["evaluated"]:
             return captured
         if retained is None or not retained.facts:
@@ -966,12 +1040,29 @@ class RecordedNativeProbe:
         # recall credit, semantic interpretation or final HTTP-body evidence.
         envelope = json.dumps(retained.text, ensure_ascii=False)[1:-1]
         present = any(envelope in text for text in texts)
+        binding = publications
+        if publications["evaluated"]:
+            if publications["source_digest"] != retained.source_digest.value:
+                raise ValueError("Retained publication observation belongs to another original envelope")
+            binding = {
+                "evaluated": True,
+                "source_digest": publications["source_digest"],
+                "references": publications["references"],
+                "authored_wordings": publications["authored_wordings"],
+                "context_digest": captured["context_digest"],
+                "exact_envelope_present": present,
+                "scope": "Certified original retained publications within the exact envelope "
+                         "in this recorded SDK request; an absent envelope does not prove "
+                         "individual wording absent elsewhere; not native stimulus delivery, "
+                         "HTTP bytes, provider receipt or recall",
+            }
         return {"evaluated": True, "stage": "recorded SDK provider input",
                 "final_transport_evaluated": False,
                 "context_digest": captured["context_digest"],
                 "required": len(retained.facts),
                 "present": len(retained.facts) if present else 0,
-                "exact_envelope_present": present}
+                "exact_envelope_present": present,
+                "retained_source_binding": binding}
 
     def probe_input_presence(self, data, user, captured):
         """Measure rendered probe text in the acquired original SDK request.
@@ -1322,12 +1413,10 @@ class RecordedNativeProbe:
         prompt, submitted, submitted_input = self.submitted_prompt(user, manifest)
         if self.checkpoint is not None:
             attempt, entry, covered, assembly = self.checkpoint.capture_for_probe(
-                self.session,evidence,self.fork_journal,source)
+                self.session,evidence,self.fork_journal,source,user)
             checkpoint = self.checkpoint._report(attempt, entry, covered, assembly)
             retained = attempt.request.retained
-            scoped = self.checkpoint.scoped_facts(attempt)
-            if user.parent_id != checkpoint["native_entry_id"]:
-                raise ValueError("Recorded probe must immediately follow its original checkpoint")
+            scoped = checkpoint["scoped_facts"]
         else:
             retained = None
             scoped = {"evaluated": False, "reason": "No original scoped checkpoint",
@@ -1362,7 +1451,9 @@ class RecordedNativeProbe:
             },
             "checkpoint": checkpoint,
             "canonical_availability": checkpoint["canonical_availability"],
-            "provider_prompt_presence": self.prompt_presence(retained, texts, serialized),
+            "provider_prompt_presence": self.prompt_presence(retained, texts, serialized,
+                publications=scoped.get("retained_publications", {"evaluated": False,
+                    "reason": "No original scoped retained publications"})),
             "probe_input_presence": self.probe_input_presence(data, user, serialized),
             "prompt_scope": "original native user and assembled-context proof, not final provider payload",
         }

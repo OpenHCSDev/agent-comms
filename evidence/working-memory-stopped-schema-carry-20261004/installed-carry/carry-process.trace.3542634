@@ -1,0 +1,3 @@
+execve("/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python", ["/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python", "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry.py", "--declaration"], 0x7ffe79b19930 /* 114 vars */) = 0
+exit_group(0)                           = ?
++++ exited with 0 +++

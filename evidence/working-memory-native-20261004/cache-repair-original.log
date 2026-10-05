@@ -1,0 +1,4 @@
+npm error code EALLOWREMOTE
+npm error Fetching packages of type "remote" have been disabled
+npm error Refusing to fetch "https://registry.npmjs.org/zod-to-json-schema/-/zod-to-json-schema-3.25.2.tgz"
+npm error A complete log of this run can be found in: /home/ts/.npm/_logs/2026-10-04T15_31_37_433Z-debug-0.log

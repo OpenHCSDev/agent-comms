@@ -1,0 +1,20 @@
+{
+  "state": "Native W1 artifact scoped qualification complete; Core627 overall remains separate unfinished source/UI work",
+  "producer_head": "fcbd30a1316ba6c1f4e39719591b39535425e946",
+  "driver_head": "0270acd478f91b58e89ed2afa8a75943a429adb7",
+  "artifact_manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+  "artifact_tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d",
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent",
+  "sdk_exit_code": 0,
+  "sdk_seconds": 0.9894417780451477,
+  "cases": 6,
+  "source_syntax": "5changedcompiledJSmodules and fullcanonicalmanifest/tree verifyPASS",
+  "source_AST": "Original NRA324Core/13stackPython/53tools parse0omissions; Einstein original0865module/58site JS lexical before snapshot. No new compiled JS AST parser available; syntax is not AST evidence and dynamic caller completeness not claimed. Existing before sites read and all10compiled deltas enumerated.",
+  "SDK_scope": "Matching native artifact plus original authored six-case SDK source-preview system assembly/parity/span capture accepted; no committed model producer, installed Python/UI, W6, provider, public or whole working-memory acceptance",
+  "artifact_receipt_sha256": "80cd74a0cfc27faae75b99a9732feaeaf67ab1ecf765e7aa1a1fb4d99f6861c6",
+  "provider_requests": 0,
+  "native_inputs": 0,
+  "prefix_changes": false,
+  "public_changes": false,
+  "execution_claim": "CLOSED after actualSDKterminal and authoredscratch retirement; immutable artifactREADkeeper retained for Einstein627"
+}

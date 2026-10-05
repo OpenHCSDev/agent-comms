@@ -1,0 +1,44 @@
+..F..                                                                    [100%]
+=================================== FAILURES ===================================
+_ RecordedMeasurementTests.test_retained_publications_verify_original_wording_separately_from_pin _
+agent_comms.errors.RelationViolationError: Notification reference is not its original source
+
+During handling of the above exception, another exception occurred:
+
+self = <test_recorded_retention_measurements.RecordedMeasurementTests testMethod=test_retained_publications_verify_original_wording_separately_from_pin>
+
+    def test_retained_publications_verify_original_wording_separately_from_pin(self):
+        # A certified pin must not hide changed/missing original USER wording.
+        # The real private wire owns publication; no native input is authored.
+        comms = Comms(self.root / 'wording')
+        comms.messaging.initialize_private_initial_protocol()
+        owner = comms.registry.declare(Thread('recipient', frozenset(), str(self.root)))
+        subject = comms.messaging.send_user_message(owner.name, 'Keep /archive/λ exact',
+                                                   worktree=owner.worktree)
+        pin = comms.messaging.pin_user_constraint(owner.name, subject.reference,
+                                                  worktree=owner.worktree)
+        retained = comms.bus.log.retained_context(owner.name, comms.registry).retained
+        cut = replace(self.checkpoint, wire=comms.root / 'bus.jsonl',
+            registry_scope=self.artifact('wording-scope.json', comms.registry.store.read()))
+    
+        def attempt(facts):
+            request = manual_summary_record(self.session, incarnation=owner.incarnation, retained=facts)
+            return SelectedSummaryAttempt('wording', str(self.session), request.journal_json(),
+                                          request, ReservedSummary())
+    
+        measured = cut.scoped_facts(attempt(retained))['retained_publications']
+        self.assertTrue(measured['evaluated'])
+        self.assertEqual(set(measured['references']), {subject.reference, pin.reference})
+        self.assertEqual(measured['source_digest'], retained.source_digest.value)
+        self.assertEqual(measured['authored_wordings'], (
+            {'declaration': pin.reference, 'wording': WireProvenance(subject.reference)},))
+        changed = RetainedTaskFacts(tuple(replace(fact, source=replace(subject, body='Changed λ'))
+            if subject in fact.wire_sources() else fact for fact in retained.facts))
+>       with self.assertRaisesRegex(ValueError, 'wire source differs'):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: "wire source differs" does not match "Notification reference is not its original source"
+
+tests/test_recorded_retention_measurements.py:2125: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_recorded_retention_measurements.py::RecordedMeasurementTests::test_retained_publications_verify_original_wording_separately_from_pin
+1 failed, 4 passed, 42 deselected in 1.24s

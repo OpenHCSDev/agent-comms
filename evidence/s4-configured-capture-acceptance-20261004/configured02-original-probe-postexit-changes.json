@@ -1,0 +1,8 @@
+[
+  {
+    "field": "condition_observation",
+    "recorded_sha256": "baf5a04c25bddd41d252fe5e0b176682f63fd6c1179cd7422a2846e6b0fc2ac4",
+    "final_sha256": "b00d20e9ad4f9e60b5728278c0577e26609bbdcedfba0275014ebf424cfb9611",
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02/application/condition-observation.jsonl"
+  }
+]

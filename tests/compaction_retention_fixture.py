@@ -29,6 +29,7 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_tools import CodingTool
 from agent_comms.pi_payloads import ReportedModel
 from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
 from agent_comms.turn_context import FileProvenance, JournalProvenance, ToolCatalogSegment
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 
@@ -262,20 +263,24 @@ class RecordedNativeProbes:
             evidence = sources[Path(checkpoint.reference.session_file)]
             header, _ = evidence.observe()
             session = NativeSessionIdentity(header.id, str(evidence.source.path))
-            attempt, entry, covered, assembly = checkpoint.capture(session, evidence)
-            report = checkpoint._report(attempt, entry, covered, assembly)
+            captured = checkpoint.capture(session, evidence)
+            attempt, entry, _, _ = captured
+            report = checkpoint._report(*captured)
             if identity in stimuli:
                 stimuli[identity]['source_delivery'] = self.stimuli[identity].source_delivery(
                     expected[identity], stimuli[identity], evidence, entry.id, None)
             if previous is not None:
-                old, prior_attempt, prior_entry, prior_session = previous
+                prior_round, old, before, prior_session = previous
                 prior_session.require_same_session(session)
-                if prior_entry.id == entry.id or prior_entry not in evidence.branch(entry.id, evidence.entries):
-                    raise ValueError("Repeated measurements require distinct original ancestor cuts")
-                report["source_changes"] = attempt.request.retained.changed_from(prior_attempt.request.retained)
-                report["revision_mass"] = checkpoint.revision_from(old, prior_attempt, attempt)
+                comparison = checkpoint.compare_acquired(old, before, captured, evidence)
+                report["observed_interval"] = dict(comparison,
+                    from_round=prior_round, to_round=identity)
+                report["source_changes"] = comparison["source_changes"]
             reports[identity] = report
-            previous = checkpoint, attempt, entry, session
+            previous = identity, checkpoint, captured, session
+        for identity, measured in scenario.revision_intervals(reports).items():
+            if identity in reports:
+                reports[identity]["revision_mass"] = measured
         for identity, probe in self.rounds.items():
             observations[identity] = probe.read(sources[Path(probe.session.session_file)],
                                                 sources[probe.checkpoint_source])
@@ -590,6 +595,11 @@ class ScoredScenario(ScoreView):
             for item in self.source.rounds}
         return FieldCodec.encode(dict(result, native_probes=evidence,
                     answer_origin="recorded-native",
+                    retained_publications={
+                        item.identity: checkpoints.get(item.identity, {}).get("scoped_facts", {}).get(
+                            "retained_publications", {"evaluated": False,
+                                "reason": "No original retained-publication observation supplied"})
+                        for item in self.source.rounds},
                     recorded_resources=self.recorded_resources(checkpoints, evidence, stimuli),
                     source_delivery=source_delivery,
                     condition_construction=self.condition_construction(evidence, source_delivery),
@@ -612,8 +622,7 @@ class ScoredScenario(ScoreView):
                             "evaluated": False, "reason": "No original native probe supplied"
                         } for item in self.source.rounds
                     },
-                    revision_mass={identity: report["revision_mass"]
-                                   for identity, report in checkpoints.items()},
+                    revision_mass=self.source.revision_intervals(checkpoints),
                     answer_support={identity: original["answer_support"]
                                     for identity, original in evidence.items()},
                     recall_scope="Original recorded answers; tool-assisted answers are task quality, not unassisted recall. Authored answers are scorer controls"))
@@ -656,6 +665,10 @@ class ScoredScenario(ScoreView):
                            for identity, original in evidence.items()}
         inputs = {identity: original['probe_input_presence']
                   for identity, original in evidence.items()}
+        retained_sources = {identity: original.get('provider_prompt_presence', {}).get(
+            'retained_source_binding', {'evaluated': False,
+                'reason': 'Original request/publication binding unavailable'})
+            for identity, original in evidence.items()}
         return {'evaluated': False, 'declared_condition': self.condition,
                 'bounded_sdk_application': group(applications),
                 'installed_sdk_source': group(installations),
@@ -675,6 +688,13 @@ class ScoredScenario(ScoreView):
                     'absent_rounds': tuple(identity for identity in identities
                         if identity in inputs and inputs[identity]['evaluated'] and not inputs[identity]['present'])},
                 'source_delivery': group(source_delivery),
+                'retained_source_request': {**group(retained_sources),
+                    'present_rounds': tuple(identity for identity in identities
+                        if identity in retained_sources and retained_sources[identity]['evaluated']
+                        and retained_sources[identity]['exact_envelope_present']),
+                    'absent_envelope_rounds': tuple(identity for identity in identities
+                        if identity in retained_sources and retained_sources[identity]['evaluated']
+                        and not retained_sources[identity]['exact_envelope_present'])},
                 'full_history_capacity': group(capacity),
                 'full_history_sdk_admission': {**group(full_admissions),
                     'admitted_rounds': tuple(identity for identity in identities
@@ -1108,6 +1128,60 @@ class RecallScenario:
 
     def public(self) -> dict:
         return {"scenario": self.identity, "rounds": [item.public() for item in self.rounds]}
+
+    def revision_intervals(self, checkpoints):
+        """Every frozen adjacent pair keeps its original denominator.
+
+        Original checkpoint comparisons may span missing rounds. Keep that
+        observed interval visible, but never use it as evidence for either
+        missing adjacent comparison or infer an unchanged intermediate cut.
+        """
+        intervals = {}
+        for before, after in zip(self.rounds, self.rounds[1:]):
+            missing = tuple(item.identity for item in (before, after)
+                            if item.identity not in checkpoints)
+            if missing:
+                measured = {"evaluated": False, "missing_checkpoints": missing,
+                    "reason": "Both original adjacent-round checkpoints are required"}
+            else:
+                observed = checkpoints[after.identity].get("observed_interval")
+                if observed is None:
+                    measured = {"evaluated": False,
+                        "reason": "Original adjacent checkpoint comparison unavailable"}
+                else:
+                    if (observed['from_round'], observed['to_round']) != (before.identity, after.identity):
+                        raise ValueError("Original checkpoint interval differs from the frozen adjacent rounds")
+                    measured = observed['revision_mass']
+            intervals[after.identity] = dict(measured,
+                from_round=before.identity, to_round=after.identity)
+        return intervals
+
+    @classmethod
+    def configured_retention(cls, root_reference, publications: tuple[Message, ...]):
+        """Freeze original public wording and prospective corrections before cuts.
+
+        Publication bodies belong to their original messages. Future wording is
+        declared once here, then the runner publishes these exact source additions.
+        Oracle answer/evidence metadata stays separate from those public operands.
+        This value is not proof of native delivery or a matched intervention.
+        """
+        history = tuple(message.body for message in publications)
+        additions = ((),
+            ('Authorized correction: the binding archive root is now /artifacts/S4/β/corrected.',),
+            ('Explicitly drop the archive-root constraint. No binding archive root remains for this task.',))
+        rounds = []
+        for number, path in enumerate(('/artifacts/S4/α/source', '/artifacts/S4/β/corrected', 'NONE'), 1):
+            history += additions[number - 1]
+            rounds.append(RecallRound(f'cut-{number}', history, (
+                Question('archive', 'What archive root is currently binding? Answer NONE if it was explicitly dropped.',
+                         path, root_reference, obsolete=tuple(value for value in
+                            ('/artifacts/S4/α/source', '/artifacts/S4/β/corrected') if value != path)),
+                Question('replay', 'May an uncertain input be replayed? Answer yes or no.',
+                         'no', 'persistent-prohibition', measurement=Measurement.PROHIBITION),
+                Question('alternative', 'What valid review alternative remained available although warm-review was chosen?',
+                         'cold-review', 'persistent-alternative', measurement=Measurement.ALTERNATIVE),
+            )))
+        return cls('configured-original-three-cut', tuple(rounds))
 
     def construction_rounds(self):
         """Derive ordered source additions and public probes from one oracle.

@@ -1,0 +1,36 @@
+{
+  "command": [
+    "python",
+    "tests/compaction_retention_fixture.py",
+    "--condition",
+    "task-memory",
+    "--recorded-run",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-adjacent-cut-measurements-20261005/empty-recorded-run.json"
+  ],
+  "environment": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "src:tests:tools/cutover"
+  },
+  "exit_code": 0,
+  "expected_adjacent_pairs": 2,
+  "unavailable_pairs": 2,
+  "authored_input_only": true,
+  "original_session_reads": 0,
+  "SDK_processes": 0,
+  "providers": 0,
+  "inputs": 0,
+  "scope": "Actual source CLI decoding/export over authored empty recorded trajectory; not installed/provider/study acceptance",
+  "raw_hashes": {
+    "evidence/s4-adjacent-cut-measurements-20261005/empty-recorded-run.json": "3537e320fcf3a212771c46c365057c250bb7d1d702fe118d185df35cd94b5146",
+    "evidence/s4-adjacent-cut-measurements-20261005/recorded-cli.stdout.json": "038513ab74848e82dbd482f7c4c2685685c26e882189870ea30b24cdfd8dc46b",
+    "evidence/s4-adjacent-cut-measurements-20261005/recorded-cli.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "evidence/s4-adjacent-cut-measurements-20261005/focused-final.log": "cf79550eb336875c4be016300c34f3a6c45c39463d72e82a9791988a46c41180",
+    "evidence/s4-adjacent-cut-measurements-20261005/before.json": "bb5ebc6e03ce062a82774b2d49a352115668c160f77953649b27b1025cb9c393",
+    "evidence/s4-adjacent-cut-measurements-20261005/after.json": "6430005fc8887881470065f5aa2860d5640166efe2ddb9e4ca7cd3e7b327a9db"
+  },
+  "source_hashes": {
+    "tests/retained_native_fixture.py": "cee9b8ab5ee2731f757bb6bb5766565e0b41ed89e02ab0d4e0e1ce2ed86d1278",
+    "tests/compaction_retention_fixture.py": "d71807ae39b3482e187ed93b3cb150d907be4f7e36a7ce8476ee4e5a8cc197ae",
+    "tests/test_recorded_retention_measurements.py": "38132d4ef44e44d696188629bf4145f00af51790ab469c032c3f167c93e0671b"
+  }
+}

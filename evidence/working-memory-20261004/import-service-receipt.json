@@ -1,0 +1,44 @@
+{
+  "source": "de5c3fa165a46b26f6b032c3fd13d7100881f333",
+  "prior_exact_green": {
+    "source": "f81111f0aad87d7bdb9649c1e5aa6ac4249164eb",
+    "run": 37220074818,
+    "job": 111488453406,
+    "conclusion": "SUCCESS"
+  },
+  "old_string_rewrite_negative": {
+    "source": "8cd1da46",
+    "run": 37219624189,
+    "positive": {
+      "StringSubscript": 1
+    },
+    "log": ".artifacts/import-service-hosted-debt-negative.log",
+    "sha256": "a7ed8a14fb0dd77a703726d8e988de9ac588c8e0f36a540445d070aa8bde317e"
+  },
+  "ownership": "ImportedSessionMetadata is the sole saved import payload declaration and original registry-incarnation/selected-file membership service. NativeEntry/PiPayload decode external custom data once; Thread owns absent saved selection; NativeTranscript owns bounded prefix read and SessionRevision. ReferenceNode/ContextInspection consume original service for authenticated text; no copied corpus or SDK/request/current-context attribution.",
+  "new_types_reason": "No existing class represented the saved custom metadata shape. ImportedSessionMetadata replaces its manual dictionary. CustomEntry and ImportedMetadataEntry are members of the existing NativeEntry external record family; other extensions remain opaque. No parallel UI family was introduced.",
+  "deletions": "Manual import metadata map deleted. PiPayload wire_discriminator owns external projection once, replacing both ImportedMetadataEntry and ManagedCompactionEntry postencoding type rewrites. CLI native/ACP imports moved behind actual native-path acquisition; historical references and recorded history do not acquire that dependency.",
+  "final_prefix_delta": "After f811 source read: NativeTranscript traverses original metadata/configuration prefix and stops at first conversation entry, rather than assuming import custom data must always be the second physical record. Source SHA/revision, incarnation/session membership, original raw record hashes remain unchanged.",
+  "source_batch": {
+    "initial": "26PASS/1 historical CLI missing-acp dependency negative .84s",
+    "corrected_historical_cli": "1PASS .28s",
+    "complete_changed_pi_import_transcript_family": "51PASS .72s",
+    "changed_configuration_prefix": "1PASS .34s"
+  },
+  "failure_prevented": "Metadata/receipt roundtrips; known/opaque Pi wire preservation; refused nonmember source and changed incarnation/session/original record; stopped CLI historical read without runtime transport; original metadata after model configuration; stop before malformed later conversation tail.",
+  "native": "7a2e/fcbd three producers unchanged, no build or SDK/provider repetition",
+  "remaining": "Frontend/worker installed named W6 purpose awaits parent654 wholefloor handback plus actual explicit grant. Schema9->10 remains fresh-private-only here, no public carry. W7 empirical calibration and W8 remain unfinished; external paid disclosure OFF.",
+  "keepers": {
+    "import-service-before.json": "d22c561cfb5e54a15e1fff1d32add09e3f2b1df0d94a23b6ed219ec430dd658c",
+    "import-service-after.json": "79d51755e40272bd8ff12cea005b6ac52fdd8025886e6673b521d02483238433",
+    "import-service-cli-dependency-negative.log": "b3f5715c0fda96166cd160ededc93b9592c62d45264d55f8b34388b54cacfc68",
+    "import-service-corrected-cli.log": "f574bf83729b682055fea4742e2eec06cd32be9f8694d8319d5361875228ed00",
+    "import-wire-family-final.log": "a6503127ed6544f2410cf909373d21b5a92f2dcf311b68dbe8edc86b3b2ff2b8",
+    "import-prefix-final.log": "fc4efa05ec8ff7ed11c8f5fb2578bb82b5de5a8d34ed02c3e116981f5db95c2e"
+  },
+  "actual_codex_session_reads": 0,
+  "installed_changes": 0,
+  "provider_calls": 0,
+  "new_environments": 0,
+  "local_handles": []
+}

@@ -1,0 +1,73 @@
+{"application_imports": ["/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/__init__.py", "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad/__init__.py", "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual/__init__.py"], "test_runner": "/usr/lib/python3.14/site-packages/pytest/__init__.py"}
+...FF                                                                    [100%]
+=================================== FAILURES ===================================
+__ test_imported_instruction_reference_read_search_export_remains_historical ___
+tests/test_context_manifest_navigation.py:36: in test_imported_instruction_reference_read_search_export_remains_historical
+    service.messaging.initialize_private_initial_protocol()
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/messaging.py:103: in initialize_private_initial_protocol
+    return self.bus.publisher.initialize_private_protocol()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/publisher.py:177: in initialize_private_protocol
+    return self._initialize_private_protocol_unlocked()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/publisher.py:187: in _initialize_private_protocol_unlocked
+    store.install_private_runtime()
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:81: in install_private_runtime
+    schema.install(self)
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/native_prompt_binding.py:55: in install
+    install_prompt_binding_schema(store)
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/native_prompt_binding.py:112: in install_prompt_binding_schema
+    _ensure_binding_schema(store)
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/native_prompt_binding.py:117: in _ensure_binding_schema
+    create_sidecar_file(binding_store_path(store), PromptBinding)
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/private_sidecar.py:333: in create_sidecar_file
+    _verify_schema(connection, row_type)
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/private_sidecar.py:235: in _verify_schema
+    if SnapshotMeta.select(connection) != [SnapshotMeta(1, _digest(row_type))]:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/typed_table.py:483: in select
+    cls._column_list(tuple(key))
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/typed_table.py:404: in _column_list
+    raise ValueError(f"Unknown or empty column list for {cls.declared_name}: {names}")
+E   ValueError: Unknown or empty column list for snapshot_meta: ()
+________ test_authored_import_registered_app_and_local_user_correction _________
+tests/test_context_manifest_navigation.py:114: in test_authored_import_registered_app_and_local_user_correction
+    root_id = service.messaging.initialize_private_initial_protocol()
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/messaging.py:103: in initialize_private_initial_protocol
+    return self.bus.publisher.initialize_private_protocol()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/publisher.py:177: in initialize_private_protocol
+    return self._initialize_private_protocol_unlocked()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/publisher.py:187: in _initialize_private_protocol_unlocked
+    store.install_private_runtime()
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:81: in install_private_runtime
+    schema.install(self)
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/native_prompt_binding.py:55: in install
+    install_prompt_binding_schema(store)
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/native_prompt_binding.py:112: in install_prompt_binding_schema
+    _ensure_binding_schema(store)
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/native_prompt_binding.py:117: in _ensure_binding_schema
+    create_sidecar_file(binding_store_path(store), PromptBinding)
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/private_sidecar.py:333: in create_sidecar_file
+    _verify_schema(connection, row_type)
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/private_sidecar.py:235: in _verify_schema
+    if SnapshotMeta.select(connection) != [SnapshotMeta(1, _digest(row_type))]:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/typed_table.py:483: in select
+    cls._column_list(tuple(key))
+../toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms/typed_table.py:404: in _column_list
+    raise ValueError(f"Unknown or empty column list for {cls.declared_name}: {names}")
+E   ValueError: Unknown or empty column list for snapshot_meta: ()
+=============================== warnings summary ===============================
+../../../../usr/lib/python3.14/site-packages/_pytest/config/__init__.py:1464
+  /usr/lib/python3.14/site-packages/_pytest/config/__init__.py:1464: PytestConfigWarning: Unknown config option: asyncio_mode
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../comms-field-codec-closure-20260928::test_imported_instruction_reference_read_search_export_remains_historical
+FAILED ../comms-field-codec-closure-20260928::test_authored_import_registered_app_and_local_user_correction
+2 failed, 3 passed, 1 warning in 5.81s

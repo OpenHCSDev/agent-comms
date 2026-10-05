@@ -1,0 +1,33 @@
+{
+  "modules": 324,
+  "omissions": [],
+  "owner_sites": [
+    {
+      "method": "_fields_named",
+      "line": 313,
+      "source": "@classmethod\ndef _fields_named(cls, names: tuple[str, ...]) -> tuple[_Field, ...]:\n    \"\"\"Resolve a declared field subset, including an unfiltered query.\"\"\"\n    unknown = set(names).difference(cls.columns())\n    if unknown:\n        raise ValueError(f'Unknown fields for {cls.__name__}: {sorted(unknown)}')\n    return tuple((item for item in cls._fields() if item.name in names))"
+    },
+    {
+      "method": "_column_list",
+      "line": 410,
+      "source": "@classmethod\ndef _column_list(cls, names: tuple[str, ...]) -> str:\n    if not names:\n        raise ValueError(f'Empty column list for {cls.declared_name}')\n    cls._fields_named(names)\n    return ', '.join(map(_identifier, names))"
+    },
+    {
+      "method": "select",
+      "line": 483,
+      "source": "@classmethod\ndef select(cls, db: sqlite3.Connection, *, where: str='1', parameters: tuple=(), order_by: tuple[str, ...]=(), **key: object) -> list[Self]:\n    selected = cls._fields_named(tuple(key))\n    if selected:\n        where = '(' + where + ') AND ' + ' AND '.join((f'{_identifier(item.name)} IS ?' for item in selected))\n        parameters = (*parameters, *(item.encode(key[item.name]) for item in selected))\n    return cls.read(db.execute(f'SELECT {cls._column_list(cls.columns())} FROM {_identifier(cls.declared_name)} WHERE {where}' + (f' ORDER BY {cls._column_list(order_by)}' if order_by else ''), parameters))"
+    },
+    {
+      "method": "one",
+      "line": 506,
+      "source": "@classmethod\ndef one(cls, db: sqlite3.Connection, **key: object) -> Self | None:\n    rows = cls.select(db, **key)\n    if len(rows) > 1:\n        raise ValueError(f'Expected one {cls.declared_name} for {tuple(key)}')\n    return next(iter(rows), None)"
+    },
+    {
+      "method": "update",
+      "line": 543,
+      "source": "@classmethod\ndef update(cls, db: sqlite3.Connection, *, where: str, parameters: tuple=(), **changes: object) -> sqlite3.Cursor:\n    selected = cls._fields_named(tuple(changes))\n    if not selected:\n        raise ValueError(f'Update requires fields for {cls.declared_name}')\n    if any((item.column.generated is not None for item in selected)):\n        raise ValueError('Generated columns cannot be updated')\n    return db.execute(f'UPDATE {_identifier(cls.declared_name)} SET ' + ', '.join((f'{_identifier(item.name)}=?' for item in selected)) + f' WHERE {where}', tuple((item.encode(changes[item.name]) for item in selected)) + parameters)"
+    }
+  ],
+  "semantics": "Optional query field subset resolved once through TypedRow; SQL column list and updates separately require nonempty fields; inherited select/one/all no-key callers migrated through shared behavior",
+  "limit": "AST lexical evidence, not dynamic call resolution"
+}

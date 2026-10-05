@@ -1,0 +1,1344 @@
+{
+  "head": "9c297ef44303df5accc257bb0d726270af557f7b",
+  "root": "src/agent_comms",
+  "modules": 311,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 57,
+      "declaration": "ContextObserved"
+    },
+    {
+      "path": "src/agent_comms/awareness_context.py",
+      "line": 7,
+      "import": "from .turn_context import InstructionFile, InstructionSegment, WireProvenance"
+    },
+    {
+      "path": "src/agent_comms/awareness_context.py",
+      "line": 18,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/awareness_context.py",
+      "line": 36,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 41,
+      "import": "from .turn_context import InputContributionCoordinates"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 220,
+      "reference": "InputContributionCoordinates"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 307,
+      "reference": "InputContributionCoordinates"
+    },
+    {
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 18,
+      "import": "from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 35,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 53,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 83,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/bus_route_counts.py",
+      "line": 24,
+      "import": "from .typed_table import Column, Index, TypedRow, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/bus_route_counts.py",
+      "line": 32,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/bus_route_counts.py",
+      "line": 40,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/bus_route_counts.py",
+      "line": 50,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/bus_route_counts.py",
+      "line": 152,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/bus_route_counts.py",
+      "line": 99,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 885,
+      "import": "from .native_turn_context import NativeContextData"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 913,
+      "reference": "NativeContextData"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 18,
+      "import": "from .typed_table import Column, ForeignKey, Index, SQLiteForeignKeys, SQLiteJournalMode, SQLiteSchemaObject, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 41,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 69,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 216,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 283,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 372,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 396,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 523,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 463,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 539,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 22,
+      "import": "from .typed_table import TypedTable"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 88,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 139,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 36,
+      "import": "from .typed_table import Column, Index, TypedRow, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 126,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 209,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 300,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 322,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 329,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 358,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 103,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime_schema.py",
+      "line": 13,
+      "import": "from .typed_table import SQLiteForeignKeys, SQLiteSchemaObject, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime_schema.py",
+      "line": 21,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 58,
+      "import": "from agent_comms.typed_table import Column, SQLiteForeignKeys, SQLiteSchemaObject, TypedRow, TypedTable, ForeignKey"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 84,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 95,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 157,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 168,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_schema.py",
+      "line": 12,
+      "import": "from agent_comms.typed_table import TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_schema.py",
+      "line": 130,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/assignments.py",
+      "line": 23,
+      "import": "from agent_comms.typed_table import Column, ForeignKey, Index, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/assignments.py",
+      "line": 38,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/assignments.py",
+      "line": 342,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/attempts.py",
+      "line": 24,
+      "import": "from agent_comms.typed_table import Column, ForeignKey, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/attempts.py",
+      "line": 49,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/attempts.py",
+      "line": 338,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "line": 22,
+      "import": "from agent_comms.typed_table import Column, ForeignKey, Index, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "line": 38,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "line": 120,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/metadata.py",
+      "line": 14,
+      "import": "from agent_comms.typed_table import Column, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/metadata.py",
+      "line": 21,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/participants.py",
+      "line": 9,
+      "import": "from agent_comms.typed_table import Column, ForeignKey, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/participants.py",
+      "line": 17,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/participants.py",
+      "line": 60,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/participants.py",
+      "line": 92,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/publications.py",
+      "line": 22,
+      "import": "from agent_comms.typed_table import Column, ExactStorage, ForeignKey, TypedRow, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/publications.py",
+      "line": 42,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/publications.py",
+      "line": 315,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/recovery.py",
+      "line": 18,
+      "import": "from agent_comms.typed_table import Column, ForeignKey, Index, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/recovery.py",
+      "line": 38,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/recovery.py",
+      "line": 84,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/responses.py",
+      "line": 19,
+      "import": "from agent_comms.typed_table import Column, ForeignKey, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/responses.py",
+      "line": 27,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 76,
+      "import": "from .typed_table import TypedTable"
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 78,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 52,
+      "import": "from .typed_table import Column, SQLiteJournalMode, SQLiteSchemaObject, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 76,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 214,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 282,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 297,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 313,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 561,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/goal_failure_observation.py",
+      "line": 29,
+      "import": "from .typed_table import Column, ForeignKey, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/goal_failure_observation.py",
+      "line": 55,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/goal_failure_observation.py",
+      "line": 42,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/goal_history.py",
+      "line": 23,
+      "import": "from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/goal_history.py",
+      "line": 31,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/goal_states.py",
+      "line": 36,
+      "import": "from .turn_context import InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/goal_states.py",
+      "line": 38,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 15,
+      "import": "from .turn_context import Provenance"
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "line": 44,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 32,
+      "import": "from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 183,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 36,
+      "import": "from .typed_table import Column, TypedRow, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 52,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 23,
+      "import": "from .typed_table import Column, IntegerStorage, TypedRow, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 35,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 76,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 341,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 8,
+      "import": "from .turn_context import ContextManifest, ContextSegment, ContextSourceText, MeasuredNativeSegment, PreviewProvenance, Provenance, SegmentManifest, TurnContext"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 42,
+      "declaration": "NativeContextData"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 18,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 26,
+      "reference": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 47,
+      "reference": "ContextSegment"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 55,
+      "reference": "ContextSegment"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 71,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 82,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 58,
+      "import": "from .turn_context import ContextSegment, InstructionFile, ResourceProvenance, TurnContext, WireProvenance"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 240,
+      "reference": "ContextSegment"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 246,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 247,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 220,
+      "reference": "ContextSegment"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 349,
+      "reference": "ContextSegment"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 477,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 478,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 205,
+      "import": "from .turn_context import TurnContext, AutomaticTitleSegment, ReplyRouteSegment, InstructionFile, OwnerProvenance, RecordedContextTurn"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 226,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 237,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 16,
+      "import": "from .native_turn_context import NativeContextData"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 25,
+      "import": "from .turn_context import InputContributionCoordinates, SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 477,
+      "reference": "NativeContextData"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 482,
+      "reference": "NativeContextData"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 485,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 156,
+      "reference": "InputContributionCoordinates"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 486,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 489,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 31,
+      "import": "from .typed_table import Column, Index, SQLiteSchemaObject, SqlStorage, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 41,
+      "import": "from .turn_context import ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 338,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 365,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 403,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 419,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 425,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 407,
+      "reference": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 256,
+      "reference": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 280,
+      "reference": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 652,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 532,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 590,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 31,
+      "import": "from .typed_table import Column, SQLiteForeignKeys, SQLiteSchemaObject, TypedRow, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 190,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 217,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 221,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 225,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 314,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 342,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/retained_context.py",
+      "line": 13,
+      "import": "from .turn_context import ContextSegment, OwnerProvenance, WireProvenance"
+    },
+    {
+      "path": "src/agent_comms/retained_context.py",
+      "line": 17,
+      "reference": "ContextSegment"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 23,
+      "import": "from .turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 358,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 386,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 378,
+      "reference": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/selected_actions.py",
+      "line": 11,
+      "import": "from .turn_context import InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/selected_actions.py",
+      "line": 25,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/selected_actions.py",
+      "line": 51,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/selected_actions.py",
+      "line": 82,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/selected_source_batch.py",
+      "line": 15,
+      "import": "from .turn_context import InstructionFile, ReplyRouteSegment, WireProvenance"
+    },
+    {
+      "path": "src/agent_comms/selected_source_batch.py",
+      "line": 134,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/selected_source_batch.py",
+      "line": 92,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/selected_source_batch.py",
+      "line": 93,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 31,
+      "import": "from .turn_context import InstructionFile, InstructionSegment, RecordedContextTurn, RenderedInput, TurnContext"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 98,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 121,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 102,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 103,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 125,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 15,
+      "import": "from .turn_context import Provenance, WireProvenance"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 205,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 526,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 535,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 22,
+      "import": "from .typed_table import Column, TypedRow, TypedTable, sql_literal"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 267,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 46,
+      "import": "from .turn_context import InputContributionCoordinates"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 186,
+      "reference": "InputContributionCoordinates"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 13,
+      "import": "from .typed_table import Column, SQLiteSchemaObject, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 21,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 33,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 62,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 164,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/triage_native_sources.py",
+      "line": 11,
+      "import": "from .typed_table import Column, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/triage_native_sources.py",
+      "line": 15,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 26,
+      "declaration": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 153,
+      "declaration": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 170,
+      "declaration": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 275,
+      "declaration": "ContextSegment"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 323,
+      "declaration": "InputContributionCoordinates"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 388,
+      "declaration": "SystemLayerSegment"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 638,
+      "declaration": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 56,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 71,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 80,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 92,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 105,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 119,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 135,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 345,
+      "reference": "ContextSegment"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 351,
+      "reference": "ContextSegment"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 463,
+      "reference": "ContextSegment"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 160,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 193,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 201,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 302,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 311,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 316,
+      "reference": "InputContributionCoordinates"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 346,
+      "reference": "InputContributionCoordinates"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 464,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 505,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 656,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 661,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 668,
+      "reference": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 730,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 781,
+      "reference": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 172,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 176,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 237,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 240,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 276,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 288,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 292,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 292,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 304,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 311,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 318,
+      "reference": "InputContributionCoordinates"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 327,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 355,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 368,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 371,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 383,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 414,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 414,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 589,
+      "reference": "InputContributionCoordinates"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 641,
+      "reference": "SegmentManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 661,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 676,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 700,
+      "reference": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 714,
+      "reference": "ContextSegment"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 730,
+      "reference": "Provenance"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 759,
+      "reference": "ContextSegment"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 762,
+      "reference": "ContextSegment"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 782,
+      "reference": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 477,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 515,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 560,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 681,
+      "reference": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 769,
+      "reference": "ContextSegment"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 238,
+      "reference": "ContextSegment"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 381,
+      "declaration": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 243,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 248,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 223,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/view_unread.py",
+      "line": 16,
+      "import": "from .typed_table import Column, SQLiteUserVersion, TypedRow, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/view_unread.py",
+      "line": 26,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/view_unread.py",
+      "line": 35,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/view_unread.py",
+      "line": 136,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 31,
+      "import": "from .typed_table import Column, Index, SQLiteJournalMode, SQLiteSchemaObject, TypedTable"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 51,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 76,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 82,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 181,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 190,
+      "reference": "TypedTable"
+    },
+    {
+      "path": "src/agent_comms/wake_injection.py",
+      "line": 18,
+      "import": "from .turn_context import InstructionFile, InstructionSegment, OwnerProvenance, NextContextTurn, WireProvenance"
+    },
+    {
+      "path": "src/agent_comms/wake_injection.py",
+      "line": 35,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/wake_injection.py",
+      "line": 39,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/wake_policy.py",
+      "line": 68,
+      "import": "from .turn_context import InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/wake_policy.py",
+      "line": 70,
+      "reference": "InstructionFile"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 26,
+      "import": "from .turn_context import ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/wire_metadata.py",
+      "line": 63,
+      "reference": "ContextManifest"
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 180,
+      "import": "from .turn_context import ContextManifest"
+    }
+  ],
+  "limits": "Lexical Python declarations/references; native assembly is read separately, dynamic dispatch not proven."
+}

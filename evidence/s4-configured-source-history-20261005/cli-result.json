@@ -1,0 +1,22 @@
+{
+  "command": [
+    "python",
+    "tests/compaction_retention_fixture.py",
+    "--construction-plan",
+    "--comparison-design",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-configured-source-history-20261005/authored-design.json",
+    "--sampling-seed",
+    "20261005"
+  ],
+  "exit_code": 0,
+  "scope": "Actual source construction-plan CLI, authored Message values only; prospective operands not registered execution",
+  "new_inputs": 0,
+  "provider_calls": 0,
+  "SDK_processes": 0,
+  "original_reads": 0,
+  "authored_round_additions": [
+    3,
+    1,
+    1
+  ]
+}

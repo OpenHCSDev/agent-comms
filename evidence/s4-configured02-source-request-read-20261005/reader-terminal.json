@@ -1,0 +1,18 @@
+{
+  "exit_code": 0,
+  "elapsed_seconds": 6.647768527036533,
+  "identity": {
+    "pid": 338558,
+    "start_time": 64662517
+  },
+  "joined": true,
+  "retired": true,
+  "command_receipt": {
+    "path": "evidence/s4-configured02-source-request-read-20261005/command.json",
+    "sha256": "b9738b218ca6f6885d827aadfe94e00d3ece8cc95cbea9a9f9cd0221b648fb89"
+  },
+  "new_inputs": 0,
+  "provider_calls": 0,
+  "SDK_processes": 0,
+  "scope": "One same-input recorded read; original ParentedProcess owns exact child/group retirement"
+}

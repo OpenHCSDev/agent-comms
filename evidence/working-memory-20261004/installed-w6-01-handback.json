@@ -1,0 +1,27 @@
+{
+  "state": "whole original floor restored; execution terminal FAIL before App mount; no retry",
+  "members": 1470,
+  "protected": 390,
+  "packages": 69,
+  "normal_installer": true,
+  "original_metadata_modes_restored": [],
+  "extra_application_assets": [],
+  "native_inputs": 0,
+  "provider_calls": 0,
+  "forks": 0,
+  "app_mounted": false,
+  "activation_changed": false,
+  "native_keeper_changed": false,
+  "scope": "3 installed controls PASS; 2 cases FAIL at fresh sidecar verification before App, no native child launched",
+  "elapsed": 7.42849,
+  "grant": "style22-EinsteinW6-Core627-Toad434-issued-grant.json",
+  "borrowers": {
+    "processes": 229,
+    "refs": 0,
+    "gaps": 0
+  },
+  "all_owned_handles_closed": true,
+  "package_import_read_execution_claim": "CLOSED; whole style22 returned",
+  "native_7a2e_read_execution_claim": "CLOSED; original keeper retained unchanged",
+  "output": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-installed01"
+}

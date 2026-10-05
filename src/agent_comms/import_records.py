@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .declared_family import DeclaredFamily
 from .importing import ImportBuffer, ImportRole, ReverseImportBuffer, object_value, objects, text
+from .turn_context import CodexRolloutProvenance
 
 
 class ImportedCase(ABC):
@@ -17,7 +19,11 @@ class ImportedCase(ABC):
             member = cls.decode(wire.get("type"))
         except ValueError:
             member = cls.ignored_case()
-        return member.capture(wire)
+        return member.capture_envelope(wire)
+
+    @classmethod
+    def capture_envelope(cls, wire):
+        return cls.capture(wire)
 
     @classmethod
     @abstractmethod
@@ -106,6 +112,9 @@ class CodexItem(ImportedCase, DeclaredFamily, affix="CodexItem"):
     @abstractmethod
     def apply(self, buffer): ...
 
+    def historical_instructions(self):
+        return ()
+
 
 @dataclass(frozen=True)
 class IgnoredCodexItem(CodexItem):
@@ -117,18 +126,36 @@ class IgnoredCodexItem(CodexItem):
         pass
 
 
-@dataclass(frozen=True)
 class MessageCodexItem(CodexItem):
+    """The original message envelope delegates roles to declared members."""
+
     text_types = frozenset({"input_text", "output_text", "text"})
-    role: ImportRole
+
+    @classmethod
+    def capture(cls, wire):
+        try:
+            member = MessageRoleCodexItem.decode(wire.get("role"))
+        except ValueError:
+            return IgnoredCodexItem()
+        return member.capture(wire)
+
+    def apply(self, buffer):
+        raise TypeError("A Codex message envelope requires its decoded role")
+
+
+@dataclass(frozen=True)
+class MessageRoleCodexItem(MessageCodexItem):
     body: str
     source_id: str
 
     @classmethod
+    def capture_envelope(cls, wire):
+        # A nested message role is not an external Codex item kind. The
+        # original envelope alone selects this capability through its role.
+        return IgnoredCodexItem()
+
+    @classmethod
     def capture(cls, wire):
-        role = wire.get("role")
-        if role not in {"user", "assistant"}:
-            return IgnoredCodexItem()
         content = wire.get("content")
         pieces = (
             [content]
@@ -139,10 +166,39 @@ class MessageCodexItem(CodexItem):
                 if part.get("type") in cls.text_types
             ]
         )
-        return cls(ImportRole(role), "\n".join(pieces), text(wire.get("id")))
+        return cls("\n".join(pieces), text(wire.get("id")))
+
+    @abstractmethod
+    def apply(self, buffer): ...
+
+
+class UserCodexItem(MessageRoleCodexItem):
+    def apply(self, buffer):
+        buffer.add(ImportRole.USER, self.body, self.source_id)
+
+
+class AssistantCodexItem(MessageRoleCodexItem):
+    def apply(self, buffer):
+        buffer.add(ImportRole.ASSISTANT, self.body, self.source_id)
+
+
+class HistoricalInstructionCodexItem:
+    """Shared historical capability; not another wire family or role registry."""
 
     def apply(self, buffer):
-        buffer.add(self.role, self.body, self.source_id)
+        # Historical instructions are metadata references, never Pi messages.
+        pass
+
+    def historical_instructions(self):
+        return (self,)
+
+
+class SystemCodexItem(HistoricalInstructionCodexItem, MessageRoleCodexItem):
+    pass
+
+
+class DeveloperCodexItem(HistoricalInstructionCodexItem, MessageRoleCodexItem):
+    pass
 
 
 @dataclass(frozen=True)
@@ -209,6 +265,15 @@ class CodexRecord(ImportedCase, DeclaredFamily, affix="CodexRecord"):
     def forward(self, scan, buffer):
         pass
 
+    def historical_instructions(self):
+        return ()
+
+    def instruction_sources(self, source, offset, raw):
+        digest = hashlib.sha256(raw).hexdigest()
+        return tuple(CodexRolloutProvenance(str(source.resolve()), offset, len(raw), digest,
+                                           index)
+                     for index, _ in enumerate(self.historical_instructions()))
+
 
 @dataclass(frozen=True)
 class IgnoredCodexRecord(CodexRecord):
@@ -270,6 +335,10 @@ class CompactedCodexRecord(CodexRecord):
             item.apply(probe)
         return probe.latest_request
 
+    def historical_instructions(self):
+        return tuple(instruction for item in self.replacement
+                     for instruction in item.historical_instructions())
+
     def reverse(self, scan, offset, raw):
         request = self.latest_request(scan.reverse_buffer.limits)
         if scan.found_checkpoint:
@@ -306,6 +375,9 @@ class ResponseItemCodexRecord(CodexRecord):
     def forward(self, scan, buffer):
         self.item.apply(buffer)
 
+    def historical_instructions(self):
+        return self.item.historical_instructions()
+
 
 @dataclass
 class CodexImportScan:
@@ -315,6 +387,23 @@ class CodexImportScan:
     latest_project: str = ""
     checkpoint: tuple[int, int, CompactedCodexRecord] | None = None
     prior_request: str = ""
+    instruction_sources: set[CodexRolloutProvenance] = field(default_factory=set)
+
+    def reverse_record(self, record, source, offset, raw):
+        # Older records searched only for a missing user request cannot acquire
+        # instruction membership in the selected checkpoint/suffix.
+        if self.searching_checkpoint:
+            self.instruction_sources.update(record.instruction_sources(source, offset, raw))
+        return record.reverse(self, offset, raw)
+
+    def forward_record(self, record, source, offset, raw, buffer):
+        self.instruction_sources.update(record.instruction_sources(source, offset, raw))
+        record.forward(self, buffer)
+
+    @property
+    def historical_instructions(self):
+        return tuple(sorted(self.instruction_sources,
+                            key=lambda value:(value.offset,value.instruction)))
 
     @property
     def needs_project(self):

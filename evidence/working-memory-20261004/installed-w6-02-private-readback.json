@@ -1,0 +1,18 @@
+{
+  "terminal": "timeout at90s; test phase not retained by captured runner",
+  "source_sha256": "7ba0851965c9ae11ed759257dc2d12ed8a8e23a09f7cd393640fc55fb26cd31a",
+  "source_bytes": 502,
+  "registry_sha256": "6aca519cb3e6dde13cca25ab8c2440cb9a40e946d37a2ffc8f5479558495ccdf",
+  "row_counts": {
+    "span_annotations": 2,
+    "annotation_requests": 0,
+    "native_runtime_schema_meta": 1,
+    "native_runtime_input": 0,
+    "current_native_cursor": 0,
+    "native_runtime_triage_sources": 0
+  },
+  "bus_bytes": 0,
+  "owned_processes_after_timeout": [],
+  "input_dispositions_file_present": false,
+  "scope": "read-only original authored fixture; no stage inference from absent trace"
+}

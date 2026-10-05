@@ -1,0 +1,506 @@
+{
+  "parsed": 748,
+  "requested": 748,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/context_segments/retained.py",
+      "line": 34,
+      "kind": "FunctionDef",
+      "name": "original_text_source"
+    },
+    {
+      "path": "src/agent_comms/context_segments/retained.py",
+      "line": 35,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "src/agent_comms/context_segments/retained.py",
+      "line": 22,
+      "kind": "Attribute",
+      "name": "wire_sources"
+    },
+    {
+      "path": "src/agent_comms/context_segments/retained.py",
+      "line": 23,
+      "kind": "Attribute",
+      "name": "original_wording_context_source"
+    },
+    {
+      "path": "src/agent_comms/context_segments/retained.py",
+      "line": 24,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "src/agent_comms/context_segments/retained.py",
+      "line": 51,
+      "kind": "Attribute",
+      "name": "wire_sources"
+    },
+    {
+      "path": "src/agent_comms/retained_context.py",
+      "line": 23,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 39,
+      "kind": "FunctionDef",
+      "name": "wire_sources"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 59,
+      "kind": "FunctionDef",
+      "name": "wire_sources"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 75,
+      "kind": "FunctionDef",
+      "name": "wire_sources"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 183,
+      "kind": "FunctionDef",
+      "name": "wire_sources"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 321,
+      "kind": "FunctionDef",
+      "name": "original_text_source"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 326,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 371,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 253,
+      "kind": "Attribute",
+      "name": "wire_sources"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 43,
+      "kind": "Attribute",
+      "name": "wire_sources"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 365,
+      "kind": "Attribute",
+      "name": "wire_sources"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 205,
+      "kind": "FunctionDef",
+      "name": "original_text_source"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 211,
+      "kind": "FunctionDef",
+      "name": "original_wording_context_source"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 490,
+      "kind": "FunctionDef",
+      "name": "original_text_source"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 544,
+      "kind": "FunctionDef",
+      "name": "original_wording_context_source"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 465,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 590,
+      "kind": "FunctionDef",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 630,
+      "kind": "FunctionDef",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1218,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1228,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1229,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 268,
+      "kind": "Attribute",
+      "name": "_report"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 605,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 49,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 77,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 199,
+      "kind": "FunctionDef",
+      "name": "_report"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 368,
+      "kind": "FunctionDef",
+      "name": "authored_scope"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 456,
+      "kind": "FunctionDef",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 234,
+      "kind": "Attribute",
+      "name": "_report"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 405,
+      "kind": "Attribute",
+      "name": "authored_scope"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 406,
+      "kind": "Attribute",
+      "name": "authored_scope"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 463,
+      "kind": "Attribute",
+      "name": "authored_scope"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 212,
+      "kind": "Attribute",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 341,
+      "kind": "Attribute",
+      "name": "_report"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1394,
+      "kind": "Attribute",
+      "name": "_report"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 473,
+      "kind": "Attribute",
+      "name": "wire_sources"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 381,
+      "kind": "Attribute",
+      "name": "wire_sources"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 484,
+      "kind": "Attribute",
+      "name": "original_wording_context_source"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 485,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 122,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 232,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 269,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1940,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1951,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2140,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1275,
+      "kind": "Attribute",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1314,
+      "kind": "Attribute",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1963,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1969,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2117,
+      "kind": "Attribute",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2126,
+      "kind": "Attribute",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2130,
+      "kind": "Attribute",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2133,
+      "kind": "Attribute",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 221,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1889,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1892,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1990,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1867,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1878,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1979,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1985,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1988,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1989,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2131,
+      "kind": "Attribute",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1871,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1897,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1924,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1885,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2124,
+      "kind": "Attribute",
+      "name": "wire_sources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2128,
+      "kind": "Attribute",
+      "name": "wire_sources"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 258,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 79,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 113,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 149,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 151,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 109,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    },
+    {
+      "path": "tools/cutover/retained_task_installed_pilot.py",
+      "line": 80,
+      "kind": "Attribute",
+      "name": "original_text_source"
+    }
+  ],
+  "scope": "Existing NRA parser; Python lexical declarations and consumers, not dynamic dispatch or native JavaScript proof"
+}

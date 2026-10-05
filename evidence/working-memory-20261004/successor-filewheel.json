@@ -1,0 +1,11 @@
+{
+  "source": "7a115077385ec6bbaa1055365d7e2009e8d67f23",
+  "wheel": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-w6-successor-source/agent_comms-0.1.0-py3-none-any.whl",
+  "sha256": "7d0fca01688932cf21b9236ed0070b3ea9ddd3b9e6985bcd308e50a12cb94fc9",
+  "bytes": 900933,
+  "assets": 355,
+  "scope": "successor filewheel only; no installed purpose inferred",
+  "native_manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+  "inventory": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-w6-successor-source/source-proof.json",
+  "inventory_sha256": "2cfb298ffb47d60767ab2cfc138841bd31a4b59f6278152091fe94eb00a68b67"
+}

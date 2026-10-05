@@ -1,0 +1,107 @@
+{
+  "returncode": 0,
+  "elapsed_seconds": 4.738188295043074,
+  "effective_argv": [
+    "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python",
+    "-B",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry_controls.py",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004",
+    "--source-python",
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "--stopped-original",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/stopped-original9"
+  ],
+  "observation": "strace process-only observation of unchanged control; proc births sampled for owned descendants",
+  "candidate_source_proof_sha256": "ad826643682378d1326c3eeac243440a07424b65fed195c2625180598c84b01d",
+  "target_grant_sha256": "ab31680dffc051b2eafb251ae3f5d5cf1183716d53199a1f670a65d00c757b86",
+  "source_grant_sha256": "d7f12b1c1f092c6123abaf2880ef87c37e1f863f705e26c3000c2574ac53415c",
+  "effective_target_lifecycle_sha256": "3fac36e185848f905315fc49a835e033657ba9071a2f4115b0921eb7ace49859",
+  "owned_processes": [
+    {
+      "pid": 3542275,
+      "birth_ticks": 64027894,
+      "ppid": 3542199,
+      "pgid": 3542275,
+      "state": "S",
+      "cmdline": [
+        "/usr/bin/strace",
+        "-ff",
+        "-s",
+        "4096",
+        "-e",
+        "trace=process",
+        "-o",
+        "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/carry-process.trace",
+        "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python",
+        "-B",
+        "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry_controls.py",
+        "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004",
+        "--source-python",
+        "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+        "--stopped-original",
+        "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/stopped-original9"
+      ],
+      "proc_absent": true,
+      "process_exit_trace": null
+    },
+    {
+      "pid": 3542280,
+      "birth_ticks": 64027895,
+      "ppid": 3542275,
+      "pgid": 3542275,
+      "state": "t",
+      "cmdline": [],
+      "proc_absent": true,
+      "process_exit_trace": null
+    },
+    {
+      "pid": 3542281,
+      "birth_ticks": 64027895,
+      "ppid": 3542275,
+      "pgid": 3542275,
+      "state": "R",
+      "cmdline": [
+        "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python",
+        "-B",
+        "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry_controls.py",
+        "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004",
+        "--source-python",
+        "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+        "--stopped-original",
+        "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/stopped-original9"
+      ],
+      "proc_absent": true,
+      "process_exit_trace": "execve(\"/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python\", [\"/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python\", \"-B\", \"/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry_controls.py\", \"/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004\", \"--source-python\", \"/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python\", \"--stopped-original\", \"/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/stopped-original9\"], 0x7ffc4da414c0 /* 114 vars */) = 0\nvfork()                                 = 3542634\n--- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3542634, si_uid=1000, si_status=0, si_utime=100 /* 1.00 s */, si_stime=9 /* 0.09 s */} ---\nwait4(3542634, [{WIFEXITED(s) && WEXITSTATUS(s) == 0}], WNOHANG, NULL) = 3542634\nexit_group(0)                           = ?\n+++ exited with 0 +++\n"
+    },
+    {
+      "pid": 3542634,
+      "birth_ticks": 64028035,
+      "ppid": 3542281,
+      "pgid": 3542275,
+      "state": "R",
+      "cmdline": [
+        "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+        "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry.py",
+        "--declaration"
+      ],
+      "proc_absent": true,
+      "process_exit_trace": "execve(\"/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python\", [\"/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python\", \"/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry.py\", \"--declaration\"], 0x7ffe79b19930 /* 114 vars */) = 0\nexit_group(0)                           = ?\n+++ exited with 0 +++\n"
+    }
+  ],
+  "joined_group": 3542275,
+  "remaining_groups": [],
+  "sockets": [],
+  "source_members_unchanged": true,
+  "source_members": 450,
+  "target_members_unchanged": true,
+  "target_members": 1372,
+  "authored_original_unchanged": true,
+  "stdout_sha256": "48236fe4fbb5d604662afa153bdb208a0e054e6db79e7f6b7a2b06ab964dfb65",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "traces": {
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/carry-process.trace.3542281": "c5678c01ad1c4f021b9735d6ab368b9915c7e7250853cb2de9118e8e2e472964",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/carry-process.trace.3542634": "0c3741c4d54e5a0805b5e22824c316d79f459d3c007c9041f8b87f06426685bc"
+  },
+  "receipt_present": true,
+  "App_native_provider_input_seed_copy_calls": 0
+}

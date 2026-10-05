@@ -1,0 +1,16 @@
+{
+  "lifecycle": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Arendt671-recorded-source-request-read-only-lifecycle.json",
+    "sha256": "ea90ba13ea9bf4e576f1796b1501d3d0cab3200da2a4fe1a1506be9aea68103c"
+  },
+  "independent_readback": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Arendt671-recorded-source-request-read-independent-final-floor-readback.json",
+    "sha256": "f396bfebaf7d5b12775cb316ab49c2269300796296b4409b2e58a59e83b6914f"
+  },
+  "state": "CLOSED",
+  "scope": "Independent whole THIN540 read/import return; no next loan",
+  "original_preimages_unchanged": 17,
+  "fresh_holder_output_refs": 0,
+  "fresh_permission_gaps": 0,
+  "fresh_process_census": 249
+}

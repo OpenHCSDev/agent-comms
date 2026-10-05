@@ -1,0 +1,380 @@
+{
+  "head": "fb826f4c55724e76d632636f8c031d6c00c53f85",
+  "parsed": 319,
+  "omissions": [],
+  "sites": [
+    {
+      "file": "src/agent_comms/acp_extension.py",
+      "line": 51,
+      "node": "Name",
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/acp_extension.py",
+      "line": 52,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 568,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 17,
+      "node": "ClassDef",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 18,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 36,
+      "node": "Name",
+      "name": "SpanLabel"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 77,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 50,
+      "node": "Name",
+      "name": "SpanLabel"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 44,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 41,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/coordinator.py",
+      "line": 71,
+      "node": "Name",
+      "name": "WorkingMemoryAnnotations"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 29,
+      "node": "Name",
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 26,
+      "node": "Name",
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 407,
+      "node": "Name",
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 256,
+      "node": "Name",
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 280,
+      "node": "Name",
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 372,
+      "node": "ClassDef",
+      "name": "RecordedContextRuntimeRequest"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 399,
+      "node": "ClassDef",
+      "name": "ContextRecordedSegmentRuntimeRequest"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 387,
+      "node": "Name",
+      "name": "RecordedContextRuntimeRequest"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 399,
+      "node": "Name",
+      "name": "RecordedContextRuntimeRequest"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 404,
+      "node": "Attribute",
+      "name": "selected_segment"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 380,
+      "node": "Name",
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 800,
+      "node": "ClassDef",
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 818,
+      "node": "FunctionDef",
+      "name": "selected_segment"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 830,
+      "node": "Name",
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 943,
+      "node": "Name",
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 862,
+      "node": "Name",
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 944,
+      "node": "Name",
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 843,
+      "node": "Name",
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 839,
+      "node": "Attribute",
+      "name": "selected_segment"
+    },
+    {
+      "file": "src/agent_comms/wire_metadata.py",
+      "line": 63,
+      "node": "Name",
+      "name": "ContextManifest"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 13,
+      "node": "ClassDef",
+      "name": "WorkingMemoryAnnotations"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 56,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 75,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 83,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 19,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 32,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 34,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 82,
+      "node": "Name",
+      "name": "HumanLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 26,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 38,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 40,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 64,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 79,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 63,
+      "node": "ClassDef",
+      "name": "SpanLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 91,
+      "node": "ClassDef",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 121,
+      "node": "ClassDef",
+      "name": "HumanLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 91,
+      "node": "Name",
+      "name": "SpanLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 121,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 75,
+      "node": "Name",
+      "name": "SpanLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 140,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 141,
+      "node": "Name",
+      "name": "HumanLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 215,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 115,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 125,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 133,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 217,
+      "node": "Name",
+      "name": "ModelLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 146,
+      "node": "Name",
+      "name": "HumanLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 75,
+      "node": "Name",
+      "name": "SpanLabel"
+    },
+    {
+      "file": "src/agent_comms/working_memory_questions.py",
+      "line": 117,
+      "node": "ClassDef",
+      "name": "KindQuestion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 61,
+      "node": "Name",
+      "name": "SpanAnnotationsRow"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 84,
+      "node": "Name",
+      "name": "KindQuestion"
+    }
+  ],
+  "scope": "Original request/turn/contributor selection and stored label owners; lexical AST does not resolve dynamic dispatch"
+}

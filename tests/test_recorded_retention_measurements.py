@@ -17,6 +17,7 @@ from agent_comms.compaction_identity import SummaryOperationIdentity
 from agent_comms.compaction_records import NativeForkCreation, SelectedSummaryAttempt
 from agent_comms.compaction_states import ReservedSummary
 from agent_comms.field_codec import FieldCodec
+from agent_comms.messages import Message, MessageType
 from agent_comms.goals import Goal
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_attempt import MissingInput, ReservedInput
@@ -42,7 +43,7 @@ from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.threads import Thread
 from agent_comms.turn_context import (
     ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, PreviewProvenance, RecordedContextTurn,
-    SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment, ToolCatalogSegment, NextContextTurn, UserInputSegment,
+    SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment, ToolCatalogSegment, NextContextTurn, UserInputSegment, WireProvenance,
 )
 from compaction_retention_fixture import Condition, Measurement, PairedRecallDesign, Question, RecallRound, RecallScenario, RecordedAnswers, RecordedNativeProbes, ScoredScenario, coding_scenario
 from retained_native_fixture import RecordedConditionInstallation, RecordedNativeCheckpoint, RecordedNativeProbe
@@ -67,6 +68,167 @@ class RecordedMeasurementTests(unittest.TestCase):
         raw = json.dumps(FieldCodec.encode(value), ensure_ascii=False).encode()
         path.write_bytes(raw)
         return FileProvenance(str(path), hashlib.sha256(raw).hexdigest())
+
+    def test_probe_checkpoint_applies_to_latest_cut_on_input_branch(self):
+        # A completed cut includes its original subsequent answers. A fresh
+        # probe may follow those messages, but not a different/newer cut.
+        rows = (
+            {'type': 'session', 'id': self.identity.session_id},
+            {'type': 'compaction', 'id': 'cut', 'summary': 'Original cut'},
+            {'type': 'message', 'id': 'direct', 'parentId': 'cut',
+             'message': {'role': 'user', 'content': 'First probe'}},
+            {'type': 'message', 'id': 'reply', 'parentId': 'direct',
+             'message': {'role': 'assistant', 'content': [], 'stopReason': 'stop'}},
+            {'type': 'message', 'id': 'continued', 'parentId': 'reply',
+             'message': {'role': 'user', 'content': 'Distinct continued probe'}},
+            {'type': 'compaction', 'id': 'newer', 'parentId': 'reply',
+             'summary': 'A different cut'},
+            {'type': 'message', 'id': 'superseded', 'parentId': 'newer',
+             'message': {'role': 'user', 'content': 'Uses newer cut'}},
+            {'type': 'message', 'id': 'unrelated',
+             'message': {'role': 'user', 'content': 'Other branch'}},
+        )
+        self.session.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+        self.session.chmod(0o600)
+        with NativeEntry.open_evidence(self.session) as evidence:
+            _, entries = evidence.observe()
+            originals = {entry.id: entry for entry in entries}
+            captured = (None, originals['cut'], frozenset(), None)
+            # Original capture/fork integrity is unchanged; this checks the
+            # new applicability relation using the real acquired branch owner.
+            with patch.object(RecordedNativeCheckpoint, 'capture', return_value=captured) as capture:
+                for key in ('direct', 'continued'):
+                    with self.subTest(input=key):
+                        self.assertIs(self.checkpoint.capture_for_probe(
+                            self.identity, evidence, None, evidence, originals[key]), captured)
+                for key in ('superseded', 'unrelated'):
+                    with self.subTest(input=key), self.assertRaisesRegex(ValueError, 'latest compaction'):
+                        self.checkpoint.capture_for_probe(
+                            self.identity, evidence, None, evidence, originals[key])
+                self.assertEqual(capture.call_count, 4)
+
+    def test_probe_observation_snapshot_preserves_raw_bytes_after_writer_append(self):
+        source = self.root / 'observer.jsonl'
+        raw = b'{"stage":"observed", "counter":0}\n'
+        source.write_bytes(raw)
+        destination = self.root / 'sealed.jsonl'
+        reference = RecordedNativeCheckpoint.snapshot_observation(source, destination)
+        with source.open('ab') as writer:
+            writer.write(b'{"stage":"observer-runtime-complete"}\n')
+        self.assertEqual(RecordedNativeCheckpoint.read_bytes(reference), raw)
+        self.assertEqual(RecordedNativeCheckpoint.read_json_lines(reference),
+                         ({'stage': 'observed', 'counter': 0},))
+        self.assertEqual(destination.stat().st_mode & 0o777, 0o600)
+        with self.assertRaises(FileExistsError):
+            RecordedNativeCheckpoint.snapshot_observation(source, destination)
+        destination.write_bytes(raw + b' ')
+        with self.assertRaisesRegex(ValueError, 'artifact changed'):
+            RecordedNativeCheckpoint.read_bytes(reference)
+
+    def test_configured_history_uses_original_public_bodies_and_cumulative_additions(self):
+        bodies = ('Original binding archive /artifacts/S4/α/source, λ 🙂.',
+                  'Never replay an uncertain input.',
+                  'cold-review remains an available alternative.')
+        publications = tuple(Message('human', 'agent', body, MessageType.INFO,
+                                     seq=index, timestamp=1.0)
+                             for index, body in enumerate(bodies, 1))
+        before = tuple(FieldCodec.encode(message) for message in publications)
+        scenario = RecallScenario.configured_retention('original-declaration-reference', publications)
+        steps = scenario.construction_rounds()
+        self.assertEqual(steps[0]['history_additions'], bodies)
+        self.assertEqual(steps[0]['source_text'], '\n'.join(bodies))
+        self.assertEqual(tuple(len(round_.history) for round_ in scenario.rounds), (3, 4, 5))
+        for previous, current in zip(scenario.rounds, scenario.rounds[1:]):
+            addition, = current.history_after(previous.history)
+            self.assertEqual(current.history, previous.history + (addition,))
+        self.assertEqual(steps[1]['history_additions'], (
+            'Authorized correction: the binding archive root is now /artifacts/S4/β/corrected.',))
+        self.assertEqual(steps[2]['history_additions'], (
+            'Explicitly drop the archive-root constraint. No binding archive root remains for this task.',))
+        for step in steps:
+            question = json.loads(step['probe_text'].split('\n', 1)[1])
+            self.assertTrue(all(set(item) == {'id', 'prompt'} for item in question['questions']))
+        self.assertEqual(tuple(FieldCodec.encode(message) for message in publications), before)
+        self.assertEqual(FieldCodec.decode(RecallScenario, FieldCodec.encode(scenario)), scenario)
+        # Existing historical placeholders still fail the original prefix
+        # owner; there is no inferred wording or compatibility reconstruction.
+        historical = replace(scenario, rounds=tuple(replace(round_, history=(f'private-source-cut-{index}',))
+            for index, round_ in enumerate(scenario.rounds, 1)))
+        with self.assertRaisesRegex(ValueError, 'preceding frozen history prefix'):
+            historical.construction_rounds()
+
+    def test_adjacent_revision_intervals_keep_every_frozen_pair(self):
+        scenario = coding_scenario()
+        mass = {'evaluated': True, 'constraints': {'eligible': 2, 'unauthorized': 0}}
+        reports = {'r1': {},
+            'r2': {'observed_interval': {'from_round': 'r1', 'to_round': 'r2', 'revision_mass': mass}},
+            'r3': {'observed_interval': {'from_round': 'r2', 'to_round': 'r3', 'revision_mass': mass}}}
+        complete = scenario.revision_intervals(reports)
+        self.assertEqual(tuple(complete), ('r2', 'r3'))
+        self.assertTrue(all(value['evaluated'] for value in complete.values()))
+        self.assertIs(complete['r2']['constraints'], mass['constraints'])
+        for missing in ('r1', 'r2', 'r3'):
+            with self.subTest(missing=missing):
+                partial = scenario.revision_intervals({key: value for key, value in reports.items()
+                                                      if key != missing})
+                self.assertEqual(tuple(partial), ('r2', 'r3'))
+                for before, after in (('r1', 'r2'), ('r2', 'r3')):
+                    self.assertEqual(partial[after]['evaluated'], missing not in (before, after))
+                    if not partial[after]['evaluated']:
+                        self.assertEqual(partial[after]['missing_checkpoints'], (missing,))
+                        self.assertNotIn('constraints', partial[after])
+        no_comparison = scenario.revision_intervals({'r1': {}, 'r2': {}})
+        self.assertFalse(no_comparison['r2']['evaluated'])
+        contradicted = {**reports, 'r3': {'observed_interval': {
+            'from_round': 'r1', 'to_round': 'r3', 'revision_mass': mass}}}
+        with self.assertRaisesRegex(ValueError, 'frozen adjacent rounds'):
+            scenario.revision_intervals(contradicted)
+
+    def test_wide_observed_cut_interval_cannot_fill_missing_round(self):
+        rows = ({'type': 'session', 'id': self.identity.session_id},
+                {'type': 'compaction', 'id': 'first', 'summary': 'First'},
+                {'type': 'compaction', 'id': 'middle', 'parentId': 'first', 'summary': 'Middle'},
+                {'type': 'compaction', 'id': 'last', 'parentId': 'middle', 'summary': 'Last'},
+                {'type': 'compaction', 'id': 'other', 'summary': 'Other branch'})
+        self.session.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+        self.session.chmod(0o600)
+        first = replace(self.checkpoint, reference=SummaryOperationIdentity(str(self.session), 'first'))
+        last = replace(self.checkpoint, reference=SummaryOperationIdentity(str(self.session), 'last'))
+        request = manual_summary_record(self.session)
+        attempts = {key: SelectedSummaryAttempt(key, str(self.session), request.journal_json(),
+                                                request, ReservedSummary())
+                    for key in ('first', 'last')}
+        run = RecordedNativeProbes({}, {'r1': first, 'r3': last})
+        mass = {'evaluated': True, 'constraints': {'eligible': 2, 'unauthorized': 0}}
+        # Journal/authored-scope corroboration is separately qualified. Exercise
+        # the real source branch owner and both callers' shared comparison here.
+        with NativeEntry.open_evidence(self.session) as evidence:
+            _, entries = evidence.observe()
+            by_id = {entry.id: entry for entry in entries}
+            captures = {key: (attempts[key], by_id[key], frozenset(), None) for key in attempts}
+            def capture(cut, session, reader):
+                return captures[cut.reference.operation_id]
+            with patch.object(RecordedNativeCheckpoint, 'capture', autospec=True, side_effect=capture), \
+                    patch.object(RecordedNativeCheckpoint, 'summary_usage', return_value={'evaluated': False}), \
+                    patch.object(RecordedNativeCheckpoint, 'revision_from', return_value=mass):
+                reports, _, _ = run.observe_acquired(coding_scenario(), {self.session: evidence}, run.checkpoints)
+                wide = reports['r3']['observed_interval']
+                self.assertEqual((wide['from_round'], wide['to_round']), ('r1', 'r3'))
+                self.assertIs(wide['revision_mass'], mass)
+                self.assertFalse(reports['r3']['revision_mass']['evaluated'])
+                self.assertEqual(reports['r3']['revision_mass']['missing_checkpoints'], ('r2',))
+                scored = coding_scenario().score(Condition.TASK_MEMORY, RecordedAnswers({}))
+                result = scored.public_native(reports, {}, {})
+                self.assertEqual(tuple(result['revision_mass']), ('r2', 'r3'))
+                self.assertTrue(all(not value['evaluated'] for value in result['revision_mass'].values()))
+                direct = last.inspect(first)
+                self.assertIs(direct['revision_mass'], mass)
+                self.assertEqual(direct['source_changes'], wide['source_changes'])
+                with self.assertRaisesRegex(ValueError, 'distinct original ancestor'):
+                    last.compare_acquired(first, captures['first'], captures['first'], evidence)
+                unrelated = (attempts['first'], by_id['other'], frozenset(), None)
+                with self.assertRaisesRegex(ValueError, 'distinct original ancestor'):
+                    last.compare_acquired(first, unrelated, captures['last'], evidence)
 
     def submitted_capture(self):
         owner = Thread('original', frozenset(), str(self.root), created_at=12)
@@ -1207,8 +1369,20 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertEqual(observed['usage'].cache_read, 0)
 
     def test_sdk_presence_requires_original_request_and_unchanged_bytes(self):
-        owner = Thread('fixture-owner', frozenset(), str(self.root))
-        retained = RetainedTaskFacts((GoalTaskFact(Goal('Keep λ original', 'goal-fixture')),))
+        comms = Comms(self.root / 'request-wire')
+        comms.messaging.initialize_private_initial_protocol()
+        owner = comms.registry.declare(Thread('fixture-owner', frozenset(), str(self.root)))
+        subject = comms.messaging.send_user_message(owner.name, 'Keep λ original',
+                                                   worktree=owner.worktree)
+        pin = comms.messaging.pin_user_constraint(owner.name, subject.reference,
+                                                  worktree=owner.worktree)
+        retained = comms.bus.log.retained_context(owner.name, comms.registry).retained
+        checkpoint = replace(self.checkpoint, wire=comms.root / 'bus.jsonl',
+            registry_scope=self.artifact('request-scope.json', comms.registry.store.read()))
+        request = manual_summary_record(self.session, incarnation=owner.incarnation, retained=retained)
+        attempt = SelectedSummaryAttempt('request', str(self.session), request.journal_json(),
+                                        request, ReservedSummary())
+        original_publications = checkpoint.scoped_facts(attempt)['retained_publications']
         context = NativeContextRecord('a' * 32, self.identity.session_id, 'user-entry', 1, 'b' * 64)
         raw = json.dumps(retained.text, ensure_ascii=False, separators=(',', ':')).encode()
         segment = SystemLayerSegment(content=retained.text, tokens=12,
@@ -1225,20 +1399,41 @@ class RecordedMeasurementTests(unittest.TestCase):
         original = probe.read_sdk_context()
         manifest = probe.request_manifest(context, original)
         texts, construction = probe.serialized_construction(original, manifest)
-        report = probe.prompt_presence(retained, texts, construction)
+        publications = {'evaluated': False, 'reason': 'No original wire scope authored'}
+        report = probe.prompt_presence(retained, texts, construction, publications=publications)
         self.assertTrue(report['exact_envelope_present'])
         self.assertFalse(report['final_transport_evaluated'])
+        self.assertIs(report['retained_source_binding'], publications)
+        binding = probe.prompt_presence(retained, texts, construction,
+                                       publications=original_publications)['retained_source_binding']
+        self.assertTrue(binding['evaluated'])
+        self.assertTrue(binding['exact_envelope_present'])
+        self.assertEqual(binding['context_digest'], context.llm_context_digest)
+        self.assertEqual(set(binding['references']), {subject.reference, pin.reference})
+        self.assertEqual(binding['authored_wordings'], original_publications['authored_wordings'])
+        with self.assertRaisesRegex(ValueError, 'another original envelope'):
+            probe.prompt_presence(retained, texts, construction,
+                                  publications=dict(original_publications, source_digest='f'*64))
+        # An empty envelope result does not declare the original wording absent
+        # elsewhere, and retained publication alone cannot fill missing request bytes.
+        no_envelope = probe.prompt_presence(retained, ('"Keep λ original"',), construction,
+                                            publications=original_publications)['retained_source_binding']
+        self.assertTrue(no_envelope['evaluated'])
+        self.assertFalse(no_envelope['exact_envelope_present'])
         self.assertTrue(construction['evaluated'])
         self.assertEqual(construction['artifact'], probe.sdk_segment_bytes)
         self.assertEqual(construction['utf8_bytes'], len(raw))
         self.assertFalse(construction['final_transport_evaluated'])
-        self.assertFalse(probe.prompt_presence(None, texts, construction)['evaluated'])
-        self.assertFalse(probe.prompt_presence(RetainedTaskFacts(()), texts, construction)['evaluated'])
+        self.assertFalse(probe.prompt_presence(None, texts, construction,
+                                             publications=publications)['evaluated'])
+        self.assertFalse(probe.prompt_presence(RetainedTaskFacts(()), texts, construction,
+                                             publications=publications)['evaluated'])
         absent = replace(probe, sdk_segment_bytes=None)
         absent_texts, unavailable = absent.serialized_construction(original, manifest)
         self.assertIsNone(absent_texts)
         self.assertFalse(unavailable['evaluated'])
-        self.assertEqual(absent.prompt_presence(retained, absent_texts, unavailable), unavailable)
+        self.assertEqual(absent.prompt_presence(retained, absent_texts, unavailable,
+                                              publications=original_publications), unavailable)
         wrong = replace(probe, sdk_segment_bytes=self.artifact('changed-segments.json', ('different',)))
         with self.assertRaisesRegex(ValueError, 'measured source'):
             wrong.serialized_construction(original, manifest)
@@ -1781,6 +1976,7 @@ for (const original of [source,undefined]) {
         self.assertEqual(partial['bounded_sdk_application']['unavailable_rounds'], identities[1:])
         self.assertEqual(partial['source_delivery']['unavailable_rounds'], identities)
         self.assertEqual(partial['source_delivery']['available_rounds'], ())
+        self.assertEqual(partial['retained_source_request']['unavailable_rounds'], identities)
         self.assertEqual(partial['full_history_capacity']['unavailable_rounds'], identities)
         self.assertEqual(partial['installed_narrative_source']['unavailable_rounds'], identities)
         self.assertEqual(partial['constructed_source_prefix']['unavailable_rounds'], identities)
@@ -1791,6 +1987,17 @@ for (const original of [source,undefined]) {
         self.assertTrue(observed['source_delivery']['evaluated'])
         self.assertFalse(observed['installed_sdk_source']['evaluated'])
         self.assertFalse(observed['sdk_entry_selection']['evaluated'])
+        self.assertFalse(observed['retained_source_request']['evaluated'])
+        request_evidence = {identities[0]: dict(original, provider_prompt_presence={
+            'retained_source_binding': {'evaluated': True, 'exact_envelope_present': True}}),
+            identities[1]: dict(original, provider_prompt_presence={
+            'retained_source_binding': {'evaluated': True, 'exact_envelope_present': False}})}
+        linked = scored.condition_construction(request_evidence, unavailable)
+        self.assertEqual(linked['retained_source_request']['present_rounds'], identities[:1])
+        self.assertEqual(linked['retained_source_request']['absent_envelope_rounds'], identities[1:2])
+        self.assertEqual(linked['retained_source_request']['unavailable_rounds'], identities[2:])
+        self.assertFalse(linked['source_delivery']['evaluated'])
+        self.assertFalse(linked['evaluated'])
         self.assertTrue(observed['native_request_admission']['evaluated'])
         self.assertEqual(partial['native_request_admission']['unavailable_rounds'], identities[1:])
         self.assertFalse(observed['full_history_capacity']['evaluated'])
@@ -1932,6 +2139,58 @@ for (const original of [source,undefined]) {
         ineligible = first.revision_from(first, empty, empty)
         self.assertFalse(ineligible['evaluated'])
         self.assertIsNone(ineligible['constraints']['mass'])
+
+    def test_retained_publications_verify_original_wording_separately_from_pin(self):
+        # A certified pin must not hide changed/missing original USER wording.
+        # The real private wire owns publication; no native input is authored.
+        comms = Comms(self.root / 'wording')
+        comms.messaging.initialize_private_initial_protocol()
+        owner = comms.registry.declare(Thread('recipient', frozenset(), str(self.root)))
+        subject = comms.messaging.send_user_message(owner.name, 'Keep /archive/λ exact',
+                                                   worktree=owner.worktree)
+        pin = comms.messaging.pin_user_constraint(owner.name, subject.reference,
+                                                  worktree=owner.worktree)
+        retained = comms.bus.log.retained_context(owner.name, comms.registry).retained
+        cut = replace(self.checkpoint, wire=comms.root / 'bus.jsonl',
+            registry_scope=self.artifact('wording-scope.json', comms.registry.store.read()))
+
+        def attempt(facts):
+            request = manual_summary_record(self.session, incarnation=owner.incarnation, retained=facts)
+            return SelectedSummaryAttempt('wording', str(self.session), request.journal_json(),
+                                          request, ReservedSummary())
+
+        measured = cut.scoped_facts(attempt(retained))['retained_publications']
+        self.assertTrue(measured['evaluated'])
+        self.assertEqual(set(measured['references']), {subject.reference, pin.reference})
+        self.assertEqual(measured['source_digest'], retained.source_digest.value)
+        self.assertEqual(measured['authored_wordings'], (
+            {'declaration': pin.reference, 'wording': WireProvenance(subject.reference)},))
+        changed = RetainedTaskFacts(tuple(replace(fact, source=replace(subject, body='Changed λ'))
+            if subject in fact.wire_sources() else fact for fact in retained.facts))
+        with self.assertRaises(RelationViolationError):
+            cut.scoped_facts(attempt(changed))
+        missing = RetainedTaskFacts(tuple(fact for fact in retained.facts
+                                         if subject not in fact.wire_sources()))
+        with self.assertRaisesRegex(RelationViolationError, 'original captured wording'):
+            cut.scoped_facts(attempt(missing))
+        self.assertFalse(replace(cut, wire=None).scoped_facts(attempt(retained))
+                         ['retained_publications']['evaluated'])
+        empty = cut.scoped_facts(attempt(RetainedTaskFacts(())))['retained_publications']
+        self.assertFalse(empty['evaluated'])
+        self.assertEqual(empty['references'], ())
+
+        # Frozen missing rounds remain unavailable, and retained publications
+        # cannot fill native source_delivery or request-presence measurements.
+        scenario = coding_scenario()
+        result = scenario.score(Condition.TASK_MEMORY, RecordedAnswers({})).public_native(
+            {'r1': {'scoped_facts': {'retained_publications': measured},
+                    'summary_usage': {'evaluated': False},
+                    'canonical_availability': {'evaluated': False}}}, {}, {})
+        self.assertTrue(result['retained_publications']['r1']['evaluated'])
+        self.assertTrue(all(not result['retained_publications'][identity]['evaluated']
+                            for identity in ('r2', 'r3')))
+        self.assertTrue(all(not item['evaluated'] for item in result['source_delivery'].values()))
+        self.assertTrue(all(not item['evaluated'] for item in result['provider_prompt_presence'].values()))
 
 
 if __name__ == '__main__':

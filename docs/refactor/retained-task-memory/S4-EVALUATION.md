@@ -78,9 +78,21 @@ unprobed `checkpoints` maps, plus optional original `stimuli` references. It val
 order through one borrowed original native source. Per-probe checkpoint,
 `sdk_context` and `context_manifest` references belong on RecordedNativeProbe.
 Checkpoint `registry_scope` references an original RegistryDocument capture;
-the document supplies its snapshot. Original certified `wire` corroborates task
-publications for scoped revision measurements. Missing original evidence stays
-unevaluated. SDK prompt presence is separate from final HTTP payload presence.
+the document supplies its snapshot. Original certified `wire` corroborates every retained wire row, including the
+separate USER wording referenced by a constraint pin. The checkpoint/probe/scorer
+exposes `retained_publications` and declaration-to-wording references through the
+existing task source methods. Publication/retention does not fill the native
+`source_delivery` measurement or prove presence in a request. Missing original
+evidence stays unevaluated; contradictory captured wording refuses.
+The same checkpoint publication observation can be bound to an original SDK
+request only through the existing `RecordedNativeProbe.prompt_presence` read.
+Its retained source digest must match the original envelope, and the existing
+serialization/request checks supply the actual request bytes. The result keeps
+`retained_source_binding` separate from native stimulus delivery. A missing
+complete envelope does not prove its individual wording absent elsewhere.
+`retained_source_request` reports frozen-round availability and exact-envelope
+presence separately; historical observations without this evidence stay
+unavailable. This does not qualify HTTP submission or a matched intervention. SDK prompt presence is separate from final HTTP payload presence.
 Original NativeSummaryPayload and every original assistant step's PiUsage supply available counters;
 absent counters are never measured zeros. See
 [the receiving scope](../../checkpoints/repeated-retention-runner-20261002.md).

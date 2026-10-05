@@ -1,0 +1,22 @@
+
+==================================== ERRORS ====================================
+_________ ERROR collecting tests/test_compaction_retention_fixture.py __________
+ImportError while importing test module '/home/ts/wt/comms-async-bus-read-publication-custody-20261002/tests/test_compaction_retention_fixture.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_compaction_retention_fixture.py:19: in <module>
+    from test_backend_native_lifecycle import native_backend
+tests/test_backend_native_lifecycle.py:16: in <module>
+    from native_backend_fixture import native_backend_fixture
+tests/native_backend_fixture.py:18: in <module>
+    from agent_comms.owned_turn import OwnedTurn
+src/agent_comms/owned_turn.py:13: in <module>
+    from acp import RequestError
+E   ModuleNotFoundError: No module named 'acp'
+=========================== short test summary info ============================
+ERROR tests/test_compaction_retention_fixture.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.31s

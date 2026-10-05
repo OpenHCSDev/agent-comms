@@ -1,0 +1,15 @@
+{
+  "original_head": "2d6961f91848655f5e6facc7b9c18153fd117bf4",
+  "run": 37214910759,
+  "job": 111473342126,
+  "status": "FAILURE",
+  "delta": {
+    "StringDispatch:src/agent_comms/import_records.py": 1,
+    "StringDispatchArms:src/agent_comms/import_records.py": 4
+  },
+  "log_path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/codex-hosted-debt-negative.log",
+  "log_sha256": "31405c06149e6385f809854e32fa31c6454ba0ccf6f425c4d490c8391c876982",
+  "correction": "Original declared message members own role behavior; both manual role lists/stored role removed; original envelope hook preserves member scope. Final hosted check pending.",
+  "final_import_cases": 15,
+  "elapsed_seconds": 0.36
+}

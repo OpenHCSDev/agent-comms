@@ -1,0 +1,10 @@
+{
+  "endpoint": "/home/ts/wt/w6e02/test_authored_import_registere0/wire/runtime/3038265.sock",
+  "removed_inode": 18745974,
+  "original_controller_pid": 3038265,
+  "original_controller_absent": true,
+  "live_exact_descriptors": [],
+  "unprivileged_census_gaps": 299,
+  "prior_privileged_census": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/style22-EinsteinW6-successor-final-borrowers.json",
+  "scope": "Closed owned synthetic endpoint only; original source/registry/labels/input evidence retained. No public runtime, package, native keeper, or owner recovery touched. RuntimeServer.close owns graceful endpoint cleanup; outer SIGTERM interrupted the original test before joined shutdown. This does not locate the App wait."
+}

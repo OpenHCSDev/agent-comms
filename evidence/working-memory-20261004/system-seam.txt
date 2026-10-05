@@ -1,0 +1,3 @@
+Source seam: original resource loader read -> SystemLayerSegment -> original buildSystemPrompt writes -> AgentSession._baseSystemPrompt -> committed TurnContext.capture.
+The loader and assembly both carry the original value with its byte coordinates; observer file-list attribution is deleted. Exact full-value equality preserves attribution across extension boundaries; transformed values are unattributed. No substring matching or later file read.
+External ResourceLoader implementations may omit the new source-observation capability; their values remain usable but attribution is unknown. Existing system prompt getter/string API remains external, while the internal base prompt becomes the rich original SystemLayerSegment.

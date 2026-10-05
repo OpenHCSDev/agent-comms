@@ -56,7 +56,7 @@ class ResetRuntimeInstallation(PreserveRuntimeInstallation):
 
 @dataclass(frozen=True)
 class CarryNativeRuntimeInstallation(RuntimeInstallation):
-    """Native6 declarations; original compaction proof facts remain unchanged."""
+    """Declared stopped carry; original compaction proof facts remain unchanged."""
 
     original: NativeSchemaDeclaration
     source_python: Annotated[Path, PathText]

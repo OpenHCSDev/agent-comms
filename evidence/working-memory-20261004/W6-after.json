@@ -1,0 +1,266 @@
+{
+  "revision": "bd210595422c068a459498bf9ce515b328c312bd",
+  "root": "src/agent_comms",
+  "parsed_modules": 324,
+  "parse_omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 131,
+      "import": "from .working_memory_worker import AnnotationWorker"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 133,
+      "consumer": "AnnotationWorker(comms, self._runtime, self, AnnotationPolicy.configured())"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 50,
+      "declaration": "ContextAnnotatedUpdate",
+      "bases": [
+        "AgentCommsUpdate"
+      ],
+      "fields": [
+        "context: ContextManifest",
+        "labels: tuple[ModelLabel, ...]"
+      ],
+      "methods": []
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 582,
+      "declaration": "AnnotationsCalibrationCliCommand",
+      "bases": [
+        "CliCommand"
+      ],
+      "fields": [
+        "operation: Literal['calibration'] = option('operation', help='calibration')",
+        "question: QuestionVersion = option('--question', normalize=json.loads, help='JSON of the original question member and version digest')",
+        "classifier: ClassifierVersion = option('--classifier', normalize=json.loads, help='JSON of the original classifier member and pinned release')"
+      ],
+      "methods": [
+        "apply",
+        "encode_result"
+      ]
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 591,
+      "import": "from .working_memory_annotations import WorkingMemoryAnnotations"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 593,
+      "consumer": "WorkingMemoryAnnotations.calibration(ctx.root / 'coordination.sqlite3', self.question, self.classifier)"
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 19,
+      "import": "from .working_memory_annotations import WorkingMemoryAnnotations"
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 71,
+      "consumer": "WorkingMemoryAnnotations(self.session)"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 421,
+      "declaration": "ContextAnnotationsRuntimeRequest",
+      "bases": [
+        "ContextRecordedSegmentRuntimeRequest"
+      ],
+      "fields": [
+        "classifier: ClassifierVersion"
+      ],
+      "methods": [
+        "result"
+      ]
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 435,
+      "declaration": "ContextAnnotationCorrectionRuntimeRequest",
+      "bases": [
+        "ContextRecordedSegmentRuntimeRequest"
+      ],
+      "fields": [
+        "label: ModelLabel",
+        "answer: type[SpanAnswer]",
+        "worktree: str"
+      ],
+      "methods": [
+        "result"
+      ]
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 425,
+      "import": "from .working_memory_annotations import WorkingMemoryAnnotations"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 444,
+      "consumer": "segment.contains_span(self.label.span)"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 370,
+      "declaration": "ContributionCoordinates",
+      "bases": [],
+      "fields": [
+        "kind: type[ContextSegment]",
+        "provenance: tuple[Provenance, ...]",
+        "offset: int",
+        "length: int",
+        "sha256: str"
+      ],
+      "methods": [
+        "__post_init__",
+        "capture",
+        "public_text",
+        "sentences",
+        "contains"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 421,
+      "declaration": "ContextSpan",
+      "bases": [],
+      "fields": [
+        "segment_sha256: str",
+        "coordinates: ContributionCoordinates"
+      ],
+      "methods": [
+        "public_text"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 494,
+      "declaration": "SystemLayerSegment",
+      "bases": [
+        "MeasuredNativeSegment"
+      ],
+      "fields": [
+        "content: str",
+        "tokens: int",
+        "sha256: str",
+        "utf8_bytes: int",
+        "source_spans: tuple[ContributionCoordinates, ...] = field(default=(), metadata={'wire_omit_default': True})"
+      ],
+      "methods": [
+        "__post_init__",
+        "assembly_ranges",
+        "contains_contribution",
+        "disclosure_for",
+        "source_membership",
+        "source_ranges",
+        "provider_value",
+        "public_text",
+        "render_into"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 211,
+      "consumer": "self.kind.contains_contribution(self, span.coordinates)"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 337,
+      "consumer": "ContextSpan(digest, sentence)"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 632,
+      "consumer": "ContextSpan(self.sha256, coordinates)"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 19,
+      "declaration": "WorkingMemoryAnnotations",
+      "bases": [],
+      "fields": [],
+      "methods": [
+        "__init__",
+        "address",
+        "reading",
+        "labels",
+        "calibration",
+        "for_segment",
+        "for_context",
+        "for_segments",
+        "reserve",
+        "complete",
+        "fail",
+        "correct"
+      ]
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 68,
+      "consumer": "cls.for_segments(path, (segment,), classifier)"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 77,
+      "consumer": "cls.for_segments(path, tuple((segment for manifest in manifests for root in manifest.segments for segment in root.original_values())), classifier)"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 91,
+      "consumer": "segment.contains_span(label.span)"
+    },
+    {
+      "path": "src/agent_comms/working_memory_disclosure.py",
+      "line": 9,
+      "import": "from .turn_context import ContextSegment, ContextSpan"
+    },
+    {
+      "path": "src/agent_comms/working_memory_labels.py",
+      "line": 13,
+      "import": "from .turn_context import ContextSpan"
+    },
+    {
+      "path": "src/agent_comms/working_memory_requests.py",
+      "line": 10,
+      "import": "from .turn_context import ContextSpan"
+    },
+    {
+      "path": "src/agent_comms/working_memory_worker.py",
+      "line": 10,
+      "import": "from .acp_extension import ContextAnnotatedUpdate, encode_updates"
+    },
+    {
+      "path": "src/agent_comms/working_memory_worker.py",
+      "line": 12,
+      "import": "from .working_memory_annotations import PreviouslyRequestedAnnotation, WorkingMemoryAnnotations"
+    },
+    {
+      "path": "src/agent_comms/working_memory_worker.py",
+      "line": 20,
+      "declaration": "AnnotationWorker",
+      "bases": [],
+      "fields": [],
+      "methods": [
+        "__init__",
+        "observe",
+        "start",
+        "retired",
+        "close",
+        "store",
+        "answer",
+        "run"
+      ]
+    },
+    {
+      "path": "src/agent_comms/working_memory_worker.py",
+      "line": 96,
+      "consumer": "ContextAnnotatedUpdate(manifest, tuple(labels))"
+    }
+  ],
+  "limits": "Lexical AST declarations and consumers; dynamic dispatch, resource currentness and installed path require semantic reading and application validation."
+}

@@ -1,0 +1,20 @@
+{
+  "rows": [
+    {
+      "row": 1,
+      "label": "ModelLabel",
+      "section": "Unclassified",
+      "question": "kind",
+      "request_id": "authored-controlled-answer"
+    },
+    {
+      "row": 2,
+      "label": "HumanLabel",
+      "section": "Promised",
+      "question": "kind",
+      "request_id": "authored-controlled-answer",
+      "author": "user"
+    }
+  ],
+  "scope": "original committed authored rows after timeout; no registered App acceptance"
+}

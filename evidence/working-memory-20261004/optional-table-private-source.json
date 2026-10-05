@@ -1,0 +1,9 @@
+{
+  "state": "fresh original private initialization PASS after shared table owner correction",
+  "schema": 10,
+  "elapsed": 0.2775560939917341,
+  "native_processes_launched": 0,
+  "provider_calls": 0,
+  "root": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-w6-source-private01",
+  "scope": "source-path private schema/sidecar; not installed App or W6 acceptance"
+}

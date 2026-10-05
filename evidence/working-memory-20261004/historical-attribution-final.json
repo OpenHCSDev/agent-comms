@@ -1,0 +1,10 @@
+{
+  "source": "ca492ef408d06024f8c8c5615fb8fc9ddc0bb730",
+  "scope": "Source-only final changed historical and current assembly attribution family; no native attestation",
+  "exit": 0,
+  "checks": "Original three checks plus historical loaded-file descriptors do not attribute sentences",
+  "log_sha256": "1efbd5fc9da76a71b0acad1451577d9edfe50962077b19e434edf3ce3a299dba",
+  "provider_inputs": 0,
+  "external_requests": 0,
+  "owned_children": []
+}

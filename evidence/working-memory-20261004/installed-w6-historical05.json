@@ -1,0 +1,82 @@
+{
+  "state": "Scoped current-main historical ReferenceNode registered App PASS; purpose returned, independent Bohr closure pending",
+  "Core_source": "3aacd708fb9c699cc80c6b864e0ae8cf9ccff7f8",
+  "Core_wheel_sha256": "0ed358e9a1d845f3fdceca138d0f2fa02824ac61161b3d8ba9a5e32b1cc3b6e3",
+  "Toad_source": "76ec05358b0ef790d10746e49ee0f09c036e2baa",
+  "Toad_wheel_sha256": "e414911627406bee6654171ee5796779a476358279770f1193d930131b0b6a4e",
+  "Toad_evidence_head": "75d5f0a0",
+  "Toad_evidence": "https://github.com/OpenHCSDev/toad/blob/75d5f0a0/evidence/working-memory-view-20261004/historical05/README.md",
+  "whole_handback": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-historical-installed05/whole-handback.json",
+  "whole_handback_sha256": "4d895e7cd0a1bfb075653dced74e32615c34ea9bd6f69e7fcaa7a40a905c8693",
+  "receipt_hashes": {
+    "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-historical-installed05/terminal.json": "5f9c524738f30e6804c7c9cee74242d16bed5e88f167e7edcb3cd5799eb5c790",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-historical-installed05/stdout.log": "6b9ce7551154a86b590435d4cb2ea2257256e78f55433eedcefebcc9348c8305",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-historical-installed05/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-historical-installed05/restore-receipt.json": "e18b0eefeebe10f2138d692a6673ccd9d6e1519063a99f1f41a2ab700f81da4c",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-historical-installed05/candidate-source-proof.json": "62cc0016b09952a784f3d24ada050093317a3a1365825dbfe71e2c461c8d227d",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-historical-installed05/candidate-activation.json": "1632466c871b684cf604387715811953f8fcc791bb17b907e3b672078fedb651",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-historical-installed05/grant-binding.json": "36425979bbe2a41b7a4cb49623d0061e959c9fcf311d99a8b99b79820f99eea1",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-historical-installed05/command.json": "435ab9fb34c917db48f97f31ce54b71e5421e3864eea1b9d8f969a5d7dbca2d5",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-historical-installed05/handle.json": "ce0d28682fd6b49b22e3e4c1bcb1a72a818b44e1b0bd7c75835b64cfae482acd",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-historical-installed05/ASSESSMENT.json": "64c1ab5b74f42163e397059a7e7dd8574a4473fe078ec67566858d802883c032",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-historical-installed05/install.log": "eeb3aa9ae78ec3ebd628b4f2b1237e6e09ce67c5300169d33795457296a4fcb9",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-historical-installed05/restore.log": "8cadf64bf5727623b2cbe0313070da6617eec4ecd0b09d36b17514038c3fca94",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-historical-installed05/restore-verify.log": "ca4a95f25d2cd9ac8f5930ab325e68f25f6c8bb44f7de8372a53c906296b5ed2",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-historical-installed05/baseline-packages.json": "24b6682dd106750f69ac2d548edc9c0aba2876a9b6fdf4eb326a95dd96f46bd7",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-historical-installed05/restored-packages.json": "24b6682dd106750f69ac2d548edc9c0aba2876a9b6fdf4eb326a95dd96f46bd7",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-historical-installed05/candidate-packages.json": "e4fe37442a72a1c1382a929503ae7c04e3724f5fc3f1b4ee83481e822c743389"
+  },
+  "accepted_scope": {
+    "state": "Scoped installed historical ReferenceNode registered App PASS; whole current444 restoration verified, independent Bohr closure pending",
+    "elapsed_seconds": 30.217576351948082,
+    "pytest": "1 passed in 26.35s",
+    "historical": [
+      "authored original developer instruction imported as historical, never current instruction",
+      "original registered ACP/session source-root/incarnation admission",
+      "painted native node/line/non-toggle selection with actual cursor/focus/intent identity",
+      "authenticated source read",
+      "query historical \u03bb -> one original source match",
+      "original selected-source export with byte-range provenance and not-current marker"
+    ],
+    "separate_local_USER": "Controlled local UserInputSegment correction -> original USER HumanLabel Promised; not attribution to imported historical instruction",
+    "default_OFF": true,
+    "new_inputs": 0,
+    "provider_calls": 0,
+    "native_prompts": 0,
+    "accepted_AnnotationNode_GUI_repeat": false,
+    "actual_Codex_reads": 0,
+    "source_inputdisposition_incarnation_unchanged": "Original granted test assertions PASS",
+    "export": {
+      "path": "/home/ts/wt/w6h05/test_authored_import_registere0/historical-source.txt",
+      "sha256": "08b26eee7f480d4d046605230218ce6447fde312535b615eb6cc7a87765cfd43"
+    },
+    "source": {
+      "path": "/home/ts/wt/w6h05/test_authored_import_registere0/authored-history.jsonl",
+      "sha256": "eb798f0a15ff6ef50954eac6b89e64e67c39b041523ed01f8511d02b4a00c1e0"
+    },
+    "remaining": [
+      "retained schema9->10 stopped carry installed qualification (Mendel663)",
+      "W7 empirical calibration and W8 study/disclosure remain OFF/unqualified"
+    ],
+    "no_physical_or_whole_feature_claim": true,
+    "carry_target_read_not_granted_or_executed": true,
+    "runner": {
+      "pid": 3290651,
+      "start_time": 63911289
+    },
+    "runner_absent": true,
+    "owned_groups": []
+  },
+  "actual_floor": {
+    "members": 1469,
+    "packages": 69,
+    "protected_originals": 519,
+    "byte_mode_readlink_failures": [],
+    "extra_package_assets": [],
+    "remaining_private_runtime_sockets": []
+  },
+  "SDK_preview_repeated": false,
+  "accepted_authentic_GUI_repeated": false,
+  "default_OFF": true,
+  "no_full_feature_or_physical_claim": true
+}

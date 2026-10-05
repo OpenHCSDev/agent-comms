@@ -1,0 +1,238 @@
+{
+  "collector": "original audit.findings.Package AST",
+  "revision": "a38c06de24315fa868de45786e01fefadb0aaef1",
+  "root": "src/agent_comms",
+  "parsed": 316,
+  "omissions": [],
+  "identity_signature_sites": [
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 118,
+      "function": "retain",
+      "arguments": "self, child: PiSessionChild, identity: NativeSessionIdentity",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 140,
+      "function": "require_reopen",
+      "arguments": "self, identity: NativeSessionIdentity",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 144,
+      "function": "external_write",
+      "arguments": "self, identity: NativeSessionIdentity",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 100,
+      "function": "_recorded_private_contexts",
+      "arguments": "root: Path, session: NativeSessionIdentity",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/native_admission_epoch.py",
+      "line": 29,
+      "function": "record",
+      "arguments": "self, row, db, admission_generation: int, session: NativeSessionIdentity",
+      "postponed": false
+    },
+    {
+      "path": "src/agent_comms/native_admission_epoch.py",
+      "line": 47,
+      "function": "record",
+      "arguments": "self, row, db, admission_generation: int, session: NativeSessionIdentity",
+      "postponed": false
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 119,
+      "function": "reopen",
+      "arguments": "self, identity: NativeSessionIdentity",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 162,
+      "function": "reopen",
+      "arguments": "self, identity: NativeSessionIdentity",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 236,
+      "function": "selected",
+      "arguments": "self, identity: NativeSessionIdentity, package: Path",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 120,
+      "function": "recorded_contexts",
+      "arguments": "cls, db: sqlite3.Connection, session: NativeSessionIdentity",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 39,
+      "function": "require_same_session",
+      "arguments": "self, other: NativeSessionIdentity",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 46,
+      "function": "same_session",
+      "arguments": "self, other: NativeSessionIdentity",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 122,
+      "function": "prompt_boundary",
+      "arguments": "self, delegate: Callable[..., AbstractContextManager[None]], identity: NativeSessionIdentity",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 164,
+      "function": "prompt_boundary",
+      "arguments": "self, delegate: Callable[..., AbstractContextManager[None]], identity: NativeSessionIdentity",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 81,
+      "function": "require_source",
+      "arguments": "self, identity: NativeSessionIdentity",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 103,
+      "function": "require_source",
+      "arguments": "self, identity: NativeSessionIdentity",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "line": 131,
+      "function": "require_source",
+      "arguments": "self, identity: NativeSessionIdentity",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 197,
+      "function": "_admit_once",
+      "arguments": "self, identity: NativeSessionIdentity, selected_runtime_revision: FileRevision | None",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 272,
+      "function": "__call__",
+      "arguments": "self, identity: NativeSessionIdentity, selected_runtime_revision: FileRevision | None=None",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 28,
+      "function": "_exchange_observation",
+      "arguments": "persistent: PersistentPiSession, request: NativeQuery, source: NativeSessionIdentity, *, expected_package: Path, timeout: float",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 88,
+      "function": "attest",
+      "arguments": "self, identity: NativeSessionIdentity",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 92,
+      "function": "admit",
+      "arguments": "self, actual: NativeSessionIdentity, runtime_revision",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 253,
+      "function": "attest",
+      "arguments": "self, identity: NativeSessionIdentity",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 257,
+      "function": "admit",
+      "arguments": "self, actual: NativeSessionIdentity, runtime_revision",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 316,
+      "function": "admit",
+      "arguments": "self, actual: NativeSessionIdentity, runtime_revision",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 47,
+      "function": "journal_entries",
+      "arguments": "self, identity: NativeSessionIdentity",
+      "postponed": true
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 100,
+      "function": "journal_entries",
+      "arguments": "self, identity: NativeSessionIdentity",
+      "postponed": true
+    }
+  ],
+  "epoch_import_consumers": [
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 20,
+      "statement": "from .native_admission_epoch import NativeAdmissionEpoch, UnrecordedNativeAdmission"
+    }
+  ],
+  "type_hint_reflection_consumers": [
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 294,
+      "statement": "get_type_hints(type(bound))"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 308,
+      "statement": "get_type_hints(cls)"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 357,
+      "statement": "get_type_hints(cls)"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 401,
+      "statement": "get_type_hints(member)"
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "line": 253,
+      "statement": "get_type_hints(declaration, include_extras=True)"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 295,
+      "statement": "get_type_hints(cls, include_extras=True)"
+    }
+  ],
+  "dynamic_resolution_limit": "Attribute dispatch requires semantic reading; no runtime resolution proof."
+}

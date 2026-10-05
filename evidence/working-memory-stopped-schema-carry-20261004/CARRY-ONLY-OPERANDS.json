@@ -1,0 +1,223 @@
+{
+  "state": "PROPOSED carry-only binding; NO issued source or target purpose/access/reservation",
+  "tools_source": "88e8d2f9983df69de876401abf0d3ec506235985",
+  "original_recipe_git": "9d6e2c956f490a337ae43f9f55f6950d1e7bb3f9",
+  "original_recipe_sha256": "b3afc8496e4dc016179f56ebfd177c338cbd6c7e112a74e697352f4f60c8cf04",
+  "tools_sha256": {
+    "tools/cutover/native_schema_carry.py": "08d5b673910f96634ad017eb7e8224cb440e5b5cfea7c07d597b3ddf0f209c2b",
+    "tools/cutover/native_schema_carry_controls.py": "450678fe8a510273f89aad9c9bcc260eab52d1f25be58f24b3056821df930420",
+    "tools/cutover/runtime_installation.py": "77841672b6d9d99e3cb4c724706ffdad7eefd604aab583743f2e4b341156224c"
+  },
+  "target_operands": "/home/ts/wt/comms-field-codec-closure-20260928/evidence/working-memory-20261004/stopped-carry-current-main-target-operands.json",
+  "target_operands_sha256": "334b6db60ea1a8e9742a4ddda58045a094267888d65c286d72093ea62f77ef43",
+  "target_source": "3aacd708fb9c699cc80c6b864e0ae8cf9ccff7f8",
+  "target_wheel": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-historical-main3aac-source/agent_comms-0.1.0-py3-none-any.whl",
+  "target_wheel_sha256": "0ed358e9a1d845f3fdceca138d0f2fa02824ac61161b3d8ba9a5e32b1cc3b6e3",
+  "target_assets": 355,
+  "target_tuple": [
+    10,
+    3,
+    3,
+    6
+  ],
+  "target_prefix": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002",
+  "target_python": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python",
+  "target_package_writer_and_whole_restore": "Einstein ONLY; actual1469/69/519 floor/origins through original normal installer; Bohr issues specific purpose after c3ed actual close/fresh eligibility",
+  "source_python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+  "source_tuple": [
+    9,
+    3,
+    3,
+    6
+  ],
+  "source_donor_whole_handback": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/source-donor-whole-handback.json",
+  "source_donor_whole_handback_sha256": "7f827a066132799f487345cbe54644c6aca1a03af3ad88149665e4f21b17a0b8",
+  "original_source_declaration": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/original9-declaration.json",
+  "original_source_declaration_sha256": "97110417427ede82ae91fa16a76855537d1ca2f1a9b88dffdd80ce848a17d57b",
+  "original_seed_stdout_sha256": "2be7a42674b82d364c8a0a720bfa9af7398ccf7d65093ce63dca7dc6f8e32d06",
+  "source_purpose_required": "NEW explicit540 immutable installed-source re-declaration READ; original8f7c independently wholeCLOSED0fd92, not inherited",
+  "target_purpose_required": "NEW explicit style22 target import/READ and isolated carry on ONLY this stopped-copy root after soleEinstein schema10 stage/source proof; c3ed historical App loan returned, NOT carry authority",
+  "effective_argv": [
+    "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python",
+    "-B",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry_controls.py",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004",
+    "--source-python",
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "--stopped-original",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/stopped-original9"
+  ],
+  "source_redeclaration_child_argv": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry.py",
+    "--declaration"
+  ],
+  "source_redeclaration_entry": "Exactly original_declaration(source_python) inside existing target control; no manual second probe/seed/read step.",
+  "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+  "environment": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "ABSENT"
+  },
+  "base": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004",
+  "authored_original": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/authored-original9",
+  "stopped_original": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/stopped-original9",
+  "stopped_root_full_mode": 16832,
+  "stopped_files": [
+    {
+      "relative_path": ".bus.jsonl.lock",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "full_mode": 33188,
+      "mtime_ns": 1791160637958413670,
+      "stopped_copy_inode": 2661177,
+      "original_inode": 2661150,
+      "bytes": 0
+    },
+    {
+      "relative_path": ".bus_meta.json.lock",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "full_mode": 33188,
+      "mtime_ns": 1791160637958413670,
+      "stopped_copy_inode": 2661165,
+      "original_inode": 2661151,
+      "bytes": 0
+    },
+    {
+      "relative_path": ".catalog.json.lock",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "full_mode": 33188,
+      "mtime_ns": 1791160637906412598,
+      "stopped_copy_inode": 2661170,
+      "original_inode": 2661147,
+      "bytes": 0
+    },
+    {
+      "relative_path": ".compaction-publication-handoff.lock",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "full_mode": 33152,
+      "mtime_ns": 1791160638312420963,
+      "stopped_copy_inode": 2661164,
+      "original_inode": 2661158,
+      "bytes": 0
+    },
+    {
+      "relative_path": ".native_prompt_bindings.sqlite3.snapshot-lock",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "full_mode": 33152,
+      "mtime_ns": 1791160638134417296,
+      "stopped_copy_inode": 2661171,
+      "original_inode": 2661153,
+      "bytes": 0
+    },
+    {
+      "relative_path": ".registry-owner-guard",
+      "sha256": "58285cc5c3014ba805051afdedad7e13f6ba4b6b056fb4c023b4d005c88aca76",
+      "full_mode": 33152,
+      "mtime_ns": 1791160638327421272,
+      "stopped_copy_inode": 2661176,
+      "original_inode": 2661154,
+      "bytes": 188
+    },
+    {
+      "relative_path": ".registry.json.lock",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "full_mode": 33188,
+      "mtime_ns": 1791160637898412434,
+      "stopped_copy_inode": 2661172,
+      "original_inode": 2661145,
+      "bytes": 0
+    },
+    {
+      "relative_path": ".wire.lock",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "full_mode": 33188,
+      "mtime_ns": 1791160637906412598,
+      "stopped_copy_inode": 2661174,
+      "original_inode": 2661146,
+      "bytes": 0
+    },
+    {
+      "relative_path": "bus.jsonl",
+      "sha256": "e0ce2240953a6f4ca7e9b5eaaea525308548990203f020f7692e8eaa40e13433",
+      "full_mode": 33152,
+      "mtime_ns": 1791160638269420077,
+      "stopped_copy_inode": 2661169,
+      "original_inode": 2661157,
+      "bytes": 1399
+    },
+    {
+      "relative_path": "bus_meta.json",
+      "sha256": "2bcda79fd9c82f7540a4737adffb7708f2873b6b9dd0923ad7f7bd82b3588044",
+      "full_mode": 33152,
+      "mtime_ns": 1791160638309188938,
+      "stopped_copy_inode": 2661168,
+      "original_inode": 2661156,
+      "bytes": 819
+    },
+    {
+      "relative_path": "catalog.json",
+      "sha256": "d123a627e69c834e64b20cb582255406ff504dc7f4245b7bafa68505f45fe5a7",
+      "full_mode": 33152,
+      "mtime_ns": 1791160637949828428,
+      "stopped_copy_inode": 2661166,
+      "original_inode": 2661148,
+      "bytes": 297
+    },
+    {
+      "relative_path": "coordination.sqlite3",
+      "sha256": "aefcb9ef6dd7e98e41ce7165481dfa36b17d333c2e7a0db44882a4fd4a611f20",
+      "full_mode": 33152,
+      "mtime_ns": 1791160638262419933,
+      "stopped_copy_inode": 2661167,
+      "original_inode": 2661152,
+      "bytes": 397312
+    },
+    {
+      "relative_path": "native_prompt_bindings.sqlite3",
+      "sha256": "f2f41017e6a5a08cb28f54459497611aa4954df344e68412e47cb96603ba6c60",
+      "full_mode": 33152,
+      "mtime_ns": 1791160638138417378,
+      "stopped_copy_inode": 2661163,
+      "original_inode": 2661155,
+      "bytes": 12288
+    },
+    {
+      "relative_path": "private_bus_checkpoint.sqlite3",
+      "sha256": "96582c78586e62592dc922771049931c5661869f7d3fb6340b2041f8114e653e",
+      "full_mode": 33152,
+      "mtime_ns": 1791160638304420799,
+      "stopped_copy_inode": 2661175,
+      "original_inode": 2661159,
+      "bytes": 45056
+    },
+    {
+      "relative_path": "registry.json",
+      "sha256": "df8e6ae8f401d0e290cc647f2c6034fdb49c17290145d3d3185c6712df6d0a32",
+      "full_mode": 33152,
+      "mtime_ns": 1791160638325640407,
+      "stopped_copy_inode": 2661173,
+      "original_inode": 2661149,
+      "bytes": 2715
+    }
+  ],
+  "stopped_file_manifest_sha256": "a991dda8c5097c85556cfc5bc7507d0fd1bb47eaa7c667dd6ba718a38a54a56f",
+  "stdout": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/target-control.stdout.json",
+  "stderr": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/target-control.stderr.log",
+  "outputs": [
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/receipt.json",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/matched-candidate",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/original-preimages/reviewed-carry.json",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/original-preimages/reviewed-stores.json",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/original-preimages/publication-staging.json",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/original-preimages/installed.json"
+  ],
+  "carry_operator": "Mendel original663 ONLY; join exact child births/groups/FD/socket cleanup; preserve original15-file authored tree and its original declaration/seed. Install transforms stopped copy through original preimage/candidate/staging owner.",
+  "scope_exclusions": [
+    "PUBLIC334 CURRENT447 is excluded; no target use/restore",
+    "No new seed or copy",
+    "No App/native/provider/input/fork/movie/authenticW6/live corpus/UNKNOWN replay",
+    "No new environment/build/dependency/native/artifact operation",
+    "No repeated accepted authentic or historical GUI",
+    "No old purpose inheritance or automatic next loan"
+  ],
+  "proposal_preparation": "Only own tools and original authored/copy bytes hashed; neither interpreter imported or used. Actual target declaration/carry remains unqualified."
+}

@@ -1,0 +1,35 @@
+{
+  "scope": "Accepted installed original-source AnnotationNode GUI/ACP consumer; not fullworkingmemory/physical/calibration/historicalimport/carry",
+  "Core_determining": "a59ea3901c120988f2f16812b80479478c0569eb",
+  "Core_wheel": "ab640f006531a4b45515d1c6319217c2ed010532e37c20d42ac7101b9017b072",
+  "Core_assets": 355,
+  "Toad_determining": "f0711d42a4ce63c175ea8538d8fd01e9e6eacc6c",
+  "Toad_wheel": "178b3f3c8101bc4231933eeb3c89731c3164e7c1c27180a95a49ad664fed1d79",
+  "Toad_acceptance_evidence_commit": "4e604bbf8",
+  "Toad_raw_stdout_commit": "0572d044d",
+  "request": "527f6dcf-963f-4a91-95a3-f0d6ca38aff8",
+  "result": "terminal0/23.12312366301194s/pytest1PASS20.18",
+  "consumer_chain": "originalsealedWireLog -> selectedrecordedsegment/contains_span -> mountedAnnotationNode reader -> GUIdeclared answer -> originalACP/runtime/USER correction -> persisted effectiveHumanLabel -> Obeys/Promised refresh/reread",
+  "new_inputs": 0,
+  "providers": 0,
+  "ModelLabel_insertions": 0,
+  "external_requests": 0,
+  "defaultOFF": true,
+  "source_session_inputproof_history_preserved": true,
+  "source_evidence_references": {
+    "/home/ts/wt/toad-regression-widget-cost-20261001/evidence/working-memory-view-20261004/continuation03/stdout.log": "85ceff7cfda2b45a4f4671611f9fb63600eccef7ea3a958e1511fd351a6085c7",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/evidence/working-memory-view-20261004/continuation03/terminal.json": "3d926e6686c9cb0c2ef3725bd4fb2b61370cc87fb45d12ef02c3f67cd50da0f5",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/evidence/working-memory-view-20261004/continuation03/whole-handback.json": "e62cf06af3f1c5bb5c6addf89706d24892b27d24e119eb003102eed64315f3fd",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/evidence/working-memory-view-20261004/continuation03/independent-closed-lifecycle.json": "23599c5b75326deb945236326e6d8723f31ad358ea4cf3eb25e6df96f25f5654",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/evidence/working-memory-view-20261004/continuation03/independent-final-handback-readback.json": "d507ee99ea55c64fdb0c87c693532bd4f691c9ef34014b32da92a7ca79cf82ec",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/evidence/working-memory-view-20261004/continuation03/native-launch-metadata-clarification.json": "f239e73114f32936ae24aa0bb65fdb186eba12541a5218e0cbd8a36c7552e9cf"
+  },
+  "floor": "actual3344401468/69origins/287 independently restored,223UID0refs/gaps; package and native executionclaimsclosed",
+  "remaining": [
+    "historicalReferenceNode registeredAppread/search/export",
+    "retained9->10stoppedcarry independentMendel663",
+    "W7empirical corpus calibration and thresholds",
+    "W8 afteractualcalibration"
+  ],
+  "unchanged": "fcbd3nativeproducers/matching7aartifact; originalSDKsixcasepreview not rerun; no Coreproduct/native/pins/build change"
+}

@@ -1,0 +1,9 @@
+{
+  "python": "3.11.11 (main, Mar 17 2025, 21:02:09) [Clang 20.1.0 ]",
+  "interpreter": "/home/ts/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/bin/python3.11",
+  "source": "3aacd708fb9c699cc80c6b864e0ae8cf9ccff7f8",
+  "compiled_modules": 324,
+  "failures": [],
+  "source_selection": "Original git ls-files src/agent_comms *.py, builtin compile(bytes,path,exec); no source import",
+  "scope": "One merged-package minimumPython compiler check, not full imports/SDK/installedApp qualification; no nativeartifact/holderaccess"
+}

@@ -1,0 +1,47 @@
+{
+  "error": "PrivateFileRole refused canonical ordinary0644 lock file",
+  "owner": "retain_file requires private0600 data",
+  "source_children_successfully_joined": [
+    {
+      "argv": [
+        "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+        "-B",
+        "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry.py",
+        "--declaration"
+      ],
+      "pid": 2795139,
+      "birth_ticks": 63627526,
+      "pgid": 2795139,
+      "started": 1791160636.0859108,
+      "stdout": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/original9-declaration.json",
+      "stderr": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/declaration.stderr.log",
+      "returncode": 0,
+      "proc_absent": true,
+      "group_members": [],
+      "stdout_sha256": "97110417427ede82ae91fa16a76855537d1ca2f1a9b88dffdd80ce848a17d57b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "argv": [
+        "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+        "-B",
+        "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/seed_retained_index_fixture.py",
+        "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/authored-original9"
+      ],
+      "pid": 2795564,
+      "birth_ticks": 63627644,
+      "pgid": 2795564,
+      "started": 1791160637.2657151,
+      "stdout": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/source9-seed.json",
+      "stderr": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/seed.stderr.log",
+      "returncode": 0,
+      "proc_absent": true,
+      "group_members": [],
+      "stdout_sha256": "2be7a42674b82d364c8a0a720bfa9af7398ccf7d65093ce63dca7dc6f8e32d06",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "source_unchanged_no_chmod": true,
+  "stopped_directory_empty": true,
+  "disposition": "Use existing shutil.copytree/copy2 for complete ordinary filesystem tree; exact source mode/hash/inode preserved. No seed repeat or weakening private-data custody."
+}

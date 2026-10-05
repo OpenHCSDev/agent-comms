@@ -1,0 +1,776 @@
+{
+  "parser": "NRA SourceModuleBatchParser",
+  "modules": 748,
+  "omissions": [],
+  "scope": "Tracked Python src/tests/tools/experiments; direct names+attributes+declarations; lexical sites not dynamic proof; native unchanged",
+  "sites": [
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 523,
+      "node": "Attribute",
+      "name": "pin_user_constraint"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 612,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 628,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 157,
+      "node": "FunctionDef",
+      "name": "send_user_message"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 167,
+      "node": "FunctionDef",
+      "name": "pin_user_constraint"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1074,
+      "node": "FunctionDef",
+      "name": "history_after"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1144,
+      "node": "FunctionDef",
+      "name": "configured_retention"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1170,
+      "node": "FunctionDef",
+      "name": "construction_rounds"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 592,
+      "node": "Name",
+      "name": "source_delivery"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 117,
+      "node": "Attribute",
+      "name": "construction_rounds"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 681,
+      "node": "Name",
+      "name": "source_delivery"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 270,
+      "node": "Attribute",
+      "name": "source_delivery"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 289,
+      "node": "Attribute",
+      "name": "source_delivery"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 599,
+      "node": "Name",
+      "name": "source_delivery"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 257,
+      "node": "Attribute",
+      "name": "construction_rounds"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 600,
+      "node": "Name",
+      "name": "source_delivery"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1180,
+      "node": "Attribute",
+      "name": "history_after"
+    },
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 121,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 29,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 839,
+      "node": "FunctionDef",
+      "name": "source_delivery"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 423,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 514,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_catalog_document.py",
+      "line": 84,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_certified_bootstrap.py",
+      "line": 38,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_certified_bootstrap.py",
+      "line": 58,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_certified_bootstrap.py",
+      "line": 59,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 23,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_channel_display.py",
+      "line": 135,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_channel_display.py",
+      "line": 196,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_channel_display.py",
+      "line": 208,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_channel_retirement.py",
+      "line": 119,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_channel_retirement.py",
+      "line": 117,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_channel_retirement.py",
+      "line": 87,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_channels.py",
+      "line": 405,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_channels.py",
+      "line": 91,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_compaction_recipient_scope.py",
+      "line": 16,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_compaction_recipient_scope.py",
+      "line": 21,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_compaction_recipient_scope.py",
+      "line": 30,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_compaction_recipient_scope.py",
+      "line": 41,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 270,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "line": 274,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_cutover_admission.py",
+      "line": 24,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_cutover_admission.py",
+      "line": 59,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 199,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_mentions.py",
+      "line": 18,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_mentions.py",
+      "line": 40,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_mentions.py",
+      "line": 55,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_mentions.py",
+      "line": 70,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_mentions.py",
+      "line": 195,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_mentions.py",
+      "line": 228,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_mentions.py",
+      "line": 243,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 178,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 155,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 97,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 110,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_private_bus_checkpoint.py",
+      "line": 94,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 51,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 63,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 84,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 132,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 176,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 192,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 197,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 213,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 223,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 225,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 290,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_private_human_ingress.py",
+      "line": 234,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 136,
+      "node": "Attribute",
+      "name": "configured_retention"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 137,
+      "node": "Attribute",
+      "name": "construction_rounds"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2064,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2065,
+      "node": "Attribute",
+      "name": "pin_user_constraint"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2085,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 142,
+      "node": "Attribute",
+      "name": "history_after"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 158,
+      "node": "Attribute",
+      "name": "construction_rounds"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 352,
+      "node": "Attribute",
+      "name": "construction_rounds"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 386,
+      "node": "Attribute",
+      "name": "source_delivery"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 390,
+      "node": "Attribute",
+      "name": "source_delivery"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 422,
+      "node": "Attribute",
+      "name": "source_delivery"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 424,
+      "node": "Attribute",
+      "name": "source_delivery"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 427,
+      "node": "Attribute",
+      "name": "source_delivery"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 430,
+      "node": "Attribute",
+      "name": "source_delivery"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 443,
+      "node": "Attribute",
+      "name": "construction_rounds"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 327,
+      "node": "Attribute",
+      "name": "construction_rounds"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 336,
+      "node": "Attribute",
+      "name": "history_after"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 339,
+      "node": "Attribute",
+      "name": "history_after"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 419,
+      "node": "Attribute",
+      "name": "source_delivery"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 394,
+      "node": "Attribute",
+      "name": "source_delivery"
+    },
+    {
+      "path": "tests/test_reply_routing.py",
+      "line": 66,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 35,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 36,
+      "node": "Attribute",
+      "name": "pin_user_constraint"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 98,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 41,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 164,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 183,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 234,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_stack_channel_delivery.py",
+      "line": 124,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_stack_channel_delivery.py",
+      "line": 134,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 63,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 66,
+      "node": "Attribute",
+      "name": "pin_user_constraint"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 99,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 102,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 106,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 107,
+      "node": "Attribute",
+      "name": "pin_user_constraint"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 111,
+      "node": "Attribute",
+      "name": "pin_user_constraint"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 125,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 127,
+      "node": "Attribute",
+      "name": "pin_user_constraint"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 137,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 196,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 379,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 416,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 476,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 584,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 88,
+      "node": "Attribute",
+      "name": "pin_user_constraint"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 90,
+      "node": "Attribute",
+      "name": "pin_user_constraint"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 131,
+      "node": "Attribute",
+      "name": "pin_user_constraint"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 134,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 140,
+      "node": "Attribute",
+      "name": "pin_user_constraint"
+    },
+    {
+      "path": "tests/test_view_unread.py",
+      "line": 30,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/test_viewer_snapshot_index.py",
+      "line": 105,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 278,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 279,
+      "node": "Attribute",
+      "name": "pin_user_constraint"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 287,
+      "node": "Attribute",
+      "name": "configured_retention"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 315,
+      "node": "Attribute",
+      "name": "history_after"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 318,
+      "node": "Attribute",
+      "name": "history_after"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 319,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tools/cutover/retained_task_installed_pilot.py",
+      "line": 69,
+      "node": "Attribute",
+      "name": "send_user_message"
+    },
+    {
+      "path": "tools/cutover/retained_task_installed_pilot.py",
+      "line": 71,
+      "node": "Attribute",
+      "name": "pin_user_constraint"
+    }
+  ]
+}
