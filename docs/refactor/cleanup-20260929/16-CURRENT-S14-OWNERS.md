@@ -9,7 +9,9 @@ and failed its width action because the right SessionThreadSidebar was still
 collapsed. Its floor and claims are independently closed at8aea263f/readbackf876;
 original SDK journals and movie remain held. Heis corrected the original native
 right-sidebar disclosure and normally joined accepted466 at25dae6d2. Final06
-proposal4505b319 at1c741b7c supersedes the unissued62e proposal. One authorized
+proposale06cbdd7 at30412f19 supersedes the unissued4505/62e proposals. The
+last source-only correction makes capture_state derive reconciliation from the
+original worker, rather than reading the deleted running mirror. One authorized
 normal union wheel2ece83e3 contains the accepted worker fix and otherwise matches
 old7f401 across318 assets. Parent matched all20 current helpers, the three other
 controls and all three wheel hashes. Bohr is advancing a fresh specific purpose;

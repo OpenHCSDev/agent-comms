@@ -3102,31 +3102,40 @@ BLOCKED/ACTIVE observations remain historical, with no goal-tool resume/replay.
 
 ### Current delivery checkpoint, 2026-10-05
 
-- [x] Explorer functional448 published and ordinary public journey accepted:
-  original18 checks pass; actual warm/channel/native-return images reviewed after
-  exit; same native owner/root retained. This is not motion/FPS acceptance.
-- [x] C3 current-goal ownership675 normally merged7b68d630 at exact35af6a42.
-  Six canonical scopes qualify across original5 plus corrected1; actual saved-SDK
-  TurnRunner same-goal progress/replacement cases both pass. Original negatives
-  preserved; actual540 floor restored and independent purpose closed9de9f54b.
-- [ ] Deliver merged C3 in the next coherent local cohort. Actual public Explorer
-  installation is unchanged; retained a685 matches merged Core build inputs.
-- [ ] Heis joint453/454 workspace/source-lifetime and connected readiness change:
-  branch a432852c removes four queued source-read awaits through the existing
-  observation owner. Native NoAgent/project and connected callback verification
-  remain distinct; source-only currently.
-- [ ] Kepler Text66 paint rectangle reuse: source2e8e872e, original damage/exposure
-  and origins preserved; affected controls, actual integration and frame timings
-  remain pending. Text65 is merged and its e253 artifact retained.
-- [ ] Fast useful paint, smooth mouse-wheel/held-scroll/reversal/End, actual loaded
-  scaling and the configured continuous journey remain unfinished with Heis/Kepler.
-- [ ] S4 source/case authoritative USER publication remains Arendt's; same-owner
-  certified native branch selection/restoration contract is Mendel's next separate
-  registry/custody source scope. No provider/study or holder operation is inferred.
+- [x] Explorer functional448 and later PUBLIC465 are installed; the original
+  corrected-environment ordinary journey passed18 native checks. Saved/channel
+  body, tab return, draft and Undo images were inspected after terminal.
+  This is not motion/FPS acceptance.
+- [x] C3 goal ownership675 and selected saved-SDK resource676 are merged and
+  delivered in PUBLIC465 through retained Core3fe. Original canonical/settlement
+  and seven saved-SDK qualifications stand; all borrowed floors and claims closed.
+- [x] Workspace457/455 and initial-prompt461 are merged and delivered at their
+  distinct installed strengths. Local/persistent renderer458 and cold-output464
+  are also merged and delivered; accepted controls need no repeat.
+- [x] Viewport worker466 is merged0bc37f7a after one mounted cancellation-before-
+  entry, same-source resume, coalescing and joined-close acceptance. Former485
+  floor and all claims independently closed; original failures remain preserved.
+- [ ] Deliver merged466 in the local public cohort. Sch prepares the concrete
+  source/wheel/receiving proposal separately; this grants no current access.
+- [ ] Heis460 final06 includes accepted466 in one normal union wheel and fixes
+  right-sidebar disclosure plus all related worker observers. The unchanged
+  full150s cold/wheel/width/reversal/End/B-A scope has not run yet. Fast useful
+  paint, frame cadence, CPU and actual loaded scaling remain unfinished.
+- [ ] Complete the original continuous saved/channel/DM/fork/notification/reply/
+  handling/queue/status journey. Draft468 is adopted on a separate Heis source
+  integration; no current affected configured acceptance is inferred.
+- [ ] Complete the original and round-two deletion/resource scope. Mendel has
+  traced T4 production ownership as implemented and is reconciling stale control
+  consumers with Heis before edits. Heis retains TC1/budget/workflow integration.
+- [ ] Full S4 remains unfinished. Source679/680 is merged and recorded678 reads
+  are independently closed; clocks/accounting and genuine original SDK source
+  selection/capacity/matched workflows retain their evidence gaps. Arendt's
+  draft681 owns recorded-fork ancestry/frozen-source alignment only. No study,
+  provider input or holder access is inferred.
 
-Latest details and exact acceptance limits are in16-CURRENT-S14-OWNERS.md. These
-checks preserve the full original backlog and runtime finish line; none marks the
-whole goal complete.
+Current exact owners, artifacts and acceptance limits are in
+16-CURRENT-S14-OWNERS.md. Historical checkpoints below remain preserved; their
+pending states do not override this current section. The full goal remains active.
 
 Text66 subsequent actual update:22 affected native source App cases passed in
 2.54s (controller3.745095314s); Parent verified original log hash and exact source/
