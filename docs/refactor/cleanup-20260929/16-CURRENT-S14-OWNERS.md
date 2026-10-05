@@ -2752,3 +2752,24 @@ installed argv. Current Parent baseline source is not the intended installed
 product; target imports are explicitly checked under targetsys.prefix and only
 tests enter PYTHONPATH. This source boundary was sent to Bohr for its exact
 existing-purpose preparation; no package/runtime access occurred.
+
+2026-10-05 next installed checkpoint: Core673 fresh ce6ae8 purpose was read
+before its single normal Core-only stage. Candidate proof03a35 verifies355
+wheel/installed assets,154 unchanged nonCore records and all10 distribution
+versions with the truthful8546 file origin; original uv pip check passed.
+The seven-node check remains held until Bohr binds runner correction3783a8:
+existing system pytest is appended only after installed application import.
+No test/native/ACP/provider operation has run. Original510 floor records and
+5f restoration operands are preserved; whole restoration/return follows the
+one authorized check. BoundedRun launch and original-floor readback scripts
+are prepared without execution.
+
+Parent verified all155 original421 candidate artifacts, Ready effe080d and
+preparation6603168c, with publication receipt/preimages absent. Explicit
+disposition791fb4f5 supersedes that unused candidate's publication hold so
+Bohr can consider485 for a fresh453 purpose after actual current-floor/ref
+clearance. All original evidence/activation/history stays immutable. This
+does not certify old416 rollback, release former419/534, or lend953 Explorer.
+Heis effective correction99eaf names candidate7a truthfully; original2b464
+and the319-asset b13 wheel stay unchanged. Fast useful paint and physical
+wheel cadence still need their actual installed journeys.
