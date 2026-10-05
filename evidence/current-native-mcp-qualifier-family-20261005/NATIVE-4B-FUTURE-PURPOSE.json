@@ -119,9 +119,16 @@
         "PYTHONHOME",
         "PYTHONSTARTUP",
         "PYTHONUSERBASE",
-        "VIRTUAL_ENV"
+        "VIRTUAL_ENV",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy"
       ],
-      "original_mock_model": "minimal child HOME/dummy offline key/exact bound loopback origin established per case by original control; no configured auth/external provider."
+      "original_mock_model": "minimal child HOME/dummy offline key/exact bound loopback origin established per case by original control; no configured auth/external provider.",
+      "proxy_relation": "Original committed guard refuses inherited proxy variables at every default-fetch call. Clear six declared proxy selectors for authored direct-loopback positives; no proxy negative runtime claim or guard change."
     },
     "owned_output": "/home/ts/.cache/agent-scratch/mendel-mcp472-682-native02-20261005",
     "existing_controls_bounds": "Original40s waits/12s receipt-model/15s node-PTY/3s PTY-cleanup/model join/10s permission unchanged; no bound raised/waiver/new product timer. Runner body compile-only, not imported/collected/run."
