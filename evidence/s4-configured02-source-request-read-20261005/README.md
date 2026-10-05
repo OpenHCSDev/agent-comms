@@ -1,4 +1,4 @@
-# Same configured02 source/request read preparation
+# Same configured02 source/request read — scoped Ready
 
 Source trace: `RecordedNativeProbe.capture_input` preserves the passed original
 checkpoint, its original registry FileProvenance and private wire path. The
@@ -19,12 +19,11 @@ supports them. Missing originals remain unavailable or refuse through those
 owners, not converted to positive evidence. Output is a separate measurement;
 no original probe/reference/input/state is changed.
 
-`command.json` is the exact proposed command/cwd/environment/output tuple. The
-literal Python command was parsed without executing/importing it. No holder or
-original artifact was read during preparation. The old configured02-read01 raw
-readback supplies protected preimage hashes. This request needs one NEW fresh
-Bohr recorded READ/import purpose; old540 purposes are closed. No native artifact
-or SDK/provider/model input is needed, and no Sch artifact loan is requested.
+`command.json` retains the exact executed command/cwd/environment/output tuple.
+Preparation parsed the literal command without holder imports or original reads.
+The accepted configured02-read01 readback supplied protected preimage hashes.
+The fresh Bohr recorded READ/import purpose was consumed once and is now closed.
+No native artifact or SDK/provider/model input was used; no Sch loan was needed.
 The original656 installed product remains its truthful old filewheel source;
 it is not declared equal to current main. New private reader bytes are separately
 pinned in the command. All current runtime/native/tool owners remain untouched.
@@ -40,8 +39,8 @@ It imports current source only for the outer child owner, never overlays the
 leased reader's imported product. The leased child environment remains exactly
 `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tests:tools/cutover`; both source scopes are
 named separately. The command remains literal hashb9738b21, determining private
-reader source remains merged577347d1. This controller has only been parsed, not
-run. Actual issued purpose bytes must be read before execution; no loan inferred.
+reader source remains merged577347d1. The controller ran once after the actual
+issued purpose bytes were read and authenticated.
 
 
 ## Actual original-input read completed
@@ -70,8 +69,14 @@ The exact reader338558/birth64662517 was joined/retired through ParentedProcess
 and is absent. Outer control command exited0, but its PID/birth was not retained;
 that limit is explicit, with no invented controller identity.
 
-The WHOLE540 import/READ claim was explicitly returned to Bohr. Independent
-current347Core+94keepers+69metadata/10distributions/truthful5forigin readback,
-fresh privileged census and closure of only the existing671 lifecycle belong to
-him and remain pending at this checkpoint. No expired or next purpose is reused.
-There is no native086 authority to return. No rerun is needed for this result.
+The WHOLE540 import/READ claim was returned and independently closed by Bohr.
+His final readback confirms all17 originals and current347Core+94keepers+
+69metadata/10distributions/truthful5forigin unchanged. The fresh249-process
+privileged census found no holder/output references or permission gaps; the
+reader and group are absent. `independent-handback.json` names the authenticated
+closure and readback hashes. No active writer or borrowed process remains.
+There is no native086 authority to return, no next loan, and no rerun needed.
+
+This checkpoint is Ready for the same-input recorded source/request evidence.
+Production/native/private reader bytes remain unchanged from merged577347d1.
+Full S4 remains unfinished; the USD75/30-pair study is unapproved.
