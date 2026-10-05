@@ -23,7 +23,6 @@ from agent_comms.native_entries import NativeEntry
 from agent_comms.native_pi import NativeContextProof
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.pi_vocabulary import ThinkingLevel
 from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop
@@ -32,7 +31,7 @@ from agent_comms.turn_context import FileProvenance, NativeProvenance
 from original_owner_capture import CurrentTypedCapture
 from compaction_source_successor_installed_journey import configured_saved_agent, digest
 from compaction_retention_fixture import (
-    Condition, Measurement, Question, RecallRound, RecallScenario, RecordedNativeProbes,
+    Condition, RecallScenario, RecordedNativeProbes,
 )
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 from summary_prefix_configured_installed_journey import observe_native_requests
@@ -121,33 +120,6 @@ async def condition_application(stage,package,original_python,selected_condition
                 canonical_request_budget_and_terminal=True,distinct_answer=True,new_original_inputs=1,
                 model_steps=len(measured['model_steps']),model_recall_evaluated=False,
                 final_HTTP_bytes_evaluated=False)
-
-
-def frozen_scenario(root_reference, publications: tuple[Message, ...]):
-    """Freeze original public wording and prospective corrections before cuts.
-
-    Publication bodies belong to their original messages. Future wording is
-    declared once here, then the runner publishes these exact source additions.
-    Oracle answer/evidence metadata stays separate from those public operands.
-    This value is not proof of native delivery or a matched intervention.
-    """
-    history = tuple(message.body for message in publications)
-    additions = ((),
-        ('Authorized correction: the binding archive root is now /artifacts/S4/β/corrected.',),
-        ('Explicitly drop the archive-root constraint. No binding archive root remains for this task.',))
-    rounds = []
-    for number, path in enumerate(('/artifacts/S4/α/source', '/artifacts/S4/β/corrected', 'NONE'), 1):
-        history += additions[number - 1]
-        rounds.append(RecallRound(f'cut-{number}', history, (
-            Question('archive', 'What archive root is currently binding? Answer NONE if it was explicitly dropped.',
-                     path, root_reference, obsolete=tuple(value for value in
-                        ('/artifacts/S4/α/source', '/artifacts/S4/β/corrected') if value != path)),
-            Question('replay', 'May an uncertain input be replayed? Answer yes or no.',
-                     'no', 'persistent-prohibition', measurement=Measurement.PROHIBITION),
-            Question('alternative', 'What valid review alternative remained available although warm-review was chosen?',
-                     'cold-review', 'persistent-alternative', measurement=Measurement.ALTERNATIVE),
-        )))
-    return RecallScenario('configured-original-three-cut', tuple(rounds))
 
 
 async def request_construction(stage, package, original_python, *, core_source, core_artifacts=()):
@@ -312,7 +284,7 @@ async def run(stage, package, original_python, *, core_source, core_artifacts=()
                 archive_source, archive = pin('For this private retention task, the binding archive root is /artifacts/S4/α/source.')
                 prohibition, _ = pin('Never replay an uncertain input. This prohibition remains binding throughout this task.')
                 alternative, _ = pin('warm-review was chosen; cold-review remains a valid review alternative and must remain available.')
-                scenario = frozen_scenario(json.dumps(FieldCodec.encode(archive.reference), sort_keys=True),
+                scenario = RecallScenario.configured_retention(json.dumps(FieldCodec.encode(archive.reference), sort_keys=True),
                                            (archive_source, prohibition, alternative))
                 record(stage / 'frozen-oracle.private.json', scenario)
                 record(stage / 'public-questions.json', scenario.public())

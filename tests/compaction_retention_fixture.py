@@ -29,6 +29,7 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_tools import CodingTool
 from agent_comms.pi_payloads import ReportedModel
 from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
 from agent_comms.turn_context import FileProvenance, JournalProvenance, ToolCatalogSegment
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 
@@ -1138,6 +1139,33 @@ class RecallScenario:
             intervals[after.identity] = dict(measured,
                 from_round=before.identity, to_round=after.identity)
         return intervals
+
+    @classmethod
+    def configured_retention(cls, root_reference, publications: tuple[Message, ...]):
+        """Freeze original public wording and prospective corrections before cuts.
+
+        Publication bodies belong to their original messages. Future wording is
+        declared once here, then the runner publishes these exact source additions.
+        Oracle answer/evidence metadata stays separate from those public operands.
+        This value is not proof of native delivery or a matched intervention.
+        """
+        history = tuple(message.body for message in publications)
+        additions = ((),
+            ('Authorized correction: the binding archive root is now /artifacts/S4/β/corrected.',),
+            ('Explicitly drop the archive-root constraint. No binding archive root remains for this task.',))
+        rounds = []
+        for number, path in enumerate(('/artifacts/S4/α/source', '/artifacts/S4/β/corrected', 'NONE'), 1):
+            history += additions[number - 1]
+            rounds.append(RecallRound(f'cut-{number}', history, (
+                Question('archive', 'What archive root is currently binding? Answer NONE if it was explicitly dropped.',
+                         path, root_reference, obsolete=tuple(value for value in
+                            ('/artifacts/S4/α/source', '/artifacts/S4/β/corrected') if value != path)),
+                Question('replay', 'May an uncertain input be replayed? Answer yes or no.',
+                         'no', 'persistent-prohibition', measurement=Measurement.PROHIBITION),
+                Question('alternative', 'What valid review alternative remained available although warm-review was chosen?',
+                         'cold-review', 'persistent-alternative', measurement=Measurement.ALTERNATIVE),
+            )))
+        return cls('configured-original-three-cut', tuple(rounds))
 
     def construction_rounds(self):
         """Derive ordered source additions and public probes from one oracle.

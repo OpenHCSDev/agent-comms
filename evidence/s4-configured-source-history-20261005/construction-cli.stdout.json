@@ -1,0 +1,64 @@
+{
+  "comparison_design": {
+    "oracle": {
+      "kind": "file",
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-configured-source-history-20261005/authored-oracle.json",
+      "sha256": "f66f3cadd753df49cf11de2de22c203b59401b3e0d0632716413f0efa040dc54"
+    },
+    "candidate": "task-memory",
+    "baseline": "bounded",
+    "model": "openai-codex/gpt-6.1-sol",
+    "sample_count": 2,
+    "confidence": 0.95,
+    "recall_margin": -0.02,
+    "bootstrap_samples": 100,
+    "bootstrap_seed": 20261005
+  },
+  "scenario": "configured-original-three-cut",
+  "rounds": [
+    {
+      "round": "cut-1",
+      "history_additions": [
+        "Authored initial archive \u03b1 \u03bb \ud83d\ude42.",
+        "Do not replay uncertain input.",
+        "Retain cold-review alternative."
+      ],
+      "probe_text": "Answer these recall questions using the supplied history. Return only JSON mapping the round ID to an object of question IDs and exact answer strings.\n{\"round\": \"cut-1\", \"questions\": [{\"id\": \"archive\", \"prompt\": \"What archive root is currently binding? Answer NONE if it was explicitly dropped.\"}, {\"id\": \"replay\", \"prompt\": \"May an uncertain input be replayed? Answer yes or no.\"}, {\"id\": \"alternative\", \"prompt\": \"What valid review alternative remained available although warm-review was chosen?\"}]}",
+      "source_text": "Authored initial archive \u03b1 \u03bb \ud83d\ude42.\nDo not replay uncertain input.\nRetain cold-review alternative."
+    },
+    {
+      "round": "cut-2",
+      "history_additions": [
+        "Authorized correction: the binding archive root is now /artifacts/S4/\u03b2/corrected."
+      ],
+      "probe_text": "Answer these recall questions using the supplied history. Return only JSON mapping the round ID to an object of question IDs and exact answer strings.\n{\"round\": \"cut-2\", \"questions\": [{\"id\": \"archive\", \"prompt\": \"What archive root is currently binding? Answer NONE if it was explicitly dropped.\"}, {\"id\": \"replay\", \"prompt\": \"May an uncertain input be replayed? Answer yes or no.\"}, {\"id\": \"alternative\", \"prompt\": \"What valid review alternative remained available although warm-review was chosen?\"}]}",
+      "source_text": "Authorized correction: the binding archive root is now /artifacts/S4/\u03b2/corrected."
+    },
+    {
+      "round": "cut-3",
+      "history_additions": [
+        "Explicitly drop the archive-root constraint. No binding archive root remains for this task."
+      ],
+      "probe_text": "Answer these recall questions using the supplied history. Return only JSON mapping the round ID to an object of question IDs and exact answer strings.\n{\"round\": \"cut-3\", \"questions\": [{\"id\": \"archive\", \"prompt\": \"What archive root is currently binding? Answer NONE if it was explicitly dropped.\"}, {\"id\": \"replay\", \"prompt\": \"May an uncertain input be replayed? Answer yes or no.\"}, {\"id\": \"alternative\", \"prompt\": \"What valid review alternative remained available although warm-review was chosen?\"}]}",
+      "source_text": "Explicitly drop the archive-root constraint. No binding archive root remains for this task."
+    }
+  ],
+  "sampling_seed": 20261005,
+  "trajectories": [
+    {
+      "sample": 1,
+      "condition_order": [
+        "bounded",
+        "task-memory"
+      ]
+    },
+    {
+      "sample": 2,
+      "condition_order": [
+        "bounded",
+        "task-memory"
+      ]
+    }
+  ],
+  "scope": "Prospective authored source/probe operands and randomized arm order only; no native input, checkpoint, intervention, registration, capacity or spending grant"
+}
