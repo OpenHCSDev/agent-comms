@@ -1,0 +1,15 @@
+{
+  "oracle": {
+    "kind": "file",
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-single-pair-operands-20261005/coding-oracle.private.json",
+    "sha256": "06264176a3c69e2bc8ae94cc65c4782b94a50fd73482b355987e1f296f032d00"
+  },
+  "candidate": "task-memory",
+  "baseline": "bounded",
+  "model": "openai-codex/gpt-6.1-sol",
+  "sample_count": 10,
+  "confidence": 0.95,
+  "recall_margin": -0.02,
+  "bootstrap_samples": 10000,
+  "bootstrap_seed": 20261004
+}
