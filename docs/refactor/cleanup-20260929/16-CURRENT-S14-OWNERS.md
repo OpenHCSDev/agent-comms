@@ -2773,3 +2773,30 @@ does not certify old416 rollback, release former419/534, or lend953 Explorer.
 Heis effective correction99eaf names candidate7a truthfully; original2b464
 and the319-asset b13 wheel stay unchanged. Fast useful paint and physical
 wheel cadence still need their actual installed journeys.
+
+### Current owner continuation after installed673 closure, 2026-10-05
+
+Core673 final6840d939 is actually merged a7cc1da6. Certified controls02 passed
+nine parameterized installed cases (5.00s, bounded8.242110359s), restored the
+original540 floor and independently closed1e0759/readback77c955. The first
+six-failure fixture attempt remains immutable. Installed wait-graph and terminal
+fence behavior is qualified; actual native callback and wholeC3 are not.
+
+Mendel owns Draft675 c10e8088: Thread current goal selection and GoalState
+activity refusal feed input review, command ingress and permit settlement.
+Parent reviewed all six changed production files: full-record/state/process
+CAS remains and673 wait-policy sections have no competing edit. Canonical
+controls and real settlement qualification remain required; no installed loan
+or prior673 result qualifies those new consumers.
+
+Heis453 fresh d365 purpose is released for its ONE original NoAgent App after
+sourceproof1e935/DTO0fcf/package-floor5ae17 binding. Candidate primary assets
+are940, with69 distributions and1883 unchanged other66 members; actual485
+recovery floor is1441/69/155. Native7a READ-only336c authorizes trust verification,
+not Node/Pi/SDK or physical execution. No App result was read at this checkpoint.
+
+Arendt674 edc6fd11 remains source-only. Parent reviewed construction-plan and
+paired-driver consumers; canonical USER case events and their original wire
+lineage/current recipient scope remain unfinished. Native prose delivery and
+request presence do not substitute for that authority. No provider, paired
+study or holder permission follows from this source review.

@@ -1743,6 +1743,24 @@ configured continuous workflow.
   floor restored exact again; whole claims returned. Independent CLOSED1e0759
   /readback77c955 confirms235 UID holder/output references and gaps zero. Live native callback and wholeC3 remain separate; no expiredloan
   inheritance.
+- Core673 is now merged as a7cc1da6, guarded at final6840d939. Its nine
+  installed certified-bus cases qualify wait-graph and terminal-fence recovery,
+  with independent whole restoration/closure above. This does not qualify a
+  live native callback or the full C3 family. Mendel's Draft675 c10e8088 derives
+  current goal selection from Thread and activity refusal from GoalState across
+  six production files; Parent reviewed the changed source and preserved CAS.
+  Canonical controls and actual settlement acceptance remain unfinished.
+- Fresh453 purpose d365 is now released by Bohr for ONE exact NoAgent App after
+  original940-asset/69-distribution proof1e935 and ownDTO0fcf binding. The actual
+  485 floor is1441 members/69 origins/155 protected originals; NRA d392 remains
+  its original VCS installation. Matching7a authority is READ-only for trust
+  verification. App release is not a result, native execution or physical wheel
+  cadence proof. Heis is the sole operator and must restore that actual floor.
+- Draft674 edc6fd11 has a source construction/paired-driver checkpoint only.
+  Case prose/native stimulus does not establish canonical USER task authority;
+  fresh arm roots also need supported original wire lineage and recipient scope.
+  Arendt owns that remaining construction chain. No paired/provider/study run is
+  authorized by this review; the USD75/30-pair study remains unapproved.
 - Original C0 family/source ledger and C4 stated class-size target have current
   evidence. Full six-file C3, TC1/T9 resource closure, loaded scaling, configured
   continuous workflow and smooth wheel/useful paint remain explicitly unfinished.
