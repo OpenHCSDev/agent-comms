@@ -209,6 +209,7 @@ class RecordedNativeCheckpoint:
             "selected_model": FieldCodec.encode(attempt.request.selected),
             "settings": FieldCodec.encode(attempt.request.settings),
             "summary_usage": self.summary_usage(entry),
+            "scoped_facts": self.scoped_facts(attempt),
             "summary_narrative": assembly.observe() if assembly is not None else {
                 "evaluated": False, "reason": "Original pre-pack summary assembly not captured"},
             "revision_mass": {
@@ -376,12 +377,13 @@ class RecordedNativeCheckpoint:
         owner = snapshot.require_active(attempt.request.source.incarnation.name)
         if attempt.request.source.incarnation.resolved(snapshot) != owner.incarnation:
             raise ValueError("Authored evidence belongs to another original owner")
+        messages = tuple(message for fact in attempt.request.retained.facts
+                         for message in fact.wire_sources())
         with WireLog(self.wire).certified_read() as source:
-            for fact in attempt.request.retained.facts:
-                for message in fact.authored_sources():
-                    delivery, = source.references((message.reference,))
-                    if delivery.message != message:
-                        raise ValueError("Retained authored fact differs from its original publication")
+            deliveries = source.references(tuple(message.reference for message in messages))
+            for message, delivery in zip(messages, deliveries, strict=True):
+                if delivery.message != message:
+                    raise ValueError("Retained wire source differs from its original publication")
         return snapshot, owner
 
     @staticmethod
@@ -452,15 +454,41 @@ class RecordedNativeCheckpoint:
 
 
     def scoped_facts(self, attempt):
-        """Read original captured configuration and scoped Decision publications."""
+        """Read captured configuration and original retained source references.
+
+        The existing task attachment resolves a declaration's original wording;
+        a pin's own body is not its USER subject. These references describe the
+        retained payload, not a delivered native input or submitted request.
+        """
         captured = self.authored_scope(attempt)
         if captured is None:
             return {"evaluated": False, "reason": "Original scope/publications unavailable",
-                    "configured_settings": {"evaluated": False}}
+                    "configured_settings": {"evaluated": False},
+                    "retained_publications": {"evaluated": False,
+                        "reason": "Original scope/publications unavailable"}}
         snapshot, owner = captured
         retained = attempt.request.retained
         declarations = self.authored_lineages(retained, owner, snapshot, DecisionTaskFact)
-        return {"evaluated": True, "scope": "Original scoped Decision alternatives only",
+        originals = {message.reference: message for fact in retained.facts
+                     for message in fact.wire_sources()}
+        authored = {message.reference: message for fact in retained.facts
+                    for message in fact.authored_sources()}
+        return {"evaluated": True,
+                "scope": "Original captured configuration, retained publications and scoped Decision alternatives",
+                "retained_publications": {
+                    "evaluated": bool(originals),
+                    "references": tuple(originals),
+                    "source_digest": retained.source_digest.value,
+                    "authored_wordings": tuple({
+                        "declaration": message.reference,
+                        "wording": message.task.original_wording_context_source(
+                            retained.original_text_source(message)),
+                    } for message in authored.values()),
+                    "reason": "Original retained wire rows corroborated" if originals
+                              else "No retained wire publications to measure",
+                    "scope": "Exact retained publications and original wording references; "
+                             "not native input delivery, request presence, HTTP bytes or recall",
+                },
                 "configured_settings": {"evaluated": owner.model is not None and owner.thinking_level is not None,
                                         "model": owner.model, "thinking": FieldCodec.encode(owner.thinking_level),
                                         "scope": "Captured registry configuration, not provider-reported request selection"},
@@ -1365,7 +1393,7 @@ class RecordedNativeProbe:
                 self.session,evidence,self.fork_journal,source,user)
             checkpoint = self.checkpoint._report(attempt, entry, covered, assembly)
             retained = attempt.request.retained
-            scoped = self.checkpoint.scoped_facts(attempt)
+            scoped = checkpoint["scoped_facts"]
         else:
             retained = None
             scoped = {"evaluated": False, "reason": "No original scoped checkpoint",

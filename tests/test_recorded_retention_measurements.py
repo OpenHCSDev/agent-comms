@@ -43,7 +43,7 @@ from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.threads import Thread
 from agent_comms.turn_context import (
     ContextManifest, FileProvenance, JournalProvenance, NativeProvenance, PreviewProvenance, RecordedContextTurn,
-    SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment, ToolCatalogSegment, NextContextTurn, UserInputSegment,
+    SegmentManifest, SystemLayerSegment, TranscriptSegment, InjectionMessageSegment, ToolCatalogSegment, NextContextTurn, UserInputSegment, WireProvenance,
 )
 from compaction_retention_fixture import Condition, Measurement, PairedRecallDesign, Question, RecallRound, RecallScenario, RecordedAnswers, RecordedNativeProbes, ScoredScenario, coding_scenario
 from retained_native_fixture import RecordedConditionInstallation, RecordedNativeCheckpoint, RecordedNativeProbe
@@ -2094,6 +2094,58 @@ for (const original of [source,undefined]) {
         ineligible = first.revision_from(first, empty, empty)
         self.assertFalse(ineligible['evaluated'])
         self.assertIsNone(ineligible['constraints']['mass'])
+
+    def test_retained_publications_verify_original_wording_separately_from_pin(self):
+        # A certified pin must not hide changed/missing original USER wording.
+        # The real private wire owns publication; no native input is authored.
+        comms = Comms(self.root / 'wording')
+        comms.messaging.initialize_private_initial_protocol()
+        owner = comms.registry.declare(Thread('recipient', frozenset(), str(self.root)))
+        subject = comms.messaging.send_user_message(owner.name, 'Keep /archive/λ exact',
+                                                   worktree=owner.worktree)
+        pin = comms.messaging.pin_user_constraint(owner.name, subject.reference,
+                                                  worktree=owner.worktree)
+        retained = comms.bus.log.retained_context(owner.name, comms.registry).retained
+        cut = replace(self.checkpoint, wire=comms.root / 'bus.jsonl',
+            registry_scope=self.artifact('wording-scope.json', comms.registry.store.read()))
+
+        def attempt(facts):
+            request = manual_summary_record(self.session, incarnation=owner.incarnation, retained=facts)
+            return SelectedSummaryAttempt('wording', str(self.session), request.journal_json(),
+                                          request, ReservedSummary())
+
+        measured = cut.scoped_facts(attempt(retained))['retained_publications']
+        self.assertTrue(measured['evaluated'])
+        self.assertEqual(set(measured['references']), {subject.reference, pin.reference})
+        self.assertEqual(measured['source_digest'], retained.source_digest.value)
+        self.assertEqual(measured['authored_wordings'], (
+            {'declaration': pin.reference, 'wording': WireProvenance(subject.reference)},))
+        changed = RetainedTaskFacts(tuple(replace(fact, source=replace(subject, body='Changed λ'))
+            if subject in fact.wire_sources() else fact for fact in retained.facts))
+        with self.assertRaises(RelationViolationError):
+            cut.scoped_facts(attempt(changed))
+        missing = RetainedTaskFacts(tuple(fact for fact in retained.facts
+                                         if subject not in fact.wire_sources()))
+        with self.assertRaisesRegex(RelationViolationError, 'original captured wording'):
+            cut.scoped_facts(attempt(missing))
+        self.assertFalse(replace(cut, wire=None).scoped_facts(attempt(retained))
+                         ['retained_publications']['evaluated'])
+        empty = cut.scoped_facts(attempt(RetainedTaskFacts(())))['retained_publications']
+        self.assertFalse(empty['evaluated'])
+        self.assertEqual(empty['references'], ())
+
+        # Frozen missing rounds remain unavailable, and retained publications
+        # cannot fill native source_delivery or request-presence measurements.
+        scenario = coding_scenario()
+        result = scenario.score(Condition.TASK_MEMORY, RecordedAnswers({})).public_native(
+            {'r1': {'scoped_facts': {'retained_publications': measured},
+                    'summary_usage': {'evaluated': False},
+                    'canonical_availability': {'evaluated': False}}}, {}, {})
+        self.assertTrue(result['retained_publications']['r1']['evaluated'])
+        self.assertTrue(all(not result['retained_publications'][identity]['evaluated']
+                            for identity in ('r2', 'r3')))
+        self.assertTrue(all(not item['evaluated'] for item in result['source_delivery'].values()))
+        self.assertTrue(all(not item['evaluated'] for item in result['provider_prompt_presence'].values()))
 
 
 if __name__ == '__main__':
