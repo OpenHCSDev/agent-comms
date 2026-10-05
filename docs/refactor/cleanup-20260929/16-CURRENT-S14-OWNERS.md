@@ -46,8 +46,9 @@ This is a targeted source review of those boundaries, not another App run or a
 claim that empirical calibration, external classification or the full feature
 is delivered. The existing stopped schema9-to10 carry is now qualified on the newly authored
 donor copy. The functional source merges are complete; ordinary delivery still needs
-449 changed-owner qualification and normal integration, then a fresh
-receiving/publication purpose. The public installation has
+the same candidate receiving freeze, followed by the original fresh
+admission and one-use carry/publication. The449 changed-owner installed check
+and normal merge are complete. The public installation has
 not yet received these Explorer changes. NativeSchemaDeclaration
 compares authentic source/target declarations; carry_coordination preserves
 original rows, rowids, sequence allocations and unrelated DDL while new declared
@@ -2499,3 +2500,43 @@ zero active references and gaps. Do not substitute the earlier225 shorthand.
 Bohr independent lifecycle closure and final source/evidence freeze remain the
 next merge/reuse boundaries. This is projected-source acceptance, not full
 continuous performance, physical motion or CPU improvement. Public444 is intact.
+
+
+## Current parallel receiving and rendering checkpoint
+
+Explorer449 exact9bc783f1 is normally merged as2b97bf25 after its one installed
+mounted Tree acceptance. Sch joined that actual source; all319 source/build
+metadata assets remain equal to the staged1a8 wheel. Under existing679abc,
+canonical51 preparation passed. The first cohort preparation correctly refused
+the authored qualification list because it repeated the separately bound package
+proof and activation as journey gates. Original input2923 and exit1 are retained.
+Parent independently verified the only correction removes those two entries: the
+effective8c451e3d list has60 distinct gates, with proof8a8 and DTO113 still bound
+as their original authorities. Bohr reconciled and released corrected cohort
+preparation only in lifecycle9b887562. No canonical recopy, restage, App repeat,
+native execution or public write is needed. Sch retains sole candidate/floor
+custody until positive freeze and whole immediate handback. Public Explorer
+publication and actual default acceptance remain unfinished.
+
+In parallel, Kepler Text63 e15f22fa now tests conservative original placement
+bounds before resolving clips, descendant ranks and projected allocations. The
+same resource owner publishes both new and cached geometry; complete captures
+and required geometry targets remain preserved. Its source controls passed26
+checks. The original retained entry/membership scan is still linear. Heis451
+uses the shared source preparation owner and original worker manager to consume
+the latest extent without cancelling a valid directional batch on every layout.
+Original snapshot, page admission and direction/retirement owners revoke stale
+work. Both changes remain source-qualified only. They must be combined into the
+affected installed wheel/frame-time journey before claiming fast scrolling or
+fast thread loading; authored demand checks do not prove physical frame cadence.
+
+Parent reviewed and normally merged Core669 exact01722bcc as
+0aab3be769e0d870fe3c4e3713866e997076eb4a. The existing checkpoint certifies all
+retained wire sources in one references acquisition; original task owners resolve
+USER wording, and the probe reuses the checkpoint result. Scorer output keeps
+retained publications separate from native source delivery and request presence.
+Parent verified receipt183ed661 and all10 raw/3 source hashes; five authored
+controls passed in1.03s and the empty-run CLI retains all three unavailable
+rounds. Runtime src/stack/tools are unchanged from2ec. No original session,
+SDK, provider or holder operation occurred; authentic request/capacity/matched
+study and full S4 remain incomplete. CI remains deferred as a merge gate.
