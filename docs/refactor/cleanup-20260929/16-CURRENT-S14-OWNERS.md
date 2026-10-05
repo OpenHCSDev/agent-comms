@@ -3071,3 +3071,27 @@ any future fresh specific package purpose. Current stage/runtime claims remain
 absent. Text65/e253 is usable for this useful joint loading checkpoint; unqualified
 Text66 or final frame targets do not hold its delivery. Actual smooth wheel and
 configured continuous acceptance remain required separately.
+
+### Native paint source qualified and normally merged, 2026-10-05
+
+Text66 control7e0ad94c extended original compositor tests for clipped negative
+origins, fully clipped logical membership, full original body capture/nonzero
+bounds/cuts and link/click metadata. The one authorized existing system-Python
+native App batch passed22/2.54s, controller3.745095314s, exit0. Original partial
+damage, exposure, selection and pending scene retirement also passed. Parent
+verified logbe411550 hash and executed7e0->published38ab source/control/build
+equality; then guarded normal merge9ea7a109 at38abbe93 and read actual GH/main.
+No accepted control was repeated, no prefix, SDK/provider, movie or CPU/frame
+measurement was used. ONE owned normal declared cachedPoetry2.2.1 Text filewheel
+and full266 Git/local/ZIP/merged build relation are authorized next, preserving
+Text65/e253. Heis coordinates actual final dependency before its one source wheel;
+any already-built65 candidate remains distinct, no fake native version equality.
+
+Parent also reviewed455 connected control5a82: original private retained fixture
+callback, genuine reconnect/observedAgentReady, original goal/delivery RPC results
+held before publication, actual editor/Undo/resize and source-close captured task
+join. It explicitly does not claim the watch_agent ready branch executed. Its two
+other identical invalidate callsites have source evidence, not runtime witness.
+Core pinf437 normally names merged6757b68/retaineda685. The old UNKNOWN compaction
+main path remains historical and unselected by the new private-original entrypoint.
+All new joint installed/runtime and physical acceptance is still pending.
