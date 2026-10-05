@@ -1,0 +1,35 @@
+{
+  "scope": "Existing published schema10 target operand handoff only; no target/donor grant, imports, declaration execution, stores or run",
+  "Core627_published_head": "b7e688292074a854870d7ca78397111c1dae1c7b",
+  "determining_source": "a59ea3901c120988f2f16812b80479478c0569eb",
+  "schema_version": 10,
+  "wheel": {
+    "source": "759c821e4cf937d2872a7f7b7a8613f5eb3119aa",
+    "wheel": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-w6-attachment-successor-source/agent_comms-0.1.0-py3-none-any.whl",
+    "sha256": "ab640f006531a4b45515d1c6319217c2ed010532e37c20d42ac7101b9017b072",
+    "bytes": 901520,
+    "assets": 355,
+    "inventory": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-w6-attachment-successor-source/source-proof.json",
+    "inventory_sha256": "0f84f3ecef6c73336086502ae11aa70f2a94d3b648c39754f14048eb67818469"
+  },
+  "published_source_equality": {
+    "record": "/home/ts/wt/comms-field-codec-closure-20260928/evidence/working-memory-20261004/current-main-W6-source-relation.json",
+    "sha256": "4aee8d1d9977aa3248d4ea8980051325eac1197a32b62dcb295159005a4fb82d",
+    "meaning": "Retained759c filewheel ALL355 currenta59 Git/local/ZIP equal; no rebuild or fakeVCS origin."
+  },
+  "target_interpreter_candidate": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+  "target_holder_candidate": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002",
+  "actual_candidate_disposition": {
+    "record": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Heis443-projected-prefetch-package-App-lifecycle.json",
+    "state": "OPEN exclusive Heis443 projected-prefetch334 package/ONEToadbuild purpose; App/native executionHELD until explicitnewSch086 and exactownerwheel/installedproof",
+    "meaning": "Currently exclusiveHeis443, not released/reserved. Future target-only qualification requires actual443 wholehandback and Bohr fresh named eligibility/floor/archive/borrower purpose."
+  },
+  "previous_restored_floor": {
+    "record": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-EinsteinW6-zero-input-continuation-final-handback-readback.json",
+    "actual_floor": "334CURRENT4401468/69origins/287 originals after independentlyclosedW6 e1c; historical pre443 observation, not current access authority"
+  },
+  "control_owner": "Mendel663 b849abf5 toolsSOURCEequal137be40c; native_schema_carry_controls.run(base, source_python, root) plus original NativeSchemaDeclaration/RuntimeInstallation stopped custody",
+  "donor": "Separate future explicit THIN540656 originalschema9 declaration/read+authored producer purpose; source Python original --declaration. No existingW6/authentic/live corpus borrowed. Donor and target require separate issued purposes.",
+  "native_scope": "No native/provider/App job needed by this declaration/stoppedcarry qualification; targetwheel packaged7a pin remains original identity, no nativebuild/copy/execution authority inferred.",
+  "exclusions": "No actualCodex/public or existingauthenticW6 store, uncertaininput, snapshotreset, modelinput, provider, fork, env, packageaccess/import/run/newarchive or sourceoverlay."
+}
