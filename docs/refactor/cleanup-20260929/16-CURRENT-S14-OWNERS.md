@@ -3033,3 +3033,16 @@ with input/resize and joined retirement while pending. NoAgent/project acceptanc
 cannot stand in for that connected path. No native job or new model input was
 started. Physical wheel cadence/useful first paint remain the actual performance
 finish line; neither branch source nor ordinary still images establish them.
+
+### Qualified C3 normal merge completed, 2026-10-05
+
+Parent guarded675 normal merge at exact final35af6a42. Actual GH state MERGED and
+main7b68d630 were read back. Qualified source/test/tool/pin diff48fe->35af is zero;
+all16 compact keeper hashes/bytes matched. The original six production owner
+changes, command full-record CAS and actual settlement checks were reviewed.
+Retained a685 build source46124->merged7b68 has zero src/stack/pyproject/README/
+LICENSE delta, so no repeated Core build is required for this merged relation.
+Parent integration checkout normally joined main with zero conflicts, preserving
+untracked artifacts and release evidence. No local public package or native owner
+was changed. Sch/Heis have the actual merge relation for a future coherent cohort;
+Mendel begins separate S4 custody source work after the frozen675 checkpoint.

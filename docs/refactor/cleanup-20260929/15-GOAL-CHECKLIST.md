@@ -3099,3 +3099,31 @@ buffer/hang scope and the original comms428 native latency gap remain separate.
 
 The latest automatic goal continuation reports ACTIVE updated1790775061; earlier
 BLOCKED/ACTIVE observations remain historical, with no goal-tool resume/replay.
+
+### Current delivery checkpoint, 2026-10-05
+
+- [x] Explorer functional448 published and ordinary public journey accepted:
+  original18 checks pass; actual warm/channel/native-return images reviewed after
+  exit; same native owner/root retained. This is not motion/FPS acceptance.
+- [x] C3 current-goal ownership675 normally merged7b68d630 at exact35af6a42.
+  Six canonical scopes qualify across original5 plus corrected1; actual saved-SDK
+  TurnRunner same-goal progress/replacement cases both pass. Original negatives
+  preserved; actual540 floor restored and independent purpose closed9de9f54b.
+- [ ] Deliver merged C3 in the next coherent local cohort. Actual public Explorer
+  installation is unchanged; retained a685 matches merged Core build inputs.
+- [ ] Heis joint453/454 workspace/source-lifetime and connected readiness change:
+  branch a432852c removes four queued source-read awaits through the existing
+  observation owner. Native NoAgent/project and connected callback verification
+  remain distinct; source-only currently.
+- [ ] Kepler Text66 paint rectangle reuse: source2e8e872e, original damage/exposure
+  and origins preserved; affected controls, actual integration and frame timings
+  remain pending. Text65 is merged and its e253 artifact retained.
+- [ ] Fast useful paint, smooth mouse-wheel/held-scroll/reversal/End, actual loaded
+  scaling and the configured continuous journey remain unfinished with Heis/Kepler.
+- [ ] S4 source/case authoritative USER publication remains Arendt's; same-owner
+  certified native branch selection/restoration contract is Mendel's next separate
+  registry/custody source scope. No provider/study or holder operation is inferred.
+
+Latest details and exact acceptance limits are in16-CURRENT-S14-OWNERS.md. These
+checks preserve the full original backlog and runtime finish line; none marks the
+whole goal complete.
