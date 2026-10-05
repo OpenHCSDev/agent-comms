@@ -1,81 +1,68 @@
-# Declared-case configured execution source
+# Declared-case source and same-owner paired arms
 
-`PairedRecallDesign.construction_plan` now supplies the original case history
-additions, held-out public probes and selected prospective arm order to the
-existing configured driver. Selection preserves the complete seeded ordering;
-the design rejects empty native source operands before any acquisition.
+`PairedRecallDesign.construction_plan` supplies incremental authored history,
+held-out public probes and the selected seeded arm order. The existing runner
+uses one source owner and journal for the trajectory. Both arms create genuine
+SDK forks of the current cut and borrow `selected_native_fork`; neither arm
+creates a new registry or transfers USER rows. The old archive-specific factory
+and continuation algorithms stay deleted, and historical records stay unchanged.
 
-The driver consumes one explicit trajectory: original source input, canonical
-cut, then both selected arms on SDK forks of that cut. The original observer,
-saved-agent, checkpoint, probe and scorer retain stimuli and measurements.
-The archive-specific factory and old continuation algorithms are deleted;
-historical recorded artifacts remain readable and unchanged. Source and summary
-work is shared, not independent arm cost. The saved-agent resource now restores
-its borrowed process environment after shutdown, so a nested arm returns the
-parent root and identity rather than changing subsequent parent inputs.
+## Declared task publications
 
-## Source and checks
+`RecallRound` owns explicit constraint source positions and correction/drop
+pairs. A pair names an earlier authored source coordinate; only its actual
+returned wire reference constructs `CorrectionTaskChange`. `Messaging`,
+`HumanConstraintPin`, `UserTaskDrop` and `RetainedTaskFacts` still own authorization,
+original wording and current lineage. No prose is classified and no reference is
+invented. The runner publishes these selected actions before its native stimulus
+and records their certified originals. The native stimulus has its own InputDoc
+and measurement; it is not evidence of a USER publication.
 
-- Four authored controls passed: incremental source/public-probe boundaries,
-  exact seeded selection, owner refusal of missing source, and original stimulus
-  ancestry. They do not exercise the configured backend.
-- The new scorer CLI selected trajectory 5 from the same declared plan. Its
-  oracle is authored fixture data, not user or provider evidence.
-- The initial batch's missing-ACP import failure is retained. Moving native
-  source validation to the design removed that control's unnecessary backend
-  import; no environment, backend stub or dependency was installed.
-- `before.json` and `after.json` use the existing NRA parser across tracked Python
-  roots. Lexical sites include frozen evidence and do not prove dynamic dispatch
-  or external ACP/Pi resolution. Both active arm callers supply the public probe;
-  replaced case/continuation consumers are absent from active source.
-- `src`, `stack` and `tools` are unchanged. The nested environment lifetime has
-  source review only; actual configured execution is still required.
+Missing declarations decode as empty and are omitted from old oracle encoding.
+Frozen historical cases acquire no task credit. Future case authors must declare
+actual actions; this change does not rewrite the original datasets or manufacture
+goals, input dispositions, action authority or model Decisions. The admitted
+Decision source control remains explicitly authored, not provider-authorship proof.
 
-No model/provider/input, original donor, SDK, native artifact, installed holder,
-package or environment was accessed. A design and runnable source do not approve
-the USD75/30-pair study. Configured paired execution, runtime constraint/action
-authority, capacity, HTTP/billing evidence and full S4 remain unqualified.
-Authored goal/constraint stories cannot substitute for actual runtime state.
+## Shared application and resource lifetime
 
-## Task-source relation still missing
+`condition_application` now borrows the selected agent, owner and SDK creation.
+It owns only condition assembly, the existing inspector/RAM environment, native
+preparation, prompt and original probe. The standalone functional command has
+one outer `configured_saved_agent` acquisition and uses that same body.
 
-Only the execution restriction is an actual USER publication and constraint
-pin. `RecallRound.history` contains prose, not canonical case declarations;
-submitting it as native input establishes stimulus delivery, not task authority.
-The driver must not infer a correction/drop from wording such as “supersedes.”
+Within a selected fork, condition bytes and the observer are ready before native
+preparation. After the prompt/idle assertions and capture, original
+`close_idle_backend` joins the child while its inspector can release Node
+completion. Observer/environment scopes close before selection restoration and
+parent preparation. An observer only attaches to its declared launch, preventing
+nested parent/arm scopes from attaching two inspectors to one child.
 
-The existing `HumanConstraintPin` requires its certified original USER wording,
-author, recipient incarnation and scope. `CorrectionTaskChange` and
-`UserTaskDrop` require the original published reference. No current authored
-case supplies that chain. `RecordedNativeCheckpoint.authored_scope` and
-`revision_from` correctly require captured registry and certified wire sources.
+The production resource comes from normally joined #676 `9636b7d9`; S4 edits are
+private fixtures only. Its owner-fence/retirement ordering review remains with
+Mendel. No caller guard or registry replacement has been added here.
 
-`RecallRound` now also owns explicit authored source operations:
-`publish_constraint` sends selected case wording and pins the returned real
-reference; its `TaskChange` may reference a real earlier declaration.
-`publish_user_change` borrows `UserTaskSupersession`/`UserTaskDrop` directly.
-`publish_decision` uses `Decision.from_admission` and requires the original live
-lease. It does not classify case prose or certify provider authorship.
-`observe_task_events` borrows one existing certified retained-source cut, checks
-each returned publication and its exact case wording, and derives lineage from
-`RetainedTaskFacts`. No new type, source store or reference namespace is added.
+## Checks and limits
 
-One continuous authored source control passed in 0.493s: initial pin, referenced
-correction, explicit drop, admitted Decision and refusals for changed wording,
-another recipient, invalid source coordinates and an unadmitted choice. It used
-a small generated private certified wire, not a saved session, SDK or provider.
-The maintenance-unavailable warning is retained in the raw log. Frozen original
-cases and recorded 119d inputs remain unchanged. These source operations have
-not yet been integrated into a configured paired case or run.
+- The earlier four authored controls and trajectory-5 CLI remain retained at
+  their original source-only scope.
+- The changed batch passed seven controls and five subtests in 0.78s: source/probe
+  separation and seeded selection, real USER pin/correction/drop lineage,
+  invalid/replayed recipe refusal, historical encoding preservation and nested
+  observer ownership. Observer launches were controlled Python objects, not SDK
+  or provider processes.
+- The first invocation refused unused repository xdist arguments because that
+  plugin is absent. Its raw log remains; the serial batch disabled those defaults,
+  without installing anything. The earlier missing-ACP refusal also remains.
+- Existing NRA Package/FunctionFacts parses declared production/tests/tools
+  roots. Counts, omissions, lexical consumers and deleted inner acquisition are
+  in `selected-arm-source-contract.json`; dynamic external dispatch is not proved.
 
-Each installed arm currently acquires a fresh private root. Its SDK fork and
-`fork_condition_source` corroborate inherited native entries and narrative;
-they do not transfer original wire task authority to that new owner. Pinning
-parent narrative or copying wire rows would not close this relation. Before
-prospective paired inputs, case publications and arm scopes must be bound
-through the existing task-source and owner mechanisms. Neither native stimulus
-delivery nor task-memory installation grants that missing relation.
-Mendel owns the selected-source/custody integration. The required caller contract
-is a fenced saved-fork selection and restoration under the same idle owner,
-retiring/reopening its retained native child without changing task scope or
-copying wire rows. S4 owns the private case/arm consumers after that handoff.
+No configured pair, SDK, native artifact, holder, provider input, package or
+original donor was used for this source batch. Parent #675 is normally preserved;
+production changes in this branch are the explicit #676 dependency, not S4 edits.
+Configured selection/restoration and constructor/observer/prompt acceptance are
+still required. Shared preparation is not independent arm cost. Capacity,
+HTTP/billing, action validity, the registered comparison and full S4 remain
+unfinished. USD75/30-pair execution remains unapproved. Original artifacts,
+STARTED/UNKNOWN and prior refusals remain untouched.
