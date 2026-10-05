@@ -88,6 +88,18 @@ commands, source/control operands and actual holder disposition for the affected
 installed batch before requesting its purpose. No package access, new provider
 input, App run, artifact renewal or acceptance follows from this reconciliation.
 
+Parent's subsequent current447 source read found one concrete ownership lead:
+NativeSessionSurface.activate creates and mounts the Conversation, reaches into
+the presentation's retained agent and initial prompt before mounting, then
+restores and clears its captured editor state. OperationalSessionPresentation
+already owns that widget, attach/release, eviction and editor-state lifetime.
+Heisenberg will decide this complete acquisition family through those existing
+owners after the active446 control checkpoint. Preserve the necessary pre-mount
+agent binding and editor restoration order; this is not a runtime failure or a
+CPU attribution. NativeSessionSurface.widget already derives from the selected
+presentation and must not acquire a second stored widget. Parent has not edited
+the production files or the active control worktree.
+
 ## Dispatch
 
 > **`toad-tc1`:** Complete TC1 per `docs/refactor/cleanup/TC1-workspace-state.md`, starting with `session_presentation.py` and `transcript_publication.py`, after T9 in each.
