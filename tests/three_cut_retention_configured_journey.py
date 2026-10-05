@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import sys
+from time import monotonic
 from unittest.mock import patch
 
 from acp.agent.router import build_agent_router
@@ -257,6 +258,7 @@ async def run(stage, package, original_python, *, design: PairedRecallDesign,
     summaries = parent_stage / 'summary-assemblies'
     probes = {condition: {} for condition in selected['condition_order']}
     stimuli, checkpoints, task_events = {}, {}, ()
+    workflow_started = monotonic()
     with observe_native_requests(package, parent_stage / 'request-observation.jsonl',
                                  contexts=contexts, summaries=summaries) as observe_launch:
         async with configured_saved_agent(parent_stage, package, source_file, Receiver(), receipt,
@@ -345,15 +347,32 @@ async def run(stage, package, original_python, *, design: PairedRecallDesign,
                 receipt['completed_rounds'].append(identity)
                 record(stage / 'receipt.json', receipt)
 
-    candidate = RecordedNativeProbes(probes[design.candidate], stimuli=stimuli)
-    baseline = RecordedNativeProbes(probes[design.baseline], stimuli=stimuli)
-    report = scenario.compare_native(design.candidate, candidate, design.baseline, baseline)
-    record(stage / 'paired-measurements.private.json', report)
+    # One actual span includes source work and BOTH arms, through owned cleanup.
+    # Keep it in the existing receipt; arm records borrow it rather than copy a
+    # duration or subtract the other arm's request clocks. Its complete input
+    # membership lets the reader derive that it is shared preparation.
+    workflow_elapsed_seconds = monotonic() - workflow_started
+    runs = {condition: RecordedNativeProbes(originals, stimuli=stimuli)
+            for condition, originals in probes.items()}
+    # Corroborate and score all originals before completing the existing receipt.
+    # The clock ended with runtime cleanup; reader/scorer work is excluded.
+    report = scenario.compare_native(design.candidate, runs[design.candidate],
+                                     design.baseline, runs[design.baseline])
     receipt.update(complete=True, original_sources=len(stimuli), original_cuts=len(checkpoints),
                    original_arm_probes=sum(len(values) for values in probes.values()),
                    whole_study_evaluated=False, capacity_HTTP_billing_evaluated=False,
-                   shared_source_and_summary_cost_not_independent=True)
-    record(stage / 'receipt.json', receipt)
+                   shared_source_and_summary_cost_not_independent=True,
+                   workflow_elapsed_seconds=workflow_elapsed_seconds,
+                   workflow_inputs=tuple(dict.fromkeys(
+                       original for run in runs.values() for original in run.workflow_inputs)))
+    workflow = record(stage / 'receipt.json', receipt)
+    runs = {condition: RecordedNativeProbes(run.rounds, stimuli=run.stimuli, workflow=workflow)
+            for condition, run in runs.items()}
+    for position, condition in enumerate(selected['condition_order'], 1):
+        record(stage / f'arm-{position}-run.private.json', runs[condition])
+    for arm, condition in (('candidate', design.candidate), ('baseline', design.baseline)):
+        report[arm]['workflow_timing'] = runs[condition].workflow_timing()
+    record(stage / 'paired-measurements.private.json', report)
 
 
 if __name__ == '__main__':
