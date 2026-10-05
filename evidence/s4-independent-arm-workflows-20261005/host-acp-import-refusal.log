@@ -1,0 +1,154 @@
+FFFF                                                                     [100%]
+=================================== FAILURES ===================================
+__ test_pair_acquires_separate_arm_trajectories_from_one_untouched_seed[None] __
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/s4-independent-arm-authored683-20261005/test_pair_acquires_separate_ar0')
+failed_arm = None
+
+    @pytest.mark.parametrize('failed_arm', (None, 'baseline'))
+    def test_pair_acquires_separate_arm_trajectories_from_one_untouched_seed(tmp_path, failed_arm):
+        # Execute the runner body with authored resource boundaries only. Detect
+        # source reuse, order/stimulus drift and erasure of a completed first arm.
+        # No native files, model calls, original records or installed imports.
+        from compaction_retention_fixture import RecordedNativeProbes, coding_scenario
+>       from three_cut_retention_configured_journey import record
+
+tests/test_native_inspector_lifetime.py:30: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Declared case/arm execution through configured saved forks and original probes.
+    
+    Uses the existing configured ACP/native resource and scorer. Source publications
+    are real private USER constraints; expected answers never enter model prompts.
+    Full SDK objects are observed at their original manifest publication, not queried
+    later. No public input, original replay, policy activation or comparative study.
+    """
+    from __future__ import annotations
+    
+    import asyncio
+    import json
+    import os
+    from pathlib import Path
+    import sys
+    from time import monotonic
+    from unittest.mock import patch
+    
+>   from acp.agent.router import build_agent_router
+E   ModuleNotFoundError: No module named 'acp'
+
+tests/three_cut_retention_configured_journey.py:18: ModuleNotFoundError
+_ test_pair_acquires_separate_arm_trajectories_from_one_untouched_seed[baseline] _
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/s4-independent-arm-authored683-20261005/test_pair_acquires_separate_ar1')
+failed_arm = 'baseline'
+
+    @pytest.mark.parametrize('failed_arm', (None, 'baseline'))
+    def test_pair_acquires_separate_arm_trajectories_from_one_untouched_seed(tmp_path, failed_arm):
+        # Execute the runner body with authored resource boundaries only. Detect
+        # source reuse, order/stimulus drift and erasure of a completed first arm.
+        # No native files, model calls, original records or installed imports.
+        from compaction_retention_fixture import RecordedNativeProbes, coding_scenario
+>       from three_cut_retention_configured_journey import record
+
+tests/test_native_inspector_lifetime.py:30: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Declared case/arm execution through configured saved forks and original probes.
+    
+    Uses the existing configured ACP/native resource and scorer. Source publications
+    are real private USER constraints; expected answers never enter model prompts.
+    Full SDK objects are observed at their original manifest publication, not queried
+    later. No public input, original replay, policy activation or comparative study.
+    """
+    from __future__ import annotations
+    
+    import asyncio
+    import json
+    import os
+    from pathlib import Path
+    import sys
+    from time import monotonic
+    from unittest.mock import patch
+    
+>   from acp.agent.router import build_agent_router
+E   ModuleNotFoundError: No module named 'acp'
+
+tests/three_cut_retention_configured_journey.py:18: ModuleNotFoundError
+_____ test_arm_clock_completes_only_after_agent_and_inspector_join[False] ______
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/s4-independent-arm-authored683-20261005/test_arm_clock_completes_only_0')
+cleanup_failure = False
+
+    @pytest.mark.parametrize('cleanup_failure', (False, True))
+    def test_arm_clock_completes_only_after_agent_and_inspector_join(tmp_path, cleanup_failure):
+        # Zero authored rounds isolate clock/resource ordering. This does not
+        # qualify any source/cut/probe, SDK completion, configured path or study.
+        from compaction_retention_fixture import RecordedNativeProbes
+>       from three_cut_retention_configured_journey import record
+
+tests/test_native_inspector_lifetime.py:99: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Declared case/arm execution through configured saved forks and original probes.
+    
+    Uses the existing configured ACP/native resource and scorer. Source publications
+    are real private USER constraints; expected answers never enter model prompts.
+    Full SDK objects are observed at their original manifest publication, not queried
+    later. No public input, original replay, policy activation or comparative study.
+    """
+    from __future__ import annotations
+    
+    import asyncio
+    import json
+    import os
+    from pathlib import Path
+    import sys
+    from time import monotonic
+    from unittest.mock import patch
+    
+>   from acp.agent.router import build_agent_router
+E   ModuleNotFoundError: No module named 'acp'
+
+tests/three_cut_retention_configured_journey.py:18: ModuleNotFoundError
+______ test_arm_clock_completes_only_after_agent_and_inspector_join[True] ______
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/s4-independent-arm-authored683-20261005/test_arm_clock_completes_only_1')
+cleanup_failure = True
+
+    @pytest.mark.parametrize('cleanup_failure', (False, True))
+    def test_arm_clock_completes_only_after_agent_and_inspector_join(tmp_path, cleanup_failure):
+        # Zero authored rounds isolate clock/resource ordering. This does not
+        # qualify any source/cut/probe, SDK completion, configured path or study.
+        from compaction_retention_fixture import RecordedNativeProbes
+>       from three_cut_retention_configured_journey import record
+
+tests/test_native_inspector_lifetime.py:99: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Declared case/arm execution through configured saved forks and original probes.
+    
+    Uses the existing configured ACP/native resource and scorer. Source publications
+    are real private USER constraints; expected answers never enter model prompts.
+    Full SDK objects are observed at their original manifest publication, not queried
+    later. No public input, original replay, policy activation or comparative study.
+    """
+    from __future__ import annotations
+    
+    import asyncio
+    import json
+    import os
+    from pathlib import Path
+    import sys
+    from time import monotonic
+    from unittest.mock import patch
+    
+>   from acp.agent.router import build_agent_router
+E   ModuleNotFoundError: No module named 'acp'
+
+tests/three_cut_retention_configured_journey.py:18: ModuleNotFoundError
+=========================== short test summary info ============================
+FAILED tests/test_native_inspector_lifetime.py::test_pair_acquires_separate_arm_trajectories_from_one_untouched_seed[None]
+FAILED tests/test_native_inspector_lifetime.py::test_pair_acquires_separate_arm_trajectories_from_one_untouched_seed[baseline]
+FAILED tests/test_native_inspector_lifetime.py::test_arm_clock_completes_only_after_agent_and_inspector_join[False]
+FAILED tests/test_native_inspector_lifetime.py::test_arm_clock_completes_only_after_agent_and_inspector_join[True]
+4 failed, 13 deselected in 0.39s
