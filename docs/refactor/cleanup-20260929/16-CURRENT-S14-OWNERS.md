@@ -35,8 +35,11 @@ checkpoint. Mendel found that the recorder forced retirement after its separate
 three-second wait while the existing interaction deadline still had18.56 seconds
 left. He proposes using that original absolute deadline through the parent-wait
 consumers, retaining the16-second finalization reserve and strict exit results.
-Parent relayed the exact methods and source finding to Heis. This identifies a
-recorder deadline conflict; it does not prove why the App had not exited. No second
+The correction is published as draft4734c479fd7. Parent reviewed its exact diff,
+original receipts and unchanged parent/result methods, then relayed the reviewed
+head to Heis for normal adoption while retaining his disjoint launch timestamp.
+This identifies a recorder deadline conflict; it does not prove why the App had
+not exited. Changed full-workflow runtime acceptance remains unrun. No second
 launch or deadline increase is authorized.
 
 466 SessionView03 passed the actual mounted check in6.138s: cancellation before
@@ -51,9 +54,14 @@ in0.395s; its process is absent. Parent matched the new native READce8186 and
 exclusive proof helpereddb against every declared adaptation of the original
 proof algorithm. All14 proof outputs were absent at review; the helper compiled
 without execution. Bohr owns binding and releasing that one installed-file check.
-Canonical/cohort preparation and publication remain unexecuted. The selected
-Core3931/Toad289f cohort is deliberate and does not claim latest MAIN681/470
-source equality. This separate delivery does not hold Heis's scrolling work.
+The one installed-file check has now passed7.633s. Sourceproof8f501b8b and
+DTO03e1db2e bind all953 assets/full69/truthful origins; native READ-only trust1d8f
+passed without starting native processes. The original266 protected files,
+2157 other67 records, bootstrap2 and PREFIX activation are unchanged. Parent
+matched all five normalized inventory digests and the terminal process is absent.
+Canonical/cohort preparation is the next step; publication remains unexecuted.
+The selected Core3931/Toad289f cohort is deliberate and does not claim latest
+MAIN681/470 source equality. This separate delivery does not hold Heis's scrolling work.
 
 Core680 is source-qualified and merged3931f16f. Core681 is normally merged
 38a0533e after Parent reviewed the complete recorded-reader delivery family and
