@@ -1369,8 +1369,20 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertEqual(observed['usage'].cache_read, 0)
 
     def test_sdk_presence_requires_original_request_and_unchanged_bytes(self):
-        owner = Thread('fixture-owner', frozenset(), str(self.root))
-        retained = RetainedTaskFacts((GoalTaskFact(Goal('Keep λ original', 'goal-fixture')),))
+        comms = Comms(self.root / 'request-wire')
+        comms.messaging.initialize_private_initial_protocol()
+        owner = comms.registry.declare(Thread('fixture-owner', frozenset(), str(self.root)))
+        subject = comms.messaging.send_user_message(owner.name, 'Keep λ original',
+                                                   worktree=owner.worktree)
+        pin = comms.messaging.pin_user_constraint(owner.name, subject.reference,
+                                                  worktree=owner.worktree)
+        retained = comms.bus.log.retained_context(owner.name, comms.registry).retained
+        checkpoint = replace(self.checkpoint, wire=comms.root / 'bus.jsonl',
+            registry_scope=self.artifact('request-scope.json', comms.registry.store.read()))
+        request = manual_summary_record(self.session, incarnation=owner.incarnation, retained=retained)
+        attempt = SelectedSummaryAttempt('request', str(self.session), request.journal_json(),
+                                        request, ReservedSummary())
+        original_publications = checkpoint.scoped_facts(attempt)['retained_publications']
         context = NativeContextRecord('a' * 32, self.identity.session_id, 'user-entry', 1, 'b' * 64)
         raw = json.dumps(retained.text, ensure_ascii=False, separators=(',', ':')).encode()
         segment = SystemLayerSegment(content=retained.text, tokens=12,
@@ -1387,20 +1399,41 @@ class RecordedMeasurementTests(unittest.TestCase):
         original = probe.read_sdk_context()
         manifest = probe.request_manifest(context, original)
         texts, construction = probe.serialized_construction(original, manifest)
-        report = probe.prompt_presence(retained, texts, construction)
+        publications = {'evaluated': False, 'reason': 'No original wire scope authored'}
+        report = probe.prompt_presence(retained, texts, construction, publications=publications)
         self.assertTrue(report['exact_envelope_present'])
         self.assertFalse(report['final_transport_evaluated'])
+        self.assertIs(report['retained_source_binding'], publications)
+        binding = probe.prompt_presence(retained, texts, construction,
+                                       publications=original_publications)['retained_source_binding']
+        self.assertTrue(binding['evaluated'])
+        self.assertTrue(binding['exact_envelope_present'])
+        self.assertEqual(binding['context_digest'], context.llm_context_digest)
+        self.assertEqual(set(binding['references']), {subject.reference, pin.reference})
+        self.assertEqual(binding['authored_wordings'], original_publications['authored_wordings'])
+        with self.assertRaisesRegex(ValueError, 'another original envelope'):
+            probe.prompt_presence(retained, texts, construction,
+                                  publications=dict(original_publications, source_digest='f'*64))
+        # An empty envelope result does not declare the original wording absent
+        # elsewhere, and retained publication alone cannot fill missing request bytes.
+        no_envelope = probe.prompt_presence(retained, ('"Keep λ original"',), construction,
+                                            publications=original_publications)['retained_source_binding']
+        self.assertTrue(no_envelope['evaluated'])
+        self.assertFalse(no_envelope['exact_envelope_present'])
         self.assertTrue(construction['evaluated'])
         self.assertEqual(construction['artifact'], probe.sdk_segment_bytes)
         self.assertEqual(construction['utf8_bytes'], len(raw))
         self.assertFalse(construction['final_transport_evaluated'])
-        self.assertFalse(probe.prompt_presence(None, texts, construction)['evaluated'])
-        self.assertFalse(probe.prompt_presence(RetainedTaskFacts(()), texts, construction)['evaluated'])
+        self.assertFalse(probe.prompt_presence(None, texts, construction,
+                                             publications=publications)['evaluated'])
+        self.assertFalse(probe.prompt_presence(RetainedTaskFacts(()), texts, construction,
+                                             publications=publications)['evaluated'])
         absent = replace(probe, sdk_segment_bytes=None)
         absent_texts, unavailable = absent.serialized_construction(original, manifest)
         self.assertIsNone(absent_texts)
         self.assertFalse(unavailable['evaluated'])
-        self.assertEqual(absent.prompt_presence(retained, absent_texts, unavailable), unavailable)
+        self.assertEqual(absent.prompt_presence(retained, absent_texts, unavailable,
+                                              publications=original_publications), unavailable)
         wrong = replace(probe, sdk_segment_bytes=self.artifact('changed-segments.json', ('different',)))
         with self.assertRaisesRegex(ValueError, 'measured source'):
             wrong.serialized_construction(original, manifest)
@@ -1943,6 +1976,7 @@ for (const original of [source,undefined]) {
         self.assertEqual(partial['bounded_sdk_application']['unavailable_rounds'], identities[1:])
         self.assertEqual(partial['source_delivery']['unavailable_rounds'], identities)
         self.assertEqual(partial['source_delivery']['available_rounds'], ())
+        self.assertEqual(partial['retained_source_request']['unavailable_rounds'], identities)
         self.assertEqual(partial['full_history_capacity']['unavailable_rounds'], identities)
         self.assertEqual(partial['installed_narrative_source']['unavailable_rounds'], identities)
         self.assertEqual(partial['constructed_source_prefix']['unavailable_rounds'], identities)
@@ -1953,6 +1987,17 @@ for (const original of [source,undefined]) {
         self.assertTrue(observed['source_delivery']['evaluated'])
         self.assertFalse(observed['installed_sdk_source']['evaluated'])
         self.assertFalse(observed['sdk_entry_selection']['evaluated'])
+        self.assertFalse(observed['retained_source_request']['evaluated'])
+        request_evidence = {identities[0]: dict(original, provider_prompt_presence={
+            'retained_source_binding': {'evaluated': True, 'exact_envelope_present': True}}),
+            identities[1]: dict(original, provider_prompt_presence={
+            'retained_source_binding': {'evaluated': True, 'exact_envelope_present': False}})}
+        linked = scored.condition_construction(request_evidence, unavailable)
+        self.assertEqual(linked['retained_source_request']['present_rounds'], identities[:1])
+        self.assertEqual(linked['retained_source_request']['absent_envelope_rounds'], identities[1:2])
+        self.assertEqual(linked['retained_source_request']['unavailable_rounds'], identities[2:])
+        self.assertFalse(linked['source_delivery']['evaluated'])
+        self.assertFalse(linked['evaluated'])
         self.assertTrue(observed['native_request_admission']['evaluated'])
         self.assertEqual(partial['native_request_admission']['unavailable_rounds'], identities[1:])
         self.assertFalse(observed['full_history_capacity']['evaluated'])

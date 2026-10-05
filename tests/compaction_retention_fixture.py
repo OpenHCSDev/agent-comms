@@ -665,6 +665,10 @@ class ScoredScenario(ScoreView):
                            for identity, original in evidence.items()}
         inputs = {identity: original['probe_input_presence']
                   for identity, original in evidence.items()}
+        retained_sources = {identity: original.get('provider_prompt_presence', {}).get(
+            'retained_source_binding', {'evaluated': False,
+                'reason': 'Original request/publication binding unavailable'})
+            for identity, original in evidence.items()}
         return {'evaluated': False, 'declared_condition': self.condition,
                 'bounded_sdk_application': group(applications),
                 'installed_sdk_source': group(installations),
@@ -684,6 +688,13 @@ class ScoredScenario(ScoreView):
                     'absent_rounds': tuple(identity for identity in identities
                         if identity in inputs and inputs[identity]['evaluated'] and not inputs[identity]['present'])},
                 'source_delivery': group(source_delivery),
+                'retained_source_request': {**group(retained_sources),
+                    'present_rounds': tuple(identity for identity in identities
+                        if identity in retained_sources and retained_sources[identity]['evaluated']
+                        and retained_sources[identity]['exact_envelope_present']),
+                    'absent_envelope_rounds': tuple(identity for identity in identities
+                        if identity in retained_sources and retained_sources[identity]['evaluated']
+                        and not retained_sources[identity]['exact_envelope_present'])},
                 'full_history_capacity': group(capacity),
                 'full_history_sdk_admission': {**group(full_admissions),
                     'admitted_rounds': tuple(identity for identity in identities
