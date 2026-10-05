@@ -1,7 +1,10 @@
 # Retained writer cross-version qualification
 
-Status: source implementation in progress. No package, interpreter, root,
-installed test, native process or build authority is held by this task.
+Status: scoped installed old-writer to target-index acceptance passed. Source540
+was restored once; target334 remained unchanged. Both package/operator claims
+and matching086 READ were explicitly returned. Independent Bohr closure is
+pending. The original plan and proposal sections below retain their earlier
+checkpoint scope; the final installed result is recorded at the end.
 
 ## Original source boundary
 
@@ -156,3 +159,44 @@ Literal issued grant hashes and Sch READ receipt remain unbound until actual
 issue/phase release. Both helper scripts only parsed/compiled as source here.
 No package stage, prefix import/read proof, native keeper read or runtime control
 has run. The four determining tools and accepted build artifact are unchanged.
+
+
+## Installed cross-version acceptance
+
+The single original released qualifier exited zero in 9.264327309s; its outer
+controller joined in 10.890551720s. A newly normal-built exact-Git old720 wheel
+was installed once in the genuine existing540 producer. Target334 reused its
+original c656/5f347 installation without a stage or rebuild. The stdlib proof
+matched all297 old assets, all347 target assets, complete RECORD digests/sizes,
+10/69 distribution versions and original nonCore/target floors.
+
+The original seed produced a new private root once, then joined. Current
+WireLog refused the old checkpoint declaration. Original target require_source
+verified the matching086 keeper under fresh READ-only authority. The genuine
+old writer acquired its certificate and integer OFD; the target inherited
+fstat/flock/root validation accepted that descriptor. AssignedTranscriptSource
+read the original sender incarnation, frozen alpha/beta audience and sent event.
+Original bus, registry and guard bytes remained unchanged. No registry decoder
+compatibility or guessed schema was used.
+
+No native process, provider, owner launch or input replay ran. This is genuine
+newly built old-source qualification, not historical installed artifact or old
+clock equivalence. Actual central-batch acceptance and routing native-page
+old-registry provenance remain separate.
+
+Controller2123492/birth71807440 and pilot2123588/birth71807564 are absent; original
+BoundedRun reports retired child and empty groups. Stage/proof/restore identities
+are also absent. Nested original subprocess.run children were joined
+synchronously; individual nested births were not captured. No birth evidence
+is invented. The authored16-file fixture and all raw receipts remain preserved.
+
+Source540 was restored once with the original normal5f wheel in0.141877s. All510
+source records,133 original keepers,10 versions/RAWorigins and347 wheel assets
+match. Target334's1468 original records,428 protected files,1883 other66 records,
+69 versions/RAWorigins and PREFIXactivation match without any target install
+or restore. Readback reports no extra package assets, sockets or owned groups.
+
+`INSTALLED-SCOPED-ACCEPTANCE.json` references the original whole-handback and all
+28 raw receipts plus fixture receipt. Matching086 READ and both package/operator
+claims were explicitly returned to Sch/Bohr. Independent fresh floor/census
+closure belongs to Bohr. No retry, next loan or public publication is authorized.
