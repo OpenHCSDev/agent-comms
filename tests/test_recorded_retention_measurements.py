@@ -186,7 +186,7 @@ class RecordedMeasurementTests(unittest.TestCase):
                 self.assertFalse(reports['r3']['revision_mass']['evaluated'])
                 self.assertEqual(reports['r3']['revision_mass']['missing_checkpoints'], ('r2',))
                 scored = coding_scenario().score(Condition.TASK_MEMORY, RecordedAnswers({}))
-                result = scored.public_native(reports, {}, {})
+                result = scored.public_native(reports, {}, {}, run.workflow_timing())
                 self.assertEqual(tuple(result['revision_mass']), ('r2', 'r3'))
                 self.assertTrue(all(not value['evaluated'] for value in result['revision_mass'].values()))
                 direct = last.inspect(first)
@@ -770,6 +770,100 @@ class RecordedMeasurementTests(unittest.TestCase):
                         {'baseline': design.candidate}):
             with self.subTest(changed=changed), self.assertRaises(ValueError):
                 replace(design, **changed)
+
+    def test_workflow_clock_binds_original_inputs_and_preserves_absence(self):
+        # Prevent a controller/request clock or another input's receipt from
+        # supplying a missing workflow. No original native records are read.
+        probe = RecordedNativeProbe(self.identity, 'a' * 32, 'answer')
+        run = RecordedNativeProbes({'r1': probe})
+        self.assertFalse(run.workflow_timing()['evaluated'])
+        receipt = {'complete': True, 'workflow_elapsed_seconds': 12.5,
+                   'workflow_inputs': run.workflow_inputs}
+        timed = replace(run, workflow=self.artifact('workflow.json', receipt))
+        observed = timed.workflow_timing()
+        self.assertTrue(observed['evaluated'])
+        self.assertTrue(observed['exclusive_input_set'])
+        self.assertEqual(observed['seconds'], 12.5)
+        self.assertEqual(FieldCodec.decode(RecordedNativeProbes, FieldCodec.encode(timed)), timed)
+        other = replace(probe, input_id='b' * 32)
+        shared = replace(timed, workflow=self.artifact('shared.json', dict(receipt,
+            workflow_inputs=(*run.workflow_inputs, (other.session, other.input_id, other.answer_entry_id)))))
+        self.assertTrue(shared.workflow_timing()['evaluated'])
+        self.assertFalse(shared.workflow_timing()['exclusive_input_set'])
+        incomplete = replace(timed, workflow=self.artifact('incomplete.json', dict(receipt, complete=False)))
+        self.assertFalse(incomplete.workflow_timing()['evaluated'])
+        for seconds in (-1, float('inf'), float('nan')):
+            with self.subTest(seconds=seconds), self.assertRaisesRegex(ValueError, 'finite'):
+                replace(timed, workflow=self.artifact('invalid-clock.json', dict(receipt,
+                    workflow_elapsed_seconds=seconds))).workflow_timing()
+        for inputs in ((), (*run.workflow_inputs, *run.workflow_inputs)):
+            with self.subTest(inputs=inputs), self.assertRaisesRegex(ValueError, 'recorded inputs'):
+                replace(timed, workflow=self.artifact('wrong-inputs.json', dict(receipt,
+                    workflow_inputs=inputs))).workflow_timing()
+        Path(timed.workflow.path).write_text('{}')
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            timed.workflow_timing()
+
+    def test_workflow_p95_requires_every_exclusive_clock_and_keeps_zero(self):
+        # Prevent shared two-arm clocks and dropping slow/missing trajectories
+        # from the p95 denominator. These are authored receipt observations.
+        def clock(name, seconds):
+            probe = RecordedNativeProbe(NativeSessionIdentity(name, str(self.root / name)),
+                                        'c' * 32, 'answer')
+            run = RecordedNativeProbes({'r1': probe})
+            return replace(run, workflow=self.artifact(name + '.json', {
+                'complete': True, 'workflow_elapsed_seconds': seconds,
+                'workflow_inputs': run.workflow_inputs})).workflow_timing()
+        pairs = tuple({'candidate': {'workflow_timing': clock(f'candidate-{i}', seconds)},
+                       'baseline': {'workflow_timing': clock(f'baseline-{i}', 100.)}}
+                      for i, seconds in enumerate((1., 10., 20.)))
+        result = ScoredScenario.paired_workflow_batch(pairs)
+        self.assertTrue(result['evaluated'])
+        self.assertEqual(result['p95_seconds']['candidate']['value'], 20.)
+        self.assertEqual(result['p95_seconds']['relative_reduction']['value'], 0.8)
+        missing = dict(pairs[-1], candidate={'workflow_timing': RecordedNativeProbes({}).workflow_timing()})
+        partial = ScoredScenario.paired_workflow_batch((*pairs[:-1], missing))
+        self.assertFalse(partial['evaluated'])
+        self.assertEqual(partial['p95_seconds']['candidate']['expected_trajectories'], 3)
+        self.assertEqual(partial['p95_seconds']['candidate']['observed_trajectories'], 2)
+        shared = dict(pairs[-1], candidate={'workflow_timing': dict(
+            pairs[-1]['candidate']['workflow_timing'], exclusive_input_set=False)})
+        self.assertFalse(ScoredScenario.paired_workflow_batch((*pairs[:-1], shared))['evaluated'])
+        self.assertFalse(ScoredScenario.paired_workflow_batch((pairs[0], pairs[0]))['evaluated'])
+        zero = {'candidate': {'workflow_timing': clock('zero-candidate', 0.)},
+                'baseline': {'workflow_timing': clock('zero-baseline', 0.)}}
+        observed_zero = ScoredScenario.paired_workflow_batch((zero,))
+        self.assertTrue(observed_zero['evaluated'])
+        self.assertEqual(observed_zero['p95_seconds']['candidate']['value'], 0.)
+        self.assertFalse(observed_zero['p95_seconds']['relative_reduction']['evaluated'])
+
+    def test_resource_margins_derive_supplied_values_without_study_credit(self):
+        # Detect wrong-sign reduction, invented historical margins and missing
+        # or zero-baseline credit. Use the existing arithmetic for both metrics.
+        design = PairedRecallDesign(FileProvenance('oracle', '0' * 64),
+            Condition.TASK_MEMORY, Condition.BOUNDED, 'original/model', 2, .95, -.02, 1000, 17,
+            normalized_cost_reduction_margin=.1, workflow_p95_reduction_margin=.1)
+        def measured(candidate, baseline, complete=True):
+            return ScoredScenario.resource_difference(
+                {'evaluated': complete, 'value': candidate},
+                {'evaluated': complete, 'value': baseline})
+        cost, latency = measured(80., 100.), measured(95., 100.)
+        comparison = {'paired_resources': {'groups': {'recorded_workflow': {
+            'metrics': {'normalized_cost': cost}}}},
+            'paired_workflow_timing': {'p95_seconds': latency}}
+        result = ScoredScenario.resource_margins(comparison, design)
+        self.assertTrue(result['normalized_cost']['meets_margin'])
+        self.assertFalse(result['workflow_p95']['meets_margin'])
+        absent = ScoredScenario.resource_margins(comparison, replace(design,
+            normalized_cost_reduction_margin=None, workflow_p95_reduction_margin=None))
+        self.assertTrue(all(not item['evaluated'] for name, item in absent.items() if name != 'scope'))
+        for value in (measured(0., 0.), measured(None, None, False)):
+            self.assertFalse(ScoredScenario.reduction_margin(value, .1)['evaluated'])
+        for name in ('normalized_cost_reduction_margin', 'workflow_p95_reduction_margin'):
+            for margin in (-.1, 1.1, float('nan'), float('inf')):
+                with self.subTest(name=name, margin=margin), self.assertRaisesRegex(ValueError, 'margin'):
+                    replace(design, **{name: margin})
+        self.assertEqual(FieldCodec.decode(PairedRecallDesign, FieldCodec.encode(design)), design)
 
     def test_admitted_budget_requires_original_request_and_turn_correlation(self):
         # Prevent same-input/time guesses and historical capacity fabrication.
@@ -2069,12 +2163,12 @@ for (const original of [source,undefined]) {
                 construction = scored.condition_construction(original(installation), {})
                 self.assertTrue(construction['recorded_constructor_selection']['evaluated'])
                 self.assertFalse(construction['evaluated'])
-                public = scored.public_native({}, original(installation), {})
+                public = scored.public_native({}, original(installation), {}, RecordedNativeProbes({}).workflow_timing())
                 self.assertTrue(public['condition_construction']['recorded_constructor_selection']['evaluated'])
                 self.assertFalse(public['condition_construction']['evaluated'])
                 for wrong in (Condition.FULL_CONTEXT, Condition.TASK_MEMORY, Condition.BOUNDED):
                     with self.subTest(wrong=wrong), self.assertRaisesRegex(ValueError, 'original SDK constructor'):
-                        replace(scored, condition=wrong).public_native({}, original(installation), {})
+                        replace(scored, condition=wrong).public_native({}, original(installation), {}, RecordedNativeProbes({}).workflow_timing())
             for selection in (('source', 'prior'), ('source', 'source'), ('input',)):
                 with self.subTest(selection=selection), self.assertRaisesRegex(ValueError, 'ordered subset'):
                     probe.installed_condition(evidence, branch, context, serialized, manifest,
@@ -2332,7 +2426,8 @@ for (const original of [source,undefined]) {
         result = scenario.score(Condition.TASK_MEMORY, RecordedAnswers({})).public_native(
             {'r1': {'scoped_facts': {'retained_publications': measured},
                     'summary_usage': {'evaluated': False},
-                    'canonical_availability': {'evaluated': False}}}, {}, {})
+                    'canonical_availability': {'evaluated': False}}}, {}, {},
+            RecordedNativeProbes({}).workflow_timing())
         self.assertTrue(result['retained_publications']['r1']['evaluated'])
         self.assertTrue(all(not result['retained_publications'][identity]['evaluated']
                             for identity in ('r2', 'r3')))

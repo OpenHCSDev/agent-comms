@@ -60,6 +60,10 @@ class PairedRecallDesign:
     recall_margin: float
     bootstrap_samples: int
     bootstrap_seed: int
+    normalized_cost_reduction_margin: float | None = field(default=None,
+        metadata={'wire_omit_default': True})
+    workflow_p95_reduction_margin: float | None = field(default=None,
+        metadata={'wire_omit_default': True})
 
     def __post_init__(self):
         if self.candidate == self.baseline:
@@ -72,6 +76,9 @@ class PairedRecallDesign:
             raise ValueError("Recall margin must be finite and between minus one and one")
         if self.bootstrap_samples < ceil(2 / (1 - self.confidence)):
             raise ValueError("Bootstrap samples must represent both requested interval tails")
+        for margin in (self.normalized_cost_reduction_margin, self.workflow_p95_reduction_margin):
+            if margin is not None and (not isfinite(margin) or not 0 <= margin <= 1):
+                raise ValueError('A supplied resource reduction margin must be finite and between zero and one')
 
     def compare(self, pairs):
         """Read supplied originals through the existing comparison algorithm."""
@@ -81,6 +88,7 @@ class PairedRecallDesign:
         result = scenario.compare_native_pairs(self.candidate, pairs, self.baseline)
         result['comparison_design'] = FieldCodec.encode(self)
         result['recall_inference'] = ScoredScenario.paired_inference(result['pairs'], self)
+        result['resource_margins'] = ScoredScenario.resource_margins(result, self)
         return result
 
     def model_alignment(self, alignment):
@@ -141,6 +149,8 @@ class RecordedNativeProbes:
     checkpoints: dict[str, RecordedNativeCheckpoint] = field(default_factory=dict)
     stimuli: dict[str, RecordedNativeProbe] = field(default_factory=dict,
         metadata={'wire_omit_default': True})
+    workflow: FileProvenance | None = field(default=None,
+        metadata={'wire_omit_default': True})
 
     @property
     def inputs(self):
@@ -151,6 +161,37 @@ class RecordedNativeProbes:
         originals = tuple((probe.session, probe.input_id) for probe in self.inputs)
         if len(set(originals)) != len(originals):
             raise ValueError("A recorded trajectory cannot count the same original input twice")
+
+    @property
+    def workflow_inputs(self):
+        """The same original membership binds a runner clock and its reader."""
+        return tuple((probe.session, probe.input_id, probe.answer_entry_id) for probe in self.inputs)
+
+    def workflow_timing(self):
+        """Borrow the original completed runner span; never sum native requests.
+
+        The existing receipt owns the clock. Membership can reveal that a span
+        includes both arms; equal elapsed values cannot make it two arm clocks.
+        Historical runs without a receipt retain explicit unavailability.
+        """
+        if self.workflow is None:
+            return {'evaluated': False, 'reason': 'Original workflow clock not recorded'}
+        original = RecordedNativeCheckpoint.read_json(self.workflow)
+        complete = FieldCodec.decode(bool, original['complete'])
+        seconds = FieldCodec.decode(float, original['workflow_elapsed_seconds'])
+        inputs = FieldCodec.decode(tuple[tuple[NativeSessionIdentity, str, str], ...],
+                                   original['workflow_inputs'])
+        if not isfinite(seconds) or seconds < 0:
+            raise ValueError('Original workflow duration must be finite and nonnegative')
+        if len(set(inputs)) != len(inputs) or not set(self.workflow_inputs) <= set(inputs):
+            raise ValueError('Original workflow clock does not cover these recorded inputs')
+        return {'evaluated': complete, 'seconds': seconds, 'source': FieldCodec.encode(self.workflow),
+                'exclusive_input_set': set(self.workflow_inputs) == set(inputs),
+                'reason': 'Original completed configured workflow span' if complete else
+                          'Original workflow has not completed',
+                'scope': 'Runner monotonic time from configured source-owner acquisition through '
+                         'inputs, cuts, probe acquisition and source restoration/owned cleanup; '
+                         'excludes subsequent scoring; not request timing, S1 or provider wait'}
 
     @staticmethod
     def require_distinct(runs):
@@ -613,7 +654,7 @@ class ScoredScenario(ScoreView):
                     for question, _ in round_.scored_answers if question.measurement is Measurement.ACTION}
                 for round_ in self.rounds}
 
-    def public_native(self, checkpoints, evidence, stimuli) -> dict:
+    def public_native(self, checkpoints, evidence, stimuli, workflow) -> dict:
         result = self.public()
         source_delivery = {item.identity: stimuli[item.identity]['source_delivery']
             if item.identity in stimuli else {'evaluated': False,
@@ -627,6 +668,7 @@ class ScoredScenario(ScoreView):
                                 "reason": "No original retained-publication observation supplied"})
                         for item in self.source.rounds},
                     recorded_resources=self.recorded_resources(checkpoints, evidence, stimuli),
+                    workflow_timing=workflow,
                     source_delivery=source_delivery,
                     condition_construction=self.condition_construction(evidence, source_delivery),
                     original_stimuli=stimuli,
@@ -873,6 +915,62 @@ class ScoredScenario(ScoreView):
                 'scope': 'Aggregate descriptive paired original usage; missing trajectories keep totals unavailable; '
                          'observed subtotals are not estimates; no billing, independence, '
                          'registered margin, end-to-end timing or study acceptance'}
+
+    @classmethod
+    def paired_workflow_batch(cls, comparisons):
+        """Empirical nearest-rank p95 needs every original exclusive arm span.
+
+        A shared two-arm runner receipt is still visible in each pair, but is
+        not eligible. Missing samples stay in the denominator, never become
+        zero or disappear to improve p95. This is no population interval.
+        """
+        clocks = tuple(tuple(pair[arm]['workflow_timing'] for pair in comparisons)
+                       for arm in ('candidate', 'baseline'))
+        reasons = []
+        sources = []
+        for arm, selected in zip(('candidate', 'baseline'), clocks):
+            for index, clock in enumerate(selected, 1):
+                if not clock['evaluated']:
+                    reasons.append(f'{arm} trajectory {index}: {clock["reason"]}')
+                elif not clock['exclusive_input_set']:
+                    reasons.append(f'{arm} trajectory {index}: clock includes another arm or input set')
+                else:
+                    sources.append(FieldCodec.decode(FileProvenance, clock['source']))
+        if len(set(sources)) != len(sources):
+            reasons.append('An original workflow clock is reused across trajectories or arms')
+        complete = not reasons
+        def measured(selected):
+            values = tuple(clock['seconds'] for clock in selected if clock['evaluated'])
+            return {'evaluated': complete,
+                    'value': sorted(values)[ceil(0.95 * len(values)) - 1] if complete else None,
+                    'expected_trajectories': len(selected), 'observed_trajectories': len(values),
+                    'observed_seconds': values}
+        return {'evaluated': complete, 'reasons': reasons,
+                'p95_seconds': cls.resource_difference(measured(clocks[0]), measured(clocks[1])),
+                'method': 'Empirical nearest-rank p95 over complete original workflow spans',
+                'scope': 'Exclusive original input-set workflow clocks only; shared paired preparation '
+                         'is not independent arm time; no S1, provider-time or study acceptance'}
+
+    @staticmethod
+    def reduction_margin(measurement, margin):
+        """One supplied-margin comparison for cost and workflow p95."""
+        reduction = measurement['relative_reduction']
+        available = margin is not None and reduction['evaluated']
+        return {'evaluated': available, 'margin': margin, 'measurement': measurement,
+                'meets_margin': reduction['value'] >= margin if available else None,
+                'reason': 'Supplied conditional reduction margin' if available else
+                          'Resource reduction margin not supplied' if margin is None else reduction['reason']}
+
+    @classmethod
+    def resource_margins(cls, comparison, design):
+        """Derive decisions from original totals/clocks and supplied design only."""
+        cost = comparison['paired_resources']['groups']['recorded_workflow']['metrics']['normalized_cost']
+        latency = comparison['paired_workflow_timing']['p95_seconds']
+        return {'normalized_cost': cls.reduction_margin(cost, design.normalized_cost_reduction_margin),
+                'workflow_p95': cls.reduction_margin(latency, design.workflow_p95_reduction_margin),
+                'scope': 'Conditional supplied-design arithmetic; SDK-normalized cost is not billing; '
+                         'shared source preparation is not independent arm cost; missing margins/clocks '
+                         'stay unavailable; no registration, intervention, capacity or study acceptance'}
 
     def paired_quality(self, baseline, evidence, baseline_evidence, alignment):
         """Original alignment owns pairing; every frozen question stays visible."""
@@ -1413,7 +1511,7 @@ class RecallScenario:
 
     def score_native(self, condition: Condition, probes: RecordedNativeProbes) -> dict:
         score, checkpoints, evidence, stimuli = self.observe_native(condition, probes)
-        return score.public_native(checkpoints, evidence, stimuli)
+        return score.public_native(checkpoints, evidence, stimuli, probes.workflow_timing())
 
     def compare_native(self, condition, probes, baseline_condition, baseline):
         """The same frozen oracle scores both arms; original records own alignment."""
@@ -1423,8 +1521,9 @@ class RecallScenario:
         score, cuts, original, stimuli = self.score_observed(condition, observed)
         control, baseline_cuts, baseline_original, baseline_stimuli = self.score_observed(baseline_condition, baseline_observed)
         alignment = probes.alignment(baseline, original, baseline_original, self.rounds)
-        candidate = score.public_native(cuts, original, stimuli)
-        baseline_result = control.public_native(baseline_cuts, baseline_original, baseline_stimuli)
+        candidate = score.public_native(cuts, original, stimuli, probes.workflow_timing())
+        baseline_result = control.public_native(baseline_cuts, baseline_original, baseline_stimuli,
+                                               baseline.workflow_timing())
         constructions = candidate["condition_construction"], baseline_result["condition_construction"]
         return {"candidate": candidate, "baseline": baseline_result,
                 "alignment": alignment,
@@ -1452,6 +1551,7 @@ class RecallScenario:
         return {'scenario': self.identity, 'pairs': comparisons,
                 'paired_quality': ScoredScenario.paired_batch(comparisons),
                 'paired_resources': ScoredScenario.paired_resource_batch(comparisons),
+                'paired_workflow_timing': ScoredScenario.paired_workflow_batch(comparisons),
                 'study_acceptance': {'evaluated': False,
                     'reason': 'Recorded pairs do not supply a registered design, verified '
                               'condition construction or complete cost/end-to-end journeys'}}
