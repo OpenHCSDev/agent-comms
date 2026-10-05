@@ -57,3 +57,21 @@ source/AST verification so far: the host has no ACP dependency, and the expired
 installed purpose will not be borrowed or repeated. A changed-control installed
 check needs a fresh specific purpose after independent closure. No new wheel
 is needed because production/build inputs are unchanged.
+
+## Changed certified controls installed acceptance
+
+Fresh distinct purpose f05a169 authorized the corrected original seven-node
+command once, after exact355 candidate ZIP/installed byte/mode proof1cfae0b0
+and unchanged94 unique nonCore keeper paths (154 overlapping authority records).
+All nine parameterized executions passed in5.00s, bounded terminal0/8.242110359s.
+This accepts installed original Comms/registry/wait graph and terminal-fence
+recovery. It does not prove the live native done callback or whole C3.
+Controller1538133/birth65148416 and child1538348/birth65148515 joined, retired
+and were absent; groups empty. The actual normal original5f restore ran once.
+All510 original recorded hashes/modes/links and347 original ZIP assets matched;
+no added candidate assets. Authored scratch removed. Whole handback fcd8128b
+binds14 raw/proof/restore keeper hashes and explicitly returns all package,
+import/read and execution claims. Earlier ce6 failure remains immutable.
+No native artifact/App/ACP process, SDK/provider input or public/session/root
+operation. Independent Bohr final floor/census closure is pending separately;
+source product/build inputs stay equal the original8546 wheel, no rebuild.

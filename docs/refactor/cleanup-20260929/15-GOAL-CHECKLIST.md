@@ -31,8 +31,11 @@ configured continuous workflow.
   Current355 candidate package was removed and original347/94/69metadata10
   floor restored exactly; Bohr independently CLOSEDa71443/3a3764 with229 UID
   references/gaps zero. Ten fresh constructions now use canonical_goal_wire;
-  crash reopen and40 assertion ASTs remain unchanged. Draft7f410 source correction
-  awaits fresh specific installed verification; no retry/expiredloan inheritance.
+  crash reopen and40 assertion ASTs remain unchanged. Changed certified controls now pass all9 parameterized executions/5.00s,
+  bounded8.242110359s under distinctf05 purpose. Original347/94/69metadata10
+  floor restored exact again; whole claims returned, independent finalclosure
+  pending. Live native callback and wholeC3 remain separate; no expiredloan
+  inheritance.
 - Original C0 family/source ledger and C4 stated class-size target have current
   evidence. Full six-file C3, TC1/T9 resource closure, loaded scaling, configured
   continuous workflow and smooth wheel/useful paint remain explicitly unfinished.
