@@ -3406,3 +3406,30 @@ notification checks select the original Message.reference, and close/reopen uses
 the existing admission owner. The original three fixture producers are retained.
 This is source review only; continuous SDK/ACP/UI acceptance remains unrun.
 The twenty frozen performance helpers are unchanged and468 is not folded into04.
+
+### Startup and verifier failures identified; repairs remain active, 2026-10-05
+
+460 successor04 consumed its sole UI run and failed after32.100s. Parent read
+the original crash reports and reviewed the partial movie after termination.
+Renderer submission raised multiprocessing's bootstrapping RuntimeError, then
+BrokenProcessPool. The observer entrypoint run_observed_app.py calls main at
+module scope; Heis owns the complete entrypoint/spawn correction. This attempt
+provides no useful loading, wheel, frame or CPU acceptance. Owner handback88c77
+records one normal four-wheel restoration and exact CURRENT4471468/69 origins/
+428+1883 recovery, with no extra files. Original SDK journals and movie remain
+held after the separate private cold-storage access refusal. No replay.
+
+466 consumed one verifier attempt and failed before its mounted App. Parent
+matched wholehandback960d and all16 receipt hashes. Source-only ZIP inspection
+found the precise mismatch: the original Diff wheel includes two directory
+entries absent from RECORD; every actual file member is represented. Einstein
+owns the original verifier correction, preserving file digest/size completeness.
+The original CURRENT4591467/69 origins/266+1865 floor is restored; the worker
+cancellation/resume App remains unrun. Bohr owns independent closure of both
+returned purposes. Sch owns the matching artifact authority closures.
+
+678 READ03 is independently closed (fb5e, readback9d392), with original
+510/347+94 keepers/69 metadata/10 origins preserved and no remaining borrower.
+The qualified recorded-only comparison remains merged; Arendt continues the
+separate resource/p95 declaration source work. Continuous468 acceptance and
+actual fast loading/smooth scrolling remain unfinished, with Heis integrating.
