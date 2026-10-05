@@ -1096,7 +1096,9 @@ class RecordedMeasurementTests(unittest.TestCase):
                 source=NativeSessionIdentity(source, str(self.root / f'{source}.jsonl')),
                 source_revision=revision, revision=revision, prefix_digest=TextDigest.of('fixture prefix'), entry_count=1)
             manifest = ContextManifest(owner.incarnation, turn,
-                (SegmentManifest(ToolCatalogSegment, (JournalProvenance(probe.session.session_file, ('original',)),),
+                (SegmentManifest(SystemLayerSegment, (JournalProvenance(probe.session.session_file, ('original',)),),
+                    'd' * 64, 20, 4),
+                 SegmentManifest(ToolCatalogSegment, (JournalProvenance(probe.session.session_file, ('original',)),),
                     'c' * 64, 10, 2),), 'native', request_id='request')
             return {'construction': {'fork': fork, 'sdk_manifest': manifest,
                 'request_budget': {'evaluated': True, 'observations': (point,)},
@@ -1121,8 +1123,30 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertIs(observed['r1']['input_requests']['baseline'],
                       b['r1']['construction']['input_request_measurements'])
         self.assertFalse(observed['r2']['evaluated'])
-        self.assertEqual(len(observed['r1']['sdk_manifest_changes']['removed']), 1)
-        self.assertEqual(len(observed['r1']['sdk_manifest_changes']['added']), 1)
+        self.assertTrue(observed['r1']['request_controls']['evaluated'])
+        self.assertEqual(len(observed['r1']['sdk_manifest_changes']['removed']), 2)
+        self.assertEqual(len(observed['r1']['sdk_manifest_changes']['added']), 2)
+        # A same-model/source/tool pair must not score different instructions.
+        changed_system = observation('parent', probe=control)
+        manifest = changed_system['construction']['sdk_manifest']
+        changed_system['construction']['sdk_manifest'] = replace(manifest,
+            segments=(replace(manifest.segments[0], sha256='e' * 64), *manifest.segments[1:]))
+        with self.assertRaisesRegex(ValueError, 'Matched original request'):
+            candidate.alignment(different, a, {'r1': changed_system}, scenario.rounds)
+        # Historical absence is not a match and cannot enter paired inference.
+        missing_system = observation('parent', probe=control)
+        manifest = missing_system['construction']['sdk_manifest']
+        missing_system['construction']['sdk_manifest'] = replace(manifest, segments=manifest.segments[1:])
+        unavailable_alignment = candidate.alignment(different, a, {'r1': missing_system}, scenario.rounds)
+        unavailable_controls = unavailable_alignment['r1']
+        self.assertFalse(unavailable_controls['evaluated'])
+        self.assertFalse(unavailable_controls['request_controls']['evaluated'])
+        scores = tuple(scenario.score(condition, RecordedAnswers({}))
+                       for condition in (Condition.TASK_MEMORY, Condition.BOUNDED))
+        supported = {'r1': {'answer_support': {'unassisted_recall': True}}}
+        paired = scores[0].paired_quality(scores[1], supported, supported, unavailable_alignment)
+        self.assertFalse(paired['unassisted_recall']['evaluated'])
+        self.assertEqual(paired['unmatched']['candidate']['questions'], len(scenario.rounds[0].questions))
         changed = observation('parent', probe=control)
         changed['construction']['fork'] = replace(changed['construction']['fork'],
             source_revision=replace(revision := changed['construction']['fork'].source_revision, size=revision.size+1))
@@ -1140,6 +1164,28 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertFalse(match['captured_settings']['model']['evaluated'])
         no_summary['construction']['request_completion'] = {'evaluated': False, 'reason': 'Different terminal selection'}
         self.assertFalse(candidate.alignment(different, a, {'r1': no_summary}, scenario.rounds)['r1']['evaluated'])
+
+    def test_request_controls_preserve_order_multiplicity_and_whole_system_value(self):
+        # Annotation sources can differ across forks; the captured root value
+        # is the control. Ordered tool changes or repeated controls must differ.
+        owner = Thread('original', frozenset(), str(self.root), created_at=12)
+        turn = RecordedContextTurn(TurnId('turn'), TurnIdentity(owner.incarnation, 1))
+        source = (JournalProvenance(self.identity.session_file, ('original',)),)
+        system = SegmentManifest(SystemLayerSegment, source, 'a' * 64, 20, 4)
+        tool = SegmentManifest(ToolCatalogSegment, source, 'b' * 64, 10, 2)
+        second = replace(tool, sha256='c' * 64)
+        manifest = ContextManifest(owner.incarnation, turn, (system, tool, second), 'native', request_id='request')
+        annotated = replace(manifest, segments=(replace(system, contributors=(replace(system, sha256='d' * 64),)),
+                                                tool, second))
+        self.assertTrue(RecordedNativeProbes.context_alignment(manifest, annotated)['evaluated'])
+        for segments in ((system, second, tool), (system, tool, second, tool),
+                         (replace(system, utf8_bytes=21), tool, second)):
+            with self.subTest(segments=segments), self.assertRaisesRegex(ValueError, 'Matched original request'):
+                RecordedNativeProbes.context_alignment(manifest, replace(manifest, segments=segments))
+        self.assertFalse(RecordedNativeProbes.context_alignment(manifest,
+            replace(manifest, segments=(system,)))['evaluated'])
+        with self.assertRaisesRegex(ValueError, 'measurement counter'):
+            RecordedNativeProbes.context_alignment(manifest, replace(manifest, counter='different'))
 
     def test_request_alignment_preserves_missing_intent_and_revised_allowances(self):
         # Prevent configured-model matches and missing output intent from
