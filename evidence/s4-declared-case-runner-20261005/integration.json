@@ -1,0 +1,15 @@
+{
+  "head": "72f03c4af721e19857107faa3b86b34f7cd8db8b",
+  "main": "a7cc1da6cb5442e666c0a61012e6ef7de5eb865d",
+  "normal_merge": true,
+  "qualified_private_bytes_unchanged": {
+    "tests/compaction_retention_fixture.py": true,
+    "tests/compaction_source_successor_installed_journey.py": true,
+    "tests/test_recorded_retention_measurements.py": true,
+    "tests/three_cut_retention_configured_journey.py": true
+  },
+  "src_stack_tools_delta": [],
+  "controls_repeated": false,
+  "source_census_revision": "25b661f0f54e774983bc7970c1726ff719ba20cc",
+  "inherited_goal_family": "Accepted673 preserved unchanged; no S4 goal/wait edits"
+}
