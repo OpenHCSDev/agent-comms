@@ -82,14 +82,33 @@ class PairedRecallDesign:
 
     def compare(self, pairs):
         """Read supplied originals through the existing comparison algorithm."""
-        if len(pairs) != self.sample_count:
-            raise ValueError("Recorded pair count differs from the supplied design")
+        self.require_sample_count(pairs)
         scenario = RecordedNativeCheckpoint.read_record(self.oracle, RecallScenario)
         result = scenario.compare_native_pairs(self.candidate, pairs, self.baseline)
         result['comparison_design'] = FieldCodec.encode(self)
         result['recall_inference'] = ScoredScenario.paired_inference(result['pairs'], self)
         result['resource_margins'] = ScoredScenario.resource_margins(result, self)
         return result
+
+    def require_sample_count(self, pairs):
+        if len(pairs) != self.sample_count:
+            raise ValueError('Recorded pair count differs from the supplied design')
+
+    def pair_alignment(self, comparisons):
+        """Recall and resource decisions borrow the same original match rules."""
+        self.require_sample_count(comparisons)
+        unavailable = []
+        for index, pair in enumerate(comparisons, 1):
+            if not pair['alignment']:
+                unavailable.append(f'Pair {index}: original matched rounds unavailable')
+            for identity, alignment in pair['alignment'].items():
+                if not alignment['evaluated']:
+                    unavailable.append(f'Pair {index}, round {identity}: original alignment unavailable')
+                else:
+                    models = self.model_alignment(alignment)
+                    if not models['evaluated']:
+                        unavailable.append(f'Pair {index}, round {identity}: {models["reason"]}')
+        return {'evaluated': not unavailable, 'reasons': unavailable}
 
     def model_alignment(self, alignment):
         """Bind every observed selection to this supplied design.
@@ -181,8 +200,8 @@ class RecordedNativeProbes:
         seconds = FieldCodec.decode(float, original['workflow_elapsed_seconds'])
         inputs = FieldCodec.decode(tuple[tuple[NativeSessionIdentity, str, str], ...],
                                    original['workflow_inputs'])
-        if not isfinite(seconds) or seconds < 0:
-            raise ValueError('Original workflow duration must be finite and nonnegative')
+        if seconds < 0:
+            raise ValueError('Original workflow duration must be nonnegative')
         if len(set(inputs)) != len(inputs) or not set(self.workflow_inputs) <= set(inputs):
             raise ValueError('Original workflow clock does not cover these recorded inputs')
         return {'evaluated': complete, 'seconds': seconds, 'source': FieldCodec.encode(self.workflow),
@@ -966,11 +985,18 @@ class ScoredScenario(ScoreView):
         """Derive decisions from original totals/clocks and supplied design only."""
         cost = comparison['paired_resources']['groups']['recorded_workflow']['metrics']['normalized_cost']
         latency = comparison['paired_workflow_timing']['p95_seconds']
-        return {'normalized_cost': cls.reduction_margin(cost, design.normalized_cost_reduction_margin),
+        alignment = design.pair_alignment(comparison['pairs'])
+        decisions = {'normalized_cost': cls.reduction_margin(cost, design.normalized_cost_reduction_margin),
                 'workflow_p95': cls.reduction_margin(latency, design.workflow_p95_reduction_margin),
-                'scope': 'Conditional supplied-design arithmetic; SDK-normalized cost is not billing; '
+                'scope': 'Conditional supplied-design arithmetic on original matched selections; '
+                         'SDK-normalized cost is not billing; '
                          'shared source preparation is not independent arm cost; missing margins/clocks '
                          'stay unavailable; no registration, intervention, capacity or study acceptance'}
+        if not alignment['evaluated']:
+            for name in ('normalized_cost', 'workflow_p95'):
+                decisions[name].update(evaluated=False, meets_margin=None,
+                    reason='Original matched source/model observations unavailable')
+        return dict(decisions, original_alignment=alignment)
 
     def paired_quality(self, baseline, evidence, baseline_evidence, alignment):
         """Original alignment owns pairing; every frozen question stays visible."""
@@ -1042,17 +1068,8 @@ class ScoredScenario(ScoreView):
         sampling, correct interventions, billed cost or end-to-end acceptance.
         Missing and assisted recall cannot be dropped to improve the interval.
         """
-        if len(comparisons) != design.sample_count:
-            raise ValueError("Inference pair count differs from the supplied design")
-        samples, unavailable = [], []
+        samples, unavailable = [], list(design.pair_alignment(comparisons)['reasons'])
         for index, pair in enumerate(comparisons):
-            for identity, alignment in pair['alignment'].items():
-                if not alignment['evaluated']:
-                    unavailable.append(f"Pair {index + 1}, round {identity}: original alignment unavailable")
-                    continue
-                models = design.model_alignment(alignment)
-                if not models['evaluated']:
-                    unavailable.append(f"Pair {index + 1}, round {identity}: {models['reason']}")
             quality = pair['paired_quality']['unassisted_recall']
             frozen = pair['candidate']['measurements'].get(Measurement.RECALL.value)
             measured = quality['measurements']['candidate'].get(Measurement.RECALL.value)

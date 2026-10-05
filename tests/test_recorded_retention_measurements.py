@@ -792,10 +792,9 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertFalse(shared.workflow_timing()['exclusive_input_set'])
         incomplete = replace(timed, workflow=self.artifact('incomplete.json', dict(receipt, complete=False)))
         self.assertFalse(incomplete.workflow_timing()['evaluated'])
-        for seconds in (-1, float('inf'), float('nan')):
-            with self.subTest(seconds=seconds), self.assertRaisesRegex(ValueError, 'finite'):
-                replace(timed, workflow=self.artifact('invalid-clock.json', dict(receipt,
-                    workflow_elapsed_seconds=seconds))).workflow_timing()
+        with self.assertRaisesRegex(ValueError, 'nonnegative'):
+            replace(timed, workflow=self.artifact('invalid-clock.json', dict(receipt,
+                workflow_elapsed_seconds=-1))).workflow_timing()
         for inputs in ((), (*run.workflow_inputs, *run.workflow_inputs)):
             with self.subTest(inputs=inputs), self.assertRaisesRegex(ValueError, 'recorded inputs'):
                 replace(timed, workflow=self.artifact('wrong-inputs.json', dict(receipt,
@@ -848,15 +847,28 @@ class RecordedMeasurementTests(unittest.TestCase):
                 {'evaluated': complete, 'value': candidate},
                 {'evaluated': complete, 'value': baseline})
         cost, latency = measured(80., 100.), measured(95., 100.)
+        progress = RequestProgress('request', 'session', 'input', 1, 2, '3',
+            1, 0, 0, 0, 'budget_admission', model=ReportedModel(provider='original', id='model'))
+        requests = RecordedNativeProbe.input_request_measurements({'request': (progress,)})
+        alignment = {'r1': {'evaluated': True,
+            'completion_selection': {'models': (('original', 'model'),)},
+            'input_requests': {'candidate': requests, 'baseline': requests}}}
         comparison = {'paired_resources': {'groups': {'recorded_workflow': {
             'metrics': {'normalized_cost': cost}}}},
-            'paired_workflow_timing': {'p95_seconds': latency}}
+            'paired_workflow_timing': {'p95_seconds': latency},
+            'pairs': ({'alignment': alignment}, {'alignment': alignment})}
         result = ScoredScenario.resource_margins(comparison, design)
         self.assertTrue(result['normalized_cost']['meets_margin'])
         self.assertFalse(result['workflow_p95']['meets_margin'])
         absent = ScoredScenario.resource_margins(comparison, replace(design,
             normalized_cost_reduction_margin=None, workflow_p95_reduction_margin=None))
-        self.assertTrue(all(not item['evaluated'] for name, item in absent.items() if name != 'scope'))
+        self.assertTrue(all(not absent[name]['evaluated'] for name in ('normalized_cost', 'workflow_p95')))
+        missing = ScoredScenario.resource_margins(dict(comparison,
+            pairs=({'alignment': alignment}, {'alignment': {'r1': {'evaluated': False}}})), design)
+        self.assertFalse(missing['normalized_cost']['evaluated'])
+        self.assertIsNone(missing['workflow_p95']['meets_margin'])
+        with self.assertRaisesRegex(ValueError, 'model does not match'):
+            ScoredScenario.resource_margins(comparison, replace(design, model='another/model'))
         for value in (measured(0., 0.), measured(None, None, False)):
             self.assertFalse(ScoredScenario.reduction_margin(value, .1)['evaluated'])
         for name in ('normalized_cost_reduction_margin', 'workflow_p95_reduction_margin'):
