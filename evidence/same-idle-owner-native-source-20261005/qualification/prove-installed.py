@@ -51,7 +51,7 @@ wheel_proof = Path(grant['wheel_proof'])
 assert sha(wheel_proof.read_bytes()) == wheel_proof_sha256
 original = json.loads(wheel_proof.read_text())
 head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=checkout, text=True).strip()
-assert head == grant['source_receipt_head']
+assert head == lifecycle['source_receipt_head']
 requests = ''.join(f"{head}:{a['source']}\n" for a in original['assets'])
 blobs = io.BytesIO(subprocess.check_output(['git', 'cat-file', '--batch'], input=requests.encode(), cwd=checkout))
 inventory = []
