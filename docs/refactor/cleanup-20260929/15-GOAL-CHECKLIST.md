@@ -3137,6 +3137,12 @@ BLOCKED/ACTIVE observations remain historical, with no goal-tool resume/replay.
   external MCP selector preserves the three controls; Mendel now owns their
   source-only current producer/consumer migration. Heis owns current l0a
   migration and TC1/budget/workflow integration.
+- [ ] Complete the original retained writer cross-version restart. The current-
+  private661 inherited-FD/index and refusal check is accepted and closed; it
+  does not prove a cross-version restart. Parent owns the remaining authentic
+  old/new artifact relation; Bohr is looking only in existing retained manifests
+  after confirming the exact720 donor interpreter is absent. No fabricated old
+  schema, new environment or consumed operation is used, and471 proceeds separately.
 - [ ] Full S4 remains unfinished. Source679/680 is merged and recorded678 reads
   are independently closed; clocks/accounting and genuine original SDK source
   selection/capacity/matched workflows retain their evidence gaps. Arendt's
