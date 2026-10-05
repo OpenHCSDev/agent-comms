@@ -1,0 +1,65 @@
+{
+  "state": "ONE original recorded reader REFUSED before result; old purpose returned/independently closed",
+  "issued_sha256": "b7ac3ad369fbe335a82586f386b26ffd72ba78a60901cfadc2e8adfa75a206ef",
+  "source_frozen": "093d761ff25c1511402ed4778a2cdc929901ec25",
+  "merged": "d9f7d4457",
+  "exitcode": 1,
+  "elapsed_seconds": 1.3831455369945616,
+  "new_measurement_bytes": 0,
+  "refusal": "ValueError: Unknown fields for SystemLayerSegment: ['source_spans']",
+  "source_cause": "Retained674 producer used original676 Core355/3fe; old restored540 Core656347/5f has no SystemLayerSegment.source_spans declaration. Strict decoder correctly refuses incompatible cohort.",
+  "reader": {
+    "pid": 1124070,
+    "birth_ticks": 70081558
+  },
+  "controller": {
+    "pid": 1124057,
+    "birth_ticks": 70081516
+  },
+  "joined_absent": true,
+  "groups": [],
+  "sockets": [],
+  "keepers": {
+    "paired-measurements.private.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded01/paired-measurements.private.json",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "holder-postrun.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded01/holder-postrun.json",
+      "sha256": "970befc2baa98b3e92ca0401a515e854d3ff76c45d13dedd9f8309040ca3edeb",
+      "bytes": 1423
+    },
+    "whole-handback.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded01/whole-handback.json",
+      "sha256": "263cf3e3a4c6187dd0c794fdee58ca6cc2026334222017a904b7ce90107c3d37",
+      "bytes": 2728
+    },
+    "terminal.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded01/terminal.json",
+      "sha256": "c82cd52c6b1d39be950f91f8eeb895e69c3ede4e422a9f60fde2ec8c079fa17d",
+      "bytes": 1399
+    },
+    "stderr.log": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded01/stderr.log",
+      "sha256": "e10ef64fcdd6b201fd7755a9ea6ab1cf329f380862416d273969949c2d2deaa9",
+      "bytes": 4344
+    },
+    "live-handle.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded01/live-handle.json",
+      "sha256": "6923f6f9fbd95d534ecb11c2fa183acde7955d7d2cc2f5daadba09184a57c34f",
+      "bytes": 1149
+    }
+  },
+  "original133_current347_94_69metadata10_origins_source_exact": true,
+  "independent_closed_lifecycle": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Arendt677-same-recorded-input-read-only-lifecycle.json",
+    "sha256": "9236e9f9f7899c3889ca7169f987dcad1cc84cf6427cd5975cb4a38d9ef00230"
+  },
+  "independent_floor_readback": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Arendt677-recorded-read-independent-final-floor-readback.json",
+    "sha256": "94844ca9f1a57014483d553d206d245d383d492b309a06c9e49f8174735930e9"
+  },
+  "SDK_nativeartifact_provider_new_input_public_package_write": false,
+  "correction": "Use existing matching original676 wheel/declaration after fresh Core-only stage authority; same original scorer argv, NEW recorded02 output. No field drop/alternate codec/replay/new build."
+}
