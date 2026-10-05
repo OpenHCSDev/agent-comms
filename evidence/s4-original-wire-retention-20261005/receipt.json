@@ -1,0 +1,32 @@
+{
+  "base": "2ec1d064c131a20d33f880ca63a3252dc0a17ce0",
+  "source": {
+    "tests/retained_native_fixture.py": "61598cb627d67104d5d48b8a4f613da196bac29b5154ebd1fb6b3c9a0f961595",
+    "tests/compaction_retention_fixture.py": "a062be0024ec8da5f5c3c1d7a28c0460052d92baee10fc5a447d82f73ae11913",
+    "tests/test_recorded_retention_measurements.py": "bdfdcbeb9feabd61bf60cb0bc5b1fe0ca4d10e674528408328a233f3b3d4b3a7"
+  },
+  "raw": {
+    "evidence/s4-original-wire-retention-20261005/after.json": "a9d303974f2f495edb03765bfd51063518fcb84b3daf0fcff673259df1ad7e68",
+    "evidence/s4-original-wire-retention-20261005/before.json": "2a7fd13d25ba0af299ff28df71d6512cbb090ade574366f58de3f2b039835328",
+    "evidence/s4-original-wire-retention-20261005/cli-result.json": "74eac898d5ba24c57e60ce6d08766958526e3c49223a4e57827595587cc2fcf7",
+    "evidence/s4-original-wire-retention-20261005/cli.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "evidence/s4-original-wire-retention-20261005/cli.stdout.json": "9f0a163dd4db2d231d6c334b40daf4d3b4369ba69accee6ed88ee51ee409a157",
+    "evidence/s4-original-wire-retention-20261005/empty-recorded-run.json": "8f3cc296c7b28b4507fb760667f3188b45deacfe76456bc8cbac37d42bfb9359",
+    "evidence/s4-original-wire-retention-20261005/focused-before-batched-read.log": "8e2a8e493cc77c534b057fd2fb39fd32b5dcaf2452cecf91f3831301a3ff0118",
+    "evidence/s4-original-wire-retention-20261005/focused-final.log": "1cfa42f633305c84b2ddc3cbaa4f820bf9fcdbf77af8764862a263dc4670bc6c",
+    "evidence/s4-original-wire-retention-20261005/focused-initial.log": "d7b0c100126b5fa28980841911b7760209cf896d297e6eb68fa1b08e2cdc07cb",
+    "evidence/s4-original-wire-retention-20261005/focused-missing-usage.log": "cadb1b73e7fb37840f42b7ab69bb13f7f96c0f5409e657bb81a872703c81bdf6"
+  },
+  "final_control": "5 passed, 42 deselected in 1.03s",
+  "CLI": "Empty authored recorded-run; every frozen publication/delivery round unavailable",
+  "runtime_delta": [],
+  "counts": {
+    "Python_modules": 748,
+    "parse_omissions": [],
+    "provider_inputs": 0,
+    "SDK_runs": 0,
+    "original_session_reads": 0,
+    "holder_imports": 0
+  },
+  "limits": "Authored private-wire/source measurement only; no actual retained original re-read, native input delivery, request-presence, HTTP, recall, capacity or study proof. Prior STARTED/refusal records unchanged."
+}

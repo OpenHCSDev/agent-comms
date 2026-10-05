@@ -595,6 +595,11 @@ class ScoredScenario(ScoreView):
             for item in self.source.rounds}
         return FieldCodec.encode(dict(result, native_probes=evidence,
                     answer_origin="recorded-native",
+                    retained_publications={
+                        item.identity: checkpoints.get(item.identity, {}).get("scoped_facts", {}).get(
+                            "retained_publications", {"evaluated": False,
+                                "reason": "No original retained-publication observation supplied"})
+                        for item in self.source.rounds},
                     recorded_resources=self.recorded_resources(checkpoints, evidence, stimuli),
                     source_delivery=source_delivery,
                     condition_construction=self.condition_construction(evidence, source_delivery),
