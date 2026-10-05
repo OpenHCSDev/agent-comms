@@ -1,8 +1,22 @@
-## Current integration and live acceptance — 2026-10-04
+## Current delivery — 2026-10-05
 
-This section is the current delivery state. The records below preserve earlier
-source, execution and disposition evidence; their old pending statuses do not
-replace this section. The full original goal remains active.
+This section is the current summary. Later dated sections preserve original
+evidence and decisions; their old pending states and floors do not override it.
+The full original goal remains active. CI is deferred as a merge gate.
+
+| Work | Actual state | Remaining delivery |
+| --- | --- | --- |
+| Public installation | PUBLIC448 is on style22, with five default routes and original owner root retained. One-use receipt4ce7a47a records declared9-to10 carry and preserved owner runtime. Ordinary public44802 completed63.059s, all18 lifetime checks passed, runtime unchanged and cleanup empty. Parent reviewed original still images after terminal. | Functional publication and ordinary startup/channel/return/draft/Undo are accepted. Smooth wheel motion, frame times, CPU, fast cold useful paint and full configured continuous operation are not. Former334 is not implicitly available as a private loan. |
+| Workspace integration455 | Jointbc611 retains450/451/453/454 owners and readiness invalidation. One319-asset6977 wheel pairs merged675/a685 Core355 and mergedText66/09452 Text266. Fresh485 issued9013 package scope is effective; actual stage exited0/0.172759273s, attempt1. Installed proof and App releases remain pending. | Serial checks: worker/session custody, project restoration, genuine private-original connected readiness with zero new input. Stop on first failure/uncertainty. Native7a READ is bound; EXEC and public decoder remain held. Actual private floor1441/69/155/1883 is distinct from PUBLIC448. Earlier drafts close after qualified joint normal merge. |
+| C3 |675 merged as7b68. Five original canonical passes plus corrected reply1PASS and two saved-SDK/TurnRunner localhost settlement cases passed. Raw first failure is preserved; whole540 restoration and independent close are complete. | Merged code is in455 candidate, not yet public. Accepted controls need no repeat. Scoped owner/settlement acceptance is not a whole-workflow or speed claim. |
+| Loading and frames | Heis owns integration; Einstein is active on cold useful paint and Toad viewport/scroll work; Kepler is active on remaining native scene/scroll acquisition. Shared seams require direct agreement before edits. Text66 passed22 source App checks and its one wheel is built. | Actual fast load, smooth mouse wheel, held paging/reversal/growing End/cold width and moving-frame cadence remain required. Genuine loaded4/16/32/64 histories and full resource disposal remain unqualified; mixed cohorts with two loaded owners cannot replace them. |
+| S4 | Arendt674 owns RecallRound/condition_application and authored USER publication; Mendel676 owns same-idle-owner fork selection/restoration. Prior recorded construction/source/request passes and raw failures are retained. These branches have no SDK/provider operation. | Integrate authentic shared-arm source/custody and verify configured construction, request/capacity, comparative recall and intervention.30-pair/USD75 study remains unapproved. |
+| Original backlog | Named T2/commands/interface/event/rendering/error/recovery owners and documented271/53/116/122 reconciliation remain integrated. Explorer annotation GUI, historical read/search/export and stopped-copy carry passed distinct scopes and are functionally published. | Preserve every working feature through the next installed cohort. Whole TC1/T4/round-two deletion/resource/continuous scope and historical cross-version writer restart remain incomplete. External annotation/disclosure safeguards remain OFF; W7/W8 do not hold functional delivery. |
+
+## Historical integration and live acceptance — 2026-10-04
+
+This section preserves the original2026-10-04 delivery record. Use Current
+delivery above for the current public installation, active work and pending checks.
 
 | Work | Verified state | Next actual boundary |
 | --- | --- | --- |

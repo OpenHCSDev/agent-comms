@@ -1,8 +1,8 @@
 ## Current delivery
 
-The authoritative current installation, active owners, actual verification and remaining defects are recorded once in [16-CURRENT-S14-OWNERS.md](16-CURRENT-S14-OWNERS.md), under its newest dated heading. The full original goal remains active. The dated entries below are historical evidence, not the current live state.
+The authoritative current installation, active owners, actual verification and remaining defects are recorded once in [16-CURRENT-S14-OWNERS.md](16-CURRENT-S14-OWNERS.md), under Current delivery at the start of that file. The full original goal remains active. The dated entries below are historical evidence, not the current live state.
 
-Use the newest current-owner section linked above for installation and acceptance.
+Use that Current delivery section for installation and acceptance.
 The historical436,440 and444 entries below must not override the current
 publication recorded in16. Authentic AnnotationNode/GUI USER/effective-label
 refresh has passed, and the same-input configured construction reader has
