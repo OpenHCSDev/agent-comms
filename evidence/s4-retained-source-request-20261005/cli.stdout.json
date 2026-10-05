@@ -1,0 +1,816 @@
+{
+  "scenario": "coding-corrections-v1",
+  "condition": "task-memory",
+  "oracle_origin": "authored-frozen",
+  "answer_origin": "recorded-native",
+  "rounds": [
+    {
+      "round": "r1",
+      "questions": 7,
+      "correct": 0,
+      "stale": 0,
+      "missing": 7,
+      "measurements": {
+        "recall": {
+          "questions": 6,
+          "correct": 0,
+          "stale": 0,
+          "missing": 6
+        },
+        "prohibition": {
+          "questions": 1,
+          "correct": 0,
+          "stale": 0,
+          "missing": 1
+        }
+      },
+      "answers": {
+        "symbol": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "path": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "root": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "goal": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "commit": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "failure": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "input": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        }
+      }
+    },
+    {
+      "round": "r2",
+      "questions": 7,
+      "correct": 0,
+      "stale": 0,
+      "missing": 7,
+      "measurements": {
+        "recall": {
+          "questions": 6,
+          "correct": 0,
+          "stale": 0,
+          "missing": 6
+        },
+        "prohibition": {
+          "questions": 1,
+          "correct": 0,
+          "stale": 0,
+          "missing": 1
+        }
+      },
+      "answers": {
+        "symbol": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "path": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "root": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "goal": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "commit": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "failure": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "input": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        }
+      }
+    },
+    {
+      "round": "r3",
+      "questions": 7,
+      "correct": 0,
+      "stale": 0,
+      "missing": 7,
+      "measurements": {
+        "recall": {
+          "questions": 6,
+          "correct": 0,
+          "stale": 0,
+          "missing": 6
+        },
+        "prohibition": {
+          "questions": 1,
+          "correct": 0,
+          "stale": 0,
+          "missing": 1
+        }
+      },
+      "answers": {
+        "symbol": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "path": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "root": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "goal": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "commit": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "failure": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        },
+        "input": {
+          "correct": false,
+          "stale": false,
+          "missing": true
+        }
+      }
+    }
+  ],
+  "questions": 21,
+  "correct": 0,
+  "stale": 0,
+  "missing": 21,
+  "measurements": {
+    "recall": {
+      "questions": 18,
+      "correct": 0,
+      "stale": 0,
+      "missing": 18
+    },
+    "prohibition": {
+      "questions": 3,
+      "correct": 0,
+      "stale": 0,
+      "missing": 3
+    }
+  },
+  "native_probes": {},
+  "retained_publications": {
+    "r1": {
+      "evaluated": false,
+      "reason": "No original retained-publication observation supplied"
+    },
+    "r2": {
+      "evaluated": false,
+      "reason": "No original retained-publication observation supplied"
+    },
+    "r3": {
+      "evaluated": false,
+      "reason": "No original retained-publication observation supplied"
+    }
+  },
+  "recorded_resources": {
+    "summaries": {
+      "records": 0,
+      "usage_records": 0,
+      "expected_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "observed_rounds": [],
+      "missing_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "input_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "output_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "cache_read_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "cache_write_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "reported_total_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "reasoning_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "normalized_cost": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      }
+    },
+    "assistants": {
+      "records": 0,
+      "usage_records": 0,
+      "expected_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "observed_rounds": [],
+      "missing_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "input_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "output_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "cache_read_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "cache_write_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "reported_total_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "reasoning_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "normalized_cost": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      }
+    },
+    "combined": {
+      "records": 0,
+      "usage_records": 0,
+      "expected_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "observed_rounds": [],
+      "missing_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "input_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "output_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "cache_read_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "cache_write_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "reported_total_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "reasoning_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "normalized_cost": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      }
+    },
+    "source_inputs": {
+      "records": 0,
+      "usage_records": 0,
+      "expected_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "observed_rounds": [],
+      "missing_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "input_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "output_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "cache_read_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "cache_write_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "reported_total_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "reasoning_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "normalized_cost": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      }
+    },
+    "recorded_workflow": {
+      "records": 0,
+      "usage_records": 0,
+      "expected_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "observed_rounds": [],
+      "missing_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "input_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "output_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "cache_read_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "cache_write_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "reported_total_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "reasoning_tokens": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      },
+      "normalized_cost": {
+        "evaluated": false,
+        "value": null,
+        "observed_records": 0,
+        "expected_records": null,
+        "observed_value": null
+      }
+    },
+    "scope": "Original journaled summary and assistant completions only; complete totals require observations for every frozen round; combined retains selected-summary/recall scope; recorded_workflow also requires stimuli; shared source preparation is not independent arm cost; observed subtotals do not estimate missing work or prove no summary work; SDK-normalized cost is not billed spend; no unjournaled retries, cache-saving comparison, HTTP accounting or end-to-end timing"
+  },
+  "source_delivery": {
+    "r1": {
+      "evaluated": false,
+      "reason": "Original authored-history stimulus not captured"
+    },
+    "r2": {
+      "evaluated": false,
+      "reason": "Original authored-history stimulus not captured"
+    },
+    "r3": {
+      "evaluated": false,
+      "reason": "Original authored-history stimulus not captured"
+    }
+  },
+  "condition_construction": {
+    "evaluated": false,
+    "declared_condition": "task-memory",
+    "bounded_sdk_application": {
+      "evaluated": false,
+      "expected_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "available_rounds": [],
+      "unavailable_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ]
+    },
+    "installed_sdk_source": {
+      "evaluated": false,
+      "expected_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "available_rounds": [],
+      "unavailable_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ]
+    },
+    "recorded_constructor_selection": {
+      "evaluated": false,
+      "expected_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "available_rounds": [],
+      "unavailable_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ]
+    },
+    "sdk_entry_selection": {
+      "evaluated": false,
+      "expected_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "available_rounds": [],
+      "unavailable_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ]
+    },
+    "installed_narrative_source": {
+      "evaluated": false,
+      "expected_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "available_rounds": [],
+      "unavailable_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ]
+    },
+    "constructed_source_prefix": {
+      "evaluated": false,
+      "expected_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "available_rounds": [],
+      "unavailable_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "preserved_rounds": [],
+      "changed_rounds": []
+    },
+    "native_request_admission": {
+      "evaluated": false,
+      "expected_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "available_rounds": [],
+      "unavailable_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ]
+    },
+    "sdk_probe_input_presence": {
+      "evaluated": false,
+      "expected_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "available_rounds": [],
+      "unavailable_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "present_rounds": [],
+      "absent_rounds": []
+    },
+    "source_delivery": {
+      "evaluated": false,
+      "expected_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "available_rounds": [],
+      "unavailable_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ]
+    },
+    "retained_source_request": {
+      "evaluated": false,
+      "expected_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "available_rounds": [],
+      "unavailable_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "present_rounds": [],
+      "absent_envelope_rounds": []
+    },
+    "full_history_capacity": {
+      "evaluated": false,
+      "expected_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "available_rounds": [],
+      "unavailable_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ]
+    },
+    "full_history_sdk_admission": {
+      "evaluated": false,
+      "expected_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "available_rounds": [],
+      "unavailable_rounds": [
+        "r1",
+        "r2",
+        "r3"
+      ],
+      "admitted_rounds": [],
+      "not_full_history_rounds": []
+    },
+    "reason": "Original condition selection and complete-history eligibility are not supplied by a label or SDK preview",
+    "scope": "Frozen-round availability of original source/transform/request observations; details remain in source_delivery and native_probes; not verified matched interventions, HTTP bytes, registration or study acceptance"
+  },
+  "original_stimuli": {},
+  "quality_denominators": {
+    "unassisted_recall": {
+      "questions": 0,
+      "correct": 0,
+      "stale": 0,
+      "missing": 0
+    },
+    "tool_assisted_task_quality": {
+      "questions": 0,
+      "correct": 0,
+      "stale": 0,
+      "missing": 0
+    },
+    "unobserved": {
+      "questions": 21,
+      "correct": 0,
+      "stale": 0,
+      "missing": 21
+    }
+  },
+  "proposed_actions": {
+    "r1": {},
+    "r2": {},
+    "r3": {}
+  },
+  "scope": "recorded original native probes; condition label is not construction proof",
+  "checkpoints": {},
+  "original_checkpoint_count": 0,
+  "three_original_cuts_observed": false,
+  "canonical_availability": {
+    "r1": {
+      "evaluated": false,
+      "reason": "No original committed checkpoint supplied"
+    },
+    "r2": {
+      "evaluated": false,
+      "reason": "No original committed checkpoint supplied"
+    },
+    "r3": {
+      "evaluated": false,
+      "reason": "No original committed checkpoint supplied"
+    }
+  },
+  "provider_prompt_presence": {
+    "r1": {
+      "evaluated": false,
+      "reason": "No original native probe supplied"
+    },
+    "r2": {
+      "evaluated": false,
+      "reason": "No original native probe supplied"
+    },
+    "r3": {
+      "evaluated": false,
+      "reason": "No original native probe supplied"
+    }
+  },
+  "revision_mass": {
+    "r2": {
+      "evaluated": false,
+      "missing_checkpoints": [
+        "r1",
+        "r2"
+      ],
+      "reason": "Both original adjacent-round checkpoints are required",
+      "from_round": "r1",
+      "to_round": "r2"
+    },
+    "r3": {
+      "evaluated": false,
+      "missing_checkpoints": [
+        "r2",
+        "r3"
+      ],
+      "reason": "Both original adjacent-round checkpoints are required",
+      "from_round": "r2",
+      "to_round": "r3"
+    }
+  },
+  "answer_support": {},
+  "recall_scope": "Original recorded answers; tool-assisted answers are task quality, not unassisted recall. Authored answers are scorer controls"
+}
