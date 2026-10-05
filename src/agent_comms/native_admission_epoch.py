@@ -5,6 +5,8 @@ FieldCodec decodes that boundary once into these explicit admission members.
 Neither an absent epoch nor a later release proves that prompt bytes were unwritten.
 """
 
+from __future__ import annotations
+
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

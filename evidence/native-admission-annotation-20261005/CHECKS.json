@@ -1,0 +1,12 @@
+{
+  "python": "3.11.11 (main, Mar 17 2025, 21:02:09) [Clang 20.1.0 ]",
+  "python_path": "/home/ts/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/bin/python3.11",
+  "source": "src/agent_comms/native_admission_epoch.py",
+  "unchanged_AST_except_future_import": true,
+  "method_annotation_compiler_checks": {
+    "NativeAdmissionEpoch": "identity method annotation compiled in original constant tuple; no runtime name load",
+    "UnrecordedNativeAdmission": "identity method annotation compiled in original constant tuple; no runtime name load"
+  },
+  "initial_control_negative": "Initial oracle expected a standalone LOAD_CONST string; Python3.11 folds the complete annotations tuple. Original negative retained here; corrected oracle consumes the actual compiler tuple. No product change.",
+  "strength": "Actual Python3.11 compilation and class-definition bytecode. No full installed product import/native/provider/store/SDK run."
+}

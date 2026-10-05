@@ -16,7 +16,7 @@ from agent_comms.compaction_records import CompactionOperation, NativeForkCreati
 from agent_comms.field_codec import FieldCodec, FieldRepresentation, PathText
 from agent_comms.input_disposition import InputDocument, InputDispositions
 from agent_comms.input_attempt import InputAttempt, MissingInput
-from agent_comms.native_entries import ManagedCompactionEntry, MessageEntry, NativeEntry, NativeEvidenceRead, ThinkingLevelChangeEntry
+from agent_comms.native_entries import CompactionEntry, ManagedCompactionEntry, MessageEntry, NativeEntry, NativeEvidenceRead, ThinkingLevelChangeEntry
 from agent_comms.native_input_record import NativeInputIdText
 from agent_comms.native_pi import NativeContextProof, NativeContextRecord
 from agent_comms.native_compaction_request import NativeIntent
@@ -122,6 +122,20 @@ class RecordedNativeCheckpoint:
         if hashlib.sha256(raw).hexdigest() != reference.sha256:
             raise ValueError("Recorded measurement artifact changed")
         return raw
+
+    @staticmethod
+    def snapshot_observation(source: Path, destination: Path):
+        """Seal original appendable observation bytes before pinning a file.
+
+        Native diagnostics and inspector completion can append after a probe.
+        A FileProvenance names an immutable captured value, not that writer's
+        later contents. Preserve the raw bytes without filtering or recoding.
+        """
+        raw = source.read_bytes()
+        with destination.open('xb') as stream:
+            stream.write(raw)
+        destination.chmod(0o600)
+        return FileProvenance(str(destination), hashlib.sha256(raw).hexdigest())
 
     @classmethod
     def read_json(cls, reference: FileProvenance):
@@ -294,14 +308,25 @@ class RecordedNativeCheckpoint:
                 raise ValueError('Captured SDK request does not contain the original bounded narrative')
         return constructed
 
-    def capture_for_probe(self,session,evidence,fork_journal,source):
-        """A probe may follow the original cut or its corroborated SDK child."""
+    def capture_for_probe(self,session,evidence,fork_journal,source,input_entry):
+        """Corroborate the latest cut on this original input's acquired branch.
+
+        A completed cut may already contain subsequent messages when forked.
+        Those messages preserve the cut's applicability; another compaction or
+        another branch does not. Fork inheritance still needs its original
+        creation and exact parent/child source evidence.
+        """
         if self.reference.session_file==session.session_file:
-            return self.capture(session,evidence)
-        if fork_journal is None:
-            raise ValueError('Inherited checkpoint probe requires its original fork journal')
-        creation,_,captured=self._fork_capture(fork_journal,evidence,source)
-        creation.require_same_session(session)
+            captured=self.capture(session,evidence)
+        else:
+            if fork_journal is None:
+                raise ValueError('Inherited checkpoint probe requires its original fork journal')
+            creation,_,captured=self._fork_capture(fork_journal,evidence,source)
+            creation.require_same_session(session)
+        branch=evidence.branch(input_entry.require_entry_id(),evidence.entries)
+        cuts=tuple(entry for entry in branch if isinstance(entry,CompactionEntry))
+        if not cuts or cuts[-1]!=captured[1]:
+            raise ValueError('Recorded checkpoint is not the latest compaction on its original input branch')
         return captured
 
     def inspect(self, previous: RecordedNativeCheckpoint | None = None):
@@ -645,8 +670,10 @@ class RecordedNativeProbe:
             pin('manifest',manifest),original(contexts/f'segments-{context.llm_context_digest}.json'),
             pin('inputs',InputDispositions(service.root/InputDispositions.filename).read()),
             fork_journal=service.root/'compaction-commits.sqlite3',
-            request_observations=original(observed) if observed.is_file() else None,
-            condition_observation=original(condition_observation) if condition_observation is not None else None,
+            request_observations=RecordedNativeCheckpoint.snapshot_observation(observed,
+                output/f'probe-{row.native_id}-requests.private.jsonl') if observed.is_file() else None,
+            condition_observation=RecordedNativeCheckpoint.snapshot_observation(condition_observation,
+                output/f'probe-{row.native_id}-condition.private.jsonl') if condition_observation is not None else None,
             sdk_observation=original(sdk_observed) if sdk_observed.is_file() else None)
 
     def condition_records(self):
@@ -1322,12 +1349,10 @@ class RecordedNativeProbe:
         prompt, submitted, submitted_input = self.submitted_prompt(user, manifest)
         if self.checkpoint is not None:
             attempt, entry, covered, assembly = self.checkpoint.capture_for_probe(
-                self.session,evidence,self.fork_journal,source)
+                self.session,evidence,self.fork_journal,source,user)
             checkpoint = self.checkpoint._report(attempt, entry, covered, assembly)
             retained = attempt.request.retained
             scoped = self.checkpoint.scoped_facts(attempt)
-            if user.parent_id != checkpoint["native_entry_id"]:
-                raise ValueError("Recorded probe must immediately follow its original checkpoint")
         else:
             retained = None
             scoped = {"evaluated": False, "reason": "No original scoped checkpoint",
