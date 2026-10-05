@@ -1,171 +1,700 @@
 {
-  "production_source": "9636b7d9b16bda87a68bf63d0cdca522ea8ef0fa",
-  "collector": "original audit.findings.Package.load / ParsedModule.tree",
-  "roots": [
-    {
-      "root": "src/agent_comms",
+  "base": "7b68d630caa654d3e9884f45cbd6493718752a0c",
+  "head": "a264da8f7251c72fae0ee0259c1d81de9ea5ed7e",
+  "coverage": {
+    "src/agent_comms": {
       "parsed": 324,
       "omissions": []
     },
-    {
-      "root": "tests",
+    "tests": {
       "parsed": 373,
       "omissions": []
     },
-    {
-      "root": "tools",
+    "tools": {
       "parsed": 54,
       "omissions": []
     }
+  },
+  "patterns": [
+    "IDEN-1",
+    "IDEN-2",
+    "IDEN-3"
   ],
-  "owner_methods": [
+  "classes": [
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 87,
+      "name": "PersistentPiSession",
+      "bases": [],
+      "fields": []
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 359,
+      "name": "NativeForkCreation",
+      "bases": [
+        "NativeSessionIdentity",
+        "SessionJournalHistory",
+        "TypedTable"
+      ],
+      "fields": [
+        "session_file: str = field(metadata={'wire_name': 'sessionFile', 'sql': Column(primary_key=True)})",
+        "source: NativeSessionIdentity",
+        "source_revision: Annotated[FileRevision, NativeRevisionText] = field(metadata={'wire_name': 'sourceRevision'})",
+        "revision: Annotated[FileRevision, NativeRevisionText]",
+        "prefix_digest: TextDigest = field(metadata={'wire_name': 'prefixDigest'})",
+        "entry_count: int = field(metadata={'wire_name': 'entryCount'})"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_arguments.py",
+      "line": 152,
+      "name": "NativeArguments",
+      "bases": [],
+      "fields": [
+        "entries: tuple[NativeArgument, ...]"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 31,
+      "name": "PiSessionChild",
+      "bases": [],
+      "fields": [
+        "proc: AttachedChild",
+        "reader: PiRpcChannel",
+        "stderr_task: asyncio.Task[str]",
+        "key: tuple[NativePiRpcLaunch, tuple[int, int]]",
+        "attestation: NativeAttestation",
+        "sensitive_diagnostics: bool = False",
+        "resources: ExitStack = field(default_factory=ExitStack, repr=False)"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 106,
+      "name": "NativeCustody",
+      "bases": [
+        "ABC"
+      ],
+      "fields": []
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 146,
+      "name": "EmptyNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "fields": []
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 194,
+      "name": "RetiringNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "fields": [
+        "task: asyncio.Task[None]",
+        "successor: NativeCustody",
+        "child: PiSessionChild"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 223,
+      "name": "BorrowedNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "fields": [
+        "child: PiSessionChild",
+        "successor: NativeCustody"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 254,
+      "name": "RetainedNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "fields": [
+        "child: PiSessionChild",
+        "identity: NativeSessionIdentity",
+        "revision: SessionRevision"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 36,
+      "name": "RegistryOwner",
+      "bases": [],
+      "fields": [
+        "check_type: ClassVar[type[RegistryIdentityCheck]] = GoalRegistryAdmissionCheck",
+        "thread: Thread",
+        "admission_generation: int"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 27,
+      "name": "NativeSessionPreparation",
+      "bases": [
+        "backend.TurnSession"
+      ],
+      "fields": []
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 35,
+      "name": "Registration",
+      "bases": [],
+      "fields": []
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 66,
+      "name": "RegistryDocument",
+      "bases": [
+        "RegistryPresence"
+      ],
+      "fields": [
+        "threads: dict[str, Thread] = field(default_factory=dict)",
+        "statuses: dict[str, ThreadStatus] = field(default_factory=dict)",
+        "last_seen: dict[str, float] = field(default_factory=dict)",
+        "aliases: dict[str, str] = field(default_factory=dict)",
+        "owners: GenerationCounter = field(default_factory=GenerationCounter)",
+        "admissions: GenerationCounter = field(default_factory=GenerationCounter)"
+      ]
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 94,
+      "name": "ProjectRuntimeRequest",
+      "bases": [
+        "ResultRuntimeRequest"
+      ],
+      "fields": [
+        "binding: LiveThreadOwnerBinding"
+      ]
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 53,
+      "name": "SessionLifecycle",
+      "bases": [],
+      "fields": []
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 96,
+      "name": "TurnRunner",
+      "bases": [],
+      "fields": []
+    }
+  ],
+  "methods": [
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 118,
+      "owner": "PersistentPiSession",
+      "name": "retain",
+      "source": "def retain(self, child: PiSessionChild, identity: NativeSessionIdentity) -> bool:\n        if not child.proc.alive():\n            return False\n        try:\n            revision = SessionRevision.observe(identity.session_file).require_available()\n        except SessionRevisionUnavailable:\n            return False\n        self.custody = RetainedNative(child, identity, revision)\n        return True"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 128,
+      "owner": "PersistentPiSession",
+      "name": "close",
+      "source": "async def close(self) -> None:\n        await self._finish_retirement(self.custody.retire())"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 131,
+      "owner": "PersistentPiSession",
+      "name": "close_owned",
+      "source": "async def close_owned(self, identity: NativeSessionIdentity, binding, arguments, worktree: Path) -> None:\n        \"\"\"Refuse unrelated custody before initiating the original stop task.\"\"\"\n        await self._finish_retirement(self.custody.retire_owned(identity, binding, arguments, worktree))"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 135,
+      "owner": "PersistentPiSession",
+      "name": "_finish_retirement",
+      "source": "async def _finish_retirement(self, retiring: NativeCustody) -> None:\n        self.custody = retiring\n        try:\n            self.custody = await self.custody.closed()\n        except NativeCleanupFailed as error:\n            self.custody = error.successor\n            raise"
+    },
     {
       "path": "src/agent_comms/compaction_records.py",
       "line": 393,
+      "owner": "NativeForkCreation",
       "name": "require_recorded_selection",
       "source": "def require_recorded_selection(self, journal: Path, original: str) -> None:\n        \"\"\"Corroborate this returned fork without minting owner/task authority.\"\"\"\n        from .compaction_journal import CompactionJournal\n        from .native_entries import NativeEntry\n\n        self.source.require_session(original)\n        recorded = CompactionJournal.observe_readonly(journal, lambda db:\n            type(self).one(db, session_file=self.session_file), absent=None)\n        if recorded != self:\n            raise CompactionJournalError(\"Native selection requires its original recorded SDK fork\")\n        with NativeEntry.open_evidence(self.source.path) as parent, NativeEntry.open_evidence(self.path) as child:\n            parent.observe()\n            if not self.source.covers(parent, self.source_revision) or (\n                FileRevision.from_stat(self.source.path.stat()) != self.source_revision\n            ):\n                raise CompactionJournalError(\"Original native fork parent changed before selection\")\n            _, entries = child.observe()\n            self.require_original_prefix(child, entries)"
     },
     {
+      "path": "src/agent_comms/native_arguments.py",
+      "line": 156,
+      "owner": "NativeArguments",
+      "name": "parse",
+      "source": "def parse(cls, arguments: Sequence[str]) -> NativeArguments:\n        options = {\n            flag: member\n            for member in OptionArgument.members_with(OptionArgument)\n            for flag in (member.flag(), member.short)\n            if flag is not None\n        }\n        result = []\n        source = iter(arguments)\n        for token in source:\n            name, separator, value = token.partition(\"=\")\n            member = options.get(name)\n            result.append(\n                member.consume(value if separator else None, source)\n                if member is not None\n                else ExternalArgument((token,))\n            )\n        return cls(tuple(result))"
+    },
+    {
+      "path": "src/agent_comms/native_arguments.py",
+      "line": 185,
+      "owner": "NativeArguments",
+      "name": "model",
+      "source": "def model(self) -> str | None:\n        selected = next(\n            (entry for entry in reversed(self.entries) if isinstance(entry, ModelArgument)), None\n        )\n        return selected.qualified(self.value(ProviderArgument)) if selected is not None else None"
+    },
+    {
+      "path": "src/agent_comms/native_arguments.py",
+      "line": 192,
+      "owner": "NativeArguments",
+      "name": "thinking",
+      "source": "def thinking(self) -> str | None:\n        return self.value(ThinkingArgument)"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 40,
+      "owner": "PiSessionChild",
+      "name": "require_source_owner",
+      "source": "def require_source_owner(self, identity: NativeSessionIdentity, binding: LiveThreadOwnerBinding,\n                             arguments: NativeArguments, worktree: Path) -> None:\n        \"\"\"Retirement consumes this actual child's original launch provenance.\"\"\"\n        from .runtime_requests import ProjectRuntimeRequest\n\n        launch, _ = self.key\n        launch.session.attest(identity)\n        request = ProjectRuntimeRequest.from_wire(json.loads(launch.env[\"AGENT_COMMS_PROJECT_REQUEST\"]))\n        if request.binding != binding:\n            raise NativePiUnavailable(\"Native child belongs to another original owner binding\")\n        actual = NativeArguments.parse(launch.argv)\n        if (actual.model, actual.thinking, launch.cwd) != (\n            arguments.model, arguments.thinking, worktree.resolve(strict=True)\n        ):\n            raise NativePiUnavailable(\"Native child belongs to another selected configuration\")"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 87,
+      "owner": "PiSessionChild",
+      "name": "close",
+      "source": "async def close(self) -> None:\n        await self.proc.stop()\n        await asyncio.gather(self.stderr_task, return_exceptions=True)\n        self.resources.close()"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 135,
+      "owner": "NativeCustody",
+      "name": "retire_owned",
+      "source": "def retire_owned(self, identity: NativeSessionIdentity, binding: LiveThreadOwnerBinding,\n                     arguments: NativeArguments, worktree: Path) -> NativeCustody:\n        raise NativePiUnavailable(\"Native custody cannot retire the original selected child\")"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 149,
+      "owner": "EmptyNative",
+      "name": "retire_owned",
+      "source": "def retire_owned(self, identity, binding, arguments, worktree):\n        return self"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 200,
+      "owner": "RetiringNative",
+      "name": "retire_owned",
+      "source": "def retire_owned(self, identity, binding, arguments, worktree):\n        self.child.require_source_owner(identity, binding, arguments, worktree)\n        return self"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 209,
+      "owner": "RetiringNative",
+      "name": "closed",
+      "source": "async def closed(self):\n        try:\n            await asyncio.shield(self.task)\n        except Exception as error:\n            if self.child.proc.retired:\n                raise NativeCleanupFailed(self.successor, error) from error\n            raise\n        return self.successor"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 228,
+      "owner": "BorrowedNative",
+      "name": "retire_owned",
+      "source": "def retire_owned(self, identity, binding, arguments, worktree):\n        self.child.require_source_owner(identity, binding, arguments, worktree)\n        return self.retire()"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 240,
+      "owner": "BorrowedNative",
+      "name": "retire",
+      "source": "def retire(self, successor=None):\n        return RetiringNative(\n            asyncio.create_task(self.child.close()),\n            self.successor if successor is None else successor,\n            self.child,\n        )"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 261,
+      "owner": "RetainedNative",
+      "name": "retire_owned",
+      "source": "def retire_owned(self, identity, binding, arguments, worktree):\n        self.identity.require_same_session(identity)\n        return BorrowedNative(self.child, EmptyNative()).retire_owned(identity, binding, arguments, worktree)"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 351,
+      "owner": "RetainedNative",
+      "name": "retire",
+      "source": "def retire(self, successor=None):\n        return RetiringNative(\n            asyncio.create_task(self.child.close()),\n            EmptyNative() if successor is None else successor,\n            self.child,\n        )"
+    },
+    {
       "path": "src/agent_comms/native_input_owner.py",
       "line": 143,
+      "owner": "RegistryOwner",
       "name": "require_idle_source_snapshot",
       "source": "def require_idle_source_snapshot(self, snapshot: RegistrySnapshot) -> Thread:\n        \"\"\"Select history without granting a turn or borrowing its task scope.\n\n        Completed turns may change their generation and last-finished record.\n        The original process/admission/source/configuration and current task\n        scope must still agree; all actual turn fields stay with the document.\n        \"\"\"\n        self.thread.require_idle()\n        current = self._snapshot_owner(\n            snapshot, \"Idle native source owner changed\", RegistryIdentityCheck,\n        )\n        current.role.require_executable()\n        current.execution.require_native()\n        current.require_idle()\n        self.thread.task_scope.require_current(current)\n        return current"
     },
     {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 30,
+      "owner": "NativeSessionPreparation",
+      "name": "input_ready",
+      "source": "async def input_ready(self) -> None:\n        state = self.native.attestation.state\n        assert state is not None\n        identity = self.native.attestation.identity\n        if identity is None:\n            raise NativePiUnavailable(\"Native preparation did not attest the saved session\")\n        self.launch.session.attest(identity)\n        if (\n            state.is_streaming is not False\n            or state.is_compacting is not False\n            or state.pending_message_count != 0\n        ):\n            raise NativePiUnavailable(\"Native preparation did not attest the idle saved session\")\n        self.active_session_file = identity.session_file\n        self.admission = PreparedSession()\n        await self.stats.request(self)"
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 47,
+      "owner": "NativeSessionPreparation",
+      "name": "finish_result",
+      "source": "async def finish_result(self) -> AsyncIterator[events.AgentEvent]:\n        if not self.native_session.custody.retained:\n            self.admission.raise_native_failure(\n                NativePiUnavailable(\n                    self.output.failure_text or \"Native session preparation failed\"\n                ),\n                self.native.attestation,\n            )\n        if False:\n            yield"
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 59,
+      "owner": "NativeSessionPreparation",
+      "name": "open",
+      "source": "async def open(\n        cls,\n        persistent: backend.PersistentPiSession,\n        agent_bin: str,\n        agent_args: Sequence[str],\n        *,\n        worktree: str,\n        environment: dict[str, str],\n        session_file: str,\n        observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],\n    ) -> StateData:\n        async with persistent.lock:\n            return await cls.open_acquired(persistent, agent_bin, agent_args,\n                worktree=worktree, environment=environment, session_file=session_file, observe=observe)"
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 75,
+      "owner": "NativeSessionPreparation",
+      "name": "open_acquired",
+      "source": "async def open_acquired(\n        cls, persistent: backend.PersistentPiSession, agent_bin: str, agent_args: Sequence[str], *,\n        worktree: str, environment: dict[str, str], session_file: str,\n        observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],\n    ) -> StateData:\n        \"\"\"Borrow existing child custody through launch, observation and retention.\"\"\"\n        owner = asyncio.current_task()\n        launch = await Coordination.run_worker(partial(\n            persistent.custody.managed_launch,\n            agent_bin, tuple(agent_args), worktree=Path(worktree),\n            environment=environment, session_file=session_file,\n        ))\n        preparation = cls(launch, \"\", persistent_session=persistent)\n        async with session_writer_fence(launch.session.session_file):\n            try:\n                async with aclosing(preparation.run()) as stream:\n                    async for event in stream:\n                        if isinstance(event, events.Done) and not event.ok:\n                            raise NativePiUnavailable(event.text)\n                state = preparation.native.attestation.state\n                assert state is not None\n                await observe(state, preparation.context_info())\n                return state\n            finally:\n                if owner is not None:\n                    await backend.terminate_task_process(owner)"
+    },
+    {
       "path": "src/agent_comms/registration.py",
-      "line": 66,
+      "line": 65,
+      "owner": "Registration",
       "name": "selected_native_fork",
-      "source": "def selected_native_fork(self, original: RegistryOwner, creation: NativeForkCreation) -> Iterator[RegistryOwner]:\n        \"\"\"Select and restore SDK history under the same original idle owner.\n\n        The runtime caller retires its child before entering/exiting this\n        resource. No writer, wire or registry lock survives either publication.\n        A later completed turn's records stay current; replaced authority or\n        changed scope refuses restoration without overwriting the successor.\n        \"\"\"\n        creation.source.require_session(original.thread.require_saved_session())\n        with self._idle_fork_edit(creation) as edit:\n            change = edit.document.prepare_idle_native_source(original, creation.session_file)\n            self._commit_registration(edit, change)\n            selected = replace(original, thread=change.installed_thread)\n        try:\n            yield selected\n        finally:\n            with self._idle_fork_edit(creation) as edit:\n                change = edit.document.prepare_idle_native_source(selected, creation.source.session_file)\n                self._commit_registration(edit, change)"
+      "source": "def selected_native_fork(self, original: RegistryOwner, creation: NativeForkCreation, *,\n                             retain: Callable[[RegistryOwner], None]) -> RegistryOwner:\n        \"\"\"Publish SDK history after enrolling its exact original cleanup.\n\n        The runtime caller retires its child before entering/exiting this\n        resource. No writer, wire or registry lock survives either publication.\n        A later completed turn's records stay current; replaced authority or\n        changed scope refuses restoration without overwriting the successor.\n        \"\"\"\n        creation.source.require_session(original.thread.require_saved_session())\n        with self._idle_fork_edit(creation) as edit:\n            change = edit.document.prepare_idle_native_source(original, creation.session_file)\n            selected = replace(original, thread=change.installed_thread)\n            retain(selected)\n            self._commit_registration(edit, change)\n        return selected"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 82,
+      "owner": "Registration",
+      "name": "restore_native_fork",
+      "source": "def restore_native_fork(self, selected: RegistryOwner, creation: NativeForkCreation) -> RegistryOwner:\n        \"\"\"Restore only after the runtime joined this selection's owned child.\n\n        No deferred generator exit can publish after native retirement refused.\n        The acquired document still owns every source/admission/scope check.\n        \"\"\"\n        with self._idle_fork_edit(creation) as edit:\n            change = edit.document.prepare_idle_native_source(selected, creation.source.session_file)\n            self._commit_registration(edit, change)\n            return replace(selected, thread=change.installed_thread)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 94,
+      "owner": "Registration",
+      "name": "_idle_fork_edit",
+      "source": "def _idle_fork_edit(self, creation: NativeForkCreation) -> Iterator[RegistryEdit]:\n        \"\"\"Acquire native writer exclusion before the shared wire/registry cut.\"\"\"\n        with (\n            idle_session_writer_fence(creation.source.session_file),\n            idle_session_writer_fence(creation.session_file),\n            _store_lock(self.store.path.parent / \"wire\", shared=True),\n            self.store.editing() as edit,\n        ):\n            creation.require_recorded_selection(\n                self.store.path.parent / \"compaction-commits.sqlite3\", creation.source.session_file,\n            )\n            yield edit"
     },
     {
       "path": "src/agent_comms/registry_document.py",
       "line": 407,
+      "owner": "RegistryDocument",
       "name": "prepare_idle_native_source",
       "source": "def prepare_idle_native_source(self, original: RegistryOwner, session_file: str) -> NativeSourcePublication:\n        \"\"\"Retain the idle owner's current turn/task records during selection.\"\"\"\n        current = original.require_idle_source_snapshot(self.snapshot())\n        return self._native_source_publication(current, session_file)"
     },
     {
       "path": "src/agent_comms/registry_document.py",
       "line": 412,
+      "owner": "RegistryDocument",
       "name": "_native_source_publication",
       "source": "def _native_source_publication(self, current: Thread, session_file: str) -> NativeSourcePublication:\n        return NativeSourcePublication(\n            thread=replace(current, session_file=session_file),\n            status=self.statuses[current.name],\n            previous=current, previous_status=self.statuses[current.name],\n        )"
     },
     {
-      "path": "src/agent_comms/session_lifecycle.py",
-      "line": 184,
-      "name": "selected_native_fork",
-      "source": "async def selected_native_fork(self, session_id: str, original: RegistryOwner, creation: NativeForkCreation):\n        \"\"\"Borrow SDK fork history without replacing the loaded owner or USER.\n\n        Register the original publication resource before returning from its\n        joined worker. Cancellation after publication must still retire the\n        selected child and restore through that resource's exact owner fence.\n        Turn/child locks are held only around each swap, never across the\n        constructor/observer/prompt that acquires those same resources.\n        \"\"\"\n        selection = ExitStack()\n        try:\n            async with self._attachment_lock:\n                self.require_original_local_binding(session_id, original)\n                async with self.effects.turns.idle_backend(session_id) as persistent:\n                    if persistent is None:\n                        raise RelationViolationError(\"Native fork selection requires an idle turn\")\n                    await persistent.close()\n                    selected = await Coordination.run_worker(partial(\n                        selection.enter_context,\n                        self.comms.registry.selected_native_fork(original, creation),\n                    ))\n            yield selected\n        finally:\n            await join_retirement(asyncio.create_task(self._restore_native_fork(session_id, original, selection)))"
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 103,
+      "owner": "ProjectRuntimeRequest",
+      "name": "for_native",
+      "source": "def for_native(cls, snapshot, thread):\n        process = thread.require_process()\n        owner = snapshot.owner_identity(thread.name)\n        snapshot.require_owner_process(owner, process)\n        return cls(thread=thread.name, binding=LiveThreadOwnerBinding(owner, process))"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 109,
+      "owner": "ProjectRuntimeRequest",
+      "name": "environment",
+      "source": "def environment(self, root):\n        from .runtime import socket_path\n\n        return {\n            \"AGENT_COMMS_PROJECT_SOCKET\": str(socket_path(root, self.binding.process.pid)),\n            \"AGENT_COMMS_PROJECT_REQUEST\": json.dumps(self.to_wire()),\n        }"
     },
     {
       "path": "src/agent_comms/session_lifecycle.py",
-      "line": 209,
+      "line": 185,
+      "owner": "SessionLifecycle",
+      "name": "selected_native_fork",
+      "source": "async def selected_native_fork(self, session_id: str, original: RegistryOwner, creation: NativeForkCreation):\n        \"\"\"Borrow SDK fork history without replacing the loaded owner or USER.\n\n        Register the original publication resource before returning from its\n        joined worker. Cancellation after publication must still retire the\n        selected child and restore through that resource's exact owner fence.\n        Turn/child locks are held only around each swap, never across the\n        constructor/observer/prompt that acquires those same resources.\n        \"\"\"\n        async with AsyncExitStack() as resources:\n            async with self._attachment_lock:\n                self.require_original_local_binding(session_id, original)\n                async with self.effects.turns.idle_backend(session_id) as persistent:\n                    if persistent is None:\n                        raise RelationViolationError(\"Native fork selection requires an idle turn\")\n                    def capture_binding():\n                        snapshot = self.comms.registry.snapshot()\n                        current = original.require_idle_source_snapshot(snapshot)\n                        return snapshot.owner_binding(current.name)\n\n                    binding = await Coordination.run_worker(capture_binding)\n                    arguments = NativeArguments.parse(self.effects.turns.native_arguments(original.thread))\n                    worktree = Path(original.thread.worktree)\n                    await join_retirement(asyncio.create_task(\n                        persistent.close_owned(creation.source, binding, arguments, worktree)))\n\n                    def retain(selected):\n                        resources.push_async_callback(lambda: join_retirement(asyncio.create_task(\n                            self._restore_native_fork(session_id, original, selected, creation, binding, arguments, worktree)\n                        )))\n\n                    selected = await Coordination.run_worker(partial(\n                        self.comms.registry.selected_native_fork, original, creation, retain=retain,\n                    ))\n            def retire_selected():\n                return join_retirement(asyncio.create_task(\n                    self._retire_native_fork(session_id, creation, binding, arguments, worktree)))\n\n            yield selected, retire_selected"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 225,
+      "owner": "SessionLifecycle",
       "name": "require_original_local_binding",
       "source": "def require_original_local_binding(self, session_id: str, original: RegistryOwner) -> None:\n        if self.require(session_id) != original.thread.name or session_id in self.proxies:\n            raise RelationViolationError(\"Native fork requires the original loaded local owner\")"
     },
     {
       "path": "src/agent_comms/session_lifecycle.py",
-      "line": 213,
+      "line": 229,
+      "owner": "SessionLifecycle",
+      "name": "_retire_native_fork",
+      "source": "async def _retire_native_fork(self, session_id, creation, binding, arguments, worktree) -> None:\n        async with self.effects.turns.idle_backend(session_id) as persistent:\n            if persistent is None:\n                raise RelationViolationError(\"Native fork retirement requires its original turn to finish\")\n            await persistent.close_owned(creation, binding, arguments, worktree)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 235,
+      "owner": "SessionLifecycle",
       "name": "_restore_native_fork",
-      "source": "async def _restore_native_fork(self, session_id: str, original: RegistryOwner, selection: ExitStack) -> None:\n        async with self._attachment_lock:\n            self.require_original_local_binding(session_id, original)\n            async with self.effects.turns.idle_backend(session_id) as persistent:\n                if persistent is None:\n                    raise RelationViolationError(\"Native fork restoration requires the original turn to finish\")\n                await persistent.close()\n                await Coordination.run_worker(selection.close)\n            current = await Coordination.run_worker(lambda:\n                original.require_idle_source_snapshot(self.comms.registry.snapshot()))\n            await self.effects.turns.prepare_selected_session(session_id, current)"
+      "source": "async def _restore_native_fork(self, session_id, original, selected, creation, binding, arguments, worktree) -> None:\n        async with self._attachment_lock:\n            async with self.effects.turns.idle_backend(session_id) as persistent:\n                if persistent is None:\n                    raise RelationViolationError(\"Native fork restoration requires the original turn to finish\")\n                await persistent.close_owned(creation, binding, arguments, worktree)\n                self.require_original_local_binding(session_id, original)\n                restored = await Coordination.run_worker(partial(\n                    self.comms.registry.restore_native_fork, selected, creation))\n                await self.effects.turns.prepare_selected_session(\n                    session_id, restored.thread, open_native=NativeSessionPreparation.open_acquired)"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 178,
+      "owner": "TurnRunner",
+      "name": "prepare_selected_session",
+      "source": "async def prepare_selected_session(self, session_id: str, thread: Thread, *,\n                                       open_native=NativeSessionPreparation.open) -> StateData:\n        if thread.session_file is None:\n            raise ValueError(\"Native preparation requires a saved session\")\n        environment = await Coordination.run_worker(lambda: thread.native_environment(\n            self.comms.root, self.comms.registry.snapshot(), thread.worktree,\n        ))\n        state = await open_native(\n            self.persistent_backends.setdefault(session_id, backend.PersistentPiSession()),\n            self.agent_bin,\n            self.native_arguments(thread),\n            worktree=thread.worktree,\n            environment=environment,\n            session_file=thread.session_file,\n            observe=partial(self.observe_selected_preparation, session_id, thread),\n        )\n        return state"
     },
     {
       "path": "src/agent_comms/turn_runner.py",
       "line": 485,
+      "owner": "TurnRunner",
       "name": "close_idle_backend",
       "source": "async def close_idle_backend(self, session_id: str) -> None:\n        async with self.idle_backend(session_id) as persistent:\n            if persistent is not None:\n                await persistent.close()"
     },
     {
       "path": "src/agent_comms/turn_runner.py",
       "line": 491,
+      "owner": "TurnRunner",
       "name": "idle_backend",
       "source": "async def idle_backend(self, session_id: str):\n        \"\"\"Hold this session's turn and child acquisition until an idle effect ends.\n\n        Configuration retirement remains conditional on an idle owner. Source\n        selection uses this same resource and refuses a busy owner. Neither\n        consumer can close a child after a new turn acquired it.\n        \"\"\"\n        lock = self.turn_locks.setdefault(session_id, asyncio.Lock())\n        if lock.locked():\n            yield None\n            return\n        async with lock:\n            if await Coordination.run_worker(partial(self.session_busy, session_id)):\n                yield None\n                return\n            persistent = self.persistent_backends.setdefault(session_id, backend.PersistentPiSession())\n            async with persistent.lock:\n                yield persistent"
     }
   ],
-  "consumers": [
+  "consumer_attribute_sites": [
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 129,
+      "expression": "self._finish_retirement"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 133,
+      "expression": "self._finish_retirement"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 133,
+      "expression": "self.custody.retire_owned"
+    },
     {
       "path": "src/agent_comms/config_options.py",
       "line": 280,
-      "call": "self.effects.turns.close_idle_backend(session_id)"
+      "expression": "self.effects.turns.close_idle_backend"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 80,
+      "expression": "runner.prepare_selected_session"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 201,
+      "expression": "self.child.require_source_owner"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 229,
+      "expression": "self.child.require_source_owner"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 263,
+      "expression": "BorrowedNative(self.child, EmptyNative()).retire_owned"
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 71,
+      "expression": "cls.open_acquired"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 384,
+      "expression": "self.runner.prepare_selected_session"
     },
     {
       "path": "src/agent_comms/registration.py",
-      "line": 76,
-      "call": "edit.document.prepare_idle_native_source(original, creation.session_file)"
+      "line": 75,
+      "expression": "self._idle_fork_edit"
     },
     {
       "path": "src/agent_comms/registration.py",
-      "line": 95,
-      "call": "creation.require_recorded_selection(self.store.path.parent / 'compaction-commits.sqlite3', creation.source.session_file)"
+      "line": 88,
+      "expression": "self._idle_fork_edit"
     },
     {
       "path": "src/agent_comms/registration.py",
-      "line": 83,
-      "call": "edit.document.prepare_idle_native_source(selected, creation.source.session_file)"
-    },
-    {
-      "path": "src/agent_comms/registry_document.py",
-      "line": 405,
-      "call": "self._native_source_publication(current, session_file)"
+      "line": 102,
+      "expression": "creation.require_recorded_selection"
     },
     {
       "path": "src/agent_comms/registry_document.py",
       "line": 409,
-      "call": "original.require_idle_source_snapshot(self.snapshot())"
-    },
-    {
-      "path": "src/agent_comms/registry_document.py",
-      "line": 410,
-      "call": "self._native_source_publication(current, session_file)"
+      "expression": "original.require_idle_source_snapshot"
     },
     {
       "path": "src/agent_comms/session_lifecycle.py",
-      "line": 215,
-      "call": "self.require_original_local_binding(session_id, original)"
+      "line": 230,
+      "expression": "self.effects.turns.idle_backend"
     },
     {
       "path": "src/agent_comms/session_lifecycle.py",
-      "line": 196,
-      "call": "self.require_original_local_binding(session_id, original)"
+      "line": 233,
+      "expression": "persistent.close_owned"
     },
     {
       "path": "src/agent_comms/session_lifecycle.py",
-      "line": 216,
-      "call": "self.effects.turns.idle_backend(session_id)"
+      "line": 237,
+      "expression": "self.effects.turns.idle_backend"
     },
     {
       "path": "src/agent_comms/session_lifecycle.py",
-      "line": 301,
-      "call": "self.effects.turns.close_idle_backend(session_id)"
+      "line": 323,
+      "expression": "self.effects.turns.close_idle_backend"
     },
     {
       "path": "src/agent_comms/session_lifecycle.py",
       "line": 197,
-      "call": "self.effects.turns.idle_backend(session_id)"
+      "expression": "self.effects.turns.idle_backend"
     },
     {
       "path": "src/agent_comms/session_lifecycle.py",
-      "line": 207,
-      "call": "self._restore_native_fork(session_id, original, selection)"
+      "line": 240,
+      "expression": "persistent.close_owned"
     },
     {
       "path": "src/agent_comms/session_lifecycle.py",
-      "line": 222,
-      "call": "original.require_idle_source_snapshot(self.comms.registry.snapshot())"
+      "line": 244,
+      "expression": "self.effects.turns.prepare_selected_session"
     },
     {
       "path": "src/agent_comms/session_lifecycle.py",
-      "line": 203,
-      "call": "self.comms.registry.selected_native_fork(original, creation)"
+      "line": 202,
+      "expression": "original.require_idle_source_snapshot"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 221,
+      "expression": "self._retire_native_fork"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 243,
+      "expression": "self.comms.registry.restore_native_fork"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 245,
+      "expression": "NativeSessionPreparation.open_acquired"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 217,
+      "expression": "self.comms.registry.selected_native_fork"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 209,
+      "expression": "persistent.close_owned"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 213,
+      "expression": "self._restore_native_fork"
     },
     {
       "path": "src/agent_comms/turn_runner.py",
       "line": 486,
-      "call": "self.idle_backend(session_id)"
+      "expression": "self.idle_backend"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 219,
+      "expression": "self.prepare_selected_session"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 86,
+      "expression": "agent.turns.prepare_selected_session"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 97,
+      "expression": "owner.turns.prepare_selected_session"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 134,
+      "expression": "TurnRunner.prepare_selected_session"
+    },
+    {
+      "path": "tests/test_native_arguments.py",
+      "line": 145,
+      "expression": "owner.turns.prepare_selected_session"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 148,
+      "expression": "owner.turns.prepare_selected_session"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 101,
+      "expression": "owner.turns.prepare_selected_session"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 203,
+      "expression": "agent.turns.prepare_selected_session"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 41,
+      "expression": "agent.turns.prepare_selected_session"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 44,
+      "expression": "agent.turns.prepare_selected_session"
     },
     {
       "path": "tests/test_same_owner_native_fork.py",
-      "line": 42,
-      "call": "agent.sessions.selected_native_fork(session, original, creation)"
+      "line": 65,
+      "expression": "agent.sessions.selected_native_fork"
+    },
+    {
+      "path": "tests/test_same_owner_native_fork.py",
+      "line": 170,
+      "expression": "agent.turns.prepare_selected_session"
+    },
+    {
+      "path": "tests/test_same_owner_native_fork.py",
+      "line": 181,
+      "expression": "agent.sessions.selected_native_fork"
+    },
+    {
+      "path": "tests/test_same_owner_native_fork.py",
+      "line": 186,
+      "expression": "agent.sessions.selected_native_fork"
+    },
+    {
+      "path": "tests/test_same_owner_native_fork.py",
+      "line": 75,
+      "expression": "agent.turns.prepare_selected_session"
+    },
+    {
+      "path": "tests/test_same_owner_native_fork.py",
+      "line": 187,
+      "expression": "agent.turns.prepare_selected_session"
     }
   ],
-  "limits": "Syntax and source closure only. Real saved-SDK authored controls unrun. Initial explicit attachment, leased source observation and stopped restoration remain distinct authority lifetimes."
+  "shared_fixture_sha256": "a4cb188d5b472f5445cc8ba653137075455907c8e06cf0e95eb01793c4ce7575",
+  "changed_family_files": [
+    "src/agent_comms/backend.py",
+    "src/agent_comms/compaction_records.py",
+    "src/agent_comms/native_custody.py",
+    "src/agent_comms/native_input_owner.py",
+    "src/agent_comms/native_session_prepare.py",
+    "src/agent_comms/registration.py",
+    "src/agent_comms/registry_document.py",
+    "src/agent_comms/session_lifecycle.py",
+    "src/agent_comms/turn_runner.py",
+    "tests/test_same_owner_native_fork.py"
+  ],
+  "resolution_limit": "Original Package parses all three roots. Attribute sites include indirect partial/default capability references; lexical matches alone do not resolve dynamic dispatch. Owning methods and inheritance were read semantically. SDK/installed controls remain unrun."
 }

@@ -44,11 +44,35 @@ local idle owner and current task scope. Publication changes only the saved
 source. No attachment, turn, persistent, wire or reader lock survives the yield
 to the existing constructor, observer and prompt.
 
-On scope exit the joined cleanup retires the selected child, requires the same
-local idle incarnation, admission, selected source/configuration and scope, and
-restores the original source through `NativeSourcePublication`. It then acquires
-the original source using mandatory shared preparation/Stats/AgentInfo, so the
-restored retained child and published observation refer to the original source.
+On entry, the joined registry observation first validates the original idle
+owner and captures its existing `LiveThreadOwnerBinding`. Before starting a stop,
+`PiSessionChild` checks the actual launch saved identity, original encoded
+`ProjectRuntimeRequest.binding`, and the existing `NativeArguments` model/thinking
+projections plus launch worktree. `NativeCustody` owns refusal and delegates
+retirement to its original stop algorithm. Empty custody does no work; retiring
+custody joins its existing task; a successor child is refused without being
+stopped or replacing its custody.
+
+Selection enlists the exact installed owner in the original `AsyncExitStack`
+BEFORE registry commit. A cancelled worker result therefore cannot discard the
+cleanup owner. `Registration.restore_native_fork` is an explicit guarded
+publication, replacing the deferred generator exit. A failed native retirement
+cannot trigger a later source restoration through generator destruction.
+
+On scope exit, qualified retirement can join the original selected child even
+after registry revocation. The registry independently requires the same local
+idle incarnation, admission, selected source/configuration and scope before
+restoring the original source through `NativeSourcePublication`. It then acquires
+the original source using mandatory shared preparation/Stats/AgentInfo while
+the original turn AND persistent child locks remain held. The restored retained
+child and published observation refer to the original source.
+
+`NativeSessionPreparation.open` still owns ordinary lock acquisition. Its
+`open_acquired` capability owns the same launch/attestation/writer fence/Stats/info/
+retention/terminal cleanup body when restoration already holds that lock. The
+existing `TurnRunner.prepare_selected_session` consumes this opener; normal
+callers keep the locking opener. The old release-then-prepare gap and nested
+lock reacquisition are both deleted.
 Keep legitimate completed-turn fields and original input receipts. Loss of the
 owner/source/scope must refuse restoration, not overwrite a newer owner. UNKNOWN
 remains UNKNOWN; no input is manufactured, replayed or settled by selection.
@@ -77,11 +101,14 @@ selection/restoration.
 
 Capture the original idle `RegistryOwner` from the same service snapshot and
 pass the returned SDK creation recorded in that root's journal. Inside the
-resource, write the original condition observation, enter the existing
-`observe_native_requests`/RAM environment scope, and call original preparation
-with `selected.thread` before the actual prompt. Finish capture and close that
-inspector/environment scope **before** leaving the resource; restoration then
-uses the original environment. This needs no production observer hook, nested
+resource, receive `(selected, retire_selected)`, write the original condition
+observation, enter the existing `observe_native_requests`/RAM environment scope,
+and call original preparation with `selected.thread` before the actual prompt.
+In that inspector/environment scope's `finally`, `await retire_selected()` joins
+ONLY the qualified original selected child while the inspector is still alive.
+Then close the inspector/environment scope **before** leaving the selection
+resource; restoration uses the original environment. No caller-authored current
+child close or registry replacement supplies retirement authority. This needs no production observer hook, nested
 Comms root, replacement participant or second context reader.
 
 ## Source evidence and remaining boundary
@@ -93,14 +120,42 @@ dynamic dispatch by themselves; the cited owning methods were read directly.
 Patterns: IDEN-1 / IDEN-2 / IDEN-3 (owner identity, declared relations, original
 resource lifetime). No scanner, state mirror or alternate reader is introduced.
 
-Production checkpoint `9636b7d9` compiles all 324 production modules. The three
-authored controls in `tests/test_same_owner_native_fork.py` use the unchanged
-`NativeBackendFixture` SDK producer, registered ACP owner and real custody:
-one localhost prompt/completion, cancellation without input, and canonical
-owner revocation/refused restoration. No fake history, witnesses, stream or
-registry replacement supplies their evidence. The fork output directory is
-explicitly the original owned fixture sessions directory.
+## Corrected counterexamples and source checkpoint
 
-These controls and Arendt's caller migration remain unqualified. All prior
-675 holder and artifact purposes are closed. No runtime or package purpose is
-inferred by this source checkpoint.
+Parent read `9636b7d9` and found that generic `persistent.close()` ran before
+canonical stale-owner refusal. A newer same-name owner could acquire a child
+that the stale selection or restoration would then stop. That source checkpoint
+is superseded; its build-only purpose was withdrawn before use.
+
+The corrected production checkpoint is
+`a264da8f7251c72fae0ee0259c1d81de9ea5ed7e`. Original Package parsed 324 production,
+373 test and 54 tool modules with zero omissions; `AFTER.json` records 16 existing
+owner classes, 37 owning methods and 45 direct or indirect attribute consumers.
+All 324 production modules and the authored control source compile. This is
+source evidence only; no application import, SDK/native execution, test, build,
+package installation or provider operation qualified this checkpoint.
+
+The seven authored variants in `tests/test_same_owner_native_fork.py` use the
+unchanged `NativeBackendFixture` SDK producer, registered ACP owner and real
+custody: one localhost prompt/completion, cancellation without input, canonical
+owner revocation/refused restoration, and entry/exit successor refusal for both
+owner generation and registered configuration changes. Owner successors are
+produced by original idle fencing, heartbeat and same-process acquisition;
+configuration successors use `ThreadManagement.set_thread_thinking_level`.
+Actual preparation replaces the prior child before the refusal is exercised.
+The cases require the successor child, registry source, owner/admission and
+configuration to remain intact until ordinary fixture shutdown. No raw registry
+replacement, fake history, witness or process supplies these facts.
+
+During original parent AgentInfo publication, the completion/cancellation cases
+observe BOTH original locks held and schedule an actual native context read that
+must remain pending until restoration releases custody. That read is then joined
+and must return the restored source; it sends no prompt. This covers the real
+release-then-prepare source race without a second reader implementation.
+
+The controls and Arendt's tuple/finally caller migration remain unqualified.
+No current package build/import/READ/EXEC purpose is inherited from the withdrawn
+`afac6739` request or completed #675. A fresh purpose must bind this corrected
+source, unchanged shared fixture, seven authored variants and the actual final
+installed proof before execution. Original UNKNOWN and prior negative receipts
+remain unchanged. No latency or provider-performance claim is made.
