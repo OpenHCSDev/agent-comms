@@ -3121,8 +3121,9 @@ BLOCKED/ACTIVE observations remain historical, with no goal-tool resume/replay.
   right-sidebar disclosure plus all related worker observers. The unchanged
   full150s cold/wheel/width/reversal/End/B-A run reached all motion/tab phases
   but timed out150.143s. Ctrl+Q did not retire the App; original parent recorded
-  forced cleanup. Controller/child are absent; Heis owns cleanup/floor return
-  and shutdown diagnosis. Fast useful paint, frame cadence, CPU and actual
+  forced cleanup. Whole floor and claims independently closed315bc508/readback
+  ce1b143f, originals held. Heis owns App shutdown; Mendel traces the disjoint
+  recorder wait/result family. Fast useful paint, frame cadence, CPU and actual
   loaded scaling remain unfinished.
 - [ ] Complete the original continuous saved/channel/DM/fork/notification/reply/
   handling/queue/status journey. Draft468 is adopted on a separate Heis source
@@ -3130,8 +3131,9 @@ BLOCKED/ACTIVE observations remain historical, with no goal-tool resume/replay.
 - [ ] Complete the original and round-two deletion/resource scope. Mendel's bounded T4 production ownership
   receipt469 is merged289f1c6c. Dead replay/current README commands are removed
   by merged470b6702008, preserving historical evidence/analyzers. The genuine
-  external MCP selector remains unresolved; Heis owns current l0a migration and
-  TC1/budget/workflow integration.
+  external MCP selector preserves the three controls; Mendel now owns their
+  source-only current producer/consumer migration. Heis owns current l0a
+  migration and TC1/budget/workflow integration.
 - [ ] Full S4 remains unfinished. Source679/680 is merged and recorded678 reads
   are independently closed; clocks/accounting and genuine original SDK source
   selection/capacity/matched workflows retain their evidence gaps. Arendt's

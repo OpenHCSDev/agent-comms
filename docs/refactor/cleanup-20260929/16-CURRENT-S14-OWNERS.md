@@ -24,8 +24,14 @@ recorder data reached width, wheel, reversal, End and B/A return; Parent inspect
 the original reversal and A-return images after terminal. The driver finished
 109.717s after capture launch, but Ctrl+Q did not retire the App and the original
 parent recorded signal retirement, so completed=false. This is reached interaction
-evidence, not a successful full run or smooth/FPS/CPU acceptance. Heis owns
-original cleanup/restoration and offline shutdown diagnosis; no second launch.
+evidence, not a successful full run or smooth/FPS/CPU acceptance. Whole336a and
+final census1688 return every immediate claim. Bohr independently closed315bc508
+with readbackce1b143f: original1468/69 RAW origins/428+1883 restored once, private
+references/gaps zero and original19 public environment references preserved.
+Sch native closure92c3 is bound; held SDK journals/movie remain immutable. Heis
+owns ApplicationLifetime/session/agent/preparation shutdown diagnosis; Mendel
+owns the disjoint original recorder wait/parent-result family at a safe source
+checkpoint. No second launch or deadline increase is authorized.
 
 466 SessionView03 passed the actual mounted check in6.138s: cancellation before
 entry, same-source resume, three coalesced requests and joined close/App and
@@ -53,9 +59,11 @@ Core owner/protected-control bytes. Existing owners implement the original
 production responsibilities. Dead replay executable/current README instructions are removed by normally
 merged470b6702008; historical navigation evidence and JSON analyzers remain.
 The three MCP/typed controls remain because AC_MCP_TOAD_ADAPTER is a genuine
-external selection seam. Heis owns current l0a migration in continuous468,
-separate from frozen06. No new production decomposition or runtime acceptance
-is inferred.
+external selection seam. Parent assigned their three-file MCP/typed producer
+and consumer migration to Mendel, preserving the external open_observer contract
+and current turn/permission owners. Source-only work has no runtime grant. Heis
+owns current l0a migration in continuous468, separate from frozen06. No new
+production decomposition or runtime acceptance is inferred.
 
 | Work | Actual state | Remaining delivery |
 | --- | --- | --- |
