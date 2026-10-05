@@ -2566,3 +2566,25 @@ continue independently. Heis ca26eb67 now uses original WorkerManager newest
 admission ordering to distinguish the exclusive replacement from a cancelled
 worker still in RUNNING state. Original cancelled work remains owned until
 joined; no extra worker order store was added.
+
+
+## Frozen receiving integration and request-measurement merge
+
+Parent normally merged exact448bbbfc03d as75d249246612d7682fb0ead4a8e32fe5af9efba2.
+Published READY,107 frozen operands, whole handback and corrected terminal are
+byte-identical to the reviewed prepared artifacts; product/build metadata is
+unchanged from actual449 merge2b97. No reinstall, App repeat or publication
+followed this source merge. Sch's8ec4ca74 matching Parent7a keeper proposal is
+prepared only, not effective: original independent preparation closure and its
+actual literal native authority read precede the original one-use cutover.
+
+Core670 exact9b380038 is normally merged as577347d139d39547d6bc32c9d179dbe7ef1f8271.
+Parent read the complete prompt-presence call family and verified receiptc652
+plus all seven raw and three source hashes. The recorded probe binds exact
+retained envelope presence to the same acquired certified wire-source observation
+and original SDK context digest; mismatched source digest refuses. Scorer
+retained-source-request availability remains separate from native delivery, HTTP
+bytes, capacity and recall. Three authored controls passed in0.88s; the empty
+recorded run preserves all three unavailable rounds. Runtime src/stack/tools
+remain unchanged. Next S4 work is original same-input artifact applicability,
+without reconstructing missing references or another provider input/study.
