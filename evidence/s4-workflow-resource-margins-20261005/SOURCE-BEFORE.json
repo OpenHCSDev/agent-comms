@@ -1,0 +1,1316 @@
+{
+  "base": "a0fb1bdafd217b710ff2fd398d4188bf8455307f",
+  "roots": {
+    "src/agent_comms": {
+      "parsed": 324,
+      "omissions": []
+    },
+    "tests": {
+      "parsed": 373,
+      "omissions": []
+    },
+    "tools": {
+      "parsed": 54,
+      "omissions": []
+    }
+  },
+  "sites": [
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 46,
+      "kind": "ClassDef",
+      "name": "PairedRecallDesign"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 139,
+      "kind": "ClassDef",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 564,
+      "kind": "ClassDef",
+      "name": "ScoredScenario"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 616,
+      "kind": "FunctionDef",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 743,
+      "kind": "FunctionDef",
+      "name": "recorded_resources"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 826,
+      "kind": "FunctionDef",
+      "name": "paired_resources"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 848,
+      "kind": "FunctionDef",
+      "name": "paired_resource_batch"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 939,
+      "kind": "FunctionDef",
+      "name": "paired_inference"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1389,
+      "kind": "Name",
+      "name": "ScoredScenario"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 83,
+      "kind": "Attribute",
+      "name": "paired_inference"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 140,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 142,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 939,
+      "kind": "Name",
+      "name": "PairedRecallDesign"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1308,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1393,
+      "kind": "Name",
+      "name": "ScoredScenario"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1399,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1414,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1416,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1426,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1427,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1639,
+      "kind": "Name",
+      "name": "PairedRecallDesign"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1657,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1662,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 83,
+      "kind": "Name",
+      "name": "ScoredScenario"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1412,
+      "kind": "Name",
+      "name": "ScoredScenario"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1422,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1432,
+      "kind": "Attribute",
+      "name": "paired_resources"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1449,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1454,
+      "kind": "Attribute",
+      "name": "paired_resource_batch"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1668,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 251,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 408,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 410,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 414,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 416,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 418,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 452,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1453,
+      "kind": "Name",
+      "name": "ScoredScenario"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1454,
+      "kind": "Name",
+      "name": "ScoredScenario"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 629,
+      "kind": "Attribute",
+      "name": "recorded_resources"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1672,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1672,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 663,
+      "kind": "ClassDef",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 213,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 220,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 212,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 213,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 169,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 211,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 319,
+      "kind": "Name",
+      "name": "PairedRecallDesign"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 352,
+      "kind": "Name",
+      "name": "PairedRecallDesign"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 474,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 507,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 533,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 535,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 601,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 616,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 631,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 632,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 639,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 642,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 685,
+      "kind": "Name",
+      "name": "PairedRecallDesign"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 704,
+      "kind": "Attribute",
+      "name": "paired_inference"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 740,
+      "kind": "Attribute",
+      "name": "paired_inference"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 760,
+      "kind": "Name",
+      "name": "PairedRecallDesign"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 780,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 843,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 928,
+      "kind": "Attribute",
+      "name": "recorded_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 952,
+      "kind": "Attribute",
+      "name": "recorded_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 970,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1000,
+      "kind": "Attribute",
+      "name": "recorded_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1003,
+      "kind": "Attribute",
+      "name": "recorded_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1006,
+      "kind": "Attribute",
+      "name": "paired_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1042,
+      "kind": "Attribute",
+      "name": "paired_resource_batch"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1052,
+      "kind": "Attribute",
+      "name": "paired_resource_batch"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1077,
+      "kind": "Attribute",
+      "name": "recorded_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1089,
+      "kind": "Attribute",
+      "name": "recorded_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1095,
+      "kind": "Attribute",
+      "name": "recorded_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1107,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1171,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1172,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1179,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1375,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1458,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1497,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1534,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1591,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1661,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1701,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1809,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2204,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2332,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 555,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 556,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 562,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 565,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 575,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 576,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 602,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 602,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 634,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 636,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 645,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 694,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 704,
+      "kind": "Name",
+      "name": "ScoredScenario"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 710,
+      "kind": "Attribute",
+      "name": "paired_inference"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 714,
+      "kind": "Attribute",
+      "name": "paired_inference"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 716,
+      "kind": "Attribute",
+      "name": "paired_inference"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 725,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 727,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 736,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 740,
+      "kind": "Name",
+      "name": "ScoredScenario"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 747,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 762,
+      "kind": "Name",
+      "name": "PairedRecallDesign"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 903,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 957,
+      "kind": "Attribute",
+      "name": "recorded_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 962,
+      "kind": "Attribute",
+      "name": "recorded_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 973,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 982,
+      "kind": "Attribute",
+      "name": "recorded_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 987,
+      "kind": "Attribute",
+      "name": "recorded_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1028,
+      "kind": "Attribute",
+      "name": "paired_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1037,
+      "kind": "Attribute",
+      "name": "recorded_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1050,
+      "kind": "Attribute",
+      "name": "paired_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1176,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1296,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1304,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1309,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1334,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1341,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1347,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1484,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1491,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1492,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1665,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 189,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 572,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 589,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 638,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 641,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 672,
+      "kind": "Name",
+      "name": "ScoredScenario"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 676,
+      "kind": "Name",
+      "name": "ScoredScenario"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 710,
+      "kind": "Name",
+      "name": "ScoredScenario"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 714,
+      "kind": "Name",
+      "name": "ScoredScenario"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 716,
+      "kind": "Name",
+      "name": "ScoredScenario"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 734,
+      "kind": "Attribute",
+      "name": "paired_inference"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 973,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 974,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1051,
+      "kind": "Attribute",
+      "name": "recorded_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1281,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1320,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1322,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1354,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1498,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1911,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1918,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1929,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2072,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 605,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 620,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 734,
+      "kind": "Name",
+      "name": "ScoredScenario"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1040,
+      "kind": "Attribute",
+      "name": "paired_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1093,
+      "kind": "Attribute",
+      "name": "recorded_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1273,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1277,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1278,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1300,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1301,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1318,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1323,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1351,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1358,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 591,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 966,
+      "kind": "Attribute",
+      "name": "recorded_resources"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1198,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1199,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1934,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2077,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 649,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 649,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1925,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1938,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 39,
+      "kind": "FunctionDef",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 46,
+      "kind": "AsyncFunctionDef",
+      "name": "condition_application"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 220,
+      "kind": "AsyncFunctionDef",
+      "name": "run"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 85,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 98,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 100,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 220,
+      "kind": "Name",
+      "name": "PairedRecallDesign"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 233,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 234,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 246,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 348,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 349,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 351,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 356,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 96,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 366,
+      "kind": "Attribute",
+      "name": "run"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 206,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 207,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 372,
+      "kind": "Attribute",
+      "name": "run"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 204,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 285,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 299,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 303,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 306,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 321,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 346,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 381,
+      "kind": "Name",
+      "name": "PairedRecallDesign"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 382,
+      "kind": "Attribute",
+      "name": "run"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 296,
+      "kind": "Name",
+      "name": "RecordedNativeProbe"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 342,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 343,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 382,
+      "kind": "Name",
+      "name": "run"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 340,
+      "kind": "Name",
+      "name": "record"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 344,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 334,
+      "kind": "Name",
+      "name": "condition_application"
+    }
+  ],
+  "limits": "Python lexical declarations/references/imports only; dynamic dispatch not proved. No native changes."
+}
