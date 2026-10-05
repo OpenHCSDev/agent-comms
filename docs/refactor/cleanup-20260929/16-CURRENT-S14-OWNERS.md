@@ -183,6 +183,20 @@ persistent stage mechanism. Logs cannot substitute for deleted source/input
 proofs or authorize reconstruction/replay. This is separate from TC1 watcher
 source repair and does not modify the frozen negative.
 
+## Configured source construction merged
+
+Parent reviewed and normally merged Core668 exact969d3597 as
+2ec1d064c131a20d33f880ca63a3252dc0a17ce0. Existing RecallScenario now
+borrows original Message bodies for cumulative histories and declares future
+correction/drop wording once; the driver consumes those history additions.
+The free driver factory and copied wordings are deleted. Original publication
+subjects and constraint declarations retain separate identities. Parent matched
+all9 raw and3 source hashes to receipt02aaff and verified runtime/src/stack/tools
+byte-zero against0a600a2b. Authored3PASS/3subtests plus construction CLI qualify
+source construction only, not configured delivery, retention or a study.
+GitHub MERGED readback matched the frozen head; no input/provider was repeated.
+This tests/evidence-only merge changes no receiving wheel or canonical operator.
+
 ## Historical integration evidence
 
 Parent retired its unused standalone channel_recovery_physical_journey wrapper.
