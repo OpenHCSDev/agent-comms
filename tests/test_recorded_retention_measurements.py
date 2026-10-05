@@ -13,7 +13,7 @@ import unittest
 from unittest.mock import patch
 
 from agent_comms.comms import Comms
-from agent_comms.compaction_identity import SummaryOperationIdentity
+from agent_comms.compaction_identity import NativeCommitIdentity, SummaryOperationIdentity
 from agent_comms.compaction_records import NativeForkCreation, SelectedSummaryAttempt
 from agent_comms.compaction_states import ReservedSummary
 from agent_comms.field_codec import FieldCodec
@@ -23,13 +23,13 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.input_attempt import MissingInput, ReservedInput
 from agent_comms.input_disposition import InputDocument
 from agent_comms.native_compaction_request import NativeSummaryPayload
-from agent_comms.native_entries import MessageEntry, NativeEntry
+from agent_comms.native_entries import ManagedCompactionEntry, MessageEntry, NativeEntry
 from agent_comms.native_input_record import NativeInputCommit
 from agent_comms.native_pi import NativeContextRecord, NativePiUnavailable
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
 from agent_comms.native_tools import ReadTool, WriteTool
-from agent_comms.pi_summary_payloads import SummaryCost, SummaryUsage
+from agent_comms.pi_summary_payloads import ManagedSummaryMetadata, SummaryCost, SummaryUsage
 from agent_comms.pi_payloads import AssistantMessage, PiCost, PiMessage, PiUsage, ToolCallContent, ToolResultMessage, UserMessage
 from agent_comms.request_progress import RequestProgress
 from agent_comms.private_path import FileRevision
@@ -854,12 +854,26 @@ class RecordedMeasurementTests(unittest.TestCase):
             'completion_selection': {'models': (('original', 'model'),)},
             'input_requests': {'candidate': requests, 'baseline': requests}}}
         comparison = {'paired_resources': {'groups': {'recorded_workflow': {
-            'metrics': {'normalized_cost': cost}}}},
+            'metrics': {'normalized_cost': cost},
+            'original_accounting': ScoredScenario.accounting_partition(tuple(
+                {'completion_sources': (JournalProvenance(name, ('answer',)),), 'missing_rounds': ()}
+                for name in ('candidate-1', 'baseline-1', 'candidate-2', 'baseline-2')))}}},
             'paired_workflow_timing': {'p95_seconds': latency},
             'pairs': ({'alignment': alignment}, {'alignment': alignment})}
         result = ScoredScenario.resource_margins(comparison, design)
         self.assertTrue(result['normalized_cost']['meets_margin'])
         self.assertFalse(result['workflow_p95']['meets_margin'])
+        for source in (None, JournalProvenance('shared-parent', ('original-completion',))):
+            accounting = ScoredScenario.accounting_partition((
+                {'completion_sources': (source,), 'missing_rounds': ()},
+                {'completion_sources': (source,), 'missing_rounds': ()}))
+            shared = dict(comparison, paired_resources={'groups': {'recorded_workflow': {
+                'metrics': {'normalized_cost': cost}, 'original_accounting': accounting}}})
+            decision = ScoredScenario.resource_margins(shared, design)['normalized_cost']
+            self.assertFalse(decision['evaluated'])
+            self.assertIsNone(decision['meets_margin'])
+            self.assertIs(decision['measurement'], cost)
+            self.assertEqual(decision['original_accounting'], accounting)
         absent = ScoredScenario.resource_margins(comparison, replace(design,
             normalized_cost_reduction_margin=None, workflow_p95_reduction_margin=None))
         self.assertTrue(all(not absent[name]['evaluated'] for name in ('normalized_cost', 'workflow_p95')))
@@ -1006,16 +1020,84 @@ class RecordedMeasurementTests(unittest.TestCase):
             MessageEntry(id='answer', message=AssistantMessage(stop_reason='stop',
                 usage=PiUsage(input=0, output=0, total_tokens=0))),
         )
-        steps = RecordedNativeProbe.model_steps(branch)
+        steps = RecordedNativeProbe.model_steps(self.identity, branch)
         self.assertEqual(tuple(step['entry_id'] for step in steps),
                          ('tool-step', 'missing', 'answer'))
         self.assertIs(steps[0]['usage']['value'], branch[1].message.usage)
         self.assertEqual(steps[0]['usage']['value'].total_tokens, 16)
         self.assertEqual(steps[0]['timestamp'], branch[1].timestamp)
+        self.assertEqual(tuple(step['source'] for step in steps), tuple(
+            JournalProvenance(self.identity.session_file, (entry.id,)) for entry in branch[1:]))
         self.assertEqual(steps[1]['usage'], {'evaluated': False, 'value': None})
         self.assertTrue(steps[2]['usage']['evaluated'])
         self.assertEqual(steps[2]['usage']['value'].total_tokens, 0)
         self.assertNotIn('cacheRead', FieldCodec.encode(steps[2]['usage']['value']))
+
+    def test_accounting_partition_uses_acquired_completion_coordinates(self):
+        # Detect shared summary/stimulus cost being labeled independent, while
+        # retaining the descriptive totals. Original leaf readers own sources;
+        # no SDK/file collection or provider operation is used in this control.
+        selected = manual_summary_record(self.session)
+        attempt = SelectedSummaryAttempt('operation', str(self.session), selected.journal_json(),
+                                         selected, ReservedSummary())
+        entry = ManagedCompactionEntry(id='summary', summary='Authored summary',
+            tokens_before=10, first_kept_entry_id='kept',
+            details=ManagedSummaryMetadata(agent_comms_commit=NativeCommitIdentity('commit', 'a' * 64, 'b' * 64)),
+            usage=SummaryUsage(input=0, output=0, cache_read=0, cache_write=0, total_tokens=0,
+                               cost=SummaryCost(0, 0, 0, 0, 0)))
+        report = self.checkpoint._report(attempt, entry, frozenset(), None)
+        summary_source = JournalProvenance(self.identity.session_file, ('summary',))
+        self.assertEqual(report['summary_usage']['source'], summary_source)
+        source = MessageEntry(id='source-answer', message=AssistantMessage(stop_reason='stop',
+            usage=PiUsage(input=1, output=1, total_tokens=2, cost=PiCost(total=.25))))
+        stimuli = {'r1': {'model_steps': RecordedNativeProbe.model_steps(self.identity, (source,))}}
+        scored = RecallScenario('original-accounting', (replace(coding_scenario().rounds[0], identity='r1'),)
+            ).score(Condition.TASK_MEMORY, RecordedAnswers({}))
+
+        def arm(name, cost):
+            identity = NativeSessionIdentity(name, str(self.root / (name + '.jsonl')))
+            answer = MessageEntry(id='answer', message=AssistantMessage(stop_reason='stop',
+                usage=PiUsage(input=1, output=1, total_tokens=2, cost=PiCost(total=cost))))
+            return scored.recorded_resources({'r1': report},
+                {'r1': {'model_steps': RecordedNativeProbe.model_steps(identity, (answer,))}}, stimuli)
+
+        candidate, baseline = arm('candidate', 1.), arm('baseline', 3.)
+        paired = scored.paired_resources(candidate, baseline)
+        self.assertTrue(paired['groups']['assistants']['original_accounting']['exclusive'])
+        partition = paired['groups']['recorded_workflow']['original_accounting']
+        self.assertTrue(partition['evaluated'])
+        self.assertFalse(partition['exclusive'])
+        self.assertEqual(partition['shared_sources'],
+            (summary_source, JournalProvenance(self.identity.session_file, ('source-answer',))))
+        self.assertEqual(paired['groups']['recorded_workflow']['metrics']['normalized_cost']['candidate']['value'], 1.25)
+        self.assertEqual(paired['groups']['recorded_workflow']['metrics']['normalized_cost']['baseline']['value'], 3.25)
+
+        distinct = scored.paired_resources(arm('next-candidate', 2.), arm('next-baseline', 4.))
+        batch = scored.paired_resource_batch(({'paired_resources': paired}, {'paired_resources': distinct}))
+        self.assertTrue(batch['groups']['assistants']['original_accounting']['exclusive'])
+        repeated = scored.paired_resource_batch(({'paired_resources': paired}, {'paired_resources': paired}))
+        self.assertFalse(repeated['groups']['assistants']['original_accounting']['exclusive'])
+        self.assertEqual(repeated['groups']['assistants']['original_accounting']['expected_groups'], 4)
+        self.assertFalse(batch['groups']['recorded_workflow']['original_accounting']['exclusive'])
+
+    def test_accounting_partition_preserves_missing_sources_and_rounds(self):
+        # Detect inferred ownership from costs or labels and merged completion
+        # references, without turning incomplete original records into zeros.
+        source = JournalProvenance('original', ('answer',))
+        original = {'completion_sources': (source,), 'missing_rounds': ()}
+        unknown = dict(original, completion_sources=(None,))
+        missing = dict(original, missing_rounds=('r2',))
+        for group in (unknown, missing, dict(original, completion_sources=())):
+            with self.subTest(group=group):
+                partition = ScoredScenario.accounting_partition((original, group))
+                self.assertFalse(partition['evaluated'])
+                self.assertIsNone(partition['exclusive'])
+                self.assertEqual(partition['expected_groups'], 2)
+        self.assertFalse(ScoredScenario.accounting_partition((dict(original,
+            completion_sources=(source, source)),))['exclusive'])
+        with self.assertRaisesRegex(ValueError, 'one original completion'):
+            ScoredScenario.accounting_partition((dict(original,
+                completion_sources=(JournalProvenance('original', ('first', 'second')),)),))
 
     def test_resource_totals_use_original_summary_and_all_assistant_usage(self):
         # Detect omitted tool steps, double-added reasoning and normalized cost
@@ -1026,8 +1108,8 @@ class RecordedMeasurementTests(unittest.TestCase):
             cost=PiCost(total=0.25))
         zero = PiUsage(input=0, output=0, total_tokens=0, reasoning=0,
             cost=PiCost(total=0))
-        cuts = {'cut': {'summary_usage': {'evaluated': True, 'usage': summary}}}
-        evidence = {'cut': {'model_steps': tuple({'usage': {'value': usage}}
+        cuts = {'cut': {'summary_usage': {'source': None, 'evaluated': True, 'usage': summary}}}
+        evidence = {'cut': {'model_steps': tuple({'source': None, 'usage': {'value': usage}}
                                              for usage in (assistant, zero))}}
         round_ = replace(coding_scenario().rounds[0], identity='cut')
         scored = RecallScenario('resource-control', (round_,)).score(Condition.TASK_MEMORY, RecordedAnswers({}))
@@ -1052,9 +1134,9 @@ class RecordedMeasurementTests(unittest.TestCase):
             total_tokens=3, cost=SummaryCost(0, 0, 0, 0, 0))
         probe = PiUsage(input=3, output=4, total_tokens=7)
         source = PiUsage(input=8, output=1, total_tokens=9)
-        cuts = {'cut': {'summary_usage': {'evaluated': True, 'usage': summary}}}
-        evidence = {'cut': {'model_steps': ({'usage': {'value': probe}},)}}
-        stimuli = {'cut': {'model_steps': ({'usage': {'value': source}},)}}
+        cuts = {'cut': {'summary_usage': {'source': None, 'evaluated': True, 'usage': summary}}}
+        evidence = {'cut': {'model_steps': ({'source': None, 'usage': {'value': probe}},)}}
+        stimuli = {'cut': {'model_steps': ({'source': None, 'usage': {'value': source}},)}}
         observed = scored.recorded_resources(cuts, evidence, stimuli)
         self.assertEqual(observed['combined']['reported_total_tokens']['value'], 10)
         self.assertEqual(observed['source_inputs']['reported_total_tokens']['value'], 9)
@@ -1064,11 +1146,11 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertFalse(missing['reported_total_tokens']['evaluated'])
         self.assertIsNone(missing['reported_total_tokens']['value'])
         self.assertEqual(missing['reported_total_tokens']['observed_value'], 10)
-        stimuli['cut']['model_steps'] = ({'usage': {'value': PiUsage(input=0, output=0, total_tokens=0)}},)
+        stimuli['cut']['model_steps'] = ({'source': None, 'usage': {'value': PiUsage(input=0, output=0, total_tokens=0)}},)
         zero = scored.recorded_resources(cuts, evidence, stimuli)['source_inputs']
         self.assertTrue(zero['reported_total_tokens']['evaluated'])
         self.assertEqual(zero['reported_total_tokens']['value'], 0)
-        stimuli['cut']['model_steps'] = ({'usage': {'value': None}},)
+        stimuli['cut']['model_steps'] = ({'source': None, 'usage': {'value': None}},)
         self.assertFalse(scored.recorded_resources(cuts, evidence, stimuli)
                          ['recorded_workflow']['reported_total_tokens']['evaluated'])
         # Shared original source input is allowed; only recall probes establish
@@ -1081,8 +1163,8 @@ class RecordedMeasurementTests(unittest.TestCase):
 
     def test_resource_totals_keep_unreported_and_empty_denominators(self):
         # Detect a perfect zero inferred from absent summary/usage/fields.
-        cuts = {'cut': {'summary_usage': {'evaluated': False}}}
-        evidence = {'cut': {'model_steps': ({'usage': {'value': None}},)}}
+        cuts = {'cut': {'summary_usage': {'source': None, 'evaluated': False}}}
+        evidence = {'cut': {'model_steps': ({'source': None, 'usage': {'value': None}},)}}
         round_ = replace(coding_scenario().rounds[0], identity='cut')
         scored = RecallScenario('resource-control', (round_,)).score(Condition.TASK_MEMORY, RecordedAnswers({}))
         unavailable = scored.recorded_resources(cuts, evidence, {})['combined']
@@ -1102,12 +1184,12 @@ class RecordedMeasurementTests(unittest.TestCase):
             Condition.TASK_MEMORY, RecordedAnswers({}))
         summary = SummaryUsage(input=20, output=8, cache_read=0, cache_write=0, total_tokens=28,
             cost=SummaryCost(0, 0, 0, 0, 0))
-        cuts = {'cut': {'summary_usage': {'evaluated': True, 'usage': summary}}}
+        cuts = {'cut': {'summary_usage': {'source': None, 'evaluated': True, 'usage': summary}}}
         candidate = scored.recorded_resources(cuts, {'cut': {'model_steps': (
-            {'usage': {'value': PiUsage(input=4, output=6, total_tokens=10,
+            {'source': None, 'usage': {'value': PiUsage(input=4, output=6, total_tokens=10,
                 reasoning=2, cost=PiCost(total=0.25))}},)}}, {})
         baseline = scored.recorded_resources(cuts, {'cut': {'model_steps': (
-            {'usage': {'value': PiUsage(input=8, output=8, total_tokens=16,
+            {'source': None, 'usage': {'value': PiUsage(input=8, output=8, total_tokens=16,
                 reasoning=3, cost=PiCost(total=1))}},)}}, {})
         paired = scored.paired_resources(candidate, baseline)
         self.assertEqual(set(paired['groups']), set(candidate) - {'scope'})
@@ -1141,7 +1223,7 @@ class RecordedMeasurementTests(unittest.TestCase):
             Condition.TASK_MEMORY, RecordedAnswers({}))
         def original(cost):
             return scored.recorded_resources({}, {'cut': {'model_steps': (
-                {'usage': {'value': PiUsage(input=0, output=0, total_tokens=0,
+                {'source': None, 'usage': {'value': PiUsage(input=0, output=0, total_tokens=0,
                     cost=PiCost(total=cost))}},)}}, {})
         pairs = tuple({'paired_resources': scored.paired_resources(original(a), original(b))}
                       for a, b in ((0.25, 1), (1, 3)))
@@ -1178,8 +1260,8 @@ class RecordedMeasurementTests(unittest.TestCase):
             total_tokens=0, reasoning=0, cost=SummaryCost(0, 0, 0, 0, 0))
         assistant = PiUsage(input=0, output=0, cache_read=0, cache_write=0,
             total_tokens=0, reasoning=0, cost=PiCost(total=0))
-        cuts = {identities[0]: {'summary_usage': {'evaluated': True, 'usage': summary}}}
-        evidence = {identities[0]: {'model_steps': ({'usage': {'value': assistant}},)}}
+        cuts = {identities[0]: {'summary_usage': {'source': None, 'evaluated': True, 'usage': summary}}}
+        evidence = {identities[0]: {'model_steps': ({'source': None, 'usage': {'value': assistant}},)}}
         partial = scored.recorded_resources(cuts, evidence, {})
         for group in partial['summaries'], partial['assistants'], partial['combined']:
             self.assertEqual(group['expected_rounds'], identities)
@@ -1437,14 +1519,14 @@ class RecordedMeasurementTests(unittest.TestCase):
                 'model': 'configured-alias', 'responseModel': 'returned-model',
                 'responseId': 'response-1', 'providerThinkingLevel': 'high'}
         entry = NativeEntry.from_evidence({'type': 'message', 'id': 'answer', 'message': wire})
-        selected, = RecordedNativeProbe.model_steps((entry,))
+        selected, = RecordedNativeProbe.model_steps(self.identity, (entry,))
         observation = selected['selection']
         self.assertTrue(observation['evaluated'])
         self.assertEqual(observation['model'], 'configured-alias')
         self.assertEqual(observation['response_model'], 'returned-model')
         self.assertEqual(observation['provider_thinking_level'], 'high')
         self.assertTrue(all(entry.message.to_wire()[key] == value for key, value in wire.items()))
-        unreported, = RecordedNativeProbe.model_steps((MessageEntry(id='missing', message=AssistantMessage()),))
+        unreported, = RecordedNativeProbe.model_steps(self.identity, (MessageEntry(id='missing', message=AssistantMessage()),))
         self.assertFalse(unreported['selection']['evaluated'])
         self.assertIsNone(unreported['selection']['model'])
         with self.assertRaises(ValueError):
@@ -2437,7 +2519,7 @@ for (const original of [source,undefined]) {
         scenario = coding_scenario()
         result = scenario.score(Condition.TASK_MEMORY, RecordedAnswers({})).public_native(
             {'r1': {'scoped_facts': {'retained_publications': measured},
-                    'summary_usage': {'evaluated': False},
+                    'summary_usage': {'source': None, 'evaluated': False},
                     'canonical_availability': {'evaluated': False}}}, {}, {},
             RecordedNativeProbes({}).workflow_timing())
         self.assertTrue(result['retained_publications']['r1']['evaluated'])

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 import argparse
+from collections import Counter
 from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field
 from enum import Enum
@@ -811,12 +812,12 @@ class ScoredScenario(ScoreView):
         neither tokens nor cost is reconstructed from component counters.
         """
         rounds = tuple(round_.identity for round_ in self.source.rounds)
-        summaries = {identity: (report['summary_usage']['usage']
-            if report['summary_usage']['evaluated'] else None,)
+        summaries = {identity: ((report['summary_usage']['source'], report['summary_usage']['usage']
+            if report['summary_usage']['evaluated'] else None),)
             for identity, report in checkpoints.items()}
-        assistants = {identity: tuple(step['usage']['value']
+        assistants = {identity: tuple((step['source'], step['usage']['value'])
             for step in original['model_steps']) for identity, original in evidence.items()}
-        source_inputs = {identity: tuple(step['usage']['value']
+        source_inputs = {identity: tuple((step['source'], step['usage']['value'])
             for step in original['model_steps']) for identity, original in stimuli.items()}
 
         def metric(values, expected, complete_rounds):
@@ -828,7 +829,9 @@ class ScoredScenario(ScoreView):
                     'observed_value': sum(supplied) if supplied else None}
 
         def total(*groups):
-            records = tuple(chain.from_iterable(records for group in groups for records in group.values()))
+            acquired = tuple(chain.from_iterable(records for group in groups for records in group.values()))
+            sources = tuple(source for source, _ in acquired)
+            records = tuple(usage for _, usage in acquired)
             observed_rounds = tuple(identity for identity in rounds
                                     if all(group.get(identity) for group in groups))
             missing_rounds = tuple(identity for identity in rounds if identity not in observed_rounds)
@@ -838,6 +841,7 @@ class ScoredScenario(ScoreView):
             available = tuple(record for record in records if record is not None)
             return {'records': len(records),
                 'usage_records': len(available),
+                'completion_sources': sources,
                 'expected_rounds': rounds, 'observed_rounds': observed_rounds,
                 'missing_rounds': missing_rounds,
                 **{name: measured(values) for name, values in self.resource_metrics(available).items()}}
@@ -853,6 +857,34 @@ class ScoredScenario(ScoreView):
                          'observed subtotals do not estimate missing work or prove no summary work; '
                          'SDK-normalized cost is not billed spend; no unjournaled retries, '
                          'cache-saving comparison, HTTP accounting or end-to-end timing'}
+
+    @staticmethod
+    def accounting_partition(groups):
+        """Derive reuse from acquired completion coordinates, never arm labels.
+
+        Each record has one original journal entry. Shared source inputs and
+        summaries remain visible; their cost cannot be charged as exclusive
+        work in both arms or reused across sampled trajectories. Missing
+        coordinates/rounds do not grant exclusivity even when usage is present.
+        This is accounting ownership, not statistical independence or billing.
+        """
+        sources = tuple(source for group in groups for source in group['completion_sources'])
+        observed = tuple(source for source in sources if source is not None)
+        if any(len(source.entries) != 1 for source in observed):
+            raise ValueError('A usage record requires one original completion coordinate')
+        counts = Counter(observed)
+        shared = tuple(source for source, count in counts.items() if count > 1)
+        available = all(group['completion_sources'] and not group['missing_rounds']
+                        and all(source is not None for source in group['completion_sources'])
+                        for group in groups)
+        return {'evaluated': available, 'exclusive': not shared if available else None,
+                'expected_groups': len(groups), 'observed_records': len(observed),
+                'shared_sources': shared,
+                'reason': 'Original completion ownership unavailable' if not available else
+                          'Original completions are shared or reused' if shared else
+                          'Distinct original completion coordinates',
+                'scope': 'Acquired journal completion ownership; no independent sampling, '
+                         'unjournaled work, workflow duration or billed-spend proof'}
 
     @staticmethod
     def resource_metrics(usages):
@@ -898,6 +930,7 @@ class ScoredScenario(ScoreView):
             if original['expected_rounds'] != control['expected_rounds']:
                 raise ValueError('Paired resources require the same frozen rounds')
             groups[name] = {'candidate': original, 'baseline': control,
+                'original_accounting': cls.accounting_partition((original, control)),
                 'metrics': {metric: cls.resource_difference(original[metric], control[metric])
                             for metric in cls.resource_metrics(())}}
         return {'groups': groups,
@@ -926,6 +959,8 @@ class ScoredScenario(ScoreView):
         for name in comparisons[0]['paired_resources']['groups']:
             samples = tuple(pair['paired_resources']['groups'][name] for pair in comparisons)
             groups[name] = {'trajectories': len(samples), 'samples': samples,
+                'original_accounting': cls.accounting_partition(tuple(
+                    sample[arm] for sample in samples for arm in ('candidate', 'baseline'))),
                 'metrics': {metric: cls.resource_difference(
                     aggregate(tuple(sample['metrics'][metric]['candidate'] for sample in samples)),
                     aggregate(tuple(sample['metrics'][metric]['baseline'] for sample in samples)))
@@ -984,6 +1019,7 @@ class ScoredScenario(ScoreView):
     def resource_margins(cls, comparison, design):
         """Derive decisions from original totals/clocks and supplied design only."""
         cost = comparison['paired_resources']['groups']['recorded_workflow']['metrics']['normalized_cost']
+        accounting = comparison['paired_resources']['groups']['recorded_workflow']['original_accounting']
         latency = comparison['paired_workflow_timing']['p95_seconds']
         alignment = design.pair_alignment(comparison['pairs'])
         decisions = {'normalized_cost': cls.reduction_margin(cost, design.normalized_cost_reduction_margin),
@@ -992,6 +1028,10 @@ class ScoredScenario(ScoreView):
                          'SDK-normalized cost is not billing; '
                          'shared source preparation is not independent arm cost; missing margins/clocks '
                          'stay unavailable; no registration, intervention, capacity or study acceptance'}
+        decisions['normalized_cost']['original_accounting'] = accounting
+        if not accounting['exclusive']:
+            decisions['normalized_cost'].update(evaluated=False, meets_margin=None,
+                                               reason=accounting['reason'])
         if not alignment['evaluated']:
             for name in ('normalized_cost', 'workflow_p95'):
                 decisions[name].update(evaluated=False, meets_margin=None,
