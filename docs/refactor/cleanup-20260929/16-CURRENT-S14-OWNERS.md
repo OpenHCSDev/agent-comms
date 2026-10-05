@@ -2264,3 +2264,18 @@ control reads to original CoordinationStore.observing and the declared
 SQLiteUserVersion/SchemaMeta contract. Ordinary readers remain unchanged.
 The earlier carry-owner review does not qualify these faulty control calls.
 No installed gate was run to discover them, and no source-only PASS is claimed.
+
+### Actual projected-prefetch acceptance
+
+Parent independently read443 terminal1dc145, App receipt3c78a5, app.logd550,
+source proof5d1a, wheel proof53c4, owner handbacke3ccd and final censusc79.
+One installed App passed9.344005s: nine projected pages,116 completed original
+body dispatches, raw events retained, selected-source retirement, bounds and
+whole App shutdown. Provider/native inputs and movies were zero; runner2580069
+is absent. Owner restoration records actual334 CURRENT4401468 byte/mode/link
+members,69 origins and287 protected originals. Raw censusc79 contains234
+processes and19 historical underscore-only matches; classification846aa reports
+zero active references and gaps. Do not substitute the earlier225 shorthand.
+Bohr independent lifecycle closure and final source/evidence freeze remain the
+next merge/reuse boundaries. This is projected-source acceptance, not full
+continuous performance, physical motion or CPU improvement. Public444 is intact.
