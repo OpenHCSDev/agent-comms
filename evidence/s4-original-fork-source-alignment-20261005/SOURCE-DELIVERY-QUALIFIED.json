@@ -1,0 +1,36 @@
+{
+  "source_head": "9034bf75d85f71e0ff35d9e7a5a9e7b7cf7e4a37",
+  "source_sha256": {
+    "src/agent_comms/compaction_records.py": "fc8e30b846e2bc3dea1690975b921f96128eaccb0d82bc946693ad2cf7376cc5",
+    "tests/retained_native_fixture.py": "66f52623ac6ca7a29190f6c1df7e759d3b706e96a08a4e18e4dbfb70d10cedc0",
+    "tests/compaction_retention_fixture.py": "7979b5854c8b88df17563f52ba3bf67546618fc6773d4c6f26f37e4c29db8eeb",
+    "tests/test_recorded_retention_measurements.py": "c23b7629b33875add0aec99e3cb73831c5fa77738c213c192a92cc2683c18bfc"
+  },
+  "raw_sha256": {
+    "evidence/s4-original-fork-source-alignment-20261005/delivery-family-final.log": "880a6b8d9c667addfd6f38d6b97897308f7bbc8b93a4155b9a015e6719611f4b"
+  },
+  "ast_sha256": {
+    "evidence/s4-original-fork-source-alignment-20261005/SOURCE-DELIVERY-AFTER.json": "bd6349134370d240aaed48a25c1ea2baea89de9eb2d97c74c4a40dc0f3a1bded"
+  },
+  "final_controls": {
+    "tests": 9,
+    "seconds": 0.205,
+    "result": "PASS",
+    "scope": "Authored own JSONL and actual private CompactionJournal rows; real acquired NativeEvidenceRead/prefix/branch and observe_acquired delivery. Input proof and managed summary reporting alone are spies. Not genuine SDK return or configured execution."
+  },
+  "counterexample_closed": "Root stimulus -> recorded first child -> recorded later leaf now reaches source_delivery through observe for both uncut recall and selected checkpoint. NativeForkCreation checks input/answer membership at every inherited edge. Missing earlier row unavailable; excluded answer or changed digest refuses. All shared readers close once through original resource.",
+  "related_consumers": "Both observe_acquired delivery paths carry original journal and held reader map; Probe.read/construction/observe and continuation reader consume the same map; no single-fork compatibility signature or None checkpoint route retained.",
+  "unchanged": "Original source expected-text and earlier branch boundary checks; same-session delivery proof; same-session chronological checkpoint comparison; original owner fields/DDL/coverage/admission/selection/native producer/runtime/runner/pins. No package or saved data changed.",
+  "operations": {
+    "original_record_reads": 0,
+    "sdk": 0,
+    "native_artifact": 0,
+    "holder": 0,
+    "provider": 0,
+    "inputs": 0,
+    "build": 0,
+    "children": 0
+  },
+  "historical": "Earlier SOURCE-QUALIFIED/five controls and initial wrapper negative remain immutable; Parent found the related delivery gap before readiness. This successor is the complete source delivery family evidence.",
+  "remaining": "No independent full workflows, clocks/costs/p95, capacity or study acceptance. Original chronological managed-cut comparison remains same-session per arm; source inheritance crosses returned forks, not native checkpoint ownership. Future separate runner trajectories and matching installed recorded-source validation require their own actual scope. USD75/30pairs unapproved."
+}

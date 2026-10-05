@@ -1,0 +1,14 @@
+test_stimulus_delivery_requires_exact_source_and_original_earlier_branch (test_recorded_retention_measurements.RecordedMeasurementTests.test_stimulus_delivery_requires_exact_source_and_original_earlier_branch) ... ok
+test_stimulus_inheritance_requires_existing_exact_sdk_prefix (test_recorded_retention_measurements.RecordedMeasurementTests.test_stimulus_inheritance_requires_existing_exact_sdk_prefix) ... ok
+test_stimulus_group_uses_scenario_source_and_same_acquired_reader (test_recorded_retention_measurements.RecordedMeasurementTests.test_stimulus_group_uses_scenario_source_and_same_acquired_reader) ... ok
+test_group_reader_shared_once_and_closed_after_second_arm_refuses (test_recorded_retention_measurements.RecordedMeasurementTests.test_group_reader_shared_once_and_closed_after_second_arm_refuses) ... ok
+test_alignment_requires_distinct_originals_and_keeps_missing_rounds (test_recorded_retention_measurements.RecordedMeasurementTests.test_alignment_requires_distinct_originals_and_keeps_missing_rounds) ... ok
+test_recorded_fork_chain_corroborates_each_acquired_prefix_and_position (test_recorded_retention_measurements.RecordedMeasurementTests.test_recorded_fork_chain_corroborates_each_acquired_prefix_and_position) ... ok
+test_multi_edge_delivery_flows_through_observe_and_selected_cut (test_recorded_retention_measurements.RecordedMeasurementTests.test_multi_edge_delivery_flows_through_observe_and_selected_cut) ... ok
+test_recorded_fork_chain_refuses_cycles_identity_and_missing_edges (test_recorded_retention_measurements.RecordedMeasurementTests.test_recorded_fork_chain_refuses_cycles_identity_and_missing_edges) ... ok
+test_distinct_fork_sources_require_entire_ordered_frozen_stimulus_prefix (test_recorded_retention_measurements.RecordedMeasurementTests.test_distinct_fork_sources_require_entire_ordered_frozen_stimulus_prefix) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 0.205s
+
+OK

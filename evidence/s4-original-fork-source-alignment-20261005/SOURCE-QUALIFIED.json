@@ -1,0 +1,38 @@
+{
+  "source_head": "9bd17ee786baf7ef2abefe345adc30082e83d6dd",
+  "base": "3931f16feb8bcb2dbcc3041446ca342dea665024",
+  "scope": "Read-only original fork ancestry and frozen-source matching, authored checks only",
+  "source_sha256": {
+    "src/agent_comms/compaction_records.py": "5c55ca5c1c3bdb10ec7e60a62ddba7e24f75a8a8ef00c29812bbe3635908a548",
+    "tests/retained_native_fixture.py": "9fc4a272e50910fba7928a4fda36947362c3987616789e22045ddc6400cb9592",
+    "tests/compaction_retention_fixture.py": "b4d61bd164464f3dd0abb5656fd881f235db96a0eaca4da71f52b78e075a5907",
+    "tests/test_recorded_retention_measurements.py": "9f01da8a0c56a5fd5a03c29c1b8de0f9659e722d0df7ad51160997aba5a4e9fc"
+  },
+  "raw_sha256": {
+    "evidence/s4-original-fork-source-alignment-20261005/authored-controls.log": "3c6ca009d63d73a82be0d93bd21981b6a897e2751c64b0a7bf7e8f5cea4e8c17",
+    "evidence/s4-original-fork-source-alignment-20261005/authored-final.log": "d98af5a15865a8612c97e5c0f01746cf7e837b6290ef3550cfec78193a4f9f4b",
+    "evidence/s4-original-fork-source-alignment-20261005/authored-source-final.log": "86b7746bfe5125435b1fef96b67909e3cba939ce9dbf91a0d59729f87c3fbc29"
+  },
+  "ast_sha256": {
+    "evidence/s4-original-fork-source-alignment-20261005/SOURCE-BEFORE.json": "cf7c48cf5eaecc68632aed045f436a23836e2d28695e5d7704ca771d0dcdd0bd",
+    "evidence/s4-original-fork-source-alignment-20261005/SOURCE-AFTER.json": "ec269ceb7318524da8580b9603432ae0c342368bb87a33f88dca0365391a9f28"
+  },
+  "authored_final": {
+    "tests": 5,
+    "elapsed_seconds": 0.083,
+    "result": "PASS",
+    "proof_strength": "Host source imports, own freshly authored private JSONL/journal rows and original acquired reader/codec; not original SDK creation or configured execution"
+  },
+  "preserved_negative": "Initial authored descriptor-count assertion failed because the refusal observation was outside the test wrapper. Only that observation scope was corrected; original raw log is retained. Intermediate and final controls are separate.",
+  "operations": {
+    "original_record_reads": 0,
+    "sdk": 0,
+    "native_artifact_access": 0,
+    "holders": 0,
+    "provider": 0,
+    "inputs": 0,
+    "builds": 0
+  },
+  "unchanged": "Original NativeForkCreation fields, existing prefix/selection/coverage methods, DDL/storage/admission/lifecycle/runner/native producer; no persisted format or installed package claim",
+  "remaining": "Genuinely exclusive source/summary trajectories and original creation records at each selected cut; complete frozen source delivery and request/construction evidence; independent workflow clocks/costs/capacity and registered study. Old shared workflows supply none of these missing facts. No new configured purpose proposed; USD75/30pairs unapproved."
+}
