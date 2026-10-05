@@ -23,6 +23,7 @@ from agent_comms.native_entries import NativeEntry
 from agent_comms.native_pi import NativeContextProof
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.pi_vocabulary import ThinkingLevel
 from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop
@@ -122,11 +123,22 @@ async def condition_application(stage,package,original_python,selected_condition
                 final_HTTP_bytes_evaluated=False)
 
 
-def frozen_scenario(root_reference):
-    """Freeze the oracle before any summary or answer, separate from prompts."""
+def frozen_scenario(root_reference, publications: tuple[Message, ...]):
+    """Freeze original public wording and prospective corrections before cuts.
+
+    Publication bodies belong to their original messages. Future wording is
+    declared once here, then the runner publishes these exact source additions.
+    Oracle answer/evidence metadata stays separate from those public operands.
+    This value is not proof of native delivery or a matched intervention.
+    """
+    history = tuple(message.body for message in publications)
+    additions = ((),
+        ('Authorized correction: the binding archive root is now /artifacts/S4/β/corrected.',),
+        ('Explicitly drop the archive-root constraint. No binding archive root remains for this task.',))
     rounds = []
     for number, path in enumerate(('/artifacts/S4/α/source', '/artifacts/S4/β/corrected', 'NONE'), 1):
-        rounds.append(RecallRound(f'cut-{number}', (f'private-source-cut-{number}',), (
+        history += additions[number - 1]
+        rounds.append(RecallRound(f'cut-{number}', history, (
             Question('archive', 'What archive root is currently binding? Answer NONE if it was explicitly dropped.',
                      path, root_reference, obsolete=tuple(value for value in
                         ('/artifacts/S4/α/source', '/artifacts/S4/β/corrected') if value != path)),
@@ -294,13 +306,14 @@ async def run(stage, package, original_python, *, core_source, core_artifacts=()
                 subject = service.messaging.send_user_message(owner.name, wording, worktree=owner.worktree)
                 declaration = service.messaging.pin_user_constraint(owner.name, subject.reference,
                                 worktree=owner.worktree, **changes)
-                return declaration
+                return subject, declaration
 
             if continuation is None:
-                archive = pin('For this private retention task, the binding archive root is /artifacts/S4/α/source.')
-                pin('Never replay an uncertain input. This prohibition remains binding throughout this task.')
-                pin('warm-review was chosen; cold-review remains a valid review alternative and must remain available.')
-                scenario = frozen_scenario(json.dumps(FieldCodec.encode(archive.reference), sort_keys=True))
+                archive_source, archive = pin('For this private retention task, the binding archive root is /artifacts/S4/α/source.')
+                prohibition, _ = pin('Never replay an uncertain input. This prohibition remains binding throughout this task.')
+                alternative, _ = pin('warm-review was chosen; cold-review remains a valid review alternative and must remain available.')
+                scenario = frozen_scenario(json.dumps(FieldCodec.encode(archive.reference), sort_keys=True),
+                                           (archive_source, prohibition, alternative))
                 record(stage / 'frozen-oracle.private.json', scenario)
                 record(stage / 'public-questions.json', scenario.public())
             else:
@@ -327,11 +340,12 @@ async def run(stage, package, original_python, *, core_source, core_artifacts=()
                     print(f'{round_.identity}: recorded original answer; no summary or input replay', flush=True)
                     continue
                 if number == 2:
-                    archive = pin('Authorized correction: the binding archive root is now /artifacts/S4/β/corrected.',
-                                  change=CorrectionTaskChange(archive.reference))
+                    wording, = round_.history_after(scenario.rounds[number - 2].history)
+                    _, archive = pin(wording, change=CorrectionTaskChange(archive.reference))
                 elif number == 3:
+                    wording, = round_.history_after(scenario.rounds[number - 2].history)
                     service.messaging.send_user_message(owner.name,
-                        'Explicitly drop the archive-root constraint. No binding archive root remains for this task.',
+                        wording,
                         worktree=owner.worktree, task=UserTaskDrop(CorrectionTaskChange(archive.reference)))
 
                 if continuation is not None and round_.identity in continuation.checkpoints:
