@@ -1,5 +1,5 @@
 {
-  "state": "Ready at changed owner/canonical plus actual authored saved-SDK localhost settlement scope; final main-PR Debt and parent guarded merge pending",
+  "state": "Ready at changed owner/canonical plus actual authored saved-SDK localhost settlement scope; whole holder/artifact purposes closed; final exact main-PR Debt and parent guarded merge pending",
   "qualified_source": "48fe470fa3b83e9f54d95d9b27d70acfaa1cf0ef",
   "production_wheel_source": "46124bbdc9dcec39e944eb64067d9c85f3508c0e",
   "production_delta_after_qualified_wheel": 0,
@@ -49,7 +49,15 @@
   },
   "native_READ_EXEC_returned": true,
   "Sch_closure_sha256": "39c3b3e06fe01895bf2a68e3210024f488b3f75968fc3beb3cbcea802c549b47",
-  "Bohr_independent_holder_closure": "pending at this source checkpoint; whole owner handback delivered",
+  "Bohr_independent_holder_closure": {
+    "lifecycle": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel675-corrected-reply02-canonical-native-package-execution-lifecycle.json",
+    "sha256": "9de9f54b94b1deb80e67e7dbb7628bfb8c3cf43e6b4cec8e12a814187a1c9d21",
+    "state": "CLOSED consumed67502 correctedcanonical1PASS/native2PASS; original5405f347+94/69metadata10/510 restored exact; wholeclaims/artifactauthorities returned; no nextloan",
+    "fresh_processes": 201,
+    "holder_output_refs": 0,
+    "permission_gaps": 0,
+    "public448_native_references_preserved": 19
+  },
   "limits": "No public/defaultUI/physical/global CPU/full C3/historical latency acceptance. Original conftest maintenance defer remains harness condition. Postterminal rawproof JSONL decoding error retained; original NativeContextJournal reader used for actual rows without source writes/input.",
   "compact_keeper_inventory": {
     "installed02/candidate-source-proof.json": {
