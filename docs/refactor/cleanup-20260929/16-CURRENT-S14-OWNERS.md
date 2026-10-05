@@ -2824,3 +2824,24 @@ control unrun. Heis remains TC1 integrator, with disjoint453 source repairs.
 Kepler owns original geometry projection lookup continuation. These independent
 source families stay active alongside public acceptance; no installed/native
 permission follows from their source checkpoints.
+
+### Geometry acquisition successor reviewed, 2026-10-05
+
+Text65 Draft230289d8 (production0ab59a04) is source-qualified over the frozen
+63/64 integration08e3. Parent read original geometry capture/project/restore,
+SpatialMap, cache admission/retirement and affected App controls. The immutable
+geometry owns source ordinal and placement together; its existing derived
+spatial map replaces the per-viewport every-entry scan, preserving original
+order, explicit offscreen targets, clipping and complete capture. Retirement
+no longer allocates a flattened tuple of all widget references. Required full
+membership unions remain O(n); first index acquisition still depends on source
+extent. No measured frame, CPU or whole-workflow speed claim follows.
+
+The original source batch qualified32 controls, retaining one new overlay-oracle
+negative; the corrected control uses native paint admission and passed once.
+Native production was unchanged between receipts. Parent authorizes one normal
+cached Text65 filewheel/full266 source proof for the future joint installed path;
+no installed prefix, native keeper or recording permission is granted. Kepler
+owns that artifact, coordinates directly with Heis and preserves08e3/487.
+Heis retains the integrated loading/scrolling workflow and public UI acceptance;
+Einstein454 pending project-reader correction stays a disjoint source family.
