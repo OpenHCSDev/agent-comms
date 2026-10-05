@@ -46,6 +46,11 @@ operators remain protected. The current goal explicitly defers CI as a merge
 gate; reviewed663/627/434/667 were normally merged at their frozen heads.
 Queued jobs are not claimed passed. Changed runtime behavior still requires
 its proportionate installed acceptance and original custody.
+The owned packaged guidance now removes its stale mandatory CI and all-flow
+feature-merge clauses in favor of the latest instruction: local verification
+and the actual affected path remain required, CI is deferred. This source-only
+instruction correction stays outside the frozen current-main receiving bundle;
+no live instruction or installed package was rewritten.
 
 ## Context Explorer source review after historical acceptance
 
