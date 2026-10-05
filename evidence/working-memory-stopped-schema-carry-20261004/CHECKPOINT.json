@@ -1,0 +1,47 @@
+{
+  "classification": "source-only-stopped-declaration-carry-not-installed-ready",
+  "determining_head": "137be40c37fcc6065138be9985d1962e737816fd",
+  "base": "a38c06de24315fa868de45786e01fefadb0aaef1",
+  "reviewed_target_producer": "b7e688292074a854870d7ca78397111c1dae1c7b",
+  "source_release": [
+    9,
+    3,
+    3,
+    6
+  ],
+  "target_release": [
+    10,
+    3,
+    3,
+    6
+  ],
+  "tools": {
+    "tools/cutover/native_schema_carry.py": "e3a519be373280870cd1a414be934962b8acf16d4c3bf016c33d13e467cee9a5",
+    "tools/cutover/native_schema_carry_controls.py": "6da0e8f31718efc0db45f77988b77b4cb677d968e34f3ca1f9e49b0048863b95",
+    "tools/cutover/runtime_installation.py": "77841672b6d9d99e3cb4c724706ffdad7eefd604aab583743f2e4b341156224c"
+  },
+  "unchanged_product_roots": [
+    "src",
+    "stack",
+    ".pi",
+    "pyproject.toml"
+  ],
+  "source_delta": [
+    "73\t22\ttools/cutover/native_schema_carry.py",
+    "44\t11\ttools/cutover/native_schema_carry_controls.py",
+    "1\t1\ttools/cutover/runtime_installation.py"
+  ],
+  "executed_checks": [
+    "original NRA Package/FunctionFacts before and after AST",
+    "changed tools AST parsing",
+    "git diff --check",
+    "byte equality of ordinary metadata/database/session/schema source"
+  ],
+  "store_or_product_execution": false,
+  "package_writes": 0,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "public_operations": 0,
+  "unknown_replays": 0,
+  "qualification_pending": "One genuine source9 declaration donor -> actual installed schema10 target stopped-custody run under a future specifically issued purpose; no active holder/native loan."
+}

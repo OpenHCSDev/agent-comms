@@ -55,3 +55,9 @@ future explicitly granted genuine schema9 declaration donor and a schema10
 installed target, using the existing stopped control/custody. Einstein retains
 W6/GUI and its source/helper/native consumers; this PR changes only the three
 existing outside-src operator-family files plus evidence.
+
+`AFTER.json` records the final owner/caller AST at determining137be40c (same
+316/52/368 roots, zero omissions). `CHECKPOINT.json` records exact tool hashes
+and the unchanged production/package roots. An absent original journal remains
+absent; the existing candidate-tamper control uses an actually present declared
+store, rather than requiring a made-up journal. No historical evidence is seeded.
