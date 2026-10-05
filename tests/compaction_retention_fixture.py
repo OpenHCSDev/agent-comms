@@ -116,6 +116,8 @@ class PairedRecallDesign:
         rounds = scenario.construction_rounds()
         if trajectory is not None and not 1 <= trajectory <= self.sample_count:
             raise ValueError("Selected trajectory is outside the supplied design")
+        if trajectory is not None and any(not operands['source_text'] for operands in rounds):
+            raise ValueError('Selected native trajectory requires declared new history before every cut')
         random = Random(sampling_seed)
         trajectories = tuple({'sample': index + 1,
             'condition_order': tuple(random.sample((self.candidate, self.baseline), 2))}

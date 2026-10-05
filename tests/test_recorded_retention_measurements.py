@@ -338,24 +338,17 @@ class RecordedMeasurementTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'artifact changed'):
             design.construction_plan(17)
 
-    def test_selected_case_validates_before_original_capture_or_configured_execution(self):
+    def test_selected_case_requires_native_source_operands_without_changing_preview(self):
         # A malformed prospective case must not spend earlier round calls or
         # borrow the public source before discovering a missing source operand.
-        import asyncio
-        from three_cut_retention_configured_journey import run
-
         scenario = coding_scenario()
         original = self.artifact('missing-source-oracle.json', replace(scenario,
             rounds=(scenario.rounds[0], replace(scenario.rounds[1], history=scenario.rounds[0].history))))
         design = PairedRecallDesign(original, Condition.TASK_MEMORY, Condition.BOUNDED,
             'openai-codex/gpt-6.1-sol', 10, 0.95, -0.02, 10000, 20261004)
-        output = self.root / 'unstarted-case'
-        with patch('three_cut_retention_configured_journey.CurrentTypedCapture',
-                   side_effect=AssertionError('Original source must not be acquired')):
-            with self.assertRaisesRegex(ValueError, 'declared new history'):
-                asyncio.run(run(output, Path('unused-package'), Path('unused-interpreter'),
-                    design=design, sampling_seed=17, trajectory=1, core_source=None))
-        self.assertFalse(output.exists())
+        self.assertEqual(design.construction_plan(17)['rounds'][1]['source_text'], '')
+        with self.assertRaisesRegex(ValueError, 'declared new history'):
+            design.construction_plan(17, trajectory=1)
 
     def test_stimulus_delivery_requires_exact_source_and_original_earlier_branch(self):
         # Detect edits, later source and sibling ancestry being credited as

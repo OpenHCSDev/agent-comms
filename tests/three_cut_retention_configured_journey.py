@@ -184,8 +184,6 @@ async def run(stage, package, original_python, *, design: PairedRecallDesign,
     """
     plan = design.construction_plan(sampling_seed, trajectory=trajectory)
     selected, = plan['trajectories']
-    if any(not operands['source_text'] for operands in plan['rounds']):
-        raise ValueError('This configured trajectory requires declared new history before every cut')
     scenario = RecordedNativeCheckpoint.read_record(design.oracle, RecallScenario)
     stage.mkdir(mode=0o700, exist_ok=False)
     record(stage / 'construction-plan.private.json', plan)
