@@ -87,3 +87,31 @@ is part of this index scope. No historical-body hunt is a prerequisite.
 The routing native-page qualifier still calls current registry decoding after
 carry. Its old/new provenance acquisition is a separate concrete unfinished
 consumer; no central-batch or whole 215/430/661 acceptance is claimed here.
+
+## Authorized old-source artifact checkpoint
+
+Parent authorized the one normal old720 build after source review. The build
+ran once with the published cached Hatchling 1.28 backend, no isolation or
+resolution, in a separate detached exact-old-Git worktree because the current
+published helper paths retain a different revision. It exited zero in 0.556s,
+joined synchronously. Both source checkouts and all six helper hashes stayed
+unchanged. No application import, installation, native build or runtime test.
+
+The wheel is retained at:
+
+`/home/ts/.cache/agent-scratch/einstein-retained-index-cross-version-20261005/old720-wheel/agent_comms-0.1.0-py3-none-any.whl`
+
+SHA256: `c3e41356b1d84c67314de57dadc287aed199f249cfe88164aad0fe705242f44b`
+
+Size: 727243 bytes. All 295 package source files plus two forced resources
+match Git/local/ZIP bytes and modes. All 302 ZIP files are present in RECORD;
+every required digest and size matches. Five generated metadata files are
+identified separately; license bytes match original Git. Original build inputs
+and uv.lock absence are preserved. Cached backend metadata hash remains exact.
+
+`OLD720-BUILT-WHEEL-PROOF.json` and `OLD720-BUILD-RECEIPT.json` publish the
+original proof/receipt bytes. `BUILT-OLD-SOURCE-INSTALLED-RELATION.json` appends
+the artifact relation to the preserved prospective proposal. This proves a
+new normal-built exact-Git old producer; it is not historical original installed
+artifact equivalence. #684 stays Draft. Both eligible nonlive holder tuples and
+controlled old/new acceptance remain unbound; centralbatch/routing are separate.

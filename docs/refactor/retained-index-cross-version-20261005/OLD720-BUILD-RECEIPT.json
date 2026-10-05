@@ -1,0 +1,75 @@
+{
+  "source_commit": "72062939239b0f07707406309305a056a23f925f",
+  "source_checkout": "/home/ts/wt/comms-old720-retained-index-build-20261005",
+  "build_proposal": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-index-cross-version-20261005/OLD720-NORMAL-BUILD-PROPOSAL.json",
+  "build_proposal_sha256": "dadea5e2953a40092af3376a3d57aba51c7abe7c69ef0c58f2dba24839641347",
+  "argv": [
+    "/usr/bin/python",
+    "-B",
+    "-m",
+    "build",
+    "--wheel",
+    "--no-isolation",
+    "--outdir",
+    "/home/ts/.cache/agent-scratch/einstein-retained-index-cross-version-20261005/old720-wheel"
+  ],
+  "cwd": "/home/ts/wt/comms-old720-retained-index-build-20261005",
+  "environment_changes": {
+    "PYTHONPATH": "/home/ts/.cache/uv/archive-v0/RgcgNn7xR1Zs9HSF",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "backend_metadata_sha256": "acd3b755437aa07859ebe3ed9b71d94536fa183cc851bbd95b437ba3fe7e09b6",
+  "source_files_before": 295,
+  "forced_resources_before": 2,
+  "build_inputs_before": [
+    {
+      "source": "pyproject.toml",
+      "present": true,
+      "sha256": "b6b42ec642128e4c01380d90fac165e6511117a1af1a15a90a84ec55c2cc1710"
+    },
+    {
+      "source": "README.md",
+      "present": true,
+      "sha256": "b77c9e4f95fe3b1c0cbf84f70f429ff07673308099688796b24bda7e339f84a6"
+    },
+    {
+      "source": "LICENSE",
+      "present": true,
+      "sha256": "1fe81c33f0cdfbcea8ce2fa4bf5cc98604be54a954ff7c59cea0ff02e3c15741"
+    },
+    {
+      "source": "src/agent_comms/__init__.py",
+      "present": true,
+      "sha256": "302424efabe07e591de8d139721b7de369c362dae6c942d2d23ebf01f7dd617e"
+    },
+    {
+      "source": "uv.lock",
+      "present": false,
+      "sha256": null
+    }
+  ],
+  "helper_hashes_before": {
+    "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_index_cutover.py": "43321c362d4a5c610aa0743872a3457f60363cda0c0b8913247db56cd28e44b6",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_index_writer.py": "12b95a6de335bffd741163f66daa183209690d1cf9f514efb3a891e3d0a8674f",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_index_installed_pilot.py": "4b66f5d2399313cb1313404ec1dd9416a444d285e411bc4ccf23207db801b166",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/seed_retained_index_fixture.py": "d89b7561882c0a0a69700f24eda02e4ad8dca939582f1155a50f8bc1d88745f4",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/checkpoint_schema.py": "0d32c74d741572f9f5a242eb34750f7c3353ee88a480957d59380afb1147adee",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/install_retained_index.py": "3060f64db3d180452452b5ec12c5cd2730f8f8052ab5676c8807f49c42b3982d"
+  },
+  "attempt": 1,
+  "historical_installed_equivalence": false,
+  "newenv": false,
+  "dependency_resolution": false,
+  "native_build": false,
+  "installations": 0,
+  "application_imports": 0,
+  "runtime_tests": 0,
+  "exit_code": 0,
+  "seconds": 0.5557569219963625,
+  "child_synchronously_joined": true,
+  "child_birth_not_captured": true,
+  "helper_hashes_after_unchanged": true,
+  "source_status_after": "",
+  "stdout_sha256": "4b7bf8a014c9d5f684f7ec116d30793882adbf9eac7ed1f8777e9a1d35742b80",
+  "stderr_sha256": "3fbf5c81df4d6f7774a09a7694742996e64ed07ccaea033ef3d34574059a981c"
+}
