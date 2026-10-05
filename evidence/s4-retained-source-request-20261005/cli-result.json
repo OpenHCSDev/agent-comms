@@ -1,0 +1,34 @@
+{
+  "terminal": 0,
+  "retained_source_request": {
+    "evaluated": false,
+    "expected_rounds": [
+      "r1",
+      "r2",
+      "r3"
+    ],
+    "available_rounds": [],
+    "unavailable_rounds": [
+      "r1",
+      "r2",
+      "r3"
+    ],
+    "present_rounds": [],
+    "absent_envelope_rounds": []
+  },
+  "native_source_delivery": {
+    "evaluated": false,
+    "expected_rounds": [
+      "r1",
+      "r2",
+      "r3"
+    ],
+    "available_rounds": [],
+    "unavailable_rounds": [
+      "r1",
+      "r2",
+      "r3"
+    ]
+  },
+  "scope": "Empty authored recorded-run CLI; no original records/SDK/provider/input"
+}

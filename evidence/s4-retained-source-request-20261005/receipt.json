@@ -1,0 +1,29 @@
+{
+  "base": "0aab3be769e0d870fe3c4e3713866e997076eb4a",
+  "source": {
+    "tests/retained_native_fixture.py": "8213a71916223655b09fa9cfd2b3bc47220bf3205c179897b0f906a3c407592c",
+    "tests/compaction_retention_fixture.py": "25f5e75bbb3d33ea95a77bb2672c3e43548ede10883b7c3972c589d9946985aa",
+    "tests/test_recorded_retention_measurements.py": "3195f687fa641ea88eb764ffa2584313f49f0c46272567eaed74cdf5bb352607"
+  },
+  "raw": {
+    "evidence/s4-retained-source-request-20261005/after.json": "db6afdea8e19711e6e3f516437582b00562efff284c0626b675cf2e3d09a6c4d",
+    "evidence/s4-retained-source-request-20261005/before.json": "403faf9d11f5e9c3f32be84d2800192d1a1ae61eed66a4b1f67ce87d35ebee21",
+    "evidence/s4-retained-source-request-20261005/cli-result.json": "bfcfdff78805ee37e5a555a587b3a04eb162701b8c45c4d697a8602bed548178",
+    "evidence/s4-retained-source-request-20261005/cli.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "evidence/s4-retained-source-request-20261005/cli.stdout.json": "84c9c13c9dbf5bc8ec6a898e65fec6720ed756d99594e4b7679e68cb79dac7f9",
+    "evidence/s4-retained-source-request-20261005/empty-recorded-run.json": "8f3cc296c7b28b4507fb760667f3188b45deacfe76456bc8cbac37d42bfb9359",
+    "evidence/s4-retained-source-request-20261005/focused-final.log": "4b5939ca136482541b68f87e3dffe049ad4defedfe78b29678686a228b9e004a"
+  },
+  "final_control": "3 passed, 44 deselected in 0.88s",
+  "CLI": "All three frozen request/source rounds unavailable; no absent/present claim",
+  "runtime_delta": [],
+  "counts": {
+    "Python_modules": 748,
+    "parse_omissions": [],
+    "SDK_runs": 0,
+    "provider_inputs": 0,
+    "original_record_reads": 0,
+    "holder_operations": 0
+  },
+  "limits": "Authored private-wire and SDK-capture values/source/scorer controls only. No original configured capture re-read, submitted input, HTTP/provider receipt, capacity, matched intervention or study qualification. Prior STARTED/refusals immutable."
+}

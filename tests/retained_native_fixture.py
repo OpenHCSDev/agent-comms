@@ -1023,8 +1023,14 @@ class RecordedNativeProbe:
                 "final_transport_evaluated": False,
                 "scope": "Original captured serializations match every SDK measured segment; not HTTP bytes, provider token counts or intervention proof"}
 
-    def prompt_presence(self, retained, texts, captured):
-        """Measure envelope presence in the borrowed original SDK capture."""
+    def prompt_presence(self, retained, texts, captured, *, publications):
+        """Measure envelope bytes and bind their original publication sources.
+
+        Publication evidence comes from the same acquired checkpoint. Missing
+        wire evidence does not erase observed SDK bytes or infer their source.
+        A complete envelope match binds those references to this original SDK
+        request, not to an HTTP payload, earlier native stimulus or model recall.
+        """
         if not captured["evaluated"]:
             return captured
         if retained is None or not retained.facts:
@@ -1034,12 +1040,29 @@ class RecordedNativeProbe:
         # recall credit, semantic interpretation or final HTTP-body evidence.
         envelope = json.dumps(retained.text, ensure_ascii=False)[1:-1]
         present = any(envelope in text for text in texts)
+        binding = publications
+        if publications["evaluated"]:
+            if publications["source_digest"] != retained.source_digest.value:
+                raise ValueError("Retained publication observation belongs to another original envelope")
+            binding = {
+                "evaluated": True,
+                "source_digest": publications["source_digest"],
+                "references": publications["references"],
+                "authored_wordings": publications["authored_wordings"],
+                "context_digest": captured["context_digest"],
+                "exact_envelope_present": present,
+                "scope": "Certified original retained publications within the exact envelope "
+                         "in this recorded SDK request; an absent envelope does not prove "
+                         "individual wording absent elsewhere; not native stimulus delivery, "
+                         "HTTP bytes, provider receipt or recall",
+            }
         return {"evaluated": True, "stage": "recorded SDK provider input",
                 "final_transport_evaluated": False,
                 "context_digest": captured["context_digest"],
                 "required": len(retained.facts),
                 "present": len(retained.facts) if present else 0,
-                "exact_envelope_present": present}
+                "exact_envelope_present": present,
+                "retained_source_binding": binding}
 
     def probe_input_presence(self, data, user, captured):
         """Measure rendered probe text in the acquired original SDK request.
@@ -1428,7 +1451,9 @@ class RecordedNativeProbe:
             },
             "checkpoint": checkpoint,
             "canonical_availability": checkpoint["canonical_availability"],
-            "provider_prompt_presence": self.prompt_presence(retained, texts, serialized),
+            "provider_prompt_presence": self.prompt_presence(retained, texts, serialized,
+                publications=scoped.get("retained_publications", {"evaluated": False,
+                    "reason": "No original scoped retained publications"})),
             "probe_input_presence": self.probe_input_presence(data, user, serialized),
             "prompt_scope": "original native user and assembled-context proof, not final provider payload",
         }
