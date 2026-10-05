@@ -113,6 +113,28 @@ Frozen Explorer953/107 and453 source/package controls remain unchanged. This
 assignment grants no installed package, native keeper or runtime access, and
 does not qualify the full resource/continuous journey.
 
+### Project reader restoration checkpoint, 2026-10-05
+
+Einstein454 latest3dd0fad4 (productione73d034c) closes a concrete capture race:
+a newly mounted tree's initial root/zero viewport could overwrite the retained
+reader while restoration was pending. Existing ProjectPanel.capture_intent and
+RestorableProjectPanel retain that original intent until the original queued
+viewport restoration commits. The original asyncio future retires queued scroll
+on worker cancellation. A path change revokes pending intent before admission;
+ProjectTreeIntent.restore alone owns native resolved-path eligibility. The sole
+SessionPanel capture consumer delegates to that owner. WorkspaceChrome/sidebar
+placement/navigation boundaries were read and require no competing patch.
+
+Three production files changed; the prepared mounted App control is still
+unrun. Exact proposal1c8280f8 and control510a851e exercise initial native root
+highlight, retirement/capture/canceled worker, then remount with exact selected
+file and saved viewport. Future485 interpreter is descriptive, not an eligible
+loan. Qualified old1a8/319 differs in exactly three production assets; joint or
+standalone changed wheel and actual eligible purpose remain required. Heis is
+whole TC1 integration owner; no Editor/Explorer acceptance is repeated for this
+separate affected family. Original453 first failure and frozen Explorer953/107
+remain unchanged; no source count threshold or full resource closure is claimed.
+
 ## Dispatch
 
 > **`toad-tc1`:** Complete TC1 per `docs/refactor/cleanup/TC1-workspace-state.md`, starting with `session_presentation.py` and `transcript_publication.py`, after T9 in each.
