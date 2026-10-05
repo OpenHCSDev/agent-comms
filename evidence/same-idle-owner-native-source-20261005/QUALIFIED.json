@@ -1,0 +1,104 @@
+{
+  "state": "PASS scoped installed seven-case savedSDK owner lifecycle; initial failed proof remains failed",
+  "tested_source_head": "48b7db675f65fc312826a55db1bec20410ca7c70",
+  "production_checkpoint": "a264da8f7251c72fae0ee0259c1d81de9ea5ed7e",
+  "wheel": "3fe14077293b691000394831ed7458ecae92afd9b667af4501be2945ab86051d",
+  "required_scope": "Same idle registered owner savedSDK selection/preparation/retirement/restoration and successor refusal",
+  "pytest_passed": 7,
+  "pytest_seconds": 61.24,
+  "BoundedRun_seconds": 65.38440060301218,
+  "outer_runner_seconds": 66.55946405394934,
+  "actual_localhost_inputs": 1,
+  "other_cases_no_inputs": 6,
+  "external_paid_public_replay": 0,
+  "keeper_bytes": 36958,
+  "compact_keepers": {
+    "candidate-source-proof.json": {
+      "path": "evidence/same-idle-owner-native-source-20261005/installed02/candidate-source-proof.json",
+      "sha256": "5fcca1f6ab2bb36f615d59e144897de4e8db1045f0676b2b88031f4a1a21f2be",
+      "bytes": 4940
+    },
+    "native-full-trust.json": {
+      "path": "evidence/same-idle-owner-native-source-20261005/installed02/native-full-trust.json",
+      "sha256": "df9833f33918fd855c73a8e509c5879f435193290a4cd2ea7ca7830fa5d820b6",
+      "bytes": 815
+    },
+    "native01-live-handle.json": {
+      "path": "evidence/same-idle-owner-native-source-20261005/installed02/native01-live-handle.json",
+      "sha256": "b648082803c9bc83c6d5201a6389bbd3124004d97877e18a78856c7207813c31",
+      "bytes": 1173
+    },
+    "native01-results.xml": {
+      "path": "evidence/same-idle-owner-native-source-20261005/installed02/native01-results.xml",
+      "sha256": "a5aae436fa70898b9879160b351e1d2b1c1f96f5d7dc23020f92790f96ac1b7d",
+      "bytes": 1238
+    },
+    "native01-stderr.log": {
+      "path": "evidence/same-idle-owner-native-source-20261005/installed02/native01-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "native01-stdout.log": {
+      "path": "evidence/same-idle-owner-native-source-20261005/installed02/native01-stdout.log",
+      "sha256": "d483d409cdff431a40a9e9b03606a6ac4009492a630c8b2e4e78e43e3d6444a8",
+      "bytes": 109
+    },
+    "native01-terminal.json": {
+      "path": "evidence/same-idle-owner-native-source-20261005/installed02/native01-terminal.json",
+      "sha256": "25e5ae249dd7d835ee90ec3211c898dd1e8dfa1304b465ff9d1123dee3474b23",
+      "bytes": 5676
+    },
+    "proof-terminal.json": {
+      "path": "evidence/same-idle-owner-native-source-20261005/installed02/proof-terminal.json",
+      "sha256": "02ba7a7faa7f9b7fd9601c4d10ac1858fdb60cb96446f0c271aebc43a22959ba",
+      "bytes": 1144
+    },
+    "restore-terminal.json": {
+      "path": "evidence/same-idle-owner-native-source-20261005/installed02/restore-terminal.json",
+      "sha256": "f619096223b907cdb5e1ba2373cad73ec0fefccfba45b447d02bd05ad4210ba6",
+      "bytes": 717
+    },
+    "restored-floor-proof.json": {
+      "path": "evidence/same-idle-owner-native-source-20261005/installed02/restored-floor-proof.json",
+      "sha256": "b3911b5604bd5f8c8129b9773c0bcbb5eae81466ce644c8ca00445f40a2f92ef",
+      "bytes": 1904
+    },
+    "runner-terminal.json": {
+      "path": "evidence/same-idle-owner-native-source-20261005/installed02/runner-terminal.json",
+      "sha256": "4a0238203f63452e4667785d9dbb2b4996b0505f848a4c6565d5050582a4afab",
+      "bytes": 954
+    },
+    "stage-terminal.json": {
+      "path": "evidence/same-idle-owner-native-source-20261005/installed02/stage-terminal.json",
+      "sha256": "3b81d0a5166f62a4c2e47d9dea9d2847c59e044b5748497740fb1d8ed1984e4c",
+      "bytes": 904
+    },
+    "whole-handback.json": {
+      "path": "evidence/same-idle-owner-native-source-20261005/installed02/whole-handback.json",
+      "sha256": "9e2a79e0c4f16ac6a7b26e09334d2b7215f627485b28146cd15b5736510999bf",
+      "bytes": 17384
+    }
+  },
+  "raw_whole_handback": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed02/whole-handback.json",
+    "sha256": "9e2a79e0c4f16ac6a7b26e09334d2b7215f627485b28146cd15b5736510999bf"
+  },
+  "first_failed_phase": {
+    "path": "evidence/same-idle-owner-native-source-20261005/INSTALLED01-FAILURE.md",
+    "preserved": true
+  },
+  "private_authored_source_history_InputDoc_proofs_retained": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed02/authored-source-keeper-manifest.json",
+    "sha256": "98f48cef4c7f6ee4be2b9a6148bb2f10d7a0ded81dcc6dbc443126b41a04cdd8",
+    "files": 230,
+    "bytes": 3938130
+  },
+  "source_equivalence": "Final evidence-only checkpoint must remain src/stack/.pi/pyproject/tests byte-equal to tested48b7; no wheel rebuild or run required.",
+  "whole_holder_and_READ_EXEC_returned": true,
+  "independent_Bohr_closure": "pending; Bohr owns lifecycle",
+  "limits": [
+    "Controlled localhost native input only; no external configured-provider or public UI claim",
+    "No13.562/98.141 latency or performance improvement claim",
+    "Full native/SDK children joined; proc census cannot observe every short-lived descendant"
+  ]
+}

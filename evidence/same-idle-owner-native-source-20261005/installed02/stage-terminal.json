@@ -1,0 +1,29 @@
+{
+  "state": "PASS",
+  "argv": [
+    "uv",
+    "pip",
+    "install",
+    "--python",
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "--no-deps",
+    "--no-cache",
+    "--reinstall",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 0.2954673960339278,
+  "controller": {
+    "pid": 3963009,
+    "start_time": 68459237
+  },
+  "child": {
+    "pid": 3963019,
+    "start_time": 68459244
+  },
+  "child_proc_present": false,
+  "issued_sha256": "8072f2dc2da3d859cf9268743fb3034e050ba43fb50ee3b0094286e130df977c",
+  "lifecycle_sha256_before": "1e5f30f035c5b3eeb31a730603b11a5c0c504c78f286348ce10fc023527e050c",
+  "native_execution_started": false,
+  "original675_all26_sha_unchanged": true
+}

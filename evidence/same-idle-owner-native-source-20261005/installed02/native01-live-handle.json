@@ -1,0 +1,16 @@
+{
+  "controller": {
+    "pid": 4112670,
+    "start_time": 68513353
+  },
+  "phase": "native_batch",
+  "lifecycle_sha256": "84675d71b2376f3931929340825bcefc45440552890de310cce7dfd9bc0908b7",
+  "argv": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "-B",
+    "-c",
+    "import pathlib,sys,agent_comms; assert pathlib.Path(agent_comms.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()); sys.path.append('/usr/lib/python3.14/site-packages'); import pytest; raise SystemExit(pytest.main(['-o', 'addopts=', '-o', 'pythonpath=', '-p', 'no:cacheprovider', '--basetemp', '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed02/native01/authored', '--junitxml', '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed02/native01/results.xml', '-x', '-q', 'tests/test_same_owner_native_fork.py']))"
+  ],
+  "output": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed02/native01",
+  "started_monotonic": 685133.534362533
+}
