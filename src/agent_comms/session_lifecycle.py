@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+from contextlib import ExitStack, asynccontextmanager
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from acp import RequestError
 from acp.schema import (
@@ -30,9 +31,12 @@ from .acp_extension import (
     encode_updates,
 )
 from .comms import Comms
+from .child_process import join_retirement
 from .coordinator import Coordination
+from .errors import RelationViolationError
 from .config_options import ConfigOptions
 from .native_arguments import NativeArguments
+from .native_input_owner import RegistryOwner
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
 from .thread_identity import ThreadIncarnation
@@ -40,6 +44,9 @@ from .threads import Thread
 from .registry_document import RegistrySnapshot
 from .transcript_updates import TranscriptReplay
 from .session_load import SessionLoadAdmission, ExistingSessionLoadAdmission, FailedSessionLoadAdmission
+
+if TYPE_CHECKING:
+    from .compaction_records import NativeForkCreation
 
 
 class SessionLifecycle:
@@ -172,6 +179,48 @@ class SessionLifecycle:
         self.worktrees[session_id] = thread.worktree
         if self.runtime_enabled:
             await self.runtime.start()
+
+    @asynccontextmanager
+    async def selected_native_fork(self, session_id: str, original: RegistryOwner, creation: NativeForkCreation):
+        """Borrow SDK fork history without replacing the loaded owner or USER.
+
+        Register the original publication resource before returning from its
+        joined worker. Cancellation after publication must still retire the
+        selected child and restore through that resource's exact owner fence.
+        Turn/child locks are held only around each swap, never across the
+        constructor/observer/prompt that acquires those same resources.
+        """
+        selection = ExitStack()
+        try:
+            async with self._attachment_lock:
+                self.require_original_local_binding(session_id, original)
+                async with self.effects.turns.idle_backend(session_id) as persistent:
+                    if persistent is None:
+                        raise RelationViolationError("Native fork selection requires an idle turn")
+                    await persistent.close()
+                    selected = await Coordination.run_worker(partial(
+                        selection.enter_context,
+                        self.comms.registry.selected_native_fork(original, creation),
+                    ))
+            yield selected
+        finally:
+            await join_retirement(asyncio.create_task(self._restore_native_fork(session_id, original, selection)))
+
+    def require_original_local_binding(self, session_id: str, original: RegistryOwner) -> None:
+        if self.require(session_id) != original.thread.name or session_id in self.proxies:
+            raise RelationViolationError("Native fork requires the original loaded local owner")
+
+    async def _restore_native_fork(self, session_id: str, original: RegistryOwner, selection: ExitStack) -> None:
+        async with self._attachment_lock:
+            self.require_original_local_binding(session_id, original)
+            async with self.effects.turns.idle_backend(session_id) as persistent:
+                if persistent is None:
+                    raise RelationViolationError("Native fork restoration requires the original turn to finish")
+                await persistent.close()
+                await Coordination.run_worker(selection.close)
+            current = await Coordination.run_worker(lambda:
+                original.require_idle_source_snapshot(self.comms.registry.snapshot()))
+            await self.effects.turns.prepare_selected_session(session_id, current)
 
     async def new_session(
         self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
