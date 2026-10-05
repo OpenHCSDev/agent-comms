@@ -1,0 +1,471 @@
+FFFFFF...                                                                [100%]
+=================================== FAILURES ===================================
+______ test_standby_rejects_closed_wait_cycle_while_both_turns_are_active ______
+
+tmp_path = PosixPath('/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-check/authored/test_standby_rejects_closed_wa0')
+
+    def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path):
+        comms = wire(tmp_path)
+        for name in ("alice", "bob"):
+            comms.registry.declare(
+                Thread(
+                    name,
+                    frozenset(),
+                    str(tmp_path),
+                    process_identity=ProcessIdentity.capture(os.getpid()),
+                )
+            )
+            comms.agents.begin_turn(name, f"{name}-turn")
+        alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+        bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
+        assert alice is not None and bob is not None
+    
+>       comms.goals.update_goal(
+            "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",))
+        )
+
+tests/test_goal_standby.py:94: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_management.py:362: in update_goal
+    return action.apply(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_actions.py:147: in apply
+    self.before_publish(goal, ctx)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_actions.py:249: in before_publish
+    review = ctx.goals._goal_input_review(thread, goal.id, self.wait_for)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_management.py:124: in _goal_input_review
+    for original in self.bus.log.addressed_sources(lookup):
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:129: in addressed_sources
+    with self.certified_read() as source:
+         ^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:69: in certified_read
+    with self._certified_source(lock) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:101: in _certified_source
+    marker = self._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff2366e5810>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:275: RelationViolationError
+__________ test_standby_allows_independent_alternative_to_wait_cycle ___________
+
+tmp_path = PosixPath('/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-check/authored/test_standby_allows_independen0')
+
+    def test_standby_allows_independent_alternative_to_wait_cycle(tmp_path):
+        comms = wire(tmp_path)
+        for name in ("alice", "bob", "carol"):
+            comms.registry.declare(
+                Thread(
+                    name,
+                    frozenset(),
+                    str(tmp_path),
+                    process_identity=ProcessIdentity.capture(os.getpid()),
+                )
+            )
+            comms.agents.begin_turn(name, f"{name}-turn")
+        alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob or Carol"))
+        bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
+        assert alice is not None and bob is not None
+    
+>       comms.goals.update_goal(
+            "alice",
+            StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob", "carol")),
+        )
+
+tests/test_goal_standby.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_management.py:362: in update_goal
+    return action.apply(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_actions.py:147: in apply
+    self.before_publish(goal, ctx)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_actions.py:249: in before_publish
+    review = ctx.goals._goal_input_review(thread, goal.id, self.wait_for)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_management.py:124: in _goal_input_review
+    for original in self.bus.log.addressed_sources(lookup):
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:129: in addressed_sources
+    with self.certified_read() as source:
+         ^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:69: in certified_read
+    with self._certified_source(lock) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:101: in _certified_source
+    marker = self._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff235c46710>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:275: RelationViolationError
+______ test_liveness_check_releases_preexisting_closed_wait_group[False] _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-check/authored/test_liveness_check_releases_p0')
+pending_reply = False
+
+    @pytest.mark.parametrize("pending_reply", [False, True])
+    def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending_reply):
+        comms = wire(tmp_path)
+        for name in ("alice", "bob"):
+            comms.registry.declare(
+                Thread(
+                    name,
+                    frozenset(),
+                    str(tmp_path),
+                    process_identity=ProcessIdentity.capture(os.getpid()),
+                )
+            )
+            comms.agents.begin_turn(name, f"{name}-turn")
+        alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+        bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
+        assert alice is not None and bob is not None
+>       comms.goals.update_goal(
+            "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",))
+        )
+
+tests/test_goal_standby.py:231: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_management.py:362: in update_goal
+    return action.apply(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_actions.py:147: in apply
+    self.before_publish(goal, ctx)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_actions.py:249: in before_publish
+    review = ctx.goals._goal_input_review(thread, goal.id, self.wait_for)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_management.py:124: in _goal_input_review
+    for original in self.bus.log.addressed_sources(lookup):
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:129: in addressed_sources
+    with self.certified_read() as source:
+         ^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:69: in certified_read
+    with self._certified_source(lock) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:101: in _certified_source
+    marker = self._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff2357472a0>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:275: RelationViolationError
+_______ test_liveness_check_releases_preexisting_closed_wait_group[True] _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-check/authored/test_liveness_check_releases_p1')
+pending_reply = True
+
+    @pytest.mark.parametrize("pending_reply", [False, True])
+    def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending_reply):
+        comms = wire(tmp_path)
+        for name in ("alice", "bob"):
+            comms.registry.declare(
+                Thread(
+                    name,
+                    frozenset(),
+                    str(tmp_path),
+                    process_identity=ProcessIdentity.capture(os.getpid()),
+                )
+            )
+            comms.agents.begin_turn(name, f"{name}-turn")
+        alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+        bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
+        assert alice is not None and bob is not None
+>       comms.goals.update_goal(
+            "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",))
+        )
+
+tests/test_goal_standby.py:231: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_management.py:362: in update_goal
+    return action.apply(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_actions.py:147: in apply
+    self.before_publish(goal, ctx)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_actions.py:249: in before_publish
+    review = ctx.goals._goal_input_review(thread, goal.id, self.wait_for)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_management.py:124: in _goal_input_review
+    for original in self.bus.log.addressed_sources(lookup):
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:129: in addressed_sources
+    with self.certified_read() as source:
+         ^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:69: in certified_read
+    with self._certified_source(lock) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:101: in _certified_source
+    marker = self._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff235da7d90>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:275: RelationViolationError
+________ test_new_live_dependency_turn_keeps_old_wait_group_open[False] ________
+
+tmp_path = PosixPath('/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-check/authored/test_new_live_dependency_turn_0')
+bound_old_turn = False
+
+    @pytest.mark.parametrize("bound_old_turn", [False, True])
+    def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_turn):
+        comms = wire(tmp_path)
+        for name in ("alice", "bob"):
+            comms.registry.declare(
+                Thread(
+                    name,
+                    frozenset(),
+                    str(tmp_path),
+                    process_identity=ProcessIdentity.capture(os.getpid()),
+                )
+            )
+            comms.agents.begin_turn(name, f"{name}-first")
+        alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+        bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
+        assert alice is not None and bob is not None
+>       comms.goals.update_goal(
+            "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",))
+        )
+
+tests/test_goal_standby.py:284: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_management.py:362: in update_goal
+    return action.apply(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_actions.py:147: in apply
+    self.before_publish(goal, ctx)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_actions.py:249: in before_publish
+    review = ctx.goals._goal_input_review(thread, goal.id, self.wait_for)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_management.py:124: in _goal_input_review
+    for original in self.bus.log.addressed_sources(lookup):
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:129: in addressed_sources
+    with self.certified_read() as source:
+         ^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:69: in certified_read
+    with self._certified_source(lock) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:101: in _certified_source
+    marker = self._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff235dd2710>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:275: RelationViolationError
+________ test_new_live_dependency_turn_keeps_old_wait_group_open[True] _________
+
+tmp_path = PosixPath('/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-check/authored/test_new_live_dependency_turn_1')
+bound_old_turn = True
+
+    @pytest.mark.parametrize("bound_old_turn", [False, True])
+    def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_turn):
+        comms = wire(tmp_path)
+        for name in ("alice", "bob"):
+            comms.registry.declare(
+                Thread(
+                    name,
+                    frozenset(),
+                    str(tmp_path),
+                    process_identity=ProcessIdentity.capture(os.getpid()),
+                )
+            )
+            comms.agents.begin_turn(name, f"{name}-first")
+        alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+        bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
+        assert alice is not None and bob is not None
+>       comms.goals.update_goal(
+            "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",))
+        )
+
+tests/test_goal_standby.py:284: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_management.py:362: in update_goal
+    return action.apply(
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_actions.py:147: in apply
+    self.before_publish(goal, ctx)
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_actions.py:249: in before_publish
+    review = ctx.goals._goal_input_review(thread, goal.id, self.wait_for)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/goal_management.py:124: in _goal_input_review
+    for original in self.bus.log.addressed_sources(lookup):
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:129: in addressed_sources
+    with self.certified_read() as source:
+         ^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:69: in certified_read
+    with self._certified_source(lock) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:101: in _certified_source
+    marker = self._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7ff235692580>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+../comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py:275: RelationViolationError
+=========================== short test summary info ============================
+FAILED tests/test_goal_standby.py::test_standby_rejects_closed_wait_cycle_while_both_turns_are_active
+FAILED tests/test_goal_standby.py::test_standby_allows_independent_alternative_to_wait_cycle
+FAILED tests/test_goal_standby.py::test_liveness_check_releases_preexisting_closed_wait_group[False]
+FAILED tests/test_goal_standby.py::test_liveness_check_releases_preexisting_closed_wait_group[True]
+FAILED tests/test_goal_standby.py::test_new_live_dependency_turn_keeps_old_wait_group_open[False]
+FAILED tests/test_goal_standby.py::test_new_live_dependency_turn_keeps_old_wait_group_open[True]
+6 failed, 3 passed in 3.12s

@@ -1,0 +1,66 @@
+{
+  "before_head": "fc5a674208b8a13b05ddff9a2335cdfd2600312c",
+  "before_calls": [
+    {
+      "line": 32,
+      "owner": "wire",
+      "args": "Call(func=Name(id='wire', ctx=Load()), args=[BinOp(left=Name(id='tmp_path', ctx=Load()), op=Div(), right=Constant(value='wire'))])"
+    },
+    {
+      "line": 66,
+      "owner": "wire",
+      "args": "Call(func=Name(id='wire', ctx=Load()), args=[Name(id='tmp_path', ctx=Load())])"
+    },
+    {
+      "line": 79,
+      "owner": "wire",
+      "args": "Call(func=Name(id='wire', ctx=Load()), args=[Name(id='tmp_path', ctx=Load())])"
+    },
+    {
+      "line": 112,
+      "owner": "wire",
+      "args": "Call(func=Name(id='wire', ctx=Load()), args=[Name(id='tmp_path', ctx=Load())])"
+    },
+    {
+      "line": 140,
+      "owner": "wire",
+      "args": "Call(func=Name(id='wire', ctx=Load()), args=[Name(id='tmp_path', ctx=Load())])"
+    },
+    {
+      "line": 171,
+      "owner": "wire",
+      "args": "Call(func=Name(id='wire', ctx=Load()), args=[Name(id='tmp_path', ctx=Load())])"
+    },
+    {
+      "line": 217,
+      "owner": "wire",
+      "args": "Call(func=Name(id='wire', ctx=Load()), args=[Name(id='tmp_path', ctx=Load())])"
+    },
+    {
+      "line": 270,
+      "owner": "wire",
+      "args": "Call(func=Name(id='wire', ctx=Load()), args=[Name(id='tmp_path', ctx=Load())])"
+    },
+    {
+      "line": 315,
+      "owner": "wire",
+      "args": "Call(func=Name(id='wire', ctx=Load()), args=[Name(id='tmp_path', ctx=Load())])"
+    },
+    {
+      "line": 355,
+      "owner": "wire",
+      "args": "Call(func=Name(id='wire', ctx=Load()), args=[Name(id='tmp_path', ctx=Load())])"
+    },
+    {
+      "line": 365,
+      "owner": "wire",
+      "args": "Call(func=Name(id='wire', ctx=Load()), args=[Name(id='tmp_path', ctx=Load())])"
+    }
+  ],
+  "after_fresh_calls": 10,
+  "unchanged_reopen_calls": 1,
+  "assertions_unchanged": 40,
+  "owner": "Existing canonical_goal_wire initializes new authored empty certified bus through Messaging.initialize_private_initial_protocol; no reader guard edits",
+  "original_installed_result": "six failures before waitgraph assertions;three terminal-fence passes;6.110651239s exit1 preserved; restored510 originals347ZIP/noextra",
+  "new_phase": "Source correction only; no repeat of consumed installed purpose"
+}

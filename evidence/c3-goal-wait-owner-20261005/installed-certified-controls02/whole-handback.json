@@ -1,0 +1,63 @@
+{
+  "issued_sha256": "f05a16913690b4e945ccc7fb129cd12086d68eff6ea23e50697ac2b7cee21b3e",
+  "terminal": {
+    "controller": {
+      "pid": 1538133,
+      "start_time": 65148416
+    },
+    "argv": [
+      "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+      "-B",
+      "-c",
+      "import pathlib,sys,agent_comms; assert pathlib.Path(agent_comms.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()); sys.path.append('/usr/lib/python3.14/site-packages'); import pytest; raise SystemExit(pytest.main(['-o', 'addopts=', '--basetemp', '/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-certified-controls02/authored', '-q', 'tests/test_goal_standby.py::test_standby_rejects_closed_wait_cycle_while_both_turns_are_active', 'tests/test_goal_standby.py::test_standby_allows_independent_alternative_to_wait_cycle', 'tests/test_goal_standby.py::test_liveness_check_releases_preexisting_closed_wait_group', 'tests/test_goal_standby.py::test_new_live_dependency_turn_keeps_old_wait_group_open', 'tests/test_goal_standby_liveness.py::test_terminal_hook_rechecks_goal_and_owner_identity', 'tests/test_goal_standby_liveness.py::test_last_target_finishes_silently_releases_once_and_reopens', 'tests/test_goal_standby_liveness.py::test_replaced_target_cannot_report_for_old_incarnation']))"
+    ],
+    "cwd": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+    "lifecycle_sha256": "da88c69c7585f67fb0d4d880c7c42f9cf9557d4c43cb147fb2180979198d9ebc",
+    "child": {
+      "pid": 1538348,
+      "start_time": 65148515
+    },
+    "returncode": 0,
+    "outcome": "ExitedOutcome",
+    "successful": true,
+    "elapsed_seconds": 8.242110359016806,
+    "child_alive_after_retirement": false,
+    "remaining_group": []
+  },
+  "scoped_result": "9PASS5.00s from7selectedoriginalnodes including parameterization;8.242110359s boundedterminal0",
+  "qualified": "Installed original Comms/Registry/waitgraph and terminal-fence recovery through real certified fresh authored buses",
+  "not_qualified": [
+    "Live native done callback",
+    "whole C3",
+    "physical/performance",
+    "SDK/provider/App/public journey"
+  ],
+  "restoration": {
+    "original_records": 510,
+    "original_wheel_assets": 347,
+    "extra_core_assets": [],
+    "errors": [],
+    "cache_scope": "Preexisting compiled caches excluded from original510 authority; no claim of cachebyte equality",
+    "whole_restoration_pass": true
+  },
+  "controller_child_absent": true,
+  "authored_scratch_removed": true,
+  "claim": "Whole Core-only package/import/read/execution returned; no future loan inferred",
+  "old_failure_preserved": true,
+  "keepers": {
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-certified-controls02/terminal.json": "a450a9d416f13c4b292f2f47bf4699c7f4d3d5abd64955ab1c41072eb711120b",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-certified-controls02/handle.json": "01c5516898e1814538476af5264b5780f71d299ffdc34f63356c7fb237418bff",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-certified-controls02/command.json": "69b47f0ad5bb79479a3d6d5f2da40171a5a63e17af1c8d895c80561c8d2ce677",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-certified-controls02/stdout.log": "d1e8e795b0260a3567ccb52d9ae9c4a00e1e1fd6d68384c828638d7cda6a7f5e",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-certified-controls02/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-certified-controls02/candidate-source-proof.json": "1cfae0b0bfd4c2eda0809d3932436519833a71ada5126eda82a7300fc6303905",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-certified-controls02/stage-terminal.json": "3a9a1f22f5a2d539fbaec4362b790f8194d9cb0477d45af97e388b70442d8548",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-certified-controls02/stage.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-certified-controls02/stage.stderr.log": "2b9bbe1235581965635875dd4daade358a2f19f12dea7aa39bca1b3c453b3ae7",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-certified-controls02/restore-terminal.json": "614d7d90f0305da9dee570f6aa7a51d389d8ec11b337bb8d70db3b94f684c3c8",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-certified-controls02/restore.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-certified-controls02/restore.stderr.log": "c942a3dee2590dbc7d4cf9fe5cc0ccd467636a05dbb68de320afeebdf84ad512",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-certified-controls02/floor-restoration-readback.json": "f1b7d2df3c95a83609bc026dd0290b219dc76967e607309d9dd81b2cdadb72c2",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-certified-controls02/authored-disposal-manifest.json": "5308192324244f7ba4ee7ea3a86795beca012ab18fa6d76b58200e7c82014aec"
+  }
+}

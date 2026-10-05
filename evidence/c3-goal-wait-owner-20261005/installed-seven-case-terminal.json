@@ -1,0 +1,24 @@
+{
+  "controller": {
+    "pid": 1410583,
+    "start_time": 65096806
+  },
+  "argv": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "-B",
+    "-c",
+    "import pathlib,sys,agent_comms; assert pathlib.Path(agent_comms.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()); sys.path.append('/usr/lib/python3.14/site-packages'); import pytest; raise SystemExit(pytest.main(['-o', 'addopts=', '--basetemp', '/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-check/authored', '-q', 'tests/test_goal_standby.py::test_standby_rejects_closed_wait_cycle_while_both_turns_are_active', 'tests/test_goal_standby.py::test_standby_allows_independent_alternative_to_wait_cycle', 'tests/test_goal_standby.py::test_liveness_check_releases_preexisting_closed_wait_group', 'tests/test_goal_standby.py::test_new_live_dependency_turn_keeps_old_wait_group_open', 'tests/test_goal_standby_liveness.py::test_terminal_hook_rechecks_goal_and_owner_identity', 'tests/test_goal_standby_liveness.py::test_last_target_finishes_silently_releases_once_and_reopens', 'tests/test_goal_standby_liveness.py::test_replaced_target_cannot_report_for_old_incarnation']))"
+  ],
+  "cwd": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+  "lifecycle_sha256": "b061f756d6321ddd722b1836cf638f4032f7a89ba23eef667244c86b2e9ec003",
+  "child": {
+    "pid": 1410603,
+    "start_time": 65096903
+  },
+  "returncode": 1,
+  "outcome": "ExitedOutcome",
+  "successful": false,
+  "elapsed_seconds": 6.110651238937862,
+  "child_alive_after_retirement": false,
+  "remaining_group": []
+}
