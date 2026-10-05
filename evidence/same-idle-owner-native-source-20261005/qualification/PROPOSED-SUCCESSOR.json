@@ -1,0 +1,59 @@
+{
+  "state": "SOURCE ONLY; named issued/read paths are proposed, not granted; current412e first-failed purpose returned",
+  "production_checkpoint": "a264da8f7251c72fae0ee0259c1d81de9ea5ed7e",
+  "retained_build_source": "eb8edcdae050485683fdaa2cc3f49f396f943724",
+  "retained_wheel": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl",
+    "sha256": "3fe14077293b691000394831ed7458ecae92afd9b667af4501be2945ab86051d"
+  },
+  "retained_wheel_proof": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/wheel-source-proof.json",
+    "sha256": "d38ca0aa5da8df50afc95f1f85473d01dfa80831f71a804fd51905c7416293b2"
+  },
+  "new_build_required": false,
+  "output": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed02",
+  "candidate_sourceproof": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed02/candidate-source-proof.json",
+  "native_FullTrust_receipt": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed02/native-full-trust.json",
+  "stage_argv": [
+    "uv",
+    "pip",
+    "install",
+    "--python",
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "--no-deps",
+    "--no-cache",
+    "--reinstall",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl"
+  ],
+  "proof_argv": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "-B",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/same-idle-owner-native-source-20261005/qualification/prove-installed.py",
+    "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel676-proof-output-corrected-successor-issued-grant.json",
+    "ACTUAL_NEW_ISSUED_SHA256",
+    "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/native-keeper676-proof-output-corrected-successor-READ-issued-20261005.json",
+    "ACTUAL_NEW_READ_SHA256",
+    "d38ca0aa5da8df50afc95f1f85473d01dfa80831f71a804fd51905c7416293b2"
+  ],
+  "runner_argv": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "-B",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/same-idle-owner-native-source-20261005/qualification/run-phase.py",
+    "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel676-proof-output-corrected-successor-issued-grant.json",
+    "ACTUAL_NEW_ISSUED_SHA256"
+  ],
+  "environment": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": null,
+    "PYTHONHOME": null
+  },
+  "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+  "script_sha256": {
+    "prove-installed.py": "fda79ee25378c16199c5678bbd19ada30912b49b001eb106dabf0dc787b15b9c",
+    "run-phase.py": "d1d2313e72d32c1502ece911a69c5fa999ec6b32b5c9a2c4bb9cd28ceea0cc94"
+  },
+  "source_receipt_relation": "Future source head differs only in evidence helper/receipts; installed355 source must still equal retained build Git/local/ZIP. Fresh literal grant binds actual head and script hashes.",
+  "cases": 7,
+  "native_EXEC": "Separately issued only after final installed355/FullTrust receipt and matching Bohr release; original seven authored control bytes unchanged.",
+  "limits": "No current authority or retry; needs separately issued successor purpose after independent412e closure. No SDK/path execution performed by this proposal."
+}
