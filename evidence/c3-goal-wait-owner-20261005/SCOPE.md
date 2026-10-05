@@ -75,3 +75,10 @@ import/read and execution claims. Earlier ce6 failure remains immutable.
 No native artifact/App/ACP process, SDK/provider input or public/session/root
 operation. Independent Bohr final floor/census closure is pending separately;
 source product/build inputs stay equal the original8546 wheel, no rebuild.
+
+Independent final closure now verified: lifecycle1e0759f2 and floorreadback
+77c955eb, fresh235 UID holder/output references/gaps zero. All14 rawkeeper hashes,
+original510 mode/hash/link records,347 ZIP assets/full10 versions/origin match.
+No remaining private package/import/read/execution claim. Publication into the
+user's default runtime remains a later explicit current-package operation;
+the frozen Explorer candidate is not changed by this source merge.

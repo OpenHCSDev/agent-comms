@@ -33,8 +33,8 @@ configured continuous workflow.
   references/gaps zero. Ten fresh constructions now use canonical_goal_wire;
   crash reopen and40 assertion ASTs remain unchanged. Changed certified controls now pass all9 parameterized executions/5.00s,
   bounded8.242110359s under distinctf05 purpose. Original347/94/69metadata10
-  floor restored exact again; whole claims returned, independent finalclosure
-  pending. Live native callback and wholeC3 remain separate; no expiredloan
+  floor restored exact again; whole claims returned. Independent CLOSED1e0759
+  /readback77c955 confirms235 UID holder/output references and gaps zero. Live native callback and wholeC3 remain separate; no expiredloan
   inheritance.
 - Original C0 family/source ledger and C4 stated class-size target have current
   evidence. Full six-file C3, TC1/T9 resource closure, loaded scaling, configured
