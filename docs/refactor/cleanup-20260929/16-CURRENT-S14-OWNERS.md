@@ -2222,3 +2222,33 @@ loan follows. Source/runtime/package bytes remain equal to retained5f. The
 ordinary canonical publisher adds only InstalledSource.command_arguments;
 Sch444 now normally follows Corea38 and updates that original canonical member
 before its final cohort freeze. No package rebuild or repeated App is needed.
+
+### Parallel source reviews after the zero-input W6 handback
+
+Parent reviewed W6 control03f8/a678 and immutable proposalc36a plus append-only
+correction9747: selection borrows a painted native node/line/non-toggle cell;
+the continuation reads the two existing ModelLabels and never reinserts them.
+GUI USER correction and effective refresh still require actual acceptance.
+Einstein owns the whole Explorer workflow; source work continues independently
+of serialized package acceptance and Mendel's stopped schema carry.
+
+Mendel663 meaningful137be40c extends the existing declaration carry from
+coordination9 to10, retaining old DDL/fields, native/binding/response declarations,
+row identities, sequences and unrelated objects. Ordinary readers remain strict.
+Parent read the complete changed carry owner; genuine old-declaration donor and
+target installed qualification remain required. No store was migrated in review.
+
+Heis446 e0a31ce moves the original ReaderCheckpoint into the shared recent-reader
+owner. Saved A/B/A and 4/16/32/64 logical cohorts borrow actual committed pages,
+prepared fragments, rendered Markdown/cache identities, editor/reader/tail state
+and raw-page-read counts. Only two loaded histories earn loaded-resource credit;
+blank tabs do not. Parent reviewed source; those controls have not run.
+
+The revised443 e110 proposal matches frozen source/controls and actual restored
+private334 CURRENT4401468/69/287. Bohr issued sole443 build/package purpose3cd;
+Sch read its literal grant and awaits actual wheel/installed proof before NEW086
+execution authority. No App result or W6 concurrent holder purpose is inferred.
+Publicstyle22 CURRENT444 remains protected. Arendt configured02 command721fe and
+all referenced source/declaration/checkpoint/archive hashes were read and matched;
+its one distinct Sol/HIGH input still requires its own fresh THIN540 purpose and
+NEW086 authority. The prior STARTED/refusal remains immutable; no study is granted.
