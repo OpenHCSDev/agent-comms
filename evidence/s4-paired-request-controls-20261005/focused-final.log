@@ -1,0 +1,9 @@
+test_alignment_requires_distinct_originals_and_keeps_missing_rounds (test_recorded_retention_measurements.RecordedMeasurementTests.test_alignment_requires_distinct_originals_and_keeps_missing_rounds) ... ok
+test_request_controls_preserve_order_multiplicity_and_whole_system_value (test_recorded_retention_measurements.RecordedMeasurementTests.test_request_controls_preserve_order_multiplicity_and_whole_system_value) ... ok
+test_request_alignment_preserves_missing_intent_and_revised_allowances (test_recorded_retention_measurements.RecordedMeasurementTests.test_request_alignment_preserves_missing_intent_and_revised_allowances) ... ok
+test_paired_inference_keeps_complete_samples_and_original_model_selection (test_recorded_retention_measurements.RecordedMeasurementTests.test_paired_inference_keeps_complete_samples_and_original_model_selection) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.022s
+
+OK
