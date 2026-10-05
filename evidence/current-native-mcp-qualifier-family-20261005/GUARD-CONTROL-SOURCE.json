@@ -1,0 +1,53 @@
+{
+  "scope": "source compile/AST/Node syntax only; no application/native imports, SDK/provider, test collection, holder operation",
+  "source": "tests/test_mcp_acceptance.py",
+  "sha256": "797cdcb4d37debce6aefa276c7a102f9e54603bbc077fa6181aea4367854e2c6",
+  "compiler": "Python source compiler; Node --check --input-type=module on exact authored script projection with unbound path/port data, never executed",
+  "node_check": {
+    "returncode": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "node_helper_calls": [
+    {
+      "line": 185,
+      "source": "_node_run(node, env, f'import {{ProjectTrustStore}} from {json.dumps(api.as_uri())};new ProjectTrustStore({json.dumps(str(agent))}).set({json.dumps(str(project))},true);', project, root / 'project-trust')",
+      "arguments": 5
+    },
+    {
+      "line": 193,
+      "source": "_node_run(node, env, f\"import {{declarationDigest,parseNativeConfig}} from {json.dumps((package / 'src/config.mjs').as_uri())};console.log(declarationDigest(parseNativeConfig({json.dumps(document)}).servers[0]));\", project, root / 'mcp-declaration')",
+      "arguments": 5
+    },
+    {
+      "line": 203,
+      "source": "_node_run(node, env, f\"import {{recordProjectDecision}} from {json.dumps((package / 'src/ledger-write.mjs').as_uri())};await recordProjectDecision({{agentDir:{json.dumps(str(agent))},projectRoot:{json.dumps(str(project))},declaration:{json.dumps(declaration)},decision:'approve'}});\", project, root / 'mcp-approval')",
+      "arguments": 5
+    },
+    {
+      "line": 139,
+      "source": "_node_run(node, env, script, project, artifact)",
+      "arguments": 5
+    }
+  ],
+  "native_helper_owner": "original ParentedProcess direct parent / admitted preloads / exact child birth/outcome/group retirement; no raw Popen/lifecycle copy added",
+  "sdk_contract": {
+    "owner": "Sch685",
+    "head": "7b7a06c350c7031e2756223bd5a517a72d9e9932",
+    "production_determining": "e1a64efd2decaa9edaa30379ddc73796f0419267",
+    "bootstrap": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/src/agent_comms/pi_project_bootstrap.mjs",
+    "bootstrap_sha256": "b9af81dbe003fde1c4d80dbd77fa7ae08f4a1c017deb8a94f8520452da47de27",
+    "source_contract": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/evidence/native-bootstrap-origin-guard-20261005/SOURCE-CONTRACT.md",
+    "contract_sha256": "981e74f8cb6c259ce5fff8443391e6831cdd8d2619852143c016879947b5e259",
+    "OpenAI_export": "named OpenAI from node_modules/openai/client.mjs",
+    "dispatcher": "configureHttpDispatcher() every call sets fresh EnvHttpProxyAgent and reinstalls supported fetch; default300000ms, no new timeout selected"
+  },
+  "guard_refusal": "two original SDK clients capture fetch before/after reconfiguration; exact APIConnectionError.cause.code and both origins, not flattened CLI error",
+  "dispatch_witness": "actual Undici request:create observer with allowed positive event, required no outside-origin event; no substituted fetch/dispatcher",
+  "refused_origin": "HTTPS on exact numeric loopback address/port; outside allowed HTTP origin while all authored addresses stay loopback",
+  "redirect": "original model Handler sends real302 to refused scheme; required redirect:error rejection with no outside-origin event; HTTP GET observations kept separately from native model POSTs",
+  "native_MCP_positive": "four existing allow/no_controller/revoke_midturn/disconnect cases unchanged; guard control once at allow before native input",
+  "cleanup": "first and replacement real Undici dispatchers closed; helper parent retires process/group before publishing rawcommand/outcome. Fifteen-second helper bound preserved. Timeout output explicitly partial.",
+  "remaining_boundary": "new immutable guard deployment + truthful consuming bootstrap/pin Core artifact; eligible holder/full installed proof/newmatching READ+EXEC+purpose release. All UNBOUND; original7a guard inactive. SDK/redirect/refusal/runtime acceptance UNRUN",
+  "independent_typed": "TYPED-ONLY-INSTALLED-PURPOSE a6c1, FUTURE-INSTALLED-PURPOSE849bc and all actual typed/mcp_observation/runtime_fixture/CSS producer assets unchanged"
+}

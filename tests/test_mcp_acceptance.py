@@ -32,6 +32,7 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from agent_comms.comms import wire
+from agent_comms.child_process import ParentedProcess
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime import RuntimeProxy
@@ -41,17 +42,102 @@ pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX PTY accep
 TIMEOUT = 40
 
 
-def _node_run(node, env, script, cwd):
-    result = subprocess.run(
-        [node, "--input-type=module", "-e", script],
-        cwd=cwd,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
-    assert result.returncode == 0, result.stderr
-    return result.stdout.strip()
+def _node_run(node, env, script, cwd, artifact):
+    native_package = Path(env["PI_COMPACTION_TEST_PACKAGE"])
+    command = [
+        node, "--no-global-search-paths",
+        "--import", str(native_package / "dist/agent-comms-import-fence.mjs"),
+        "--import", str(native_package / "dist/agent-comms-project-bootstrap.mjs"),
+        "--input-type=module", "-e", script,
+    ]
+    child = outcome = None
+    stdout = stderr = b""
+    error = None
+    try:
+        with ParentedProcess.launch(tuple(command), cwd=cwd, env=env, output=subprocess.PIPE) as child:
+            try:
+                stdout, stderr = child.process.communicate(timeout=15)
+                outcome = child.reap()
+            except subprocess.TimeoutExpired as failure:
+                stdout, stderr = failure.stdout or b"", failure.stderr or b""
+                raise
+    except BaseException as failure:
+        error = repr(failure)
+        raise
+    finally:
+        artifact.with_suffix(".stdout").write_bytes(stdout)
+        artifact.with_suffix(".stderr").write_bytes(stderr)
+        artifact.with_suffix(".command.json").write_text(json.dumps({
+            "argv": command, "cwd": str(cwd),
+            "identity": FieldCodec.encode(child.identity) if child else None,
+            "outcome": FieldCodec.encode(outcome) if outcome else None,
+            "error": error, "output_complete": outcome is not None,
+            "retired": child.retired if child else None,
+            "remaining_groups": [FieldCodec.encode(member) for member in
+                                 child.platform.group_members(child.identity)] if child else [],
+        }, indent=2))
+    assert outcome.successful, stderr.decode(errors="replace")
+    return stdout.decode().strip()
+
+
+def _qualify_origin(node, env, project, artifact):
+    """Reach the actual SDK cause before dispatch, using only loopback addresses."""
+    native_package = Path(env["PI_COMPACTION_TEST_PACKAGE"])
+    allowed = env["AGENT_COMMS_NATIVE_ORIGIN"]
+    # A different scheme is outside the exact allowed origin. Even a broken
+    # guard must not send this authored control toward an external network.
+    requested = "https:" + allowed.removeprefix("http:")
+    script = "\n".join((
+        "import assert from 'node:assert/strict';",
+        "import {channel} from 'node:diagnostics_channel';",
+        f"const allowed={json.dumps(allowed)},requested={json.dumps(requested)};",
+        "const dispatched=[], report={allowed_origin:allowed,requested_origin:requested};",
+        "let firstDispatcher;",
+        "const requests=channel('undici:request:create');",
+        "const observe=({request})=>dispatched.push({origin:new URL(String(request.origin)).origin,path:request.path});",
+        "requests.subscribe(observe);",
+        f"const {{configureHttpDispatcher}}=await import({json.dumps((native_package / 'dist/core/http-dispatcher.js').as_uri())});",
+        f"const {{getGlobalDispatcher}}=await import({json.dumps((native_package / 'node_modules/undici/index.js').as_uri())});",
+        "try {",
+        "  await configureHttpDispatcher();",
+        "  firstDispatcher=getGlobalDispatcher();",
+        "  const firstFetch=globalThis.fetch;",
+        "  const positive=await fetch(allowed+'/guard-positive');",
+        "  assert.equal(positive.status,200); await positive.text();",
+        "  assert(dispatched.some(row=>row.origin===allowed && row.path==='/guard-positive'));",
+        f"  const {{OpenAI}}=await import({json.dumps((native_package / 'node_modules/openai/client.mjs').as_uri())});",
+        "  const client=new OpenAI({baseURL:requested+'/v1',apiKey:'offline-fixture-no-real-key',maxRetries:0});",
+        "  await configureHttpDispatcher();",
+        "  assert.notEqual(globalThis.fetch,firstFetch);",
+        "  assert.notEqual(getGlobalDispatcher(),firstDispatcher);",
+        "  report.dispatcher_reconfigured=true; report.refusals=[];",
+        "  const replacement=new OpenAI({baseURL:requested+'/v1',apiKey:'offline-fixture-no-real-key',maxRetries:0});",
+        "  for (const sdk of [client,replacement]) {",
+        "    let failure;",
+        "    try { await sdk.chat.completions.create({model:'z-ai/glm-5.3-flash',messages:[{role:'user',content:'Authored origin refusal; never dispatched.'}]}); }",
+        "    catch(error) { failure=error; report.refusals.push({name:error.name,message:error.message,cause:{code:error.cause?.code,allowed_origin:error.cause?.allowed_origin,requested_origin:error.cause?.requested_origin}}); }",
+        "    assert.equal(failure?.cause?.code,'ERR_AGENT_COMMS_NATIVE_ORIGIN_REFUSED');",
+        "    assert.equal(failure.cause.allowed_origin,allowed);",
+        "    assert.equal(failure.cause.requested_origin,requested);",
+        "  }",
+        "  assert(!dispatched.some(row=>row.origin!==allowed));",
+        "  let redirected=false;",
+        "  try { const response=await fetch(allowed+'/guard-redirect'); await response.text(); redirected=true; }",
+        "  catch(error) { report.redirect_error={name:error.name,message:error.message,cause_message:error.cause?.message}; }",
+        "  assert.equal(redirected,false);",
+        "  assert(report.redirect_error);",
+        "  assert(dispatched.some(row=>row.origin===allowed && row.path==='/guard-redirect'));",
+        "  assert(!dispatched.some(row=>row.origin!==allowed));",
+        "  report.localhost_positive=true; report.sdk_origin_refused=true; report.redirect_refused=true;",
+        "} finally {",
+        "  report.dispatched=dispatched; console.log(JSON.stringify(report));",
+        "  requests.unsubscribe(observe);",
+        "  try { if(firstDispatcher) await firstDispatcher.close(); }",
+        "  finally { if(getGlobalDispatcher()!==firstDispatcher) await getGlobalDispatcher().close(); }",
+        "}",
+    ))
+    report = json.loads(_node_run(node, env, script, project, artifact))
+    artifact.with_suffix(".json").write_text(json.dumps(report, indent=2))
 
 
 def _prepare(root, native_package):
@@ -102,6 +188,7 @@ def _prepare(root, native_package):
         f"import {{ProjectTrustStore}} from {json.dumps(api.as_uri())};"
         f"new ProjectTrustStore({json.dumps(str(agent))}).set({json.dumps(str(project))},true);",
         project,
+        root / "project-trust",
     )
     digest = _node_run(
         node,
@@ -110,6 +197,7 @@ def _prepare(root, native_package):
         f"{json.dumps((package / 'src/config.mjs').as_uri())};"
         f"console.log(declarationDigest(parseNativeConfig({json.dumps(document)}).servers[0]));",
         project,
+        root / "mcp-declaration",
     )
     # Initial fixture setup uses the real package writer, never a Toad ledger.
     _node_run(
@@ -120,6 +208,7 @@ def _prepare(root, native_package):
         f"await recordProjectDecision({{agentDir:{json.dumps(str(agent))},"
         f"projectRoot:{json.dumps(str(project))},declaration:{json.dumps(declaration)},decision:'approve'}});",
         project,
+        root / "mcp-approval",
     )
     (agent / "settings.json").write_text(
         json.dumps(
@@ -196,8 +285,24 @@ def _deny_via_simulated_user_pty(package, node, project, digest, env, artifact):
 @contextmanager
 def _mock_model(root, agent, receipt_seen, second_request, release_final):
     requests, errors = [], []
+    guard_requests = []
 
     class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            guard_requests.append({"path": self.path, "host": self.headers.get("Host")})
+            if self.path == "/guard-positive":
+                self.send_response(200)
+                self.send_header("Content-Length", "0")
+            elif self.path == "/guard-redirect":
+                self.send_response(302)
+                self.send_header("Location", f"https://127.0.0.1:{self.server.server_port}/guard-target")
+                self.send_header("Content-Length", "0")
+            else:
+                errors.append(f"Unexpected guard request: {self.path}")
+                self.send_response(500)
+                self.send_header("Content-Length", "0")
+            self.end_headers()
+
         def do_POST(self):
             try:
                 size = int(self.headers["Content-Length"])
@@ -274,6 +379,7 @@ def _mock_model(root, agent, receipt_seen, second_request, release_final):
         thread.join(timeout=3)
         (root / "model-requests.json").write_text(json.dumps(requests, indent=2))
         (root / "model-errors.json").write_text(json.dumps(errors))
+        (root / "guard-http-requests.json").write_text(json.dumps(guard_requests, indent=2))
 
 
 @asynccontextmanager
@@ -340,6 +446,10 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                     if key in os.environ:
                         env[key] = os.environ[key]
             environment.setattr(os, "environ", env)
+            if case == "allow":
+                await Coordination.run_worker(partial(
+                    _qualify_origin, node, env, project, tmp_path / "origin-guard",
+                ))
             args = [
                 "--offline",
                 "--no-extensions",
