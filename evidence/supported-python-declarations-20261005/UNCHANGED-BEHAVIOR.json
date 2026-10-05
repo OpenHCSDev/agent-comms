@@ -1,0 +1,5 @@
+{
+  "base": "78d14b8b28fc6da227bd2f1e47b3ed95b36fc4f1",
+  "tracked_AST_unchanged_except_Generic_TypeVar_declarations": true,
+  "method_bodies_fields_handlers_custody_nativeflow_CAS_budget_unchanged": true
+}

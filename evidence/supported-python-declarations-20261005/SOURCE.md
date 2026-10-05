@@ -28,3 +28,15 @@ the declared contract; dependency and native artifact requirements are unchanged
 
 Final checks follow this source batch. No package/provider/environment/native
 SDK run is claimed or authorized by this source correction.
+
+## Batched source qualification
+
+The actual existing Python3.11.11 interpreter now parses and compiles all316
+production modules, with0 omissions. The cursor class bytecode no longer loads
+its own name before binding. After normalizing only the declared import/generic
+syntax changes, both changed modules' ASTs match their predecessor: every
+method body, record field and lifecycle operation is unchanged. Receipts are
+PY311-AFTER.json and UNCHANGED-BEHAVIOR.json. This is honest compilation and
+source-equivalence scope, not a complete3.11 installed import or live claim.
+The initial automatic Debt ratchet passed; final evidence head requires its own
+normal exact-head comparison. No SDK, provider, package or control repeat ran.
