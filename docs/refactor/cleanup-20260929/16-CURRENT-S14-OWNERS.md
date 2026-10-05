@@ -3470,3 +3470,37 @@ that scope only. The configured clock producer is unrun; exclusive per-arm
 workflow observations and independent resource accounting remain Arendt-owned.
 No paid study, provider input, live installation or UI acceptance follows from
 this merge. No existing performance or continuous journey is replayed.
+
+### Installed proofs passed; affected App controls stopped, 2026-10-05
+
+460 successor05 installed proof passed once in7.631s, binding953 assets,
+69 origins and native7a FullTrust. The original full150s App attempt then
+stopped with exit1 after54.995s, without timeout. Parent read the original
+terminal3dfc, driver failure and whole returne0a153; both original controller
+and child are absent. Warm-ready and draft captures exist. After-terminal
+inspection of the original warm-ready PNG shows rendered saved text and Ready
+roster; this is no frame-time or whole scrolling acceptance. The width action
+refused at click_history.py111 because it found zero visible
+SidebarResizeHandle#sidebar-resize-handle within SessionThreadSidebar. Heis
+owns the complete selector/layout source repair; no product cause is inferred
+from this refused acquisition. All1468 floor members,69 raw origins,428
+protected originals,1883 other files and activation were restored once.
+Original SDK forks, movie and cold-retention refusal remain held. Bohr owns
+independent closure; no execution retry is authorized by this return.
+
+466 corrected02 installed proof passed once in6.926s. Its mounted App stopped
+with AttributeError at the control's Conversation.is_current before testing
+cancellation/resume/coalescing. Einstein returned whole6d64 with31 receipts
+and restored the actual459 floor1467/69/266+1865. The source-only26500c60
+correction retains original SessionView through content/presentation and uses
+its existing is_current owner; production and retained b2e wheel are unchanged.
+Parent read the complete control diff and hash-matched fresh03 proposald40ca.
+Bohr must close the returned02 purpose and freshly verify the eligible floor
+before binding03; worker behavior remains unqualified. This check does not
+wait for460. No wheel rebuild or unchanged journey replay is needed.
+
+Core680 source work continues independently after normal679 mergeb4a0179c.
+Arendt is tracing original acquired completion provenance for resource scopes;
+shared/missing workflow ownership cannot supply conditional cost acceptance.
+Continuous468 and fast loading, wheel/frame/CPU acceptance remain unfinished.
+PUBLIC465 and original histories/auth/UNKNOWN are preserved.
