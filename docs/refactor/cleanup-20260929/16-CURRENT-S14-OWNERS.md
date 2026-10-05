@@ -61,6 +61,32 @@ App and accepted annotation GUI are not repeated. Receiving448 names the
 existing CarryNativeRuntimeInstallation, authentic source declaration and
 stopped preimage custody; Preserve or Reset cannot deliver retained9→10.
 
+## Explorer final review: distinct range identity
+
+Final frozen functional heads are Core627 e5f3811b and ToAd43475d5f0a0;
+6631143 is separately Ready. Their required exact Debt results were still
+queued at this read. The accepted GUI, historical and stopped-copy receipts
+remain bound to their original source tuples. Receiving448 ef437bf2 remains
+source-only, with final merged pins/canonical tools and installed purpose unbound.
+
+Parent found a distinct source counterexample in the view identity family.
+WorkingMemoryAnnotations.address and SpanAnnotationsRow.address include both
+span offset and length. ContextInspection.working_memory groups full span,
+question and classifier facts, but its AnnotationNode key currently includes
+only offset. Two admitted contained ranges sharing an offset but having different
+lengths can therefore map to one key: ContextTree._add overwrites that entry,
+owns_node rejects the earlier node, and reveal/intent restoration can resolve
+the other node. This is a source counterexample, not an observed failure in the
+accepted original GUI run or a native fault.
+
+Einstein is assigned the separate successor: check the original admission
+contract, derive mounted identity from the complete existing address, migrate
+all key/intent consumers and qualify the changed range/restore behavior.
+Frozen Ready branches and receipts remain untouched. Human answer refinement
+must preserve source identity; including the answer in the key would create a
+competing identity. Parent makes no overlapping source edit, and no accepted
+App/provider replay or new holder purpose is inferred from this review.
+
 ## Historical integration evidence
 
 Parent retired its unused standalone channel_recovery_physical_journey wrapper.
