@@ -3103,3 +3103,37 @@ all266 assets directly against merged9ea Git blobs/local source/ZIP and original
 dependency metadatafa4831: exact. Native65/e253 is distinct and preserved. Literal
 artifact relation is delivered to Heis/Bohr; no installed/runtime authority or
 motion/FPS qualification follows from building it.
+
+### Joint workspace verification and parallel load work, 2026-10-05
+
+Heis455 finalbc611f6e binds the one built6977 Toad wheel, merged675/a685 Core
+and mergedText66/09452. Both original private-fork sites now use the SDK request's
+explicit destination while preserving the original captured auth/configuration;
+source helpers changed without rebuilding unchanged package assets. Effective
+serial-three operandca821 names worker/session, project restore, then genuine
+private-original connected readiness with zero new model input. Original older
+operand records remain preserved. Stop after the first failure or uncertain effect;
+none of these checks proves physical wheel cadence or useful-paint latency.
+
+Parent personally read/hash-verified Bohr's fresh issued9013ac52 purpose. The
+actual private485 floor is1441 members/69 origins/155 protected files and1883
+other-distribution keepers. Package stage is authorized after the literal read;
+all Apps remain held on installed proof and the recorded releases. First two
+checks require no native artifact execution. The connected third additionally
+requires a new matching7a execution grant, previous checks passing and joining,
+and fresh original CurrentTypedCapture identity/source admission at use. Actual
+public style22 remains448 and is excluded from private staging/restoration.
+
+Parent passed a raw retained-source locator observation to Heis/Bohr; it is not
+PID proof or a source override. The observed configured model is Sol with thinking
+OFF, which must stay truthful in captured settings. Only the third job's original
+public decoder subprocess may read config/auth/source through its fresh issued
+scope; no standalone decoder, public App, model input or public store write follows.
+
+Einstein's454 source/control handoff is frozen in455. Parent resumed a separate
+cold-useful-first-paint and fast-wheel source pass, with exact file ownership to be
+agreed directly with Heis before edits. Heis retains workflow integration; Kepler
+retains native raster ownership. No new runtime or recording was assigned by this
+source task. Mendel676 owns loaded-session/registry/fork selection and restoration
+for S4, while Arendt retains RecallRound/condition_application consumers. These
+parallel source tasks do not wait for UI verification, and do not claim it passed.
