@@ -17,6 +17,7 @@ from agent_comms.compaction_identity import SummaryOperationIdentity
 from agent_comms.compaction_records import NativeForkCreation, SelectedSummaryAttempt
 from agent_comms.compaction_states import ReservedSummary
 from agent_comms.field_codec import FieldCodec
+from agent_comms.messages import Message, MessageType
 from agent_comms.goals import Goal
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_attempt import MissingInput, ReservedInput
@@ -123,6 +124,38 @@ class RecordedMeasurementTests(unittest.TestCase):
         destination.write_bytes(raw + b' ')
         with self.assertRaisesRegex(ValueError, 'artifact changed'):
             RecordedNativeCheckpoint.read_bytes(reference)
+
+    def test_configured_history_uses_original_public_bodies_and_cumulative_additions(self):
+        bodies = ('Original binding archive /artifacts/S4/α/source, λ 🙂.',
+                  'Never replay an uncertain input.',
+                  'cold-review remains an available alternative.')
+        publications = tuple(Message('human', 'agent', body, MessageType.INFO,
+                                     seq=index, timestamp=1.0)
+                             for index, body in enumerate(bodies, 1))
+        before = tuple(FieldCodec.encode(message) for message in publications)
+        scenario = RecallScenario.configured_retention('original-declaration-reference', publications)
+        steps = scenario.construction_rounds()
+        self.assertEqual(steps[0]['history_additions'], bodies)
+        self.assertEqual(steps[0]['source_text'], '\n'.join(bodies))
+        self.assertEqual(tuple(len(round_.history) for round_ in scenario.rounds), (3, 4, 5))
+        for previous, current in zip(scenario.rounds, scenario.rounds[1:]):
+            addition, = current.history_after(previous.history)
+            self.assertEqual(current.history, previous.history + (addition,))
+        self.assertEqual(steps[1]['history_additions'], (
+            'Authorized correction: the binding archive root is now /artifacts/S4/β/corrected.',))
+        self.assertEqual(steps[2]['history_additions'], (
+            'Explicitly drop the archive-root constraint. No binding archive root remains for this task.',))
+        for step in steps:
+            question = json.loads(step['probe_text'].split('\n', 1)[1])
+            self.assertTrue(all(set(item) == {'id', 'prompt'} for item in question['questions']))
+        self.assertEqual(tuple(FieldCodec.encode(message) for message in publications), before)
+        self.assertEqual(FieldCodec.decode(RecallScenario, FieldCodec.encode(scenario)), scenario)
+        # Existing historical placeholders still fail the original prefix
+        # owner; there is no inferred wording or compatibility reconstruction.
+        historical = replace(scenario, rounds=tuple(replace(round_, history=(f'private-source-cut-{index}',))
+            for index, round_ in enumerate(scenario.rounds, 1)))
+        with self.assertRaisesRegex(ValueError, 'preceding frozen history prefix'):
+            historical.construction_rounds()
 
     def test_adjacent_revision_intervals_keep_every_frozen_pair(self):
         scenario = coding_scenario()
