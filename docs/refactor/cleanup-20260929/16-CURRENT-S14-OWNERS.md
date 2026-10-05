@@ -16,7 +16,7 @@ replace this section. The full original goal remains active.
 | W6 historical Explorer | Historical05 on current-source Core3aac/0ed355 and ToAd76ec/e414319 passed terminal0 in30.217576352s, pytest1PASS26.35: registered App/ACP source admission, painted native selection, authentic historical source read, search yielding one match and export with original byte-range provenance/not-current marker. Separate local USER correction/Promised, defaultOFF and schema10 passed. Zero input/provider/native prompt/actual Codex read or accepted GUI repeat. Parent verified all16 original handback hashes and runner3290651 absent. Owner handback4d895e7c records actual formerstyle22 CURRENT4441469/69origins/519 restore with four normal --no-cache wheels, no extras/sockets/groups. Sch matching7a returned. | Bohr independent readback32ae1cbe and CLOSED lifecycle429324f4 are hash-verified: actual1469/69origins/519 restored, fresh244 UID holder/fixture/output/7a actual references and gaps zero. Issuedc3ed unchanged and Sch7a returned. Historical03/04/90s and authentic negatives stay unchanged. No carry target read occurred; next installed carry requires fresh explicit source and target scopes, and public334 remains untouched. |
 | Stopped schema carry | Mendel663 frozen1143be39 qualifies ONE actual installed genuine9→10 authored stopped-copy carry in4.738188295s. Original source child ran once; five reader/custody refusals passed. Original rows/rowids/preimages/wire/config/proofs and journal absence were preserved; annotation_requests/span_annotations start empty. Original15 files retain hashes/full modes/mtime/inodes. Parent verified both whole handbacks and all13+11 raw receipt hashes, then read/hash-matched Bohr independent closure f3323241 and both CLOSED lifecycles6c3e975c/ea654552:219 UID actual references/gaps zero, target CURRENT4441469/69origins/519 restored and source347/94/69metadata/10 unchanged. | 663 merged normally as781b20e4 at frozen1143 under the current CI-deferred goal. This is stopped-copy carry, not public/live-schema or native restart acceptance. No repeat, package purpose or loan follows closure. Functional receiving448 advances source integration independently of W7/W8 and performance. |
 | S4 configured source | Same completed configured02 input119d passed the corrected original recorded reader: applicable latest checkpoint ancestry, task-memory installation, strict SDK→wire projection, six serialized segments185673B, budget/completion/exact marker. New postterminal measurement pins original completed unfilteredb00d bytes; old probe0c519/controller exit1/STARTED/refusals remain unchanged. ONE recorded READ exited0 in6.085s with no new provider/input/SDK/native artifact. Parent verified eight raw keepers and independent Bohr213215/readbackbe05,212 UID zero refs/gaps and original files/floor unchanged. 664 exactbbcf8bd5 requiredDebt37249582572 passed and is merged. | Recorded configured-input construction is qualified at that scope. HTTP bytes, capacity, recall, intervention and study remain unfinished. No second input or retry is required for this accepted reader. Original native/observer birth capture limit remains in the original configured receipt. |
-| Preparation/performance | 443 exactd39cc035 merged asdd7b5a38 after exactDebt37246971495. ONE installed App9.344s qualified9 projected pages/116 completed original body dispatches/source retirement/bounds/wholeclose; Bohr independently closed436ded/a78 and restored1468/69/287. This source is now delivered by447 publication. | Heis446 source7e9/docs ea180 and manifest59fe bind three original entrypoints: saved --warm-only, native mixed4/16/32/64 with TWO loaded histories, and configured --private-original-warm. ReaderCheckpoint preserves fragment-view identity/raw-read oracles and retires witnesses before resource sampling; native CtrlZ remains and original editor.redo avoids priority CtrlY SendNow. Parent reviewed the manifest and original configured capture/fork owner, then authorized preparation of the serial affected batch after independent663 whole closure. Two localhost controls permit their authored native inputs; configured warm uses a genuine private SDK fork with ZERO new input. Bohr issued exact59c17e75 at actualCURRENT4441469/69/519, final fcea/3ab5 tuple; installed proof047205d3 and ownDTO46709ddb bind945/full69/519/native086FullTrust. Sch separately issued NEW086 execution after actual reads; Bohr must bind release in the existing lifecycle before jobs. No control has run; fully loaded scaling, full configured continuous/physical workflow and CPU acceptance remain unfinished with Heis. |
+| Preparation/performance | 443 exactd39cc035 merged asdd7b5a38 after exactDebt37246971495. ONE installed App9.344s qualified9 projected pages/116 completed original body dispatches/source retirement/bounds/wholeclose; Bohr independently closed436ded/a78 and restored1468/69/287. This source is now delivered by447 publication. | Heis446 source7e9/docs ea180 and manifest59fe bind three original entrypoints: saved --warm-only, native mixed4/16/32/64 with TWO loaded histories, and configured --private-original-warm. ReaderCheckpoint preserves fragment-view identity/raw-read oracles and retires witnesses before resource sampling; native CtrlZ remains and original editor.redo avoids priority CtrlY SendNow. Parent reviewed the manifest and original configured capture/fork owner, then authorized preparation of the serial affected batch after independent663 whole closure. Two localhost controls permit their authored native inputs; configured warm uses a genuine private SDK fork with ZERO new input. Bohr issued exact59c17e75 at actualCURRENT4441469/69/519, final fcea/3ab5 tuple; installed proof047205d3 and ownDTO46709ddb bind945/full69/519/native086FullTrust. Sch separately issued NEW086 execution and Bohr released the batch. First saved control failed49.474s; mixed and configured were UNRUN. Whole floor was restored and Bohr independently closed825d8e/f4a5; Sch authority returned/closed. The retained ACP snapshot now identifies authored fixture IGNORE replies instead of expected NATIVE_RESPONSE_2; Heis owns fixture response/retention repair and thread first-paint/load speed. Fully loaded scaling, full configured continuous/physical workflow and CPU acceptance remain unfinished. |
 | Supported Python import | Mendel665 exactebaec39 merged78d14 after requiredDebt37248630704. Complete successor666 exact70bc1456 merged12f6fe2a after requiredDebt37249472985: postponed cursor self annotations and original Generic/TypeVar declarations replace three3.12-only headers. Existing3.11.11 parses/compiles all316 production modules with0 omissions; normalized AST proves fields/methods/custody/native flow unchanged. | Full installed3.11 imports/native acceptance are not claimed. Broader automatic CI is separate. Existing447 Corea38/5f and W6a59/ab640 remain honest frozen qualifiers, not byte-equal newmain666; future changed source delivery needs its normal source-equal wheel, without SDK/native rebuild. |
 | Backlog reconciliation and next receiving | 649 closed superseded without merging627/wholeW1. 447 exact797679 merged3dc801 after exactDebt37249539689. Parent hashverified all141 frozen files, independent Bohr4b31/readbacka329 and945 assets/69origins/287 originals/2539 keepers/51 canonical tools; preparation closed before original guarded publication. | New once operator is consumed; receipt/preimages now exist and must never be replayed. Current334 is PUBLIC447, not an eligible private holder or old440 restoration target. Historical Explorer/carry source continues independently; next installed purpose follows genuine former-holder disposition/clearance. |
 | Resources | Last recorded resource observations are historical; refresh actual headroom before another large run. Parent generated outputs56MB are retained proofs. Retention445 metadata/private-access repair is merged and offline-qualified. | Bohr owns cleanup; actual HDD/journal acceptance remains unqualified. Rollouts are excluded. Preserve original sources and UNKNOWN inputs; avoid duplicate builds, new environments and invented caps. |
@@ -103,16 +103,24 @@ is distinct from frozen accepted e414. No installed successor claim yet; its
 7f481 proposal requires fresh purpose after446 whole handback. Frozen627/434
 acceptance receipts remain unchanged.
 
-Bohr issued soleHeis446 CURRENT444 SERIAL3 purpose59c17e75, binding final
-fcea/3ab5 manifest and all12 control/helper hashes. NEW Sch086 READ-only is
-bound for source proof; execution remains held on actual945/full69/519 proof
-and a separate NEW execution renewal. The public334 decoder relationship is
-authorized only inside the third OriginalTypedCapture control after release.
-No job acceptance is claimed. Independently Heis owns TC1 presentation/watcher
-custody: remount currently creates a watcher before replacing it with a retained
-one, whose receiver rebind leaves the CoreEvent subscription at the old widget.
-OperationalSessionPresentation and DirectoryWatcher own the complete repair;
-446 frozen controls remain unchanged and no runtime cause is inferred.
+446 consumed its first saved control failure and independently closed; mixed and
+configured controls were UNRUN. Sch086 authority returned/closed, and actual
+CURRENT4441469/69origins/519 floor is restored. Heis owns TC1 watcher delivery,
+fixture response and persistent-source lifetime repair, and the remaining
+nonblocking delay until first useful thread paint. Responsiveness improvement
+is not a fast-load acceptance claim.
+
+Bohr issued fresh combined449+448 purpose679abc after fresh245UID clearance and
+actual floor verification. Sch alone stages retained Core0ed+Toad1a8 once;
+Einstein's exact mounted Tree check remains held until final953/full69/519
+proof, ownDTO and operator handoff are bound. After actual PASS and joined
+return, Parent normally merges449; Sch then prepares canonical51 and the typed
+carry cohort on the same unchanged candidate, frozen HELDParent. No restage,
+App/SDK/native execution/provider input or public publication is authorized.
+The effective source proposal aa5f clarifies the inner JSON newline spelling;
+Parent read both original/effective AST constants as newline[10], so no broken
+original writer is asserted. Public source declaration READ is restricted to
+the later receiving phase; public334 remains protected.
 
 ## S4 frozen adjacent comparison closure
 
@@ -153,11 +161,17 @@ actual affected default workflow remain required for public Explorer delivery.
 Original saved-warm control exited1 in49.474142917s before its startup paint
 assertion saw NATIVE_RESPONSE_2. App/ACP/live beta admission reached; two
 authored localhost preparation requests are recorded, with provider errors[];
-no warm-return or configured-provider claim follows. Mixed/configured controls
+Retained ACP transcript_snapshot contains two actual assistant IGNORE responses.
+The authored streamed_reply heuristic scans all historical messages for IGNORE
+and FULL; ordinary Coordination context contains both. This identifies a fixture
+response defect, without proving missing UI paint or latency. Heis owns the
+complete common response boundary, including coordinating canonical_wire before
+shared-file edits. No warm-return or configured-provider claim follows. Mixed/configured controls
 remain UNRUN. Controller3992375/birth64302610 exited1 with cleanup empty.
 Owner code-handback06d6f420 records actualCURRENT4441469/69origins/519
-restored and final-borrowers0e517a5a actual241UID0refs/gaps. Bohr independent
-closure remains separate; no retry is authorized.
+restored and final-borrowers0e517a5a actual241UID0refs/gaps. Bohr independently
+closed825d8e with floor readbackf4a5 and fresh240UID0refs/gaps; Sch086 authority
+is closed. No retry or remaining-job authorization survives.
 
 Parent source read confirms preparation and selected App both name beta; no
 wrong-owner oracle is established. It also identifies the original L0A fixture
