@@ -218,50 +218,26 @@ async def request_construction(stage, package, original_python, *, core_source, 
                 action_validity_evaluated=False, model_recall_evaluated=False)
 
 
-async def run(stage, package, original_python, *, design: PairedRecallDesign,
-              sampling_seed: int, trajectory: int, core_source, core_artifacts=()):
-    """Execute one explicitly selected prospective pair, never an entire study.
+async def run_arm(stage, package, source_file, *, condition, plan, scenario,
+                  capture_source, receiver, core_source, core_artifacts=()):
+    """Own one source/cut/probe trajectory through its existing resources.
 
-    This callable supplies no spending permission. Actual execution requires
-    the operator's separate configured/holder/artifact purpose. A new private
-    root is mandatory; uncertain or completed roots are never resumed here.
-    Source and summary work are shared between the arms, not independent costs.
+    Private wire publications, native completions and the cleanup span belong
+    to this arm. The unchanged seed and pair receipt are not arm clocks/costs.
+    No live operation or spending permission follows from this callable.
     """
-    plan = design.construction_plan(sampling_seed, trajectory=trajectory)
-    selected, = plan['trajectories']
-    scenario = RecordedNativeCheckpoint.read_record(design.oracle, RecallScenario)
-    stage.mkdir(mode=0o700, exist_ok=False)
-    record(stage / 'construction-plan.private.json', plan)
-    record(stage / 'frozen-oracle.private.json', scenario)
-    captured = CurrentTypedCapture(Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'),
-                                   original_python).read('openhcs-architecture-memory')
-    original = captured.require_current()
-    if original.model != design.model:
-        raise ValueError('Declared design differs from the selected configured model')
-    source_file = Path(original.require_saved_session())
     receipt = {'complete': False, 'public_inputs': 0, 'input_replays': 0,
                'comparative_study': False, 'policy_activation': False,
-               'acceptance_scope': 'one declared shared-source trajectory and original installed-arm probes',
-               'sample': selected['sample'], 'condition_order': selected['condition_order'],
-               'completed_rounds': [], 'shared_preparation': True}
-    record(stage / 'receipt.json', receipt)
+               'selected_condition': condition, 'sample': plan['trajectories'][0]['sample'],
+               'acceptance_scope': 'one original source/cut/probe arm and its joined cleanup',
+               'completed_rounds': []}
 
-    class Receiver:
-        async def session_update(self, **value):
-            pass
-
-    def capture_source():
-        return captured.require_current(), captured.retained
-
-    parent_stage = stage / 'source'
-    contexts = parent_stage / 'sdk-contexts'
-    summaries = parent_stage / 'summary-assemblies'
-    probes = {condition: {} for condition in selected['condition_order']}
-    stimuli, checkpoints, task_events = {}, {}, ()
+    contexts, summaries = stage / 'sdk-contexts', stage / 'summary-assemblies'
+    probes, stimuli, task_events = {}, {}, ()
     workflow_started = monotonic()
-    with observe_native_requests(package, parent_stage / 'request-observation.jsonl',
+    with observe_native_requests(package, stage / 'request-observation.jsonl',
                                  contexts=contexts, summaries=summaries) as observe_launch:
-        async with configured_saved_agent(parent_stage, package, source_file, Receiver(), receipt,
+        async with configured_saved_agent(stage, package, source_file, receiver, receipt,
                 capture_source=capture_source, observe_launch=observe_launch,
                 core_source=core_source, core_artifacts=core_artifacts) as (agent, owner, creation):
             contexts.mkdir(mode=0o700)
@@ -271,11 +247,8 @@ async def run(stage, package, original_python, *, design: PairedRecallDesign,
             router = build_agent_router(agent)
             journal = CompactionJournal(service.root / 'compaction-commits.sqlite3')
             inputs = InputDispositions(service.root / InputDispositions.filename)
-            # The source is frozen study data, not an instruction to modify the
-            # inherited project. Publish through the existing USER pin owner.
             restriction = service.messaging.send_user_message(owner.name,
-                scenario.rounds[0].evaluation_instructions(),
-                worktree=owner.worktree)
+                scenario.rounds[0].evaluation_instructions(), worktree=owner.worktree)
             service.messaging.pin_user_constraint(owner.name, restriction.reference,
                                                  worktree=owner.worktree)
             for number, operands in enumerate(plan['rounds'], 1):
@@ -319,60 +292,107 @@ async def run(stage, package, original_python, *, design: PairedRecallDesign,
                 operation.committed_outcome()
                 checkpoint = RecordedNativeCheckpoint(journal.path, attempt.identity,
                     operation.commit_id, scope, service.root / 'bus.jsonl').capture_summary_observation(summaries)
-                checkpoints[identity] = checkpoint
                 record(round_stage / 'checkpoint.private.json', checkpoint)
-                for position, condition in enumerate(selected['condition_order'], 1):
-                    arm_stage=round_stage/f'arm-{position}'
-                    arm_stage.mkdir(mode=0o700)
-                    original_owner=RegistryOwner.capture_local(service.registry.snapshot(),owner.name)
-                    child=await journal.private_inputs.fork(ForkSessionRequest(
-                        str(package),original_owner.thread.require_saved_session(),owner.worktree,
-                        str(arm_stage/'forks')),cwd=Path(owner.worktree))
-                    arm_receipt={'complete':False,'public_inputs':0,'input_replays':0,
-                        'paid_comparison':False,'selected_condition':condition,
-                        'acceptance_scope':'same-owner selected SDK fork and original installed input; not study'}
-                    try:
-                        async with agent.sessions.selected_native_fork(owner.name,original_owner,child) as (selected_owner,retire_selected):
-                            probe, observed = await condition_application(arm_stage,package,agent,
-                                selected_owner.thread,child,condition,checkpoint,
-                                prompt_text=operands['probe_text'],receipt=arm_receipt,
-                                retire_selected=retire_selected)
-                        arm_receipt['original_source_restored']=True
-                    finally:
-                        record(arm_stage/'receipt.json',arm_receipt)
-                    probes[condition][identity] = probe
-                    record(round_stage / f'arm-{position}-measurement.private.json', observed)
-                    record(stage / f'arm-{position}-run.private.json',
-                           RecordedNativeProbes(dict(probes[condition]), stimuli=dict(stimuli)))
+                arm_stage = round_stage / 'recall'
+                arm_stage.mkdir(mode=0o700)
+                original_owner = RegistryOwner.capture_local(service.registry.snapshot(), owner.name)
+                child = await journal.private_inputs.fork(ForkSessionRequest(
+                    str(package), original_owner.thread.require_saved_session(), owner.worktree,
+                    str(arm_stage / 'forks')), cwd=Path(owner.worktree))
+                probe_receipt = {'complete': False, 'public_inputs': 0, 'input_replays': 0,
+                    'paid_comparison': False, 'selected_condition': condition,
+                    'acceptance_scope': 'same-owner selected SDK fork and original installed input; not study'}
+                try:
+                    async with agent.sessions.selected_native_fork(owner.name, original_owner, child) as (selected_owner, retire_selected):
+                        probe, observed = await condition_application(arm_stage, package, agent,
+                            selected_owner.thread, child, condition, checkpoint,
+                            prompt_text=operands['probe_text'], receipt=probe_receipt,
+                            retire_selected=retire_selected)
+                    probe_receipt['original_source_restored'] = True
+                finally:
+                    record(arm_stage / 'receipt.json', probe_receipt)
+                probes[identity] = probe
+                record(round_stage / 'recall-measurement.private.json', observed)
+                record(stage / 'recorded-run.private.json', RecordedNativeProbes(
+                    dict(probes), stimuli=dict(stimuli)))
                 receipt['completed_rounds'].append(identity)
                 record(stage / 'receipt.json', receipt)
 
-    # One actual span includes source work and BOTH arms, through owned cleanup.
-    # Keep it in the existing receipt; arm records borrow it rather than copy a
-    # duration or subtract the other arm's request clocks. Its complete input
-    # membership lets the reader derive that it is shared preparation.
+    # End after both original agent and inspector resources have joined. This
+    # is an actual arm span, not a difference/sum of request or pair clocks.
     workflow_elapsed_seconds = monotonic() - workflow_started
-    runs = {condition: RecordedNativeProbes(originals, stimuli=stimuli)
-            for condition, originals in probes.items()}
-    # Corroborate and score all originals before completing the existing receipt.
-    # The clock ended with runtime cleanup; reader/scorer work is excluded.
+    run = RecordedNativeProbes(probes, stimuli=stimuli)
+    receipt.update(complete=True, original_sources=len(stimuli), original_cuts=len(probes),
+                   original_arm_probes=len(probes), whole_study_evaluated=False,
+                   capacity_HTTP_billing_evaluated=False,
+                   workflow_elapsed_seconds=workflow_elapsed_seconds,
+                   workflow_inputs=run.workflow_inputs)
+    workflow = record(stage / 'receipt.json', receipt)
+    run = RecordedNativeProbes(run.rounds, stimuli=run.stimuli, workflow=workflow)
+    record(stage / 'recorded-run.private.json', run)
+    return run
+
+
+async def run(stage, package, original_python, *, design: PairedRecallDesign,
+              sampling_seed: int, trajectory: int, core_source, core_artifacts=()):
+    """Execute one predeclared pair with a separate whole trajectory per arm.
+
+    This callable supplies no spending permission. The prospective oracle and
+    randomized ordering are unchanged; uncertain/completed roots never resume.
+    The SDK seed is common, but source, summary, probe and cleanup work are not.
+    """
+    plan = design.construction_plan(sampling_seed, trajectory=trajectory)
+    selected, = plan['trajectories']
+    scenario = RecordedNativeCheckpoint.read_record(design.oracle, RecallScenario)
+    stage.mkdir(mode=0o700, exist_ok=False)
+    record(stage / 'construction-plan.private.json', plan)
+    record(stage / 'frozen-oracle.private.json', scenario)
+    captured = CurrentTypedCapture(Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'),
+                                   original_python).read('openhcs-architecture-memory')
+    original = captured.require_current()
+    if original.model != design.model:
+        raise ValueError('Declared design differs from the selected configured model')
+    source_file = Path(original.require_saved_session())
+    receipt = {'complete': False, 'public_inputs': 0, 'input_replays': 0,
+               'comparative_study': False, 'policy_activation': False,
+               'acceptance_scope': 'one declared pair of original whole arm trajectories',
+               'sample': selected['sample'], 'condition_order': selected['condition_order'],
+               'completed_arms': []}
+    record(stage / 'receipt.json', receipt)
+
+    class Receiver:
+        async def session_update(self, **value):
+            pass
+
+    def capture_source():
+        return captured.require_current(), captured.retained
+
+    seed_stage = stage / 'seed'
+    seed_receipt = {'complete': False, 'public_inputs': 0, 'input_replays': 0,
+                    'acceptance_scope': 'common SDK seed resource; no source or recall inputs'}
+    runs = {}
+    receiver = Receiver()
+    async with configured_saved_agent(seed_stage, package, source_file, receiver, seed_receipt,
+            capture_source=capture_source, core_source=core_source,
+            core_artifacts=core_artifacts) as (_, _, seed):
+        for position, condition in enumerate(selected['condition_order'], 1):
+            arm_stage = stage / f'arm-{position}'
+            runs[condition] = await run_arm(arm_stage, package, Path(seed.session_file),
+                condition=condition, plan=plan, scenario=scenario, capture_source=capture_source,
+                receiver=receiver, core_source=core_source, core_artifacts=core_artifacts)
+            record(stage / f'arm-{position}-run.private.json', runs[condition])
+            receipt['completed_arms'].append(condition)
+            record(stage / 'receipt.json', receipt)
+    # The seed resource contains the nested arm lifetime. Its receipt is not
+    # borrowed as an arm clock, divided, or claimed as measured setup-only time.
+    seed_receipt['complete'] = True
+    record(seed_stage / 'receipt.json', seed_receipt)
     report = scenario.compare_native(design.candidate, runs[design.candidate],
                                      design.baseline, runs[design.baseline])
-    receipt.update(complete=True, original_sources=len(stimuli), original_cuts=len(checkpoints),
-                   original_arm_probes=sum(len(values) for values in probes.values()),
-                   whole_study_evaluated=False, capacity_HTTP_billing_evaluated=False,
-                   shared_source_and_summary_cost_not_independent=True,
-                   workflow_elapsed_seconds=workflow_elapsed_seconds,
-                   workflow_inputs=tuple(dict.fromkeys(
-                       original for run in runs.values() for original in run.workflow_inputs)))
-    workflow = record(stage / 'receipt.json', receipt)
-    runs = {condition: RecordedNativeProbes(run.rounds, stimuli=run.stimuli, workflow=workflow)
-            for condition, run in runs.items()}
-    for position, condition in enumerate(selected['condition_order'], 1):
-        record(stage / f'arm-{position}-run.private.json', runs[condition])
-    for arm, condition in (('candidate', design.candidate), ('baseline', design.baseline)):
-        report[arm]['workflow_timing'] = runs[condition].workflow_timing()
     record(stage / 'paired-measurements.private.json', report)
+    receipt.update(complete=True, whole_study_evaluated=False,
+                   capacity_HTTP_billing_evaluated=False)
+    record(stage / 'receipt.json', receipt)
 
 
 if __name__ == '__main__':
