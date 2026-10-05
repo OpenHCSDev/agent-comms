@@ -1,0 +1,121 @@
+{
+  "state": "Ready at changed owner/canonical plus actual authored saved-SDK localhost settlement scope; final main-PR Debt and parent guarded merge pending",
+  "qualified_source": "48fe470fa3b83e9f54d95d9b27d70acfaa1cf0ef",
+  "production_wheel_source": "46124bbdc9dcec39e944eb64067d9c85f3508c0e",
+  "production_delta_after_qualified_wheel": 0,
+  "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-goal-selection675-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "a685578e439aa2f7010219aa6032ae7e7307a68393e6d6adbb084563f39f43c5",
+  "installed_assets_exact": 355,
+  "canonical_scopes": {
+    "original01": {
+      "whole_exit": 1,
+      "passed": 5,
+      "failed": 1,
+      "negative_preserved": true
+    },
+    "changed02": {
+      "exit": 0,
+      "passed": 1,
+      "elapsed_seconds": 2.971592638990842
+    },
+    "distinct_qualified_cases": 6,
+    "unchanged_five_not_repeated": true
+  },
+  "native02": {
+    "exit": 0,
+    "passed": 2,
+    "elapsed_seconds": 11.30723581602797,
+    "native_inputs": 2,
+    "localhost_posts": 2,
+    "actual_proof_rows": [
+      1,
+      1
+    ],
+    "SDK_authored_seed_inputs": 2,
+    "lease_idle_native_workers_joined": true,
+    "seed_prefix_preserved": true,
+    "new_roots_appended_once_each": true
+  },
+  "provider_external_paid_public_replay_inputs": 0,
+  "whole_holder_handback_sha256": "00db81677ce60059b701fc1b9e4e9a125ee53cafbbfbfa32a2c334db180ee442",
+  "restored_floor": {
+    "assets": 347,
+    "records": 510,
+    "unique_keepers": 94,
+    "metadata_files": 69,
+    "distributions": 10,
+    "failures": [],
+    "extras": []
+  },
+  "native_READ_EXEC_returned": true,
+  "Sch_closure_sha256": "39c3b3e06fe01895bf2a68e3210024f488b3f75968fc3beb3cbcea802c549b47",
+  "Bohr_independent_holder_closure": "pending at this source checkpoint; whole owner handback delivered",
+  "limits": "No public/defaultUI/physical/global CPU/full C3/historical latency acceptance. Original conftest maintenance defer remains harness condition. Postterminal rawproof JSONL decoding error retained; original NativeContextJournal reader used for actual rows without source writes/input.",
+  "compact_keeper_inventory": {
+    "installed02/candidate-source-proof.json": {
+      "sha256": "bd9c18f7a09f3742514d9513a672e6b0013393a9f835570be8cca923d70025d9",
+      "bytes": 4033
+    },
+    "installed02/canonical02-results.xml": {
+      "sha256": "02b04656e34b04b53a200eee46f86973a69957f3f5bed9e5c0e0b07861417ea9",
+      "bytes": 368
+    },
+    "installed02/canonical02-stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "installed02/canonical02-stdout.log": {
+      "sha256": "8a5d3f8c1b452931de963c4bdff9775f7404361fdf3f79b4d740fb5a4f7e6e92",
+      "bytes": 98
+    },
+    "installed02/canonical02-terminal.json": {
+      "sha256": "ff4a00eab5ac4732217cd70411789e4b9838d8061b77a97078f8e90763b12e8d",
+      "bytes": 1563
+    },
+    "installed02/native-full-trust.json": {
+      "sha256": "09c3dc93c1cfc867a02c7e0da3ada61961b50440e1f4e9950213292c230301eb",
+      "bytes": 794
+    },
+    "installed02/native-proof-observation.json": {
+      "sha256": "61b36ef4be34f1e992649fc63bb0a90b653f7ee99e4db928573cef16edefc85c",
+      "bytes": 1555
+    },
+    "installed02/native02-results.xml": {
+      "sha256": "da468dfbb9bc0c3e46153142493737d8d8afe4bd1b8e1f6a76389e48eaff6220",
+      "bytes": 510
+    },
+    "installed02/native02-stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "installed02/native02-stdout.log": {
+      "sha256": "f7634bdcbb6f58626fa60c14f46879b3f14abc58605988365c8cb1f4df9d1d27",
+      "bytes": 98
+    },
+    "installed02/native02-terminal.json": {
+      "sha256": "ca8aaad5f0e199d416b16c938d5c985e23c876bc07c85dc7a99b7823c6c2d6e7",
+      "bytes": 2014
+    },
+    "installed02/postterminal-inspection-negative.txt": {
+      "sha256": "6362d540591cd73b47ca259ac5df9158a2d0ec69fbd5b1d6423c7cdf7e8a28b1",
+      "bytes": 365
+    },
+    "installed02/restore-terminal.json": {
+      "sha256": "fa77dc5e33b1d76211dc2a130809f996fe18f3e1be326985eb50f17ae7647387",
+      "bytes": 853
+    },
+    "installed02/restored-floor-proof.json": {
+      "sha256": "0fd1f589c083c76eb32712d0b3fcfa641b330d5b4e9f76c3174be3099903b41b",
+      "bytes": 269
+    },
+    "installed02/stage-terminal.json": {
+      "sha256": "0ecb0e25c535c69e23b5ce8827bc621d1d03c4fc1638f2e24823b11b4871ae26",
+      "bytes": 964
+    },
+    "installed02/whole-handback.json": {
+      "sha256": "00db81677ce60059b701fc1b9e4e9a125ee53cafbbfbfa32a2c334db180ee442",
+      "bytes": 9712
+    }
+  },
+  "future_source_scope": "Parent assigned fenced same-idle-owner native branch selection/restoration source pass, separate from this qualified source; no current package/artifact execution or source overlap implied."
+}

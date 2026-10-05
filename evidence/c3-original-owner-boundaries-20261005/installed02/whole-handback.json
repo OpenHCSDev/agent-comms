@@ -1,0 +1,162 @@
+{
+  "state": "WHOLE owned code/import/read/execution claim RETURNED after final authorized PASS; Bohr independent lifecycle closure pending",
+  "prefix": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002",
+  "issued_grant_sha256": "64ff90758d6266ad1cbdfe6f2a21c8f281194f60f7dabb41c240ff404daa75bd",
+  "source_head": "48fe470fa3b83e9f54d95d9b27d70acfaa1cf0ef",
+  "wheel_sha256": "a685578e439aa2f7010219aa6032ae7e7307a68393e6d6adbb084563f39f43c5",
+  "canonical02": {
+    "exit": 0,
+    "passed": 1,
+    "elapsed_seconds": 2.971592638990842,
+    "five_unchanged_historical_PASS_not_repeated": true
+  },
+  "native02": {
+    "exit": 0,
+    "passed": 2,
+    "elapsed_seconds": 11.30723581602797,
+    "actual_native_inputs": 2,
+    "controlled_localhost_posts": 2,
+    "original_input_proof_rows": [
+      1,
+      1
+    ],
+    "SDK_seed_inputs_distinct": 2,
+    "scope": "SDK-authored saved source/open_owner/real autonomous TurnRunner; same-ID later progress preserved and independent replacement untouched; original leases idle/tasks+inboxes empty/native children retired"
+  },
+  "external_paid_provider_inputs": 0,
+  "public_inputs": 0,
+  "replay": 0,
+  "native_READ_EXEC_return": {
+    "READ_issued_sha256": "280cf1e98c7d157607029ab4d3352ea4c5ab7a334c050cdce50ec7239c8bed35",
+    "EXEC_issued_sha256": "1d31dca531ac5b62ef8ebd01fd4eb6d1fea4897386b160a6dcdd00f23e3cbb90",
+    "returned": true,
+    "keeper_held": true,
+    "Sch_closure_sha256": "39c3b3e06fe01895bf2a68e3210024f488b3f75968fc3beb3cbcea802c549b47"
+  },
+  "floor": {
+    "state": "PASS",
+    "floor_records": 510,
+    "Core_assets": 347,
+    "nonCore_keepers": 94,
+    "metadata_files": 69,
+    "distributions": 10,
+    "byte_mode_link_failures": [],
+    "extra_assets": [],
+    "missing_assets": [],
+    "controller_proc_present": [],
+    "sockets": []
+  },
+  "groups": [],
+  "sockets": [],
+  "original01_negative_and_18keepers_sha_unchanged": true,
+  "original01_whole_handback_sha256": "dc716b1cadda056af088762b49d7669b84ba587034edc9aa820ce8737e34cc6e",
+  "private_authored_source_history_input_UNKNOWN_preserved": true,
+  "authored_roots": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02",
+  "evidence": {
+    "stage.stdout.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/stage.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "stage.stderr.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/stage.stderr.log",
+      "sha256": "2d4c05298a31fa24e80e0def7bd990052d39a2ae12f24530bc096003198dbaa1"
+    },
+    "stage-terminal.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/stage-terminal.json",
+      "sha256": "0ecb0e25c535c69e23b5ce8827bc621d1d03c4fc1638f2e24823b11b4871ae26"
+    },
+    "candidate-source-proof.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/candidate-source-proof.json",
+      "sha256": "bd9c18f7a09f3742514d9513a672e6b0013393a9f835570be8cca923d70025d9"
+    },
+    "installed-inventory.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/installed-inventory.json",
+      "sha256": "294ae9dd1b2f3df339be0f71864119931e145d0e503d9cb3bed11401f6417e0f"
+    },
+    "native-full-trust.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/native-full-trust.json",
+      "sha256": "09c3dc93c1cfc867a02c7e0da3ada61961b50440e1f4e9950213292c230301eb"
+    },
+    "installed-requirements.txt": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/installed-requirements.txt",
+      "sha256": "ebb69c9961fe940cb589ba0f25d937430012e8fb81405919ec95b0678ec04632"
+    },
+    "prove-installed.py": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/prove-installed.py",
+      "sha256": "f29c9d87b504cb4f0bbcb0ee741b84b19afd373b87bea28814d4ac18bce77bf1"
+    },
+    "run-phase.py": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/run-phase.py",
+      "sha256": "d48c94433088d1b0d7fda9e99583f0898315ebeb7e9be455a53b4e09ba145040"
+    },
+    "canonical02/live-handle.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/canonical02/live-handle.json",
+      "sha256": "998279de764f6e206c75d78b4a00dda549ec58fb68ba47a9087c00d334787305"
+    },
+    "canonical02/stdout.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/canonical02/stdout.log",
+      "sha256": "8a5d3f8c1b452931de963c4bdff9775f7404361fdf3f79b4d740fb5a4f7e6e92"
+    },
+    "canonical02/stderr.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/canonical02/stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "canonical02/results.xml": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/canonical02/results.xml",
+      "sha256": "02b04656e34b04b53a200eee46f86973a69957f3f5bed9e5c0e0b07861417ea9"
+    },
+    "canonical02/terminal.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/canonical02/terminal.json",
+      "sha256": "ff4a00eab5ac4732217cd70411789e4b9838d8061b77a97078f8e90763b12e8d"
+    },
+    "native02/live-handle.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/native02/live-handle.json",
+      "sha256": "7bee3850271356b75ce7d15e5bb90f80677be82583d13994f1d6e6225a2b2095"
+    },
+    "native02/stdout.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/native02/stdout.log",
+      "sha256": "f7634bdcbb6f58626fa60c14f46879b3f14abc58605988365c8cb1f4df9d1d27"
+    },
+    "native02/stderr.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/native02/stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "native02/results.xml": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/native02/results.xml",
+      "sha256": "da468dfbb9bc0c3e46153142493737d8d8afe4bd1b8e1f6a76389e48eaff6220"
+    },
+    "native02/terminal.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/native02/terminal.json",
+      "sha256": "ca8aaad5f0e199d416b16c938d5c985e23c876bc07c85dc7a99b7823c6c2d6e7"
+    },
+    "restore.stdout.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/restore.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "restore.stderr.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/restore.stderr.log",
+      "sha256": "d3b0054a4c3699304324922fa75853ef0958a8bbadbf1802c8663c61ae10fe33"
+    },
+    "restore-terminal.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/restore-terminal.json",
+      "sha256": "fa77dc5e33b1d76211dc2a130809f996fe18f3e1be326985eb50f17ae7647387"
+    },
+    "restored-floor-proof.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/restored-floor-proof.json",
+      "sha256": "0fd1f589c083c76eb32712d0b3fcfa641b330d5b4e9f76c3174be3099903b41b"
+    },
+    "authored-source-keeper-manifest.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/authored-source-keeper-manifest.json",
+      "sha256": "2a7adead5badfdbd12e8555417f11613ddd1b86526b0312440f4108be8f2426e"
+    },
+    "native-proof-observation.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/native-proof-observation.json",
+      "sha256": "61b36ef4be34f1e992649fc63bb0a90b653f7ee99e4db928573cef16edefc85c"
+    },
+    "postterminal-inspection-negative.txt": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/postterminal-inspection-negative.txt",
+      "sha256": "6362d540591cd73b47ca259ac5df9158a2d0ec69fbd5b1d6423c7cdf7e8a28b1"
+    }
+  },
+  "limits": "Scoped canonical6 across original5PASS plus changed1PASS, and actual two localhost SDK settlement cases. Original01 wholeFAIL remains separately failed. No public/defaultUI/global CPU/fullC3/historical latency acceptance. One postterminal summary attempted to decode SQLite proof as JSONL; negative retained, existing NativeContextJournal reader correctly used without input/store writes."
+}

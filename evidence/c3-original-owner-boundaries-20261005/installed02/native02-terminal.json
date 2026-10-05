@@ -1,0 +1,63 @@
+{
+  "phase": "actual_settlement",
+  "issued_sha256": "64ff90758d6266ad1cbdfe6f2a21c8f281194f60f7dabb41c240ff404daa75bd",
+  "lifecycle_sha256_at_launch": "450c302d7012354d88d50fcd026d26da00f1758c6c47a52c494b5337975a5f02",
+  "argv": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "-B",
+    "-c",
+    "import pathlib,sys,agent_comms; assert pathlib.Path(agent_comms.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()); sys.path.append('/usr/lib/python3.14/site-packages'); import pytest; raise SystemExit(pytest.main(['-o', 'addopts=', '-o', 'pythonpath=', '-p', 'no:cacheprovider', '--basetemp', '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/native02/authored', '--junitxml', '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/native02/results.xml', '-q', 'tests/test_goal_selection_native.py']))"
+  ],
+  "outcome": {
+    "kind": "exited",
+    "code": 0
+  },
+  "elapsed_seconds": 11.30723581602797,
+  "error": null,
+  "controller": {
+    "pid": 2043080,
+    "start_time": 65571674
+  },
+  "observed_children": [
+    {
+      "pid": 2043080,
+      "start_time": 65571674
+    },
+    {
+      "pid": 2043091,
+      "start_time": 65571940
+    },
+    {
+      "pid": 2043104,
+      "start_time": 65572078
+    },
+    {
+      "pid": 2043118,
+      "start_time": 65572129
+    },
+    {
+      "pid": 2043156,
+      "start_time": 65572354
+    },
+    {
+      "pid": 2043167,
+      "start_time": 65572464
+    },
+    {
+      "pid": 2043181,
+      "start_time": 65572517
+    }
+  ],
+  "alive": [],
+  "groups": {
+    "2043080": [],
+    "2043091": [],
+    "2043104": [],
+    "2043118": [],
+    "2043156": [],
+    "2043167": [],
+    "2043181": []
+  },
+  "sockets": [],
+  "observation_limit": "Short-lived descendants may exit between read-only /proc observations; original fixture/process custody joins its actual children."
+}

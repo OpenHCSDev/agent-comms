@@ -1,0 +1,13 @@
+{
+  "state": "PASS",
+  "floor_records": 510,
+  "Core_assets": 347,
+  "nonCore_keepers": 94,
+  "metadata_files": 69,
+  "distributions": 10,
+  "byte_mode_link_failures": [],
+  "extra_assets": [],
+  "missing_assets": [],
+  "controller_proc_present": [],
+  "sockets": []
+}
