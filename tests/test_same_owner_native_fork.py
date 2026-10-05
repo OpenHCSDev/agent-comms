@@ -34,6 +34,7 @@ async def test_saved_fork_restores_only_original_idle_owner(native_backend, outc
         ))
         creation = await journal.private_inputs.fork(ForkSessionRequest(
             os.environ["PI_COMPACTION_TEST_PACKAGE"], str(native.session), str(native.project),
+            directory=str(native.session.parent),
         ), cwd=native.project)
         child_bytes = Path(creation.session_file).read_bytes()
         selected_children = []

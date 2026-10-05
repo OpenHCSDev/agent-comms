@@ -1,0 +1,171 @@
+{
+  "production_source": "9636b7d9b16bda87a68bf63d0cdca522ea8ef0fa",
+  "collector": "original audit.findings.Package.load / ParsedModule.tree",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 324,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 373,
+      "omissions": []
+    },
+    {
+      "root": "tools",
+      "parsed": 54,
+      "omissions": []
+    }
+  ],
+  "owner_methods": [
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 393,
+      "name": "require_recorded_selection",
+      "source": "def require_recorded_selection(self, journal: Path, original: str) -> None:\n        \"\"\"Corroborate this returned fork without minting owner/task authority.\"\"\"\n        from .compaction_journal import CompactionJournal\n        from .native_entries import NativeEntry\n\n        self.source.require_session(original)\n        recorded = CompactionJournal.observe_readonly(journal, lambda db:\n            type(self).one(db, session_file=self.session_file), absent=None)\n        if recorded != self:\n            raise CompactionJournalError(\"Native selection requires its original recorded SDK fork\")\n        with NativeEntry.open_evidence(self.source.path) as parent, NativeEntry.open_evidence(self.path) as child:\n            parent.observe()\n            if not self.source.covers(parent, self.source_revision) or (\n                FileRevision.from_stat(self.source.path.stat()) != self.source_revision\n            ):\n                raise CompactionJournalError(\"Original native fork parent changed before selection\")\n            _, entries = child.observe()\n            self.require_original_prefix(child, entries)"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 143,
+      "name": "require_idle_source_snapshot",
+      "source": "def require_idle_source_snapshot(self, snapshot: RegistrySnapshot) -> Thread:\n        \"\"\"Select history without granting a turn or borrowing its task scope.\n\n        Completed turns may change their generation and last-finished record.\n        The original process/admission/source/configuration and current task\n        scope must still agree; all actual turn fields stay with the document.\n        \"\"\"\n        self.thread.require_idle()\n        current = self._snapshot_owner(\n            snapshot, \"Idle native source owner changed\", RegistryIdentityCheck,\n        )\n        current.role.require_executable()\n        current.execution.require_native()\n        current.require_idle()\n        self.thread.task_scope.require_current(current)\n        return current"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 66,
+      "name": "selected_native_fork",
+      "source": "def selected_native_fork(self, original: RegistryOwner, creation: NativeForkCreation) -> Iterator[RegistryOwner]:\n        \"\"\"Select and restore SDK history under the same original idle owner.\n\n        The runtime caller retires its child before entering/exiting this\n        resource. No writer, wire or registry lock survives either publication.\n        A later completed turn's records stay current; replaced authority or\n        changed scope refuses restoration without overwriting the successor.\n        \"\"\"\n        creation.source.require_session(original.thread.require_saved_session())\n        with self._idle_fork_edit(creation) as edit:\n            change = edit.document.prepare_idle_native_source(original, creation.session_file)\n            self._commit_registration(edit, change)\n            selected = replace(original, thread=change.installed_thread)\n        try:\n            yield selected\n        finally:\n            with self._idle_fork_edit(creation) as edit:\n                change = edit.document.prepare_idle_native_source(selected, creation.source.session_file)\n                self._commit_registration(edit, change)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 407,
+      "name": "prepare_idle_native_source",
+      "source": "def prepare_idle_native_source(self, original: RegistryOwner, session_file: str) -> NativeSourcePublication:\n        \"\"\"Retain the idle owner's current turn/task records during selection.\"\"\"\n        current = original.require_idle_source_snapshot(self.snapshot())\n        return self._native_source_publication(current, session_file)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 412,
+      "name": "_native_source_publication",
+      "source": "def _native_source_publication(self, current: Thread, session_file: str) -> NativeSourcePublication:\n        return NativeSourcePublication(\n            thread=replace(current, session_file=session_file),\n            status=self.statuses[current.name],\n            previous=current, previous_status=self.statuses[current.name],\n        )"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 184,
+      "name": "selected_native_fork",
+      "source": "async def selected_native_fork(self, session_id: str, original: RegistryOwner, creation: NativeForkCreation):\n        \"\"\"Borrow SDK fork history without replacing the loaded owner or USER.\n\n        Register the original publication resource before returning from its\n        joined worker. Cancellation after publication must still retire the\n        selected child and restore through that resource's exact owner fence.\n        Turn/child locks are held only around each swap, never across the\n        constructor/observer/prompt that acquires those same resources.\n        \"\"\"\n        selection = ExitStack()\n        try:\n            async with self._attachment_lock:\n                self.require_original_local_binding(session_id, original)\n                async with self.effects.turns.idle_backend(session_id) as persistent:\n                    if persistent is None:\n                        raise RelationViolationError(\"Native fork selection requires an idle turn\")\n                    await persistent.close()\n                    selected = await Coordination.run_worker(partial(\n                        selection.enter_context,\n                        self.comms.registry.selected_native_fork(original, creation),\n                    ))\n            yield selected\n        finally:\n            await join_retirement(asyncio.create_task(self._restore_native_fork(session_id, original, selection)))"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 209,
+      "name": "require_original_local_binding",
+      "source": "def require_original_local_binding(self, session_id: str, original: RegistryOwner) -> None:\n        if self.require(session_id) != original.thread.name or session_id in self.proxies:\n            raise RelationViolationError(\"Native fork requires the original loaded local owner\")"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 213,
+      "name": "_restore_native_fork",
+      "source": "async def _restore_native_fork(self, session_id: str, original: RegistryOwner, selection: ExitStack) -> None:\n        async with self._attachment_lock:\n            self.require_original_local_binding(session_id, original)\n            async with self.effects.turns.idle_backend(session_id) as persistent:\n                if persistent is None:\n                    raise RelationViolationError(\"Native fork restoration requires the original turn to finish\")\n                await persistent.close()\n                await Coordination.run_worker(selection.close)\n            current = await Coordination.run_worker(lambda:\n                original.require_idle_source_snapshot(self.comms.registry.snapshot()))\n            await self.effects.turns.prepare_selected_session(session_id, current)"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 485,
+      "name": "close_idle_backend",
+      "source": "async def close_idle_backend(self, session_id: str) -> None:\n        async with self.idle_backend(session_id) as persistent:\n            if persistent is not None:\n                await persistent.close()"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 491,
+      "name": "idle_backend",
+      "source": "async def idle_backend(self, session_id: str):\n        \"\"\"Hold this session's turn and child acquisition until an idle effect ends.\n\n        Configuration retirement remains conditional on an idle owner. Source\n        selection uses this same resource and refuses a busy owner. Neither\n        consumer can close a child after a new turn acquired it.\n        \"\"\"\n        lock = self.turn_locks.setdefault(session_id, asyncio.Lock())\n        if lock.locked():\n            yield None\n            return\n        async with lock:\n            if await Coordination.run_worker(partial(self.session_busy, session_id)):\n                yield None\n                return\n            persistent = self.persistent_backends.setdefault(session_id, backend.PersistentPiSession())\n            async with persistent.lock:\n                yield persistent"
+    }
+  ],
+  "consumers": [
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 280,
+      "call": "self.effects.turns.close_idle_backend(session_id)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 76,
+      "call": "edit.document.prepare_idle_native_source(original, creation.session_file)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 95,
+      "call": "creation.require_recorded_selection(self.store.path.parent / 'compaction-commits.sqlite3', creation.source.session_file)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 83,
+      "call": "edit.document.prepare_idle_native_source(selected, creation.source.session_file)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 405,
+      "call": "self._native_source_publication(current, session_file)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 409,
+      "call": "original.require_idle_source_snapshot(self.snapshot())"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 410,
+      "call": "self._native_source_publication(current, session_file)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 215,
+      "call": "self.require_original_local_binding(session_id, original)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 196,
+      "call": "self.require_original_local_binding(session_id, original)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 216,
+      "call": "self.effects.turns.idle_backend(session_id)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 301,
+      "call": "self.effects.turns.close_idle_backend(session_id)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 197,
+      "call": "self.effects.turns.idle_backend(session_id)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 207,
+      "call": "self._restore_native_fork(session_id, original, selection)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 222,
+      "call": "original.require_idle_source_snapshot(self.comms.registry.snapshot())"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 203,
+      "call": "self.comms.registry.selected_native_fork(original, creation)"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 486,
+      "call": "self.idle_backend(session_id)"
+    },
+    {
+      "path": "tests/test_same_owner_native_fork.py",
+      "line": 42,
+      "call": "agent.sessions.selected_native_fork(session, original, creation)"
+    }
+  ],
+  "limits": "Syntax and source closure only. Real saved-SDK authored controls unrun. Initial explicit attachment, leased source observation and stopped restoration remain distinct authority lifetimes."
+}
