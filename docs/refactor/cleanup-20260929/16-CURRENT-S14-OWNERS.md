@@ -2252,3 +2252,15 @@ Publicstyle22 CURRENT444 remains protected. Arendt configured02 command721fe and
 all referenced source/declaration/checkpoint/archive hashes were read and matched;
 its one distinct Sol/HIGH input still requires its own fresh THIN540 purpose and
 NEW086 authority. The prior STARTED/refusal remains immutable; no study is granted.
+
+### Concrete stopped-carry control counterexample
+
+Parent's later signature/lifetime read found two control errors in663:
+SchemaMeta.require_current requires (db, version), but both new calls omit
+version; CoordinationSession.read yields no connection, while the control uses
+its yielded value as db. Constructing that session also opens the initializing
+owner for a purported read-only acceptance. Mendel owns migration of both
+control reads to original CoordinationStore.observing and the declared
+SQLiteUserVersion/SchemaMeta contract. Ordinary readers remain unchanged.
+The earlier carry-owner review does not qualify these faulty control calls.
+No installed gate was run to discover them, and no source-only PASS is claimed.
