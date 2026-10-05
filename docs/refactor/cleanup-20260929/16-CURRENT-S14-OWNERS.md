@@ -13,8 +13,16 @@ actual defaults and route pointing to485, and schema10-to10 Preserve. Accepted
 466 worker behavior is now enabled in the real public bundle (selected Core3931/
 Toad289f/Text67, not later MAIN681 or unqualified Heis native71). Parent returned
 the one-use native claim in55ff39ca; keeper remains shared by the real runtime.
-Fresh stationary ordinary default UI verification is assigned to originalMendel;
-it is still pending, with no repeated18-check journey or speed claim. Heis07
+Fresh stationary ordinary default UI observe01 failed19.619s because its legacy
+inspection helper still reads deleted DocumentViewport._running. Parent reviewed
+the after image: saved body, Ready roster/session and connected/model footer are
+visible, but metadata export and graceful completion are not accepted. Whole
+client return77fae310 and all16 retained references match; recorded processes,
+groups and display sockets are gone. Heis already owns the exact helper fix1cce
+deriving reconciliation from the worker. Mendel is preparing a separate changed-
+helper observe02 using Heis existing corrected source, preserving the first
+failure; no repeated18-check journey or speed claim. No observe02 client is live
+from preparation alone, and returned01 cannot hold Heis07 source admission. Heis07
 must reconcile its later source decoder with this actual new publication before
 source READ/App release; stage/proof remain independent.
 

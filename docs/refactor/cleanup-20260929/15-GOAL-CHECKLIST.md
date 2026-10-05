@@ -3122,8 +3122,11 @@ BLOCKED/ACTIVE observations remain historical, with no goal-tool resume/replay.
   settings/history/root and actual default links on target485. Native schema
   remains10 via Preserve; receipt0c603573 and one-use return55ff39ca retained.
 - [ ] Verify the fresh471 ordinary default UI attachment. OriginalMendel owns
-  stationary saved-body/Ready/actual exit verification with a copied UI state;
-  no18-check ordinary journey, accepted466 control or speed claim is repeated.
+  stationary saved-body/Ready/actual exit verification with a copied UI state.
+  Observe01 visibly painted saved history/Ready but failed metadata export on the
+  retired viewport field; raw failure and whole77fa return are preserved. Reuse
+  Heis existing corrected helper for separate observe02; no18-check ordinary
+  journey, accepted466 control or speed claim is repeated.
 - [ ] Heis460 final06 includes accepted466 in one normal union wheel and fixes
   right-sidebar disclosure plus all related worker observers. The unchanged
   full150s cold/wheel/width/reversal/End/B-A run reached all motion/tab phases
