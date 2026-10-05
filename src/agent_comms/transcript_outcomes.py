@@ -1,5 +1,7 @@
 """Paging evidence for original compaction journal outcomes, not admission state."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, replace
 
 from .thread_identity import ThreadIncarnation
