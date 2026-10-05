@@ -46,20 +46,39 @@ root inputs and all retained build files. New handoffc5af80 records Core3931
 provenance even though the wheel bytes equal historical2ece. Original old
 provenance remains immutable. Sch owns receiving commands. The typed attempt has now returned formerstyle22
 and Bohr independently closed its purpose29026 after exact current465 floor
-restoration. This is a possible receiving holder; a fresh final command plan,
-actual floor/origins/reference checks and specific grant remain necessary.
+restoration. Bohr issued fresh preparation-only687a at the actual current465
+floor. Sch staged only the new Toad and Text71 wheels once, leaving Core unchanged.
+Before the first proof, Bohr found four original symlink records whose mode/link
+checks followed the targets or used the wrong declared field. Sch corrected the
+existing check to lstat and the issued target field; no record/schema change or
+failed proof occurred. The sole proof then passed6.696s. Parent hash/size-checked
+all23 handoff references9cff95 and independently found controller2213467 and
+child2213485 absent. The receipt proves953 installed assets, all69 packages,
+preserved originals and READ-only native FullTrust. Bohr released the four original
+preparation commands under lifecycle818e78 after independent installed-byte
+readback. Canonical/cohort execution remains pending; public publication is future.
 Receiving preparation advances independently of performance and native guard work.
 Continuous468 controls are now normally landed through474; configured execution,
 loaded scaling and startup/frame/CPU gains remain unfinished. Sch published
 receiving475; its effective planfa833 corrects both receipt/preimage descriptors
 to the new own output while retaining the actual command body and203 evidence
-references. Bohr is advancing its fresh preparation-only holder checks.
+references. Bohr bound the completed proof and released the four original
+preparation commands once. Scoped public declaration/checkpoint READ is allowed
+only inside the cohort; no App or publisher is released by this preparation.
 Parent found the future continuous output would exceed the original Unix
 socket path limit before any run; Heis published the short operand correction
 in8373e796 without product/helper/build changes. The
-current warm-tab admission still repeats PresentationBudget decisions and
-omits retained paint bytes. Heis owns the existing presentation/viewport
-correction on a separate source branch, preserving frozen474 receiving inputs.
+warm-tab source correction is published in Draft476. The original viewport
+projects registered body source/paint costs; presentation adds actual native
+widget cardinality; NativeSessionSurface delegates admission to the existing
+PresentationBudget with required selected cost and actual recent tabs. The
+repeated threshold decisions and foreign warm-state access are deleted. The
+mounted control at2ae78 now requires both actual retained identity/raw-read
+return and real presentation eviction/editor-reader return, reporting each
+entered and verified branch. This is source-only, not installed acceptance.
+Heis owns the remaining configured and genuine loaded source work; Parent has
+authorized one necessary normal Toad build after stable production source,
+with no runtime purpose inferred. Frozen474 receiving inputs remain unchanged.
 
 MCP472/682 preparation identified an inactive network preload. OriginalSch
 published685 canonical pre-SDK fetch-origin guard; one necessary native assembly
@@ -81,6 +100,15 @@ effective future9e3b with the selected new4b deployment/5d661 Core wheel and
 explicit direct-loopback proxy-selector removal. Parent has directed Bohr to
 assess the returned334 installation independently of receiving style22. This
 source preparation creates no reservation, runtime access or test result.
+The old native command's pytest socket paths would be133 bytes. Mendel published
+b79404ad short-root operandsb0dd55: all four source-derived paths are100 bytes
+at worst-case PID length, under the original107-byte bound. Bohr's actual334
+assessment distinguishes1468 captured members/945 original package assets/full69
+from style22's1477 floor and additionally preserves five original environment
+nodes outside the historical archive. The selected three candidate wheels,
+original four-wheel restore and child-join commands are now bound in the source
+proposal. Parent relayed it to originalBohr successfully. Fresh issue, installed
+proof, matching4b READ/EXEC and actual four-case acceptance are still future.
 
 S4 source683 is normally merged208b8f07 after review of complete arm acquisition,
 inputs/cuts/probes and cleanup clocks. Four authored orchestration controls and
@@ -103,13 +131,29 @@ purposescf1f/7329 with fresh floor2248 and243-process census341b: no private
 references or permission gaps. Core684 frozen7ab72 is normally mergedd41d725f.
 This is a newly built genuine old-source producer, not historical installation
 equivalence; central-batch and routing acceptance remain unqualified.
+Einstein published Draft686bc627 source-method proposal for the remaining routing
+reader relation. Parent read the original projection, archive and deferred
+transcript owners and confirmed that target-decoding the old registry precedes
+provenance and that deferred reads lose their selected historical source.
+Source implementation is cleared through the existing original codec projection,
+HistorySource fences and declaration-owned live/recorded transcript members.
+Recorded reads cannot admit or settle live turns. Einstein and Heis received
+exact Toad reader/snapshot/historical-loader coordination before consumer writes;
+no peer worktree, new decoder, registry rewrite or runtime authority is allowed.
+The stopped routing qualifier must report central_batch_used=false; genuine
+old-owner live batch remains a separate unqualified relationship.
 
 Core681 fork-source delivery is actually merged38a0533e at frozen3dc11331.
 Its nine authored source checks support recorded inheritance, not independent
-workflow costs or timing. OriginalArendt has resumed the remaining source/summary
-producer family on a fresh branch in the same checkout. Separate arm execution
-and accounting remain unfinished; this source work grants no SDK/provider run
-or paid study. OriginalMendel separately owns the related Core MCP qualifier
+workflow costs or timing. The683 source producer now owns separate complete arm
+acquisition through joined cleanup clocks; actual configured execution remains
+unrun. Arendt completed source-only effective685 candidate binding81795/333605,
+reusing the one Sch5d661 wheel and new4b commitment while preserving the683 runner.
+Remaining actual operands are authenticated retained-source origin-key absence,
+InstalledSource/fresh holder-purpose/proof, explicit one-pair18-input cost and
+whole-operation walltime authority, and separate native READ/EXEC. Controller
+null alone does not prove source environment absence. No paid study or provider
+input is authorized by this source preparation. OriginalMendel separately owns the related Core MCP qualifier
 consumer migration; its native acceptance remains unrun.
 
 Fresh PUBLIC471 attachment is now accepted at stationary UI strength. Observe02
