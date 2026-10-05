@@ -3504,3 +3504,29 @@ Arendt is tracing original acquired completion provenance for resource scopes;
 shared/missing workflow ownership cannot supply conditional cost acceptance.
 Continuous468 and fast loading, wheel/frame/CPU acceptance remain unfinished.
 PUBLIC465 and original histories/auth/UNKNOWN are preserved.
+
+### Original accounting source merged; viewport successor issued, 2026-10-05
+
+Parent reviewed Core680 finalf95c6ee8 and normal-merged3931f16f, then normally
+joined this integration branch. Three changed source files, original checkpoint
+corroboration and all model-step/scorer consumers were read. The original3
+source,4 raw,2 AST and2 authored CLI input hashes matched receipt058ff53d.
+Thirteen affected source checks passed; runtime/stack/tools/pins are unchanged.
+RecordedNativeCheckpoint/Probe project acquired JournalProvenance and
+ScoredScenario uses one accounting_partition for pair and batch decisions.
+Shared/reused/missing completion ownership withholds conditional cost-margin
+acceptance; descriptive totals, zeros and missing denominators remain visible.
+No configured workflow, independent timing, billing or study acceptance follows.
+Arendt continues the original common-ancestry/source-matching relationship in
+the same finished worktree, before changing the complete-arm runner.
+
+466 corrected02 is independently closed ate4927d6b with readback3aeee2f4:
+all31 rawkeepers and1467/69 RAWorigins/266+1865/activation exact,222UID refs0
+and gaps0, original public7a references preserved. Its failed assertion and
+unreached preparation-close assertion stay explicit. Bohr issued fresh
+SessionView03 purpose3e2801 after a new217UID/floor check, with sole Einstein
+Toad stage and the unchanged b2e wheel. Correcteda8e774 control, bf751 proof
+and runtime9873 are bound; proof/App still require the actual new READ and
+proof/release. The immediately preceding6d265 return governs this continuation,
+not the older09bc descriptive record. No build, native execution, provider input
+or performance wait is required for this mounted worker check.
