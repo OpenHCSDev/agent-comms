@@ -67,10 +67,22 @@ No new scanner or dependency installation is used.
 
 Parent #673 owns `GoalWait.current_for` and related wait-policy consumers;
 this branch changes only the coordinated input-review and settlement
-sections. Native lifecycle owners were notified before these edits.
+sections. Native lifecycle owners were notified before these edits. Its
+actual merge `a7cc1da6cb5442e666c0a61012e6ef7de5eb865d` is normally joined;
+`goal_waits.py` and `tests/test_goal_standby.py` have no branch delta against
+that main. `AFTER.json` records the implemented owner call sites (18 methods),
+with the same 324 production modules parsed and zero omissions.
 
 No tests, installed package, native process, provider or public operation has
 run for this change. Final acceptance must cover current/replaced/cleared
 goal selection, owner pause, same-ID later revision settlement, exact CAS and
 certified reply consumption through their real owners under a separately
 issued purpose. Earlier C3/SDK receipts do not qualify this changed family.
+
+Existing input-review/nominal fixtures which merely call `wire(...)` do not
+by themselves establish a private-bus initial marker. The accepted
+`goal_owner_fixture.canonical_goal_wire` is the original producer for a
+future canonical goal control. Do not invent a marker or alter readers to
+qualify these selectors. The real ACP settlement cases in `test_acp.py`
+remain stronger, separate native/provider boundaries and cannot be replaced
+by a direct `Goal` construction or a fabricated terminal event.
