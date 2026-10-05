@@ -6,9 +6,12 @@ Use the newest current-owner section linked above for installation and acceptanc
 The historical436,440 and444 entries below must not override the current
 publication recorded in16. Authentic AnnotationNode/GUI USER/effective-label
 refresh has passed, and the same-input configured construction reader has
-passed; their original negative receipts remain preserved. Remaining requirements
-are full performance/workflow, historical Explorer read/search/export and stopped
-schema carry, W7/W8, full S4, and the original cutover writer cross-version restart scope.
+passed; their original negative receipts remain preserved. Historical Explorer
+read/search/export and the authored stopped9-to10 carry have now passed their
+distinct installed scopes and whole-purpose closures. Remaining requirements
+are ordinary functional Explorer integration/publication, the assigned complete
+range-identity successor, full performance/workflow, W7/W8, full S4, and the
+original cutover writer cross-version restart scope.
 The writer current-schema private boundary has passed; that narrower result
 does not establish its cross-version restart. Their current owners, actual evidence and next
 actions are recorded there; source closure and live acceptance remain distinct.
