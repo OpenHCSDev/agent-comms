@@ -1769,6 +1769,19 @@ configured continuous workflow.
   and resource retirement while removing repeated work through the original
   geometry owner. Frozen Textual08e3/487 and Heis453 qualification stay unchanged.
   This is source ownership, not measured CPU dominance or smooth-frame acceptance.
+- The released453 first App is now consumed FAIL6.690911882s before worker or
+  session assertions: the authored control called reserve_source_work before
+  mounting establishes TranscriptHistory.window. No acceptance receipt or
+  latency conclusion follows. Heis reports exact4851441/69/155/1883 restoration
+  and READ return complete in handback14bbf258; Bohr independent closure remains
+  required. Original terminal/logs stay immutable; no retry under d365.
+- Mendel675 now has canonical controls and two genuine saved-SDK settlement
+  controls at46124bbd. They are prepared, not run. Parent found a proposed native
+  mismatch: reviewed Core forced manifest owns7a/tree0d7ff while the proposal
+  named086. Mendel owns the effective operand correction before a fresh purpose.
+  Future bounded acceptance is canonical controls followed by two authored
+  localhost native inputs, exact new Core wheel proof and whole floor handback;
+  no external provider/public input or expired673 loan is authorized.
 - Original C0 family/source ledger and C4 stated class-size target have current
   evidence. Full six-file C3, TC1/T9 resource closure, loaded scaling, configured
   continuous workflow and smooth wheel/useful paint remain explicitly unfinished.
