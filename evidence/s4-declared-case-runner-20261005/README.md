@@ -94,4 +94,16 @@ The #676 installed proposal at `eb8edcda` was read and its declared SHA
 `7f0faf790ea4a9a8195976882ddc80eb1bfb332c7cdc85c0719b3efc66f37252`
 matched. All listed control/build-input files also match this checkout. It is
 still a proposal: no build, staging, artifact access or installed gate has begun
-here. Historical 675 runner/proof templates are not executable operands.
+in this S4 checkout. Historical 675 runner/proof templates are not executable operands.
+
+Mendel subsequently qualified the unchanged #676 production at `48b7db67`:
+seven installed saved-SDK cases passed in 61.24s, with one actual ACP/localhost
+input and six zero-input cases. Completion/cancellation restored parent custody;
+owner/configuration entry and exit changes preserved successor children. The
+original handback is `.artifacts/same-owner-native-fork676-corrected-installed02/whole-handback.json`
+in the goal-ledger checkout, SHA `9e2a79e0c4f16ac6a7b26e09334d2b7215f627485b28146cd15b5736510999bf`.
+Its raw stdout, XML, terminal and restored-floor hashes were checked. Production
+and control bytes are unchanged from the joined checkpoint. This qualifies the
+selected-fork resource, not this S4 paired runner, external configured provider,
+UI, performance or study. Owner handback reports joined children and exact floor
+restoration; Bohr's independent closure remains separate.
