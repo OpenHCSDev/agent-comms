@@ -2906,3 +2906,32 @@ runs with nra1817557/birth65371423 unchanged. Actual terminal/cleanup/personal
 after-terminal images remain required; no results are inferred from admission.
 Original first preUI refusal9679fd28 and historical PREFIXactivation stay intact.
 No SDK/provider/newinput/movie/profile/package or second publication occurs.
+
+### Ordinary public Explorer acceptance complete, 2026-10-05
+
+The changed-observer public44802 original channel-lifetime still-image journey
+completed63.059175601s with all18 native checks true. Receiptc7a978e4 and Heis
+personal after-review409f475a are retained under agent-scratch/public448-ordinary-
+display-20261005-02. Parent hashed the receipt, read all18 checks, personally
+viewed the SAME warm-ready/channel-return/native-return PNGs after terminal and
+rechecked UI1941318 absent plus original nra1817557/birth65371423 alive unchanged.
+Body/editor/sidebar/status are readable with no full-body blank in those images.
+Parent review21f6a66d is .release-private/receiving448-functional-20261005/
+ordinary-public-after-review.json. Cleanup has no remaining processes/errors;
+runtime/origins remained unchanged and all owned private copies were retired.
+
+This completes the ordinary default startup/channel/tab-return/draft/Undo/body
+readiness acceptance for PUBLIC448. It is not moving-frame smoothness, fast
+thread first paint, configured queue/reply/permissions, full loaded scaling or
+S4/W7/W8 acceptance. Original preUI refusal9679fd28 remains immutable. No extra
+UI attempt, package change or publication is needed for this accepted checkpoint.
+Performance source integration and its original affected installed motion remain
+active with Heis and Kepler; no full-goal completion claim follows.
+
+C3 corrected source48fe470f/11ab3e0f changes only two authored calls to the
+existing RegistryOwner.turn_lease property. Parent personally hashed corrected
+proposal159a6eee/control4cc89468 and verified production/stack/pins byte equality
+to retained a685. Bohr closed consumed675e455 after exact original540 restoration.
+Fresh successor request selects only the changed reply case then originally
+unrun native2 after PASS/new7a authority; the five original passing scopes are
+not repeated and the failed private peer lease stays untouched.

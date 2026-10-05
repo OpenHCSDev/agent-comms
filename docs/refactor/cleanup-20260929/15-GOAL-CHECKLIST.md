@@ -9,8 +9,7 @@ refresh has passed, and the same-input configured construction reader has
 passed; their original negative receipts remain preserved. Historical Explorer
 read/search/export and the authored stopped9-to10 carry have now passed their
 distinct installed scopes and whole-purpose closures. Remaining requirements
-are ordinary functional Explorer public UI acceptance, full
-performance/workflow, W7/W8, full S4, and the
+are full performance/workflow, W7/W8, full S4, and the
 original cutover writer cross-version restart scope.
 The writer current-schema private boundary has passed; that narrower result
 does not establish its cross-version restart. Their current owners, actual evidence and next
