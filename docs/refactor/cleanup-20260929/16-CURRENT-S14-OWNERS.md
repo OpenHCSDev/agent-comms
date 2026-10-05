@@ -23,8 +23,20 @@ deriving reconciliation from the worker. Mendel is preparing a separate changed-
 helper observe02 using Heis existing corrected source, preserving the first
 failure; no repeated18-check journey or speed claim. No observe02 client is live
 from preparation alone, and returned01 cannot hold Heis07 source admission. Heis07
-must reconcile its later source decoder with this actual new publication before
-source READ/App release; stage/proof remain independent.
+has explicitly reconciled its decoder with the actual PUBLIC471 interpreter.
+Bohr final release705005a1 binds separate native EXECfde190 and the append-only
+effective controllerd15c; the historical old-source wrapper remains unexecuted.
+Stage and proof each passed once. Heis owns the sole150-second launch; no live
+process or result is inferred from the release. Observe02 can run after the
+actual public source witness returns, without waiting for the whole private job.
+
+Core681 fork-source delivery is actually merged38a0533e at frozen3dc11331.
+Its nine authored source checks support recorded inheritance, not independent
+workflow costs or timing. OriginalArendt has resumed the remaining source/summary
+producer family on a fresh branch in the same checkout. Separate arm execution
+and accounting remain unfinished; this source work grants no SDK/provider run
+or paid study. OriginalMendel separately owns the related Core MCP qualifier
+consumer migration; its native acceptance remains unrun.
 
 Latest installed verification: 460 successor05 reached saved-body/draft paint
 and failed its width action because the right SessionThreadSidebar was still
@@ -66,8 +78,10 @@ not exited. Changed full-workflow runtime acceptance remains unrun. No second
 launch or deadline increase is authorized under consumed06. Heis published fresh07
 proposal14f045f7 at7898cceb with only the recorder changed among20 helpers; all
 product/build inputs still match retained union25dae/2ece. Bohr has issued
-fresh07 purpose43b54ee0, stage only. Proof and the one full-motion run wait for
-their original fresh authority and actual bindings; no runtime result is claimed.
+fresh07 purpose43b54ee0. Its stage passed0.198s and installed proof passed3.310s,
+with all953 assets/full69 and protected files verified. Final release705005a1
+authorizes the one full-motion run through the corrected PUBLIC471 controller;
+launch and acceptance still require actual process and terminal evidence.
 
 466 SessionView03 passed the actual mounted check in6.138s: cancellation before
 entry, same-source resume, three coalesced requests and joined close/App and
