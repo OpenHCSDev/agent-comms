@@ -83,9 +83,15 @@ is used in the paired `finally`, and the standalone owned resource closes while
 its observer is still alive. `application-cleanup-source-contract.json` records
 all private caller sites and the absence of generic backend-close calls.
 
-Four authored failure/cancellation controls are source-prepared. They execute
+Four authored failure/cancellation controls passed in 0.24s at `9ff63473`. They execute
 the original private function declarations with controlled boundary calls; they
 do not load the complete ACP module or prove actual native custody. They have
-not run against this corrected capability contract. The earlier intermediate
+now checked the corrected capability consumer contract. The earlier intermediate
 generic-finally control log (four PASS/0.18s) remains separately preserved and
 does not qualify this new contract. No new configured, SDK or provider run began.
+
+The #676 installed proposal at `eb8edcda` was read and its declared SHA
+`7f0faf790ea4a9a8195976882ddc80eb1bfb332c7cdc85c0719b3efc66f37252`
+matched. All listed control/build-input files also match this checkout. It is
+still a proposal: no build, staging, artifact access or installed gate has begun
+here. Historical 675 runner/proof templates are not executable operands.
