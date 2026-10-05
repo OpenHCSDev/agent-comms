@@ -1,0 +1,156 @@
+{
+  "source_revision": "04c9b084d2c833c72b8bad696b1d9e8fb1af612f",
+  "source_sha256": {
+    "tests/compaction_retention_fixture.py": "79b46a3699b27067f0cd4ef781f8096c6ecd933daa89598e634cc961d1641b5c",
+    "tests/three_cut_retention_configured_journey.py": "9a2ae4ec012fb5408662a1e9f322d723b00071a6066eae0981138fed805dab5b",
+    "tests/test_recorded_retention_measurements.py": "fdc574d9945f84109aed77d0d36f17f9dbce21f38272e95f2a0ed76d6cc8de7e"
+  },
+  "AST": {
+    "SOURCE-BEFORE.json": "334e861749ec01e4027c320e7c1cd0b1725ae4d469531f095c87eb7d2db18c19",
+    "SOURCE-AFTER.json": "774e2fc6cfc39de84ce8269c4a38ce528fa51f070c2b6af87c79f78606f8c7ac"
+  },
+  "raw_keepers": {
+    ".artifacts/s4-workflow-resource-margins-20261005/authored-design.json": "6469b9c2c5de8ec476150a3e029967f8a2c8c9c0516d3b38eee1de2c2eb7a1a5",
+    ".artifacts/s4-workflow-resource-margins-20261005/authored-oracle.json": "8f47c9772f605382bb907108e9401a51d6537e8c1a42395dc7fc338b63569859",
+    ".artifacts/s4-workflow-resource-margins-20261005/cli-terminal.json": "ca19c33091f64f19ed132478f1e33ba688d63ca252308ad379a4664cf5aac77c",
+    ".artifacts/s4-workflow-resource-margins-20261005/construction-plan.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".artifacts/s4-workflow-resource-margins-20261005/construction-plan.stdout.json": "29d71ba3f482612ebf423d10c4ef951f7d59f2558f954a89631aeb2dbe16bdef",
+    ".artifacts/s4-workflow-resource-margins-20261005/empty-original-pairs.json": "10a07102ce956818a7f6bf9f48b59dac8fd4ef54090542a61cfe8b1a406c1285",
+    ".artifacts/s4-workflow-resource-margins-20261005/final-cli-terminal.json": "ffdfef13d1d7b650e686baaa60bab4dcc593ebc834bca908bd718cece562bf15",
+    ".artifacts/s4-workflow-resource-margins-20261005/final-controls.log": "f001d02ad212697db2f9d171db00a51d757262df8388e2c321d4f65e9720df3f",
+    ".artifacts/s4-workflow-resource-margins-20261005/final-missing-records.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".artifacts/s4-workflow-resource-margins-20261005/final-missing-records.stdout.json": "aab29fd0e01c1d6c4ca4d23b03a13a45a0d2ca7046e227f9aeb95e10fc718a1a",
+    ".artifacts/s4-workflow-resource-margins-20261005/initial-control-encoder-refusal.log": "017cf371c3c71263a8b9dbe8fe6126f56cc09e6d99ac5d01a09ffd24762a3a20",
+    ".artifacts/s4-workflow-resource-margins-20261005/missing-records.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".artifacts/s4-workflow-resource-margins-20261005/missing-records.stdout.json": "8df4512432d8bad719b38aaed07a22dac1cf0f6f2b2e6aa954e1c8f41dbb3125",
+    ".artifacts/s4-workflow-resource-margins-20261005/pre-shared-alignment-controls.log": "23804d73500abf3dbe83d382197e717a6067f2d4895a5534111a70cb213cc682"
+  },
+  "checks": {
+    "final_authored_controls": "10 PASS / 0.045s; clock membership/hash/absence; exclusive p95/all samples/zero; supplied margins/shared matching; original resource denominators",
+    "prospective_CLI_exit": 0,
+    "final_missing_records_CLI_exit": 0,
+    "final_missing_records": {
+      "resource_margins": {
+        "normalized_cost": {
+          "evaluated": false,
+          "margin": 0.1,
+          "measurement": {
+            "evaluated": false,
+            "candidate": {
+              "evaluated": false,
+              "value": null,
+              "expected_trajectories": 2,
+              "observed_trajectories": 0,
+              "observed_value": null
+            },
+            "baseline": {
+              "evaluated": false,
+              "value": null,
+              "expected_trajectories": 2,
+              "observed_trajectories": 0,
+              "observed_value": null
+            },
+            "difference": null,
+            "relative_reduction": {
+              "evaluated": false,
+              "value": null,
+              "reason": "Complete original arm observations required"
+            }
+          },
+          "meets_margin": null,
+          "reason": "Original matched source/model observations unavailable"
+        },
+        "workflow_p95": {
+          "evaluated": false,
+          "margin": 0.1,
+          "measurement": {
+            "evaluated": false,
+            "candidate": {
+              "evaluated": false,
+              "value": null,
+              "expected_trajectories": 2,
+              "observed_trajectories": 0,
+              "observed_seconds": []
+            },
+            "baseline": {
+              "evaluated": false,
+              "value": null,
+              "expected_trajectories": 2,
+              "observed_trajectories": 0,
+              "observed_seconds": []
+            },
+            "difference": null,
+            "relative_reduction": {
+              "evaluated": false,
+              "value": null,
+              "reason": "Complete original arm observations required"
+            }
+          },
+          "meets_margin": null,
+          "reason": "Original matched source/model observations unavailable"
+        },
+        "scope": "Conditional supplied-design arithmetic on original matched selections; SDK-normalized cost is not billing; shared source preparation is not independent arm cost; missing margins/clocks stay unavailable; no registration, intervention, capacity or study acceptance",
+        "original_alignment": {
+          "evaluated": false,
+          "reasons": [
+            "Pair 1, round r1: original alignment unavailable",
+            "Pair 1, round r2: original alignment unavailable",
+            "Pair 1, round r3: original alignment unavailable",
+            "Pair 2, round r1: original alignment unavailable",
+            "Pair 2, round r2: original alignment unavailable",
+            "Pair 2, round r3: original alignment unavailable"
+          ]
+        }
+      },
+      "paired_workflow_timing": {
+        "evaluated": false,
+        "reasons": [
+          "candidate trajectory 1: Original workflow clock not recorded",
+          "candidate trajectory 2: Original workflow clock not recorded",
+          "baseline trajectory 1: Original workflow clock not recorded",
+          "baseline trajectory 2: Original workflow clock not recorded"
+        ],
+        "p95_seconds": {
+          "evaluated": false,
+          "candidate": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_seconds": []
+          },
+          "baseline": {
+            "evaluated": false,
+            "value": null,
+            "expected_trajectories": 2,
+            "observed_trajectories": 0,
+            "observed_seconds": []
+          },
+          "difference": null,
+          "relative_reduction": {
+            "evaluated": false,
+            "value": null,
+            "reason": "Complete original arm observations required"
+          }
+        },
+        "method": "Empirical nearest-rank p95 over complete original workflow spans",
+        "scope": "Exclusive original input-set workflow clocks only; shared paired preparation is not independent arm time; no S1, provider-time or study acceptance"
+      },
+      "study_acceptance": {
+        "evaluated": false,
+        "reason": "Recorded pairs do not supply a registered design, verified condition construction or complete cost/end-to-end journeys"
+      }
+    }
+  },
+  "deleted_decisions": [
+    "ScoredScenario duplicate sample-count/original model matching loop now borrows PairedRecallDesign.pair_alignment",
+    "Runner post-report receipt rewrite replaced by one completed stable receipt borrowed by both arm records"
+  ],
+  "scope": {
+    "src_stack_tools_pi_pyproject_delta": "",
+    "SDK_native_holder_provider_inputs": 0,
+    "clock_producer": "Source-only, configured execution not run. Existing two-arm runner records one shared span, not exclusive arm p95. No old clocks reconstructed.",
+    "accepted": "Authored measurement arithmetic and existing CLI availability/planning plumbing only",
+    "remaining": "Exclusive per-arm configured workflow observations, genuinely independent resource accounting, registered interventions/capacity/study and billed spend not qualified. USD75/30pair study remains unapproved."
+  }
+}
