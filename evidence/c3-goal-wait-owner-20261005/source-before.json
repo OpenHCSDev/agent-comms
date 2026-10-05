@@ -1,0 +1,74 @@
+{
+  "revision": "0eb24932ab97ec91bb3451b69509e6d96784df45",
+  "roots": {
+    "src/agent_comms": {
+      "parsed": 324,
+      "omissions": []
+    },
+    "tests": {
+      "parsed": 369,
+      "omissions": []
+    },
+    "tools": {
+      "parsed": 54,
+      "omissions": []
+    }
+  },
+  "validity_reads": [
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 187,
+      "expression": "wait.owner_created_at != owner.created_at"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 188,
+      "expression": "wait.revision > goal.revision"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 344,
+      "expression": "wait.owner_created_at != current.created_at"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 250,
+      "expression": "wait.owner_created_at != owner.created_at"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 251,
+      "expression": "wait.revision > goal.revision"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 185,
+      "expression": "wait.owner_created_at != thread.created_at"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 186,
+      "expression": "wait.revision > goal.revision"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 206,
+      "expression": "peer_wait.owner_created_at != peer.created_at"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 207,
+      "expression": "peer_wait.revision > peer_goal.revision"
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "line": 125,
+      "expression": "wait.owner_created_at == owner.created_at"
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 156,
+      "expression": "wait.owner_created_at == comms.registry.require('owner').created_at"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+[
+  {
+    "root": "src/agent_comms",
+    "modules": 324,
+    "omissions": 0
+  },
+  {
+    "root": "tests",
+    "modules": 370,
+    "omissions": 0
+  }
+]

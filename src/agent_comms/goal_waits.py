@@ -53,6 +53,17 @@ class GoalWait:
         ):
             raise ValueError("A reporting turn requires both its ID and generation.")
 
+    def current_for(self, goal: Goal, owner_created_at: float) -> bool:
+        """A retained wait can survive edits, but not replacement of its owner.
+
+        Callers select the row by goal ID before asking this question. A newer
+        goal revision preserves the declared wait; a future wait revision does
+        not belong to the observed goal snapshot.
+        """
+        return self.owner_created_at == owner_created_at and goal.accepts_observation(
+            self.goal_id, self.revision
+        )
+
     def matches(self, original: CommittedDelivery) -> bool:
         """Join original sender and addressed owner through the certified source."""
         return (
@@ -182,8 +193,7 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
             wait = rows.get(goal.id) if goal is not None else None
             if wait is not None and (
                 goal is None
-                or wait.owner_created_at != thread.created_at
-                or wait.revision > goal.revision
+                or not wait.current_for(goal, thread.created_at)
             ):
                 wait = None
             dependencies = targets if name == owner else (wait.targets if wait is not None else ())
@@ -203,8 +213,7 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
                 )
                 if peer_wait is not None and (
                     peer_goal is None
-                    or peer_wait.owner_created_at != peer.created_at
-                    or peer_wait.revision > peer_goal.revision
+                    or not peer_wait.current_for(peer_goal, peer.created_at)
                 ):
                     peer_wait = None
                 if GoalWaits.target_has_active_turn(target, snapshot) and peer.process_alive:

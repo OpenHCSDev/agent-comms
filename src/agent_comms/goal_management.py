@@ -184,8 +184,7 @@ class Goals:
             wait = rows.get(goal.id)
             if (
                 wait is None
-                or wait.owner_created_at != owner.created_at
-                or wait.revision > goal.revision
+                or not wait.current_for(goal, owner.created_at)
             ):
                 return ()
             closed = GoalWaits.closed_wait_group(canonical, wait.targets, rows, snapshot)
@@ -247,8 +246,7 @@ class Goals:
                 wait = waits.get(goal.id)
                 if (
                     wait is None
-                    or wait.owner_created_at != owner.created_at
-                    or wait.revision > goal.revision
+                    or not wait.current_for(goal, owner.created_at)
                     or not any(
                         snapshot.canonical_name(target.name) == canonical
                         and target.created_at == fence.identity.incarnation.created_at

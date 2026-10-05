@@ -1,0 +1,50 @@
+{
+  "source": "550c59ce1e91cde6ca78e413186ab0f8bdd40f97",
+  "product": "f60bb437d00ebc38561a12f96709d980d98ec36e",
+  "wheel": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/wheel/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "8546b4fcecc658e2ae9f2a1d91c30a4e1c005a96ca003971be88b28c12e71c82",
+  "asset_count": 355,
+  "wheel_proof": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/wheel-proof.json",
+  "wheel_proof_sha256": "325b88522105f03e964ac18bd0fdc8b778b1389a924ab8e7f2236e865b83f6f4",
+  "proposed_prefix": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002",
+  "authority": "UNISSUED/unreserved; fresh actual eligibility/floor/refs and explicit package purpose required before prefix access",
+  "stage_argv": [
+    "uv",
+    "pip",
+    "install",
+    "--python",
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "--no-deps",
+    "--no-cache",
+    "--reinstall",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/wheel/agent_comms-0.1.0-py3-none-any.whl"
+  ],
+  "check_argv": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "-B",
+    "-c",
+    "import pathlib,sys,agent_comms,pytest; assert pathlib.Path(agent_comms.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()); raise SystemExit(pytest.main(['-o', 'addopts=', '--basetemp', '/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-check/authored', '-q', 'tests/test_goal_standby.py::test_standby_rejects_closed_wait_cycle_while_both_turns_are_active', 'tests/test_goal_standby.py::test_standby_allows_independent_alternative_to_wait_cycle', 'tests/test_goal_standby.py::test_liveness_check_releases_preexisting_closed_wait_group', 'tests/test_goal_standby.py::test_new_live_dependency_turn_keeps_old_wait_group_open', 'tests/test_goal_standby_liveness.py::test_terminal_hook_rechecks_goal_and_owner_identity', 'tests/test_goal_standby_liveness.py::test_last_target_finishes_silently_releases_once_and_reopens', 'tests/test_goal_standby_liveness.py::test_replaced_target_cannot_report_for_old_incarnation']))"
+  ],
+  "cwd": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+  "environment": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "/home/ts/wt/comms-cleanup-live-integration-20260929/tests",
+    "PI_COMPACTION_TEST_PACKAGE": null,
+    "AGENT_COMMS_ROOT": null
+  },
+  "output": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-check",
+  "selected_nodes": [
+    "tests/test_goal_standby.py::test_standby_rejects_closed_wait_cycle_while_both_turns_are_active",
+    "tests/test_goal_standby.py::test_standby_allows_independent_alternative_to_wait_cycle",
+    "tests/test_goal_standby.py::test_liveness_check_releases_preexisting_closed_wait_group",
+    "tests/test_goal_standby.py::test_new_live_dependency_turn_keeps_old_wait_group_open",
+    "tests/test_goal_standby_liveness.py::test_terminal_hook_rechecks_goal_and_owner_identity",
+    "tests/test_goal_standby_liveness.py::test_last_target_finishes_silently_releases_once_and_reopens",
+    "tests/test_goal_standby_liveness.py::test_replaced_target_cannot_report_for_old_incarnation"
+  ],
+  "source_tests": "Original frozen370-module test root at source revision; imported native fixtures are not selected or executed",
+  "limits": "Offline installed Comms/registry/wait graph and terminal-fence recovery only. No native artifact reads/execution, ACP process/App, SDK/provider/input/public/original-session access. Does not prove native done callback live path.",
+  "return_requirement": "Original actual THIN540347/94keepers/69metadata10/truthful5f origin + byte/mode/link/recorded original sources unchanged/restored and no added candidate assets; owner joined explicit whole handback and fresh Bohr census. No schema carry on existing roots; new authored private stores only.",
+  "protected": "Frozen953 Explorer candidate/Parent one-use/public334447 and native keepers untouched",
+  "build_scope": "One own source filewheel already complete; no additional build/env/dependency/native request"
+}
