@@ -36,6 +36,7 @@ from .messages import Message
 from .mro_dispatch import MroDispatch, handles
 from .native_arguments import NativeArguments
 from .native_input_owner import RegistryOwner
+from .native_session_prepare import NativeSessionPreparation
 from .routing import TurnRouting
 from .runtime import (
     ACP_PERMISSION_TIMEOUT_SECONDS,
@@ -174,15 +175,14 @@ class TurnRunner:
     def native_arguments(self, thread: Thread) -> tuple[str, ...]:
         return self.agent_args.with_model(thread.model).with_thinking(ThinkingLevel.optional_name(thread.thinking_level)).argv
 
-    async def prepare_selected_session(self, session_id: str, thread: Thread) -> StateData:
-        from .native_session_prepare import NativeSessionPreparation
-
+    async def prepare_selected_session(self, session_id: str, thread: Thread, *,
+                                       open_native=NativeSessionPreparation.open) -> StateData:
         if thread.session_file is None:
             raise ValueError("Native preparation requires a saved session")
         environment = await Coordination.run_worker(lambda: thread.native_environment(
             self.comms.root, self.comms.registry.snapshot(), thread.worktree,
         ))
-        state = await NativeSessionPreparation.open(
+        state = await open_native(
             self.persistent_backends.setdefault(session_id, backend.PersistentPiSession()),
             self.agent_bin,
             self.native_arguments(thread),
