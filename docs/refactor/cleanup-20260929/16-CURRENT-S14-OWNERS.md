@@ -126,6 +126,21 @@ remains queued with no assigned runner at this read; no duplicate workflow or
 provider/input is requested. Recorded configured-input664 acceptance remains
 separate and merged; HTTP/capacity/recall/study/fullS4 remain unfinished.
 
+## Functional source merges completed
+
+Parent applied the current goal's explicit CI-deferred disposition and merged
+reviewed exact heads normally:6631143 as781b20e4189efb47cd44ac6f11a74f580884c9af,
+Core627e5f as9c0888db3094be85223063af66d1108c4c100216, and ToAd43475d
+as262875cbd6b54bf0b6f93edfe237a8d7facfc67b. GitHub MERGED readbacks
+matched all three frozen heads. Earlier exact-green wait statements are
+historical; queued CI did not replace installed scoped acceptance or become a
+new hold. These merges deliver source, not public installation. Sch448 now owns
+normal actual-main source/wheel/canonical relations;449 remains a separate
+changed-owner draft awaiting its narrow installed check after446 handback.
+Public334447 and all old acceptance/closure evidence remain unchanged. Fresh
+receiving purpose, installed candidate, reviewed one-use carry/publication and
+actual affected default workflow remain required for public Explorer delivery.
+
 ## Historical integration evidence
 
 Parent retired its unused standalone channel_recovery_physical_journey wrapper.
