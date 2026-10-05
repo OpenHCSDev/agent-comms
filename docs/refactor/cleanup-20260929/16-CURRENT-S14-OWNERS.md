@@ -2679,3 +2679,24 @@ HTTP, recall, capacity or study proof. The merged671 same-input evidence remains
 bound to its original577 helper versions and old recorded request; later helper
 source changes do not rewrite that accepted measurement. No provider, SDK,
 holder operation or accepted recorded read was repeated.
+
+### Original C3 dependency-wait applicability source checkpoint, 2026-10-05
+
+Parent owns Draft Core673 at550c59ce, productionf60bb437, in the reused Parent
+checkout on refactor/goal-wait-current-owner-20261005. Existing GoalWait.current_for
+owns incarnation applicability and borrows Goal.accepts_observation for goal
+identity/revision. Four copies are removed from wait-graph node/peer traversal
+and closed/terminal recovery; reply consumption retains its different
+incarnation-only contract. No fields, codecs or store formats change.
+
+All324 production/370 test/54 tool modules parse with zero omissions; source
+evidence records one declaration/four consumers and no outside wait revision
+comparison. Five offline original Comms/Registry/GoalWaits graph cases pass1.97s.
+The initial authored graph expected terminal leaves instead of waiting owners;
+its exact source is retained. Existing standby modules could not collect on
+host because xdist and ACP dependencies were absent; no holder/env was borrowed.
+Generated authored scratch is removed. No native/App/provider/public operation
+was performed. Parent retains installed terminal/recovery verification as an
+explicit outstanding boundary; the branch is not merged or installed, and no
+whole C3 or speed claim follows. Frozen Explorer448 and Heis453 performance work
+continue independently.
