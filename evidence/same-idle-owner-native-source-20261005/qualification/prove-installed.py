@@ -133,7 +133,7 @@ proof = InstalledSourceProof('PASS installed byte/origin and native READ trust; 
                             Path(native['package']), str(Path(native['package']) / 'dist/cli.js'), native['manifest'], native['tree'], True,
                             metadata.version('agent-client-protocol'), len(distributions), tuple(sorted(versions.items())), sha(requirements.encode()),
                             len(unchanged), True, False, False, False, False, (),
-                            'Seven original serial saved-SDK same-owner source/custody cases remain unrun; one intended localhost input, six no-input variants, source/cancel/successor refusal and restored lock/context observations. No public/UI/performance claim.', (artifact,))
+                            grant['proof_strength'], (artifact,))
 result = FieldCodec.encode(proof)
 result['qualification_evidence'] = {'issued_grant': str(issued), 'issued_sha256': sha(issued.read_bytes()),
                                   'inventory': str(inventory_path), 'inventory_sha256': sha(inventory_path.read_bytes()),
