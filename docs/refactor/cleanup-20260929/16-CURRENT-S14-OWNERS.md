@@ -31,7 +31,13 @@ references/gaps zero and original19 public environment references preserved.
 Sch native closure92c3 is bound; held SDK journals/movie remain immutable. Heis
 owns ApplicationLifetime/session/agent/preparation shutdown diagnosis; Mendel
 owns the disjoint original recorder wait/parent-result family at a safe source
-checkpoint. No second launch or deadline increase is authorized.
+checkpoint. Mendel found that the recorder forced retirement after its separate
+three-second wait while the existing interaction deadline still had18.56 seconds
+left. He proposes using that original absolute deadline through the parent-wait
+consumers, retaining the16-second finalization reserve and strict exit results.
+Parent relayed the exact methods and source finding to Heis. This identifies a
+recorder deadline conflict; it does not prove why the App had not exited. No second
+launch or deadline increase is authorized.
 
 466 SessionView03 passed the actual mounted check in6.138s: cancellation before
 entry, same-source resume, three coalesced requests and joined close/App and
@@ -39,10 +45,15 @@ preparation cleanup. Parent verified whole1cb259 and all31 original keeper hashe
 and bytes. Final466c80c2c4e is normally merged0bc37f7a. Bohr independently closed
 3e280 at5fcb3c4b/readback790b3939, verifying the restored459 floor1467/69 origins/
 266+1865, no private borrowers and returned native READ. No accepted control
-repeat is needed. Sch has a separate source-only assignment to prepare functional
-worker delivery from actual merged source and truthful retained artifacts; that
-proposal confers no access, reservation or publication authority and does not
-hold Heis's full scrolling run.
+repeat is needed. Sch's separate471 preparation purpose5c99 is now issued against
+freshly verified former485 floor. The one retained Core3fe/Toadb2e stage passed
+in0.395s; its process is absent. Parent matched the new native READce8186 and
+exclusive proof helpereddb against every declared adaptation of the original
+proof algorithm. All14 proof outputs were absent at review; the helper compiled
+without execution. Bohr owns binding and releasing that one installed-file check.
+Canonical/cohort preparation and publication remain unexecuted. The selected
+Core3931/Toad289f cohort is deliberate and does not claim latest MAIN681/470
+source equality. This separate delivery does not hold Heis's scrolling work.
 
 Core680 is source-qualified and merged3931f16f. Core681 is normally merged
 38a0533e after Parent reviewed the complete recorded-reader delivery family and

@@ -3115,8 +3115,11 @@ BLOCKED/ACTIVE observations remain historical, with no goal-tool resume/replay.
 - [x] Viewport worker466 is merged0bc37f7a after one mounted cancellation-before-
   entry, same-source resume, coalescing and joined-close acceptance. Former485
   floor and all claims independently closed; original failures remain preserved.
-- [ ] Deliver merged466 in the local public cohort. Sch prepares the concrete
-  source/wheel/receiving proposal separately; this grants no current access.
+- [ ] Deliver merged466 in the local public cohort. Separate471 preparation is
+  issued; Sch's one retained Core/Toad stage passed0.395s. The new read permission
+  and exclusive installed-file checker were reviewed without execution; Bohr
+  binds/releases that check next. Canonical/cohort preparation and public
+  publication remain unexecuted; the user's live installation is unchanged.
 - [ ] Heis460 final06 includes accepted466 in one normal union wheel and fixes
   right-sidebar disclosure plus all related worker observers. The unchanged
   full150s cold/wheel/width/reversal/End/B-A run reached all motion/tab phases
