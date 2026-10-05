@@ -183,6 +183,28 @@ persistent stage mechanism. Logs cannot substitute for deleted source/input
 proofs or authorize reconstruction/replay. This is separate from TC1 watcher
 source repair and does not modify the frozen negative.
 
+## Explorer installed address fix merged
+
+Original Einstein ran the single released installed449 mounted Tree check:
+terminal0/5.404749810s, pytest1PASS1.83s. Actual prefix imports were asserted;
+same-offset/different-length ranges remain distinct, HumanLabel section change
+retains the correct reader and selection, and remove/remount restores it.
+The original test asserts no App exception. Parent hash-verified handbackd87c
+and all11 references, controller60294 and child60296 absent, groups empty and
+authored model removed. No ACP/SDK/native artifact execution/provider/input or
+accepted registered GUI repeat occurred. Bohr independently bound consumed
+check and returned operator custody in lifecycle0ee9e36b.
+
+Parent normally merged frozen4499bc783f1 as
+2b97bf256fdddc15a909a95df8712db176962341; GitHub MERGED readback and fetched
+actual main match. Source/tests/tools/pyproject/uv/README/LICENSE/hatch are
+byte-zero against stagedc160 and retained1a8. Sch keeps sole package custody
+of the same candidate. Actual merged-source319/buildmetadata relation and
+literal qualification gates must be bound in the existing679abc purpose before
+receiving canonical51/cohort preparation and its scoped source-declaration
+READ are released. No restage, new App or CI hold is needed. Public334447 stays
+unchanged until Parent reviewed one-use publication and affected acceptance.
+
 ## Frame-time priority and fixture source repair
 
 Tristan clarified that mouse-wheel slowness means delayed/jerky frames, not too
