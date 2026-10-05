@@ -3008,3 +3008,28 @@ family must own any legal same-idle-owner certified branch selection/restoration
 Arendt continues explicit authored case publications independently. No generic
 registry replacement, fabricated wire reference, relaxed reader, SDK/provider
 operation or paired-study authorization is implied.
+
+### C3 independently closed; readiness callback source landed in branch, 2026-10-05
+
+Parent personally hashed67502 whole00db8167, native terminalca8aaad5/XMLda468dfb
+and read actual lifecycle9de9f54b CLOSED. Independent Bohr readbackdcd8ac16 and
+census1cda51ec verify original540347/510/94/69metadata10 floor, no extras or
+sockets,201UID zero private refs/gaps and19 preserved public native references.
+All26 new and18 original keeper hashes verified. Native execution/package claims
+are false; no future loan follows. Final source/evidence publication and normal
+merge are next, without another control, stage, build or CI requirement.
+
+Heis published joint branch commit a432852c: all four Conversation readiness/watch
+callbacks queue SessionObservation.invalidate rather than awaiting refresh. Parent
+read exact changes and every remaining refresh/invalidate/close consumer; explicit
+user actions still await freshness and original release still joins cancellation.
+Text65 pin normally names actual06771827. Project454 three-file owner/control
+union is present, affected mounted App remains unrun.
+
+The existing connected goal/read pilot currently holds the read after its original
+RPC returns and clicks a warm source. Parent routed that precise acceptance gap
+to Heis: exercise the changed readiness callback on the real Agent/read lifetime,
+with input/resize and joined retirement while pending. NoAgent/project acceptance
+cannot stand in for that connected path. No native job or new model input was
+started. Physical wheel cadence/useful first paint remain the actual performance
+finish line; neither branch source nor ordinary still images establish them.
