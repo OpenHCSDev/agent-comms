@@ -1,0 +1,32 @@
+{
+  "source_head": "db99e6176a5003f1d7030301e83e414925a4e524",
+  "read_complete": true,
+  "same_original_input": "119d18523df3babc6f7018e67193a15d",
+  "new_inputs": 0,
+  "provider_calls": 0,
+  "SDK_processes": 0,
+  "reader_seconds": 6.0851745650870726,
+  "reader_exit_code": 0,
+  "reader_joined_proc_absent": true,
+  "serialized_SDK_segments": 6,
+  "serialized_SDK_bytes": 185673,
+  "condition": "task-memory",
+  "request_budget_evaluated": true,
+  "request_completion_evaluated": true,
+  "original_controller_exit_code": 1,
+  "original_input_state_preserved": "STARTED",
+  "original_probe_and_refusal_unchanged": true,
+  "strength": "Actual recorded configured provider input and corrected same-input construction reader; not HTTP bytes, provider capacity, recall, intervention or study",
+  "keepers": {
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02-read01/command-terminal.json": "28154096a943fb86d89e0d4b2a1ba1b72ca0792d6167c1eabfc394089699bf8f",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02-read01/completed-condition.private.jsonl": "b00d20e9ad4f9e60b5728278c0577e26609bbdcedfba0275014ebf424cfb9611",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02-read01/holder-postrun.json": "536775c4f73436965dbdaf7be77bfe0a2a12368090cd54fa0833cc40c48bcc5a",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02-read01/measurement.private.json": "60b7cb9a856554b767318bd1cdd5215225376439aa5f89700e11ae81976194ea",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02-read01/postterminal-probe.private.json": "1d2aec7ee446fd801dc852f88fc66f1f82b83a2d48ed172249dab3760bc843eb",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02-read01/receipt.json": "868fbe763e0bea604647d577889a25d62a53ff121b9f511ffe749fdaabcbf1e0",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02-read01/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02-read01/stdout.log": "ef0697baebf4ec765da75cc28ad7f3673607bb0522f177b3e2dc190c8279f0ab"
+  },
+  "whole_540_read_import_claim_returned": true,
+  "independent_lifecycle_close_owner": "Bohr"
+}

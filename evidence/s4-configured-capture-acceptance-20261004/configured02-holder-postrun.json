@@ -1,0 +1,27 @@
+{
+  "installed_assets": 347,
+  "installed_assets_equal": true,
+  "original_environment_keepers": 94,
+  "original_keepers_equal": true,
+  "metadata_files": 69,
+  "metadata_equal": true,
+  "distributions": {
+    "pydantic_core": "2.46.5",
+    "typing-inspection": "0.4.4",
+    "metaclass-registry": "0.2.1",
+    "annotated-types": "0.8.0",
+    "typing_extensions": "4.15.0",
+    "pydantic": "2.13.5",
+    "packaging": "26.2",
+    "agent-comms": "0.1.0",
+    "nominal-refactor-audit": "0.1.0",
+    "agent-client-protocol": "0.12.1"
+  },
+  "truthful_origin": {
+    "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "native086_full_trust": true,
+  "original_source_unchanged": true,
+  "native_children_closed": true
+}
