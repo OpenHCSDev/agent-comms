@@ -2540,3 +2540,29 @@ controls passed in1.03s and the empty-run CLI retains all three unavailable
 rounds. Runtime src/stack/tools are unchanged from2ec. No original session,
 SDK, provider or holder operation occurred; authentic request/capacity/matched
 study and full S4 remain incomplete. CI remains deferred as a merge gate.
+
+
+## Explorer positive preparation frozen for public disposition
+
+Corrected original cohort preparation exited0 in8.520108723s. Frozen READY8ed33
+and manifest8e1d831a bind107 artifacts,953 installed assets/full69/519 originals,
+60 distinct journey gates and original proof8a8/DTO113. Parent verified every
+manifest hash, byte count and mode. The prepared one-use21306916 commands use
+target -I -B -c/runpy with the authentic frozen0a canonical51 directory.
+Original9→10 declaration and equal checkpoint digest select
+CarryNativeRuntimeInstallation with PreserveOwnerRuntime; native086→7a remains
+a genuine transition. Parent reviewed the existing installer and identity
+readback and checked command syntax without execution. Publication receipt,
+preimages and stopped carry candidate are absent. Sch returned whole immediate
+custody in6f2bcbd1; Bohr independent close is required before public disposition.
+No positive floor restoration, restage, accepted App repeat or native execution
+has occurred. The original current PUBLIC334447 remains unchanged.
+
+The next actual delivery is Parent's original fresh client admission, one-use
+publication under stopped source custody, identity/default readback and affected
+ordinary default acceptance. Preparation is complete at its scope; public
+Explorer delivery is not yet established. Rendering and first-paint owners
+continue independently. Heis ca26eb67 now uses original WorkerManager newest
+admission ordering to distinguish the exclusive replacement from a cancelled
+worker still in RUNNING state. Original cancelled work remains owned until
+joined; no extra worker order store was added.
