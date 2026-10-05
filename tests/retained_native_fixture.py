@@ -722,16 +722,20 @@ class RecordedNativeProbe:
         return (RecordedNativeCheckpoint.read_json_lines(self.condition_observation)
                 if self.condition_observation is not None else ())
 
-    def applied_condition(self,evidence,parent,texts,serialized,manifest,records):
-        """Join this input's SDK hook to the corroborated narrative and actual bytes."""
+    def bounded_summary_replacement(self,evidence,parent,texts,serialized,manifest,records):
+        """Read the direct post-transform summary replacement SDK observation.
+
+        Installed constructors enter the configured transform through their
+        own hook. They do not perform this later summary replacement.
+        """
         if self.condition_observation is None:
-            return {'evaluated':False,'reason':'Original condition application not captured'}
+            return {'evaluated':False,'reason':'Original direct summary replacement not captured'}
         if self.checkpoint is None or self.fork_journal is None or not serialized['evaluated']:
             return {'evaluated':False,'reason':'Original checkpoint, fork and SDK bytes required'}
         applications=tuple(row for row in records if row.get('stage')=='bounded-transform-applied'
                            and row['input_id']==self.input_id)
         if not applications:
-            return {'evaluated':False,'reason':'Original bounded-source hook observation unavailable'}
+            return {'evaluated':False,'reason':'Original direct summary replacement hook unavailable'}
         source=self.checkpoint.fork_request_narrative(self.fork_journal,evidence,parent,texts)
         if not source['evaluated']:
             return source
@@ -1323,7 +1327,7 @@ class RecordedNativeProbe:
             "request_completion": self.request_completion(budget, answer),
             "source_coverage": coverage,
             "full_history_sdk_admission": self.full_history_admission(installation, budget),
-            "condition_application": self.applied_condition(evidence,parent,texts,serialized,manifest,records),
+            "bounded_summary_replacement": self.bounded_summary_replacement(evidence,parent,texts,serialized,manifest,records),
             "condition_installation": installation,
         }
 

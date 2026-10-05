@@ -658,8 +658,10 @@ class ScoredScenario(ScoreView):
 
         The probe owns transform/source/refusal checks. This view only groups
         its acquired observations against the frozen rounds. An observed
-        constructor must agree with the declared arm; agreement cannot infer
-        complete transformed history or complete-history eligibility.
+        constructor must agree with the declared arm. Construction is measured
+        when its complete acquired message partition is bound to the request;
+        preserved and changed prefixes remain distinct outcomes. Journal entry
+        selection, full-history eligibility and capacity are separate questions.
         """
         identities = tuple(item.identity for item in self.source.rounds)
 
@@ -670,7 +672,7 @@ class ScoredScenario(ScoreView):
                     'available_rounds': tuple(identity for identity in identities if identity not in unavailable),
                     'unavailable_rounds': unavailable}
 
-        applications = {identity: original['construction']['condition_application']
+        replacements = {identity: original['construction']['bounded_summary_replacement']
                         for identity, original in evidence.items()}
         installations = {identity: original['construction']['condition_installation']
                          for identity, original in evidence.items()}
@@ -695,18 +697,21 @@ class ScoredScenario(ScoreView):
             'retained_source_binding', {'evaluated': False,
                 'reason': 'Original request/publication binding unavailable'})
             for identity, original in evidence.items()}
-        return {'evaluated': False, 'declared_condition': self.condition,
-                'bounded_sdk_application': group(applications),
+        constructor_selection = group({identity: {'evaluated': bool(originals)}
+            for identity, originals in constructors.items()})
+        constructed_prefix = {**group(prefixes),
+            'preserved_rounds':tuple(identity for identity in identities
+                if identity in prefixes and prefixes[identity]['evaluated'] and prefixes[identity]['preserved']),
+            'changed_rounds':tuple(identity for identity in identities
+                if identity in prefixes and prefixes[identity]['evaluated'] and not prefixes[identity]['preserved'])}
+        return {'evaluated': constructor_selection['evaluated'] and constructed_prefix['evaluated'],
+                'declared_condition': self.condition,
+                'bounded_summary_replacement': group(replacements),
                 'installed_sdk_source': group(installations),
-                'recorded_constructor_selection': group({identity: {'evaluated': bool(originals)}
-                    for identity, originals in constructors.items()}),
+                'recorded_constructor_selection': constructor_selection,
                 'sdk_entry_selection': group(entry_selections),
                 'installed_narrative_source': group(narratives),
-                'constructed_source_prefix': {**group(prefixes),
-                    'preserved_rounds':tuple(identity for identity in identities
-                        if identity in prefixes and prefixes[identity]['evaluated'] and prefixes[identity]['preserved']),
-                    'changed_rounds':tuple(identity for identity in identities
-                        if identity in prefixes and prefixes[identity]['evaluated'] and not prefixes[identity]['preserved'])},
+                'constructed_source_prefix': constructed_prefix,
                 'native_request_admission': group(admissions),
                 'sdk_probe_input_presence': {**group(inputs),
                     'present_rounds': tuple(identity for identity in identities
@@ -729,8 +734,9 @@ class ScoredScenario(ScoreView):
                     'not_full_history_rounds': tuple(identity for identity in identities
                         if identity in full_admissions and full_admissions[identity]['evaluated']
                         and not full_admissions[identity]['admitted_full_history'])},
-                'reason': 'Original condition selection and complete-history eligibility are not supplied by a label or SDK preview',
                 'scope': 'Frozen-round availability of original source/transform/request observations; '
+                         'evaluated means the declared constructor and entire SDK request prefix were measured, '
+                         'not that the prefix was preserved or complete history admitted; '
                          'details remain in source_delivery and native_probes; '
                          'not verified matched interventions, HTTP bytes, registration or study acceptance'}
 
@@ -1427,7 +1433,8 @@ class RecallScenario:
                                                             baseline_result['recorded_resources']),
                 "condition_construction": {"evaluated": all(item['evaluated'] for item in constructions),
                     "candidate": constructions[0], "baseline": constructions[1],
-                    "scope": "Matched construction requires both original arm relations; partial SDK evidence is not full eligibility"},
+                    "scope": "Both declared constructors and complete SDK request prefixes measured; "
+                             "preservation, full-history eligibility and matched interventions remain separate"},
                 "study_acceptance": {"evaluated": False,
                     "reason": "One recorded sample is not a registered comparative study or margin result"}}
 

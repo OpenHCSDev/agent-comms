@@ -1486,7 +1486,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertEqual(result['original_checkpoint_count'], 0)
         self.assertFalse(result['three_original_cuts_observed'])
         self.assertFalse(result['condition_construction']['evaluated'])
-        for name in ('bounded_sdk_application', 'installed_sdk_source', 'source_delivery', 'full_history_capacity'):
+        for name in ('bounded_summary_replacement', 'installed_sdk_source', 'source_delivery', 'full_history_capacity'):
             self.assertEqual(result['condition_construction'][name]['unavailable_rounds'], ['r1', 'r2', 'r3'])
         paired = scenario.compare_native(Condition.TASK_MEMORY, RecordedNativeProbes({}),
                                         Condition.BOUNDED, RecordedNativeProbes({}))
@@ -1720,24 +1720,24 @@ class RecordedMeasurementTests(unittest.TestCase):
 
         with patch.object(RecordedNativeCheckpoint, 'fork_condition_acquired', return_value=source):
             partial_probe=captured('partial.jsonl', (applied, retired))
-            partial = partial_probe.applied_condition(
+            partial = partial_probe.bounded_summary_replacement(
                 object(), object(), texts, serialized, manifest,partial_probe.condition_records())
             self.assertFalse(partial['evaluated'])
             self.assertTrue(partial['transform']['evaluated'])
             self.assertFalse(partial['message_binding']['evaluated'])
             selected = captured('complete.jsonl', (applied, conversion, retired))
-            complete = selected.applied_condition(object(), object(), texts, serialized, manifest,selected.condition_records())
+            complete = selected.bounded_summary_replacement(object(), object(), texts, serialized, manifest,selected.condition_records())
             self.assertTrue(complete['evaluated'])
             self.assertEqual(complete['transform']['narrative_source'], source['source'])
             self.assertEqual(complete['message_binding']['request_id'], manifest.request_id)
             self.assertIs(complete['observation'], selected.condition_observation)
             with self.assertRaisesRegex(ValueError, 'has not retired'):
                 unretired=captured('unretired.jsonl', (applied, conversion))
-                unretired.applied_condition(
+                unretired.bounded_summary_replacement(
                     object(), object(), texts, serialized, manifest,unretired.condition_records())
             Path(selected.condition_observation.path).write_text('{}')
             with self.assertRaisesRegex(ValueError, 'artifact changed'):
-                selected.applied_condition(object(), object(), texts, serialized, manifest,selected.condition_records())
+                selected.bounded_summary_replacement(object(), object(), texts, serialized, manifest,selected.condition_records())
 
     def test_installed_observer_retains_constructor_source(self):
         # Exercise the private observer, not an SDK/model turn. This prevents
@@ -2031,7 +2031,7 @@ for (const original of [source,undefined]) {
                     'answer_support': {'unassisted_recall': False},
                     'provider_prompt_presence': {'evaluated': False},
                     'probe_input_presence': {'evaluated': False},
-                    'construction': {'condition_application': {'evaluated': False},
+                    'construction': {'bounded_summary_replacement': {'evaluated': False},
                     'condition_installation': installation, 'request_budget': {'evaluated': False},
                     'full_history_sdk_admission': {'evaluated': False},
                     'source_coverage': {'full_context_capacity': {'evaluated': False}}}}}
@@ -2040,7 +2040,15 @@ for (const original of [source,undefined]) {
                 self.assertTrue(metrics['evaluated'])
                 self.assertEqual(metrics['preserved_rounds'], ('r1',) if preserved else ())
                 self.assertEqual(metrics['changed_rounds'], () if preserved else ('r1',))
-                self.assertFalse(scored.condition_construction(original(installation), {})['evaluated'])
+                construction = scored.condition_construction(original(installation), {})
+                self.assertTrue(construction['evaluated'])
+                self.assertFalse(construction['sdk_entry_selection']['evaluated'])
+                self.assertFalse(construction['full_history_capacity']['evaluated'])
+                self.assertFalse(construction['bounded_summary_replacement']['evaluated'])
+                extra = replace(scenario, rounds=(*scenario.rounds,
+                    RecallRound('r2', ('later',), (Question('q2', 'Later?', 'source', 'oracle'),))))
+                self.assertFalse(extra.score(Condition.RECENT_ONLY, RecordedAnswers({}))
+                    .condition_construction(original(installation), {})['evaluated'])
             for installation, measured_history, available, admitted_round in (
                     (complete_history, history, True, True),
                     (smaller, smaller_history, True, False),
@@ -2104,15 +2112,15 @@ for (const original of [source,undefined]) {
         identities = tuple(item.identity for item in scenario.rounds)
         unavailable = {identity: {'evaluated': False} for identity in identities}
         original = {'probe_input_presence': {'evaluated': False},
-            'construction': {'condition_application': {'evaluated': True},
+            'construction': {'bounded_summary_replacement': {'evaluated': True},
             'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}, 'narrative_source': {'evaluated': False}, 'constructed_prefix': {'evaluated': False}},
             'request_budget': {'evaluated': True},
             'full_history_sdk_admission': {'evaluated': False},
                     'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
         partial = scored.condition_construction({identities[0]: original}, unavailable)
         self.assertFalse(partial['evaluated'])
-        self.assertEqual(partial['bounded_sdk_application']['available_rounds'], identities[:1])
-        self.assertEqual(partial['bounded_sdk_application']['unavailable_rounds'], identities[1:])
+        self.assertEqual(partial['bounded_summary_replacement']['available_rounds'], identities[:1])
+        self.assertEqual(partial['bounded_summary_replacement']['unavailable_rounds'], identities[1:])
         self.assertEqual(partial['source_delivery']['unavailable_rounds'], identities)
         self.assertEqual(partial['source_delivery']['available_rounds'], ())
         self.assertEqual(partial['retained_source_request']['unavailable_rounds'], identities)
@@ -2122,7 +2130,7 @@ for (const original of [source,undefined]) {
         evidence = {identity: original for identity in identities}
         delivered = {identity: {'evaluated': True} for identity in identities}
         observed = scored.condition_construction(evidence, delivered)
-        self.assertTrue(observed['bounded_sdk_application']['evaluated'])
+        self.assertTrue(observed['bounded_summary_replacement']['evaluated'])
         self.assertTrue(observed['source_delivery']['evaluated'])
         self.assertFalse(observed['installed_sdk_source']['evaluated'])
         self.assertFalse(observed['sdk_entry_selection']['evaluated'])
@@ -2154,7 +2162,7 @@ for (const original of [source,undefined]) {
             self.assertEqual(labelled['declared_condition'], condition)
             self.assertFalse(labelled['evaluated'])
         partial_application = {'probe_input_presence': {'evaluated': False},
-            'construction': {'condition_application': {
+            'construction': {'bounded_summary_replacement': {
             'evaluated': False, 'transform': {'evaluated': True}},
             'condition_installation': {'evaluated': False, 'installations': (), 'entry_selection': {'evaluated': False}, 'narrative_source': {'evaluated': False}, 'constructed_prefix': {'evaluated': False}},
             'request_budget': {'evaluated': True},
@@ -2162,7 +2170,7 @@ for (const original of [source,undefined]) {
                     'source_coverage': {'full_context_capacity': {'evaluated': False}}}}
         self.assertEqual(scored.condition_construction(
             {**evidence, identities[0]: partial_application}, delivered)
-            ['bounded_sdk_application']['unavailable_rounds'], identities[:1])
+            ['bounded_summary_replacement']['unavailable_rounds'], identities[:1])
         # Even an authored available capacity observation cannot authenticate
         # a supplied experimental label or its intended source selection.
         original['construction']['source_coverage']['full_context_capacity'] = {'evaluated': True}
