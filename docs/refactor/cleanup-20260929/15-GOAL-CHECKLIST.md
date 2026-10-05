@@ -3131,6 +3131,12 @@ BLOCKED/ACTIVE observations remain historical, with no goal-tool resume/replay.
   completed143.892s within150s, with real UI/st parent exits0 before retirement.
   Changed wait/quit consumers match the tested source; Parent inspected the
   original width/reversal/A-return/Undo images. No FPS/CPU claim follows.
+- [x] Merge working460 at5fc73b1b after actual07 full motion functional PASS,
+  graceful UI/st parent exits and independent original-floor closure. Retract the
+  mistaken blank-body image reading; original saved text/draft/Ready is visible.
+- [ ] Deliver merged460 native71/PathContent into the actual public installation
+  through the existing receiver, preserving accepted current Core676 features
+  and truthful source/pin/wheel relations. PUBLIC471 remains Text67 today.
 - [ ] Heis460 final06 includes accepted466 in one normal union wheel and fixes
   right-sidebar disclosure plus all related worker observers. The unchanged
   full150s cold/wheel/width/reversal/End/B-A run reached all motion/tab phases

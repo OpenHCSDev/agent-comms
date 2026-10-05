@@ -30,6 +30,27 @@ Stage and proof each passed once. Heis owns the sole150-second launch; no live
 process or result is inferred from the release. Observe02 can run after the
 actual public source witness returns, without waiting for the whole private job.
 
+Latest merge: reviewed460 frozenb51a68b6 is normally merged5fc73b1b.
+The full installed07 motion path passed, including width, wheel reversal, End,
+B/A return, draft/Undo and graceful UI/st exits. The earlier blank-body image
+interpretation was mistaken and is retracted: original central saved text,
+draft and Ready are visible. No missing-body paint repair is justified. The
+native71/PathContent and current recording consumers are merged; current PUBLIC471
+still uses Text67, so truthful receiving/pin integration is the next delivery
+step. Preserve accepted Core676 features rather than reverting to an older
+Core while delivering Text71. Startup/frame/CPU, loaded scaling and continuous
+configured acceptance remain unfinished with originalHeis active.
+
+MCP472/682 preparation identified an inactive network preload: native bootstrap
+strips NODE_OPTIONS, and immutable7a has no approved origin guard. OriginalSch
+owns the minimal pre-SDK bootstrap source seam; no artifact edit, build or native
+run is authorized by that source task. Mendel owns qualifier setup and independent
+typed mounted preparation. S4 source683 now separates complete arm acquisition,
+inputs/cuts/probes and cleanup clocks; its source controls do not prove configured
+SDK execution. OriginalEinstein published684 source correction for genuine old
+integer-FD writer custody and incarnation-only target acquisition; old/current
+prefixes and execution remain unbound.
+
 Core681 fork-source delivery is actually merged38a0533e at frozen3dc11331.
 Its nine authored source checks support recorded inheritance, not independent
 workflow costs or timing. OriginalArendt has resumed the remaining source/summary
