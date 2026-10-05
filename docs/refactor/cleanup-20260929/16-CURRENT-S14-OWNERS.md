@@ -3433,3 +3433,40 @@ returned purposes. Sch owns the matching artifact authority closures.
 The qualified recorded-only comparison remains merged; Arendt continues the
 separate resource/p95 declaration source work. Continuous468 acceptance and
 actual fast loading/smooth scrolling remain unfinished, with Heis integrating.
+
+### Corrections published and resource-margin source merged, 2026-10-05
+
+Both failed purposes are independently closed:460 ABE04 at4a626 with floor
+readback266318, and46609bc at9f035 with floor14f569. Original journals, crash
+reports, movie and negative receipts remain held. Parent's after-terminal
+review is retained at
+`/home/ts/.cache/agent-scratch/parent-heis460-successor04-after-terminal-review-20261005/REVIEW.json`
+(075c1c7b); its temporary contact sheet belongs to that same review directory.
+
+Heis published the observer main-guard correction and exact fresh full150s
+proposal99e1 plus append-only runner correctione6c63. Parent verified all20
+helper hashes and the05-owned executable path. Bohr issued fresh85b2; the three
+retained wheels staged once with exit0/.237s. NewREAD61c and proof binding9cdf
+bind the05 helper3c383e and exclusive outputs. The helper diff only substitutes
+new purpose/authority literals and descriptions; its verifier is unchanged.
+The loading/wheel/width/reversal/End App remains unqualified until actual run.
+
+Einstein published the ZIP file-member correctionbf751 and effective466
+proposal207f. Parent verified that both command tails now name joint-mounted02;
+old proposals and failed outputs remain immutable. Bohr issued fresh6d265 at
+the independently cleared485 floor. One Toad stage, changed verifier and the
+previously unrun mounted worker check are authorized through their original
+proof/READ/release conditions; no native execution or rebuild is needed.
+
+Parent reviewed and normal-merged Core679e3e2 as b4a0179c on actual main,
+then joined that merge normally in this integration worktree. The complete
+three-file behavioral diff and original3 source/14 raw/2 AST hashes were read
+and matched. PairedRecallDesign owns supplied cost/p95 margins and matching;
+the duplicate scorer matching loop is deleted. RecordedNativeProbes verifies
+receipt membership and original provenance. Shared two-arm time cannot become
+independent arm p95, and unavailable clocks/margins remain unavailable. Ten
+authored source checks and original missing-record CLI results are accepted at
+that scope only. The configured clock producer is unrun; exclusive per-arm
+workflow observations and independent resource accounting remain Arendt-owned.
+No paid study, provider input, live installation or UI acceptance follows from
+this merge. No existing performance or continuous journey is replayed.
