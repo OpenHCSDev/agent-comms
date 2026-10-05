@@ -3137,3 +3137,16 @@ retains native raster ownership. No new runtime or recording was assigned by thi
 source task. Mendel676 owns loaded-session/registry/fork selection and restoration
 for S4, while Arendt retains RecallRound/condition_application consumers. These
 parallel source tasks do not wait for UI verification, and do not claim it passed.
+
+Parent's direct Git comparison of450/451/453/454 against actual455bc611 verifies
+the directory watcher, session presentation, transcript preparation/history and
+all three project454 production files retained byte-for-byte. Project control510
+also matches. The453 Conversation difference is exactly four readiness refreshes
+replaced by invalidate. Shared fixture changes make the private directory0700,
+pass an explicit SDK fork directory at both original sites and preserve auth env.
+The451 stationary control retains original assertions while admitting the mounted
+source before reservation and adding session custody/owned finalization. Its wheel
+recorder path remains, with later actual-route verification and warm-return journey
+composition. No lost production owner was found in this comparison. Earlier PRs
+remain open until qualified joint455 normal merge;446's full warm/configured scope
+is separate and is not satisfied by these three affected checks.
