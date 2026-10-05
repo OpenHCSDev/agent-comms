@@ -38,7 +38,6 @@ from agent_comms.runtime import RuntimeProxy
 from delivery_owner_fixture import canonical_agent
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX PTY acceptance")
-PACKAGE = Path(__file__).resolve().parents[1] / "extensions" / "pi-mcp-client"
 TIMEOUT = 40
 
 
@@ -55,7 +54,8 @@ def _node_run(node, env, script, cwd):
     return result.stdout.strip()
 
 
-def _prepare(root):
+def _prepare(root, native_package):
+    package = native_package / "agent-comms-extensions" / "pi-mcp-client"
     node = shutil.which("node")
     assert node
     agent, project = root / "agent", root / "project"
@@ -63,8 +63,8 @@ def _prepare(root):
     (project / ".pi").mkdir(parents=True)
     starts, calls = root / "server-starts", root / "server-calls"
     server = root / "fixture.mjs"
-    sdk = PACKAGE / "node_modules" / "@modelcontextprotocol" / "sdk" / "dist" / "esm"
-    zod = PACKAGE / "node_modules" / "zod" / "index.js"
+    sdk = package / "node_modules" / "@modelcontextprotocol" / "sdk" / "dist" / "esm"
+    zod = package / "node_modules" / "zod" / "index.js"
     server.write_text(
         "import {appendFileSync} from 'node:fs';\n"
         f"import {{McpServer}} from {json.dumps((sdk / 'server/mcp.js').as_uri())};\n"
@@ -92,9 +92,10 @@ def _prepare(root):
         "CI": "true",
         "NO_COLOR": "1",
         "PI_OFFLINE": "1",
+        "PI_COMPACTION_TEST_PACKAGE": str(native_package),
         "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
     }
-    api = PACKAGE / "node_modules/@earendil-works/pi-coding-agent/dist/index.js"
+    api = native_package / "dist" / "index.js"
     _node_run(
         node,
         env,
@@ -106,7 +107,7 @@ def _prepare(root):
         node,
         env,
         "import {declarationDigest,parseNativeConfig} from "
-        f"{json.dumps((PACKAGE / 'src/config.mjs').as_uri())};"
+        f"{json.dumps((package / 'src/config.mjs').as_uri())};"
         f"console.log(declarationDigest(parseNativeConfig({json.dumps(document)}).servers[0]));",
         project,
     )
@@ -115,7 +116,7 @@ def _prepare(root):
         node,
         env,
         "import {recordProjectDecision} from "
-        f"{json.dumps((PACKAGE / 'src/ledger-write.mjs').as_uri())};"
+        f"{json.dumps((package / 'src/ledger-write.mjs').as_uri())};"
         f"await recordProjectDecision({{agentDir:{json.dumps(str(agent))},"
         f"projectRoot:{json.dumps(str(project))},declaration:{json.dumps(declaration)},decision:'approve'}});",
         project,
@@ -128,10 +129,10 @@ def _prepare(root):
             }
         )
     )
-    return node, agent, project, digest, starts, calls, env
+    return package, node, agent, project, digest, starts, calls, env
 
 
-def _deny_via_simulated_user_pty(node, project, digest, env, artifact):
+def _deny_via_simulated_user_pty(package, node, project, digest, env, artifact):
     """Acceptance-owned simulated user; never production auto-confirmation."""
     master, slave = pty.openpty()
     process = None
@@ -140,7 +141,7 @@ def _deny_via_simulated_user_pty(node, project, digest, env, artifact):
         process = subprocess.Popen(
             [
                 node,
-                str(PACKAGE / "bin/pi-mcp.mjs"),
+                str(package / "bin/pi-mcp.mjs"),
                 "trust",
                 "deny",
                 "--id",
@@ -307,8 +308,10 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
     if not binary:
         pytest.skip("Set AC_MCP_NATIVE_BIN to an explicitly prepared native Pi launcher")
     assert binary == "pi" or (Path(binary).is_absolute() and os.access(binary, os.X_OK))
-    node, agent, project, digest, starts, calls, env = _prepare(tmp_path)
-    env["PI_COMPACTION_TEST_PACKAGE"] = os.environ["PI_COMPACTION_TEST_PACKAGE"]
+    native_package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package, node, agent, project, digest, starts, calls, env = _prepare(
+        tmp_path, native_package
+    )
     receipt_seen, second_request, release_final = (threading.Event() for _ in range(3))
     if case != "revoke_midturn":
         release_final.set()
@@ -322,7 +325,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
             {
                 "launcher": binary,
                 "nativePackage": env["PI_COMPACTION_TEST_PACKAGE"],
-                "package": str(PACKAGE),
+                "package": str(package),
                 "case": case,
             }
         )
@@ -359,7 +362,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                 "--thinking",
                 "off",
                 "-e",
-                str(Path(env["PI_COMPACTION_TEST_PACKAGE"]) / "agent-comms-extensions/pi-mcp-client"),
+                str(package),
             ]
             retirement = AsyncExitStack()
             try:
@@ -452,6 +455,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                     if case == "revoke_midturn":
                         await asyncio.to_thread(
                             _deny_via_simulated_user_pty,
+                            package,
                             node,
                             project,
                             digest,
