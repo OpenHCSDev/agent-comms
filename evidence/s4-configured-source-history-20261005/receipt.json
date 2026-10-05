@@ -1,0 +1,28 @@
+{
+  "determining_main": "0a600a2b0287c5fbfef907e6e623652c587f66df",
+  "scope": "Authored configured-scenario construction/export source, not native execution or study",
+  "raw_hashes": {
+    "before.json": "aba6e2f88f60948e4c93da107ba9d3250ab40791563c8d3b9ebb5ada1e03a959",
+    "after.json": "25ae77dcb8236f4c025dcdd75f19c1a77eb82fa97e92144f5d545d6eb42451b7",
+    "focused-collection-unavailable.log": "86264ddf32c6f095981e446357893a9764731be545988afa5aa8a940cfe84d71",
+    "focused-final.log": "f4eb431ef0b67586655c6ae8e2171c8a994007cbc03d40e80bea109a990b21c4",
+    "authored-oracle.json": "f66f3cadd753df49cf11de2de22c203b59401b3e0d0632716413f0efa040dc54",
+    "authored-design.json": "6e2b2b6979d22e283c794923b0bf00671cd772cfccc3b7750631fc5746d8e207",
+    "construction-cli.stdout.json": "2b2ddc437816904e6a084bc0a94519076c4b26e24405cb2b9945a30bf3784aeb",
+    "construction-cli.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "cli-result.json": "51c7efd4ea46cd1ca786d3cdda1952a8421a425a4b134f9b77cb1fb9d833bf88"
+  },
+  "source_hashes": {
+    "tests/compaction_retention_fixture.py": "f361a1211db7cb72029be017726cbe232277142c9778162020d0485f5fd7d97a",
+    "tests/three_cut_retention_configured_journey.py": "f1ad671e3b4e3a17bc3f9bfb693e5e6a3886a743231829913c27f758ac11e809",
+    "tests/test_recorded_retention_measurements.py": "ec2f6005371be23df679d2ef94bcf733e6abea6dbd118b017fd2fe5b198572f5"
+  },
+  "final_controls": "3 PASS,43 deselected,3 subtests/.34s",
+  "native_artifact_reads": 0,
+  "original_session_reads": 0,
+  "SDK_processes": 0,
+  "provider_calls": 0,
+  "inputs": 0,
+  "package_operations": 0,
+  "originals_unchanged": "No original path opened; old configured records preserved"
+}
