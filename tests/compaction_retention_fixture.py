@@ -24,6 +24,7 @@ from random import Random
 from statistics import mean
 
 from agent_comms.field_codec import FieldCodec
+from agent_comms.compaction_records import NativeForkCreation
 from agent_comms.pi_rpc import unique_fields
 from agent_comms.native_entries import NativeEntry
 from agent_comms.native_session_reopen import NativeSessionIdentity
@@ -258,7 +259,8 @@ class RecordedNativeProbes:
         if {row.native_id for row in document.rows.values() if row.has_started} != {
                 probe.input_id for probe in self.inputs} or len(document.rows) != len(self.rounds) + len(self.stimuli):
             raise ValueError("Continuation cannot include an unrecorded or uncertain input")
-        with NativeEntry.open_evidence(Path(path)) as evidence:
+        with RecordedNativeProbe.original_readers(self.inputs, selected.values()) as sources:
+            evidence = sources[Path(path)]
             _, entries = evidence.observe()
             terminals = []
             for cut in selected.values():
@@ -266,7 +268,7 @@ class RecordedNativeProbes:
                 terminals.append(entry)
             for probe in self.inputs:
                 session.require_same_session(probe.session)
-                probe.read(evidence, evidence)
+                probe.read(evidence, evidence, sources)
                 if probe.sdk_context is None or probe.submitted_inputs is None:
                     raise ValueError("Continuation requires the original SDK request capture")
                 from agent_comms.input_disposition import InputDocument
@@ -327,7 +329,7 @@ class RecordedNativeProbes:
         expected = {item['round']: item['source_text'] for item in
                     scenario.construction_rounds()} if self.stimuli else {}
         stimuli = {identity: probe.read(sources[Path(probe.session.session_file)],
-                                        sources[probe.checkpoint_source])
+                                        sources[probe.checkpoint_source], sources)
                    for identity, probe in self.stimuli.items()}
         previous = None
         for identity, checkpoint in cuts:
@@ -339,7 +341,7 @@ class RecordedNativeProbes:
             report = checkpoint._report(*captured)
             if identity in stimuli:
                 stimuli[identity]['source_delivery'] = self.stimuli[identity].source_delivery(
-                    expected[identity], stimuli[identity], evidence, entry.id, None)
+                    expected[identity], stimuli[identity], evidence, entry.id, journal=checkpoint.journal, sources=sources)
             if previous is not None:
                 prior_round, old, before, prior_session = previous
                 prior_session.require_same_session(session)
@@ -354,22 +356,54 @@ class RecordedNativeProbes:
                 reports[identity]["revision_mass"] = measured
         for identity, probe in self.rounds.items():
             observations[identity] = probe.read(sources[Path(probe.session.session_file)],
-                                                sources[probe.checkpoint_source])
+                                                sources[probe.checkpoint_source], sources)
             if identity in stimuli and identity not in selected:
                 observed = observations[identity]
                 stimuli[identity]['source_delivery'] = self.stimuli[identity].source_delivery(
                     expected[identity], stimuli[identity], sources[Path(probe.session.session_file)],
-                    observed['native_input'].session_entry_id, observed['construction']['fork'])
+                    observed['native_input'].session_entry_id, journal=probe.original_journal, sources=sources)
         for identity, observed in stimuli.items():
             if 'source_delivery' not in observed:
                 observed['source_delivery'] = {'evaluated': False,
                     'reason': 'Original stimulus has no selected cut or recall boundary'}
         return reports, observations, stimuli
 
-    def alignment(self, other, observations, baseline, rounds):
+    def source_alignment(self, original, control, stimuli, baseline_stimuli, rounds):
+        """Borrow actual fork positions and the entire frozen stimulus prefix.
+
+        Same-cut pairs already share one original source snapshot. Distinct
+        immediate sources additionally need every preceding authored input
+        authenticated before its own selected cut. Equal summary text or arm
+        labels cannot replace either relation.
+        """
+        ancestry = original['fork_ancestry'], control['fork_ancestry']
+        if not all(ancestry):
+            return {'evaluated': False, 'reason': 'Original SDK creation ancestry unavailable'}
+        common = NativeForkCreation.common_recorded_source(*ancestry)
+        if common is None:
+            return {'evaluated': False,
+                    'reason': 'No common original source position in the available recorded ancestry'}
+        shared_cut = common == (ancestry[0][0], ancestry[1][0])
+        missing = tuple(round_.identity for round_ in rounds
+            if any(round_.identity not in arm or not arm[round_.identity]['source_delivery']['evaluated']
+                   for arm in (stimuli, baseline_stimuli)))
+        available = shared_cut or not missing
+        if not shared_cut and available:
+            self.same_observations('frozen authored source prefix', tuple(
+                (tuple(arm[round_.identity]['prompt'] for round_ in rounds),)
+                for arm in (stimuli, baseline_stimuli)))
+        return {'evaluated': available, 'common_creations': common,
+                'shared_immediate_cut': shared_cut,
+                'missing_stimulus_rounds': missing if not shared_cut else (),
+                'reason': 'Common original SDK source position and frozen stimulus match' if available else
+                          'Original frozen stimulus prefix unavailable for distinct source trajectories',
+                'scope': 'Corroborated recorded creation prefixes and original authored inputs; '
+                         'not absence of extra work, independent clocks/costs, intervention or study acceptance'}
+
+    def alignment(self, other, observations, baseline, rounds, stimuli, baseline_stimuli):
         """Compare acquired original facts, never regenerate a control history."""
         pairs = {}
-        for round_ in rounds:
+        for index, round_ in enumerate(rounds, 1):
             identity = round_.identity
             if identity not in observations or identity not in baseline:
                 pairs[identity] = {"evaluated": False, "reason": "One original probe is missing"}
@@ -382,9 +416,7 @@ class RecordedNativeProbes:
             if a["fork"] is None or b["fork"] is None:
                 pairs[identity] = {"evaluated": False, "reason": "Original SDK fork records unavailable"}
                 continue
-            a["fork"].source.require_same_session(b["fork"].source)
-            if a["fork"].source_revision != b["fork"].source_revision:
-                raise ValueError("Matched probes have different original source revisions")
+            source = self.source_alignment(a, b, stimuli, baseline_stimuli, rounds[:index])
             settings = original["scoped_facts"]["configured_settings"], control["scoped_facts"]["configured_settings"]
             configured = {name: self.same_observations(f"captured model/effort ({name})", tuple(
                 (item[name],) if item["evaluated"] else (None,) for item in settings))
@@ -396,11 +428,12 @@ class RecordedNativeProbes:
             request = self.request_alignment(original, control)
             completion = self.completion_alignment(original, control)
             terminals = a["request_completion"], b["request_completion"]
-            unavailable = tuple(item["reason"] for item in (context, request, completion, *terminals)
+            unavailable = tuple(item["reason"] for item in (source, context, request, completion, *terminals)
                                 if not item["evaluated"])
             pairs[identity] = {
                 "evaluated": not unavailable,
-                "scope": "Common original SDK fork source, admitted request models joined to original SDK terminals, original system/tool bytes and frozen probe; captured settings are independent, not complete intervention/construction proof",
+                "scope": "Common recorded SDK source position and frozen inputs, admitted request models joined to original SDK terminals, original system/tool bytes and frozen probe; captured settings are independent, not complete intervention/construction proof",
+                "original_source": source,
                 "captured_settings": configured,
                 "request_controls": context,
                 "request_selection": request,
@@ -1577,7 +1610,8 @@ class RecallScenario:
         observed, baseline_observed = RecordedNativeProbes.observe_runs((probes, baseline), self)
         score, cuts, original, stimuli = self.score_observed(condition, observed)
         control, baseline_cuts, baseline_original, baseline_stimuli = self.score_observed(baseline_condition, baseline_observed)
-        alignment = probes.alignment(baseline, original, baseline_original, self.rounds)
+        alignment = probes.alignment(baseline, original, baseline_original, self.rounds,
+                                     stimuli, baseline_stimuli)
         candidate = score.public_native(cuts, original, stimuli, probes.workflow_timing())
         baseline_result = control.public_native(baseline_cuts, baseline_original, baseline_stimuli,
                                                baseline.workflow_timing())

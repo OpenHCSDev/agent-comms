@@ -410,6 +410,73 @@ class NativeForkCreation(NativeSessionIdentity, SessionJournalHistory, TypedTabl
             self.require_original_prefix(child, entries)
 
     @classmethod
+    def recorded_ancestry(cls, db, canonical: str) -> tuple[NativeForkCreation, ...]:
+        """Read actual SDK creations, newest first, without inferring a parent.
+
+        The last recorded edge's source is an observed anchor, not a claim that
+        all older history is recorded here. Readers must corroborate each
+        returned child prefix before using this lineage as source evidence.
+        No enrollment, input settlement or runtime selection follows.
+        """
+        ancestry, visited = [], set()
+        creation = cls.one(db, session_file=canonical)
+        while creation is not None:
+            if creation.session_file in visited:
+                raise CompactionJournalError("Recorded native fork ancestry is cyclic")
+            visited.add(creation.session_file)
+            ancestry.append(creation)
+            parent = cls.one(db, session_file=creation.source.session_file)
+            if parent is not None:
+                creation.source.require_same_session(parent)
+            creation = parent
+        return tuple(ancestry)
+
+    def require_inherited_creation(self, parent: NativeForkCreation, evidence) -> None:
+        """The recorded edge must cover its original acquired parent position."""
+        self.source.require_same_session(parent)
+        if (not self.source.covers(evidence, self.source_revision, parent.revision)
+                or self.source_revision.size < parent.revision.size):
+            raise CompactionJournalError("Recorded native fork ancestor position differs")
+
+    @staticmethod
+    def inherits_recorded_entries(ancestry, original: NativeSessionIdentity, identities, sources) -> bool:
+        """Corroborate original member inheritance through every returned edge.
+
+        Missing the original anchor is unavailable. An observed edge that does
+        not carry the original members contradicts inheritance and refuses.
+        Prefix and acquired position validation stay with their existing owners.
+        """
+        selected = next((index for index, creation in enumerate(ancestry)
+                         if creation.source.same_session(original)), None)
+        if selected is None:
+            return False
+        for creation in ancestry[:selected + 1]:
+            evidence = sources[creation.path]
+            _, entries = evidence.observe()
+            if not identities <= creation.covered_prefix(evidence, entries):
+                raise CompactionJournalError("Original stimulus is outside a recorded SDK inherited prefix")
+        return True
+
+    @staticmethod
+    def common_recorded_source(
+        left: tuple[NativeForkCreation, ...], right: tuple[NativeForkCreation, ...],
+    ) -> tuple[NativeForkCreation, NativeForkCreation] | None:
+        """Locate matching recorded positions in corroborated creation chains.
+
+        Return the original two edges, not a new identity/proof carrier. This
+        matches source ownership only; frozen inputs and request controls still
+        need their own evidence. Missing older edges cannot be reconstructed.
+        """
+        positions = tuple((original, control) for original in left for control in right
+                          if original.source.same_session(control.source))
+        if not positions:
+            return None
+        for original, control in positions:
+            if original.source_revision == control.source_revision:
+                return original, control
+        raise CompactionJournalError("Common recorded native source revisions differ")
+
+    @classmethod
     def recorded_prefix(cls, db, evidence, entries):
         return frozenset().union(*(creation.covered_prefix(evidence, entries)
             for creation in cls.for_session(db, str(evidence.source.path))))
