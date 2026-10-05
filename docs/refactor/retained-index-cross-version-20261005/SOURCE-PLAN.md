@@ -42,3 +42,48 @@ separate certified source contract, StoppedOwnerInstallation and acquired
 restart/failure/restore phases. Original refactor-audit Package parsing found
 old source 286/286, current source 324/324 and current cutover tools 52/52,
 with zero parse omissions. AST is source evidence, not installed acceptance.
+
+## Published implementation
+
+`1378a065` changes four existing cutover tools. `require_selection` keeps its
+whole-owner decision and delegates original decoder/schema/native preflight
+to `require_source`. `after_stopped` and the joined authored index fixture use
+`quiet_install`. The target never decodes the old registry. The seed projects
+its original sender incarnation and names the original guard through its own
+store; the pilot checks both registry and guard bytes after installation.
+
+The writer consumes the original integer descriptor, as the existing routing
+writer already does. Equal declarations still refuse before any reset. Before
+retiring the old checkpoint, `os.fstat` requires that integer resource; a current
+StoreLock is not duck-adapted and cannot fail only after destructive mutation.
+The target inherited-descriptor installer and production readers are unchanged.
+Existing central-batch busy/subset/refusal/recovery controls remain unchanged.
+
+`OWNER-CONSUMERS.json` records the original Package parser census and related
+cutover declarations, calls and descriptor consumers. The 52 cutover modules
+compile as source; no application module was imported and no tests were run.
+No parse omissions. Runtime dynamic resolution and cross-version behavior
+remain unqualified until the genuine installed control.
+
+## Prospective build and controlled qualification
+
+`OLD720-NORMAL-BUILD-PROPOSAL.json` binds exact Git bytes for all 286 Python
+modules, nine other package source files, both forced native resources and
+original build inputs. Thus there are 295 package-source files plus two forced
+resources to compare with a future normal wheel, beyond generated metadata.
+The original cached Hatchling 1.28 `python -B -m build --wheel --no-isolation`
+recipe is proposed only. No checkout to old Git, build, dependency resolution,
+installation or native copy has happened. Missing original uv.lock is recorded
+as absence, not substituted with today's file.
+
+`PROPOSED-INSTALLED-OPERANDS.json` names the single future control, owned fresh
+fixture/output, schema/FD/reader assertions and cleanup. Bohr must supply actual
+eligible existing source and target prefixes/floors before final literal grants;
+no public or active prefix is borrowed. The old wheel supplies a genuine newly
+built old-source producer, not historical installation or old clock evidence.
+The native package is READ-only preflight; no SDK/native/provider/input journey
+is part of this index scope. No historical-body hunt is a prerequisite.
+
+The routing native-page qualifier still calls current registry decoding after
+carry. Its old/new provenance acquisition is a separate concrete unfinished
+consumer; no central-batch or whole 215/430/661 acceptance is claimed here.
