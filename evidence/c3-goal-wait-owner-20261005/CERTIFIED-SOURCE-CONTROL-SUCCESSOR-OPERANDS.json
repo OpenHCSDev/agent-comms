@@ -1,0 +1,32 @@
+{
+  "scope": "Fresh changed certified-source-control installed verification only; old consumed failure immutable",
+  "source_head": "252d8b6c142977b3afec84503150031e6ed627be",
+  "source_control_sha256": "843a3db3b8e7c22790bc42228c26b77d98cdf43a44958d0b81be6001d11d4449",
+  "production_equal_to_frozen_fc5": true,
+  "retained_wheel": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/wheel/agent_comms-0.1.0-py3-none-any.whl",
+  "retained_wheel_sha256": "8546b4fcecc658e2ae9f2a1d91c30a4e1c005a96ca003971be88b28c12e71c82",
+  "assets": 355,
+  "argv": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "-B",
+    "-c",
+    "import pathlib,sys,agent_comms; assert pathlib.Path(agent_comms.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()); sys.path.append('/usr/lib/python3.14/site-packages'); import pytest; raise SystemExit(pytest.main(['-o', 'addopts=', '--basetemp', '/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-certified-controls02/authored', '-q', 'tests/test_goal_standby.py::test_standby_rejects_closed_wait_cycle_while_both_turns_are_active', 'tests/test_goal_standby.py::test_standby_allows_independent_alternative_to_wait_cycle', 'tests/test_goal_standby.py::test_liveness_check_releases_preexisting_closed_wait_group', 'tests/test_goal_standby.py::test_new_live_dependency_turn_keeps_old_wait_group_open', 'tests/test_goal_standby_liveness.py::test_terminal_hook_rechecks_goal_and_owner_identity', 'tests/test_goal_standby_liveness.py::test_last_target_finishes_silently_releases_once_and_reopens', 'tests/test_goal_standby_liveness.py::test_replaced_target_cannot_report_for_old_incarnation']))"
+  ],
+  "cwd": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+  "environment": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "/home/ts/wt/comms-cleanup-live-integration-20260929/tests",
+    "PI_COMPACTION_TEST_PACKAGE": null,
+    "AGENT_COMMS_ROOT": null
+  },
+  "output": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-certified-controls02",
+  "former_lifecycle": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Parent673-core-only-offline-seven-case-lifecycle.json",
+  "former_closure_sha256": "a71443beb65596e06274e01390b9206b2313f3b604e266470997502eb6d02828",
+  "former_independent_readback": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Parent673-independent-final-floor-readback.json",
+  "former_readback_sha256": "3a3764f2311f49236b66169d0a50c56f8629ddaf93267ebf3d6d6f82616e0df3",
+  "original_proposal": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/PROPOSED-INSTALLED-OPERANDS.json",
+  "restore": "Same original5f347/94keepers/69metadata10/truthfulorigin; fresh floor/refs grant mandatory before import/stage",
+  "zero_native_provider_sdk_public": true,
+  "no_build": true,
+  "execution": "NOTissued; no access/reservation inferred"
+}

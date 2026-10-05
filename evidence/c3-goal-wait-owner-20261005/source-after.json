@@ -1,0 +1,47 @@
+{
+  "revision": "f60bb437d00ebc38561a12f96709d980d98ec36e",
+  "roots": {
+    "src/agent_comms": {
+      "parsed": 324,
+      "omissions": []
+    },
+    "tests": {
+      "parsed": 370,
+      "omissions": []
+    },
+    "tools": {
+      "parsed": 54,
+      "omissions": []
+    }
+  },
+  "current_for_declarations": [
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 56
+    }
+  ],
+  "current_for_consumers": [
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 187,
+      "call": "wait.current_for(goal, owner.created_at)"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 249,
+      "call": "wait.current_for(goal, owner.created_at)"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 196,
+      "call": "wait.current_for(goal, thread.created_at)"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 216,
+      "call": "peer_wait.current_for(peer_goal, peer.created_at)"
+    }
+  ],
+  "outside_revision_comparisons": [],
+  "resolution": "GoalWait declaration and source-read wait/peer_wait receivers in the two migrated owner files; unrelated current_for methods excluded"
+}
