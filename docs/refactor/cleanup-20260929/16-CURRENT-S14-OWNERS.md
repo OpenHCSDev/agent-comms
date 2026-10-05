@@ -183,6 +183,30 @@ persistent stage mechanism. Logs cannot substitute for deleted source/input
 proofs or authorize reconstruction/replay. This is separate from TC1 watcher
 source repair and does not modify the frozen negative.
 
+## Frame-time priority and fixture source repair
+
+Tristan clarified that mouse-wheel slowness means delayed/jerky frames, not too
+few lines per tick, and wants predictable rendering cadence. Existing native59
+wheel handlers use animate=False; the two-line sensitivity is not the reported
+frame-time problem. Heis owns the wheel-to-frame critical path and fast thread
+first paint. Kepler has a disjoint source-only Textual compositor/frame review,
+feeding findings directly to Heis; no competing implementation or new renderer
+loop is authorized. Existing viewport/preparation/body/compositor owners must
+keep ahead work out of the frame-critical path while preserving bounded
+resources, reader intent and nonblank paint. Actual wheel frame times remain
+unqualified; responsive UI and lifetime checks cannot substitute for them.
+
+Parent reviewed446 source checkpoint747138 against frozenfcea. The three
+fixture reply consumers now use one current-USER original InstructionFile/
+SelectedTriage boundary instead of scanning whole history for IGNORE/FULL.
+The provider callback is captured once for reply and finish reason. Existing
+fixture_stage now retains private source trees after joined teardown and emits
+its path receipt; automatic TemporaryDirectory removal is deleted. Production,
+pins and the original acceptance assertions remain unchanged. This closes the
+source counterexamples, not installed warm acceptance; old49.474s failure and
+removed-source limitation remain immutable. No retry under consumed59c17 is
+allowed. Fixture repair is checkpointed; frame-time work remains the priority.
+
 ## Configured source construction merged
 
 Parent reviewed and normally merged Core668 exact969d3597 as
