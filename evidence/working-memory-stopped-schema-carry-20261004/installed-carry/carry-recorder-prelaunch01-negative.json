@@ -1,0 +1,7 @@
+{
+  "failure": "recorder metadata dict was iterated as pairs",
+  "original_control_started": false,
+  "source_declaration_started": false,
+  "store_changes": false,
+  "fix": "iterate existing metadata mapping keys"
+}

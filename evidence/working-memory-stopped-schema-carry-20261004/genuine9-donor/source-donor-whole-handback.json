@@ -1,0 +1,92 @@
+{
+  "scope": "Genuine installed9 declaration + ONE unchanged authored seed + stopped filesystem copy ONLY; target NOT accessed/carried",
+  "grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel663-genuine9-declaration-authored-producer-issued-grant.json",
+  "grant_sha256": "8f7c7b0f8666d9f72a984fdb39542daacb5f5f22539046f279931ff935aa04df",
+  "source_tools": {
+    "tools/cutover/native_schema_carry.py": "08d5b673910f96634ad017eb7e8224cb440e5b5cfea7c07d597b3ddf0f209c2b",
+    "tools/cutover/native_schema_carry_controls.py": "450678fe8a510273f89aad9c9bcc260eab52d1f25be58f24b3056821df930420",
+    "tools/cutover/runtime_installation.py": "77841672b6d9d99e3cb4c724706ffdad7eefd604aab583743f2e4b341156224c",
+    "tools/cutover/seed_retained_index_fixture.py": "29c2811f32d269c62f9d2752829cd9cac6a362ff22f08595180e43ea5d219513"
+  },
+  "source_tuple": [
+    9,
+    3,
+    3,
+    6
+  ],
+  "children": [
+    {
+      "argv": [
+        "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+        "-B",
+        "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry.py",
+        "--declaration"
+      ],
+      "pid": 2795139,
+      "birth_ticks": 63627526,
+      "pgid": 2795139,
+      "started": 1791160636.0859108,
+      "stdout": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/original9-declaration.json",
+      "stderr": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/declaration.stderr.log",
+      "returncode": 0,
+      "proc_absent": true,
+      "group_members": [],
+      "stdout_sha256": "97110417427ede82ae91fa16a76855537d1ca2f1a9b88dffdd80ce848a17d57b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "argv": [
+        "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+        "-B",
+        "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/seed_retained_index_fixture.py",
+        "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/authored-original9"
+      ],
+      "pid": 2795564,
+      "birth_ticks": 63627644,
+      "pgid": 2795564,
+      "started": 1791160637.2657151,
+      "stdout": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/source9-seed.json",
+      "stderr": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/seed.stderr.log",
+      "returncode": 0,
+      "proc_absent": true,
+      "group_members": [],
+      "stdout_sha256": "2be7a42674b82d364c8a0a720bfa9af7398ccf7d65093ce63dca7dc6f8e32d06",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "controller_pid": 2813672,
+  "authored": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/authored-original9",
+  "stopped_copy": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/stopped-original9",
+  "copied_files": 15,
+  "original_hash_mode_mtime_inode_unchanged": true,
+  "copy_hash_mode_mtime_equal": true,
+  "prefix_unchanged_members": 438,
+  "initial_copy_refusal": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/copy01-refusal.json",
+  "native_provider_input_fork_public_replay": 0,
+  "target_authority": false,
+  "declaration_sha256": "97110417427ede82ae91fa16a76855537d1ca2f1a9b88dffdd80ce848a17d57b",
+  "seed_stdout_sha256": "2be7a42674b82d364c8a0a720bfa9af7398ccf7d65093ce63dca7dc6f8e32d06",
+  "journal_present": false,
+  "new_authored_ONLY": true,
+  "noncore_original_keepers_equal": 94,
+  "metadata_files_equal": 69,
+  "distributions": {
+    "pydantic_core": "2.46.5",
+    "typing-inspection": "0.4.4",
+    "metaclass-registry": "0.2.1",
+    "annotated-types": "0.8.0",
+    "typing_extensions": "4.15.0",
+    "pydantic": "2.13.5",
+    "packaging": "26.2",
+    "agent-comms": "0.1.0",
+    "nominal-refactor-audit": "0.1.0",
+    "agent-client-protocol": "0.12.1"
+  },
+  "truthful_direct_url": {
+    "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "whole_source_package_import_read_execution_claim_released": true,
+  "future_source_redeclaration_requires_new_specific_purpose": true,
+  "target_remaining_dependency": "Next explicitly installed schema10 ab640 target + genuine9 source declaration read scope; currentW6window closed without carry"
+}

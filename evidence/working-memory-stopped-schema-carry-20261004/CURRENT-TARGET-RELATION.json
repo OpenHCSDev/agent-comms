@@ -1,0 +1,27 @@
+{
+  "target_operands": "/home/ts/wt/comms-field-codec-closure-20260928/evidence/working-memory-20261004/stopped-carry-current-main-target-operands.json",
+  "target_operands_sha256": "334b6db60ea1a8e9742a4ddda58045a094267888d65c286d72093ea62f77ef43",
+  "target_source": "3aacd708fb9c699cc80c6b864e0ae8cf9ccff7f8",
+  "target_wheel": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-historical-main3aac-source/agent_comms-0.1.0-py3-none-any.whl",
+  "target_wheel_sha256": "0ed358e9a1d845f3fdceca138d0f2fa02824ac61161b3d8ba9a5e32b1cc3b6e3",
+  "inventory_sha256": "8d0205a430a006157f7616d7c88da838ee7f663256a49aa14e49eb71effd83e7",
+  "all355_Git_local_ZIP_exact": true,
+  "same_member_set_as_original": true,
+  "changed_product_members": [
+    "agent_comms/native_admission_epoch.py",
+    "agent_comms/tracked_turn.py",
+    "agent_comms/transcript_outcomes.py"
+  ],
+  "unchanged_product_members": 352,
+  "native_manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+  "original_recipe_git": "9d6e2c956f490a337ae43f9f55f6950d1e7bb3f9",
+  "original_recipe_sha256": "b3afc8496e4dc016179f56ebfd177c338cbd6c7e112a74e697352f4f60c8cf04",
+  "frozen_tools_sha256": {
+    "tools/cutover/native_schema_carry.py": "08d5b673910f96634ad017eb7e8224cb440e5b5cfea7c07d597b3ddf0f209c2b",
+    "tools/cutover/native_schema_carry_controls.py": "450678fe8a510273f89aad9c9bcc260eab52d1f25be58f24b3056821df930420",
+    "tools/cutover/runtime_installation.py": "77841672b6d9d99e3cb4c724706ffdad7eefd604aab583743f2e4b341156224c"
+  },
+  "initial_source_path_check_negative": "A fixed src prefix did not locate forced _native/APPEND_SYSTEM.md. Correct comparison uses the existing build inventory source member for every asset; no source/wheel change or fake equality.",
+  "scope": "Source/wheel relation ONLY; no package, donor/target import, installed declaration, store, native, provider or input operation.",
+  "new_target_native_schema_declarations_unchanged": "All coordinator/native/response/binding/journal declaration members and three forced assets byteexact; only three reviewed annotation/generic modules differ. Installed declaration and carry remain unqualified."
+}
