@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="6" time="1.904" timestamp="2026-10-05T01:39:02.981072-04:00" hostname="desktop"><testcase classname="tests.test_goal_selection_owner" name="test_review_and_command_refuse_replaced_or_cleared_goal[True]" time="0.386" /><testcase classname="tests.test_goal_selection_owner" name="test_review_and_command_refuse_replaced_or_cleared_goal[False]" time="0.257" /><testcase classname="tests.test_goal_selection_owner" name="test_failed_turn_retains_later_progress_of_same_goal" time="0.323" /><testcase classname="tests.test_goal_selection_owner" name="test_exact_cas_and_owner_pause_remain_strict" time="0.302" /><testcase classname="tests.test_goal_selection_owner" name="test_model_edit_and_resume_use_current_goal_selection" time="0.315" /><testcase classname="tests.test_goal_selection_owner" name="test_certified_reply_consumes_only_original_wait" time="0.237"><failure message="AttributeError: 'RegistryOwner' object has no attribute 'require_turn_lease'">selected_goal = (&lt;agent_comms.comms.Comms object at 0x7fe43e0cf770&gt;, Goal(text='Original objective', id='d83fda0689bd44258e62809c592b8...dac3786808cec7d4a322b539c', owner_name='worker', owner_created_at=1791178744.794762, bindings=()), state=ActiveGoal()))
+
+    def test_certified_reply_consumes_only_original_wait(selected_goal):
+        comms, original = selected_goal
+&gt;       peer = comms.agents.begin_turn("peer", "original-peer-work").require_turn_lease()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'RegistryOwner' object has no attribute 'require_turn_lease'
+
+tests/test_goal_selection_owner.py:124: AttributeError</failure></testcase></testsuite></testsuites>

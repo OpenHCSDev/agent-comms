@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="0.617" timestamp="2026-10-05T01:52:56.427294-04:00" hostname="desktop"><testcase classname="tests.test_goal_selection_owner" name="test_certified_reply_consumes_only_original_wait" time="0.544" /></testsuite></testsuites>

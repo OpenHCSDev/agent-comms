@@ -200,9 +200,9 @@ class TurnGoalAccount:
         if terminal is None and self.current_active_goal() is not None:
             self.block_current("Backend turn ended without a result; inspect local diagnostics.")
         store = self.open_store()
-        current = self.comms.registry.require(self.thread_name).goal
+        current = self.comms.registry.require(self.thread_name).goal_for(self.owner.goal.id)
         if terminal is not None and terminal.ok:
-            if current is not None and current.id == self.owner.goal.id:
+            if current is not None:
                 result = VerifiedGoalSettlement(store, self.permit, current, self.turn)
                 result.dispatch_sync(current.state)
         if self.permit.has_verified_progress(store):
@@ -227,17 +227,17 @@ class TurnGoalAccount:
                 "Goal turn ended without verified terminal progress.",
                 observation=observation,
             )
-        if current is not None and current.id == self.owner.goal.id:
+        if current is not None:
             self.block_current("Goal turn ended without verified terminal progress.")
 
     def finish(self, terminal: events.Done | None) -> None:
         """Settle all original grants once from the actual producer terminal event."""
         self.settle_original(terminal)
         for goal_id, permit in self.originated.items():
-            current = self.comms.registry.require(self.thread_name).goal
+            current = self.comms.registry.require(self.thread_name).goal_for(goal_id)
             store = self.open_store()
             if terminal is not None and terminal.ok:
-                if current is not None and current.id == goal_id:
+                if current is not None:
                     result = OriginGoalSettlement(store, permit, current, self.turn)
                     result.dispatch_sync(current.state)
             if permit is None or not permit.has_verified_progress(store):
@@ -254,7 +254,7 @@ class TurnGoalAccount:
                             expected_generation=generation.number,
                             attempt_id=generation.attempt_id,
                         )
-                if current is not None and current.id == goal_id:
+                if current is not None:
                     FailedGoalOrigin(self.comms, self.thread_name, current).dispatch_sync(
                         current.state
                     )

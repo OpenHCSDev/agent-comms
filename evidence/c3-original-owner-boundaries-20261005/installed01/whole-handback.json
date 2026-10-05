@@ -1,0 +1,117 @@
+{
+  "state": "WHOLE owned code/import/execution/READ claim RETURNED after canonical first failure; independent Bohr closure pending",
+  "prefix": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002",
+  "issued_grant_sha256": "f0e2cf98608c6a7eea7fec81cc8a0c1a22ba95e14144448813db8f5b9ae484a2",
+  "canonical": {
+    "exit": 1,
+    "passed": 5,
+    "failed": 1,
+    "elapsed_seconds": 4.27944745903369,
+    "failure": "Authored test called nonexistent RegistryOwner.require_turn_lease before reply workflow; actual peer begin created a lease retained in original negative root, no synthetic cleanup of recorded state"
+  },
+  "native_execution_started": false,
+  "native_inputs": 0,
+  "localhost_posts": 0,
+  "external_provider_inputs": 0,
+  "public_inputs": 0,
+  "replay": 0,
+  "native_READ_return": {
+    "issued_grant_sha256": "1f53c4dc2606c41d5eb17985637aa0c6e1d5275f71e65bb51c394e9bff33ff34",
+    "returned": true,
+    "EXEC_used": false,
+    "keeper_held": true
+  },
+  "floor": {
+    "state": "PASS",
+    "floor_records": 510,
+    "Core_assets": 347,
+    "nonCore_keepers": 94,
+    "metadata_files": 69,
+    "distributions": 10,
+    "byte_mode_link_failures": [],
+    "extra_assets": [],
+    "missing_assets": [],
+    "controller_proc_present": [],
+    "sockets": []
+  },
+  "groups": [],
+  "sockets": [],
+  "source_tests_unchanged": true,
+  "original_private_auth_history_UNKNOWN_preserved": true,
+  "private_authored_negative_preserved": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/canonical01/authored",
+  "evidence": {
+    "stage.stdout.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/stage.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "stage.stderr.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/stage.stderr.log",
+      "sha256": "b1c0441d74488f6dcf3b6a421aad485d8d5b76fe6f446208eb1b547bba19a7b7"
+    },
+    "stage-terminal.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/stage-terminal.json",
+      "sha256": "ce7effe9353da59b7e3713944cf16bd976b476fb2aeaa4385f69de1e70a5c05e"
+    },
+    "candidate-source-proof.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/candidate-source-proof.json",
+      "sha256": "185270ed3d12968a3ae0ff6042cbb69d7c84b9526a1d26d05e13e637ab673cee"
+    },
+    "installed-inventory.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/installed-inventory.json",
+      "sha256": "294ae9dd1b2f3df339be0f71864119931e145d0e503d9cb3bed11401f6417e0f"
+    },
+    "native-full-trust.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/native-full-trust.json",
+      "sha256": "0c92b1ab53153d45aad07ece087dd4071e12a1aceb59fa361a8f112d0bfd0077"
+    },
+    "installed-requirements.txt": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/installed-requirements.txt",
+      "sha256": "ebb69c9961fe940cb589ba0f25d937430012e8fb81405919ec95b0678ec04632"
+    },
+    "prove-installed.py": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/prove-installed.py",
+      "sha256": "a7b6c90e266d0ddc9ad65f8d3897403c531636ce42574f1ae056bf5394daf97e"
+    },
+    "run-phase.py": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/run-phase.py",
+      "sha256": "de63f1fb99c7de9338a3c14f5e028d762f3ba93943ff516e56b01c6cc246e675"
+    },
+    "canonical01/live-handle.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/canonical01/live-handle.json",
+      "sha256": "880d676dcd5cf9989ef5c94ecff510d114692eaf413ac27b1e84a615a56e9452"
+    },
+    "canonical01/stdout.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/canonical01/stdout.log",
+      "sha256": "a9c5def1f17f031032cecf8bb692cfa982fb5c4cc528689fce0ebe6ef916b1e3"
+    },
+    "canonical01/stderr.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/canonical01/stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "canonical01/results.xml": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/canonical01/results.xml",
+      "sha256": "85589cf82e0dcac5bf55675c6bb830d11534603f5d88c14fd26ec6e02ad6b515"
+    },
+    "canonical01/terminal.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/canonical01/terminal.json",
+      "sha256": "8144126a2c7baa0f15392573df4f73fe413fa2b8e85b95eb58f1736d893c4efc"
+    },
+    "restore.stdout.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/restore.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "restore.stderr.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/restore.stderr.log",
+      "sha256": "4912bd8dfadc9eae417b29578429384c7616a79451fc2a3aa74cea442243454a"
+    },
+    "restore-terminal.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/restore-terminal.json",
+      "sha256": "95b8d1c930d5c7026911bc4775ba0f63bb73666c502aec856efb6b256f79c25b"
+    },
+    "restored-floor-proof.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/restored-floor-proof.json",
+      "sha256": "0fd1f589c083c76eb32712d0b3fcfa641b330d5b4e9f76c3174be3099903b41b"
+    }
+  },
+  "next_step": "Source-read original RegistryOwner.lease and AgentActivity.begin/finish family, fix authored control only; fresh exact successor purpose required before execution, no retry or unchanged five-case repeat inferred"
+}
