@@ -89,7 +89,7 @@ async def condition_application(stage,package,original_python,selected_condition
                 service.root/'compaction-commits.sqlite3',Path(fork.session_file))
             record(condition_file,condition)
             chunks.clear()
-            marker='ORIGINAL_INSTALLED_S4_APPLICATION_VERIFIED'
+            marker=f'ORIGINAL_INSTALLED_S4_APPLICATION_{stage.name.upper().replace("-", "_")}_VERIFIED'
             text=f'New distinct isolated verification input. Do not use tools or resume inherited work. Reply exactly {marker}.'
             print('CONFIGURED_FORK_INSTALLED_DISTINCT_INPUT',flush=True)
             result=await build_agent_router(agent)('session/prompt',{'sessionId':owner.name,

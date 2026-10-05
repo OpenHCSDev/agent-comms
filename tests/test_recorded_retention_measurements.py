@@ -68,6 +68,62 @@ class RecordedMeasurementTests(unittest.TestCase):
         path.write_bytes(raw)
         return FileProvenance(str(path), hashlib.sha256(raw).hexdigest())
 
+    def test_probe_checkpoint_applies_to_latest_cut_on_input_branch(self):
+        # A completed cut includes its original subsequent answers. A fresh
+        # probe may follow those messages, but not a different/newer cut.
+        rows = (
+            {'type': 'session', 'id': self.identity.session_id},
+            {'type': 'compaction', 'id': 'cut', 'summary': 'Original cut'},
+            {'type': 'message', 'id': 'direct', 'parentId': 'cut',
+             'message': {'role': 'user', 'content': 'First probe'}},
+            {'type': 'message', 'id': 'reply', 'parentId': 'direct',
+             'message': {'role': 'assistant', 'content': [], 'stopReason': 'stop'}},
+            {'type': 'message', 'id': 'continued', 'parentId': 'reply',
+             'message': {'role': 'user', 'content': 'Distinct continued probe'}},
+            {'type': 'compaction', 'id': 'newer', 'parentId': 'reply',
+             'summary': 'A different cut'},
+            {'type': 'message', 'id': 'superseded', 'parentId': 'newer',
+             'message': {'role': 'user', 'content': 'Uses newer cut'}},
+            {'type': 'message', 'id': 'unrelated',
+             'message': {'role': 'user', 'content': 'Other branch'}},
+        )
+        self.session.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+        self.session.chmod(0o600)
+        with NativeEntry.open_evidence(self.session) as evidence:
+            _, entries = evidence.observe()
+            originals = {entry.id: entry for entry in entries}
+            captured = (None, originals['cut'], frozenset(), None)
+            # Original capture/fork integrity is unchanged; this checks the
+            # new applicability relation using the real acquired branch owner.
+            with patch.object(RecordedNativeCheckpoint, 'capture', return_value=captured) as capture:
+                for key in ('direct', 'continued'):
+                    with self.subTest(input=key):
+                        self.assertIs(self.checkpoint.capture_for_probe(
+                            self.identity, evidence, None, evidence, originals[key]), captured)
+                for key in ('superseded', 'unrelated'):
+                    with self.subTest(input=key), self.assertRaisesRegex(ValueError, 'latest compaction'):
+                        self.checkpoint.capture_for_probe(
+                            self.identity, evidence, None, evidence, originals[key])
+                self.assertEqual(capture.call_count, 4)
+
+    def test_probe_observation_snapshot_preserves_raw_bytes_after_writer_append(self):
+        source = self.root / 'observer.jsonl'
+        raw = b'{"stage":"observed", "counter":0}\n'
+        source.write_bytes(raw)
+        destination = self.root / 'sealed.jsonl'
+        reference = RecordedNativeCheckpoint.snapshot_observation(source, destination)
+        with source.open('ab') as writer:
+            writer.write(b'{"stage":"observer-runtime-complete"}\n')
+        self.assertEqual(RecordedNativeCheckpoint.read_bytes(reference), raw)
+        self.assertEqual(RecordedNativeCheckpoint.read_json_lines(reference),
+                         ({'stage': 'observed', 'counter': 0},))
+        self.assertEqual(destination.stat().st_mode & 0o777, 0o600)
+        with self.assertRaises(FileExistsError):
+            RecordedNativeCheckpoint.snapshot_observation(source, destination)
+        destination.write_bytes(raw + b' ')
+        with self.assertRaisesRegex(ValueError, 'artifact changed'):
+            RecordedNativeCheckpoint.read_bytes(reference)
+
     def submitted_capture(self):
         owner = Thread('original', frozenset(), str(self.root), created_at=12)
         turn = RecordedContextTurn(TurnId('original-turn'), TurnIdentity(owner.incarnation, 11))
