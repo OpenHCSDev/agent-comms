@@ -2588,3 +2588,31 @@ bytes, capacity and recall. Three authored controls passed in0.88s; the empty
 recorded run preserves all three unavailable rounds. Runtime src/stack/tools
 remain unchanged. Next S4 work is original same-input artifact applicability,
 without reconstructing missing references or another provider input/study.
+
+
+## Explorer preparation closed; actual client admission refuses
+
+Parent read/hash verified the actual CLOSED679abc lifecycle0d2b2d11 and
+independent readback4bed5ace/final census1f92dd1e:229 UID holder/output/7a
+references and gaps zero,953/full69/519/107 frozen verified. All25 public086
+references are preserved, including original19 and six current-public-root
+associations. Sch issued new Parent matching7a one-use publication/startup
+authorityfc5bb8f8 after reading those actual closed bytes; Parent read/hash
+matched its literal issued file. No old preparation authority was inherited.
+
+Parent's original read-only fresh admission found all19 owners idle with valid
+authenticated launch captures, but require_no_clients refused interactive
+Toad4135419/birth64375468, argv(toad), cwd/home/ts, root unset. It is not an owned
+recorder. No process was signalled, stopped or launched; publisher receipt and
+preimages remain absent. Parent asked Tristan asynchronously to close his
+window, while source work continues. This actual open client must clear the
+original fresh guard before publication; independent private census does not
+substitute for that guard.
+
+Performance preparation continues in parallel: Parent authorized one source-only
+combined Text63/64 normal branch/filewheel and coherent451 ToAd filewheel proof
+through the existing cached backend, with exact upcoming original wheel/frame
+controls. No installed prefix or runtime purpose is inferred; all current
+candidate/public files and frozen negative/accepted receipts remain protected.
+This preparation makes the subsequent installed motion check ready without
+claiming fast loading or measured frame improvements.
