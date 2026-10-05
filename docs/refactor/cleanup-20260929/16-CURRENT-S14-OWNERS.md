@@ -2979,3 +2979,32 @@ and BlockProtocol navigation checks are absent at the read scope. No second
 implementation task is created for those landed families. Remaining whole-class
 responsibility justification and installed resource/continuous acceptance stay
 with the existing T4/TC1/T9 owner; this is not a whole-T4 closure claim.
+
+### C3 native settlement and next rendering/source boundary, 2026-10-05
+
+67502's two original saved-SDK/OwnedTurn/TurnRunner cases passed, exit0 in
+11.307235816s (terminal ca8aaad5, XML da468dfb). Same-ID later progress and an
+independent replacement were preserved through actual settlement, with idle
+leases, empty tasks/inboxes and original source prefix asserted. Two controlled
+localhost posts and two native inputs were observed, one per case. The corrected
+reply pass and original five passes remain distinct; no earlier case was repeated.
+Original failed peer lease/raw01 remain immutable. Mendel returned both native
+authorities and restored original540 Core5f347/all510 records/94 keepers/69metadata
+and ten distributions, whole handback00db8167 with26 rawkeepers. Independent Bohr
+floor/census closure remains pending; this does not claim current public C3 delivery.
+
+Text66 source2e8e872e/prod7934c06e makes the existing paint mapping own each positive
+bounded rectangle once, retaining original widget origins. Cuts/render/chops take
+that rectangle; separate damage/exposure selection remains. Parent read hit-test,
+dirty-region and selection consumers and found no demonstrated API mismatch.
+Kepler owns affected source controls; no App/build/frame-time or wheel-speed
+acceptance has occurred. Heis continues the joint connected workflow source batch.
+
+S4's shared arm gap is now assigned to Mendel after its C3 safe checkpoint:
+RegistryDocument.prepare_native_source and Registration.attach_native_session
+require an executable original lease, while a new thread incarnation cannot
+inherit certified USER task authority. The original registry/native custody
+family must own any legal same-idle-owner certified branch selection/restoration.
+Arendt continues explicit authored case publications independently. No generic
+registry replacement, fabricated wire reference, relaxed reader, SDK/provider
+operation or paired-study authorization is implied.
