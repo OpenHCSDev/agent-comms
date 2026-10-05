@@ -13,22 +13,16 @@ actual defaults and route pointing to485, and schema10-to10 Preserve. Accepted
 466 worker behavior is now enabled in the real public bundle (selected Core3931/
 Toad289f/Text67, not later MAIN681 or unqualified Heis native71). Parent returned
 the one-use native claim in55ff39ca; keeper remains shared by the real runtime.
-Fresh stationary ordinary default UI observe01 failed19.619s because its legacy
-inspection helper still reads deleted DocumentViewport._running. Parent reviewed
-the after image: saved body, Ready roster/session and connected/model footer are
-visible, but metadata export and graceful completion are not accepted. Whole
-client return77fae310 and all16 retained references match; recorded processes,
-groups and display sockets are gone. Heis already owns the exact helper fix1cce
-deriving reconciliation from the worker. Mendel is preparing a separate changed-
-helper observe02 using Heis existing corrected source, preserving the first
-failure; no repeated18-check journey or speed claim. No observe02 client is live
-from preparation alone, and returned01 cannot hold Heis07 source admission. Heis07
-has explicitly reconciled its decoder with the actual PUBLIC471 interpreter.
-Bohr final release705005a1 binds separate native EXECfde190 and the append-only
-effective controllerd15c; the historical old-source wrapper remains unexecuted.
-Stage and proof each passed once. Heis owns the sole150-second launch; no live
-process or result is inferred from the release. Observe02 can run after the
-actual public source witness returns, without waiting for the whole private job.
+Fresh stationary default UI observe01 failed on a stale inspection helper;
+its failure and raw images are preserved. The separate observe02 used the
+existing corrected recorder and capture helper and passed24.764s, with readable
+saved body, Ready/connected state, unchanged runtime and graceful UI/st exits.
+All21 named child identities are absent and its whole client claim is returned
+(eac1c110). This proves stationary attachment and exit, not the continuous journey.
+Heis07 also completed once: full motion passed143.892s with graceful parent
+outcomes, zero new inputs and joined cleanup. Bohr independently closed43b54
+at3f477272 after exact floor restoration; Sch READ/EXEC claims are returned.
+No public source witness, private operator claim or retry remains active.
 
 Latest merge: reviewed460 frozenb51a68b6 is normally merged5fc73b1b.
 The full installed07 motion path passed, including width, wheel reversal, End,
@@ -41,19 +35,35 @@ step. Preserve accepted Core676 features rather than reverting to an older
 Core while delivering Text71. Startup/frame/CPU, loaded scaling and continuous
 configured acceptance remain unfinished with originalHeis active.
 
-MCP472/682 preparation identified an inactive network preload: native bootstrap
-strips NODE_OPTIONS, and immutable7a has no approved origin guard. OriginalSch
-owns the minimal pre-SDK bootstrap source seam; no artifact edit, build or native
-run is authorized by that source task. Mendel owns qualifier setup and independent
-typed mounted preparation. S4 source683 is normally merged208b8f07 after review of complete arm acquisition,
+Receiving474 b687d6e3 selects public Core3931/3fe and nativeText71 while
+all319 product assets remain equal to merged460. No retained wheel matches the
+changed root pins. Parent authorized Heis one normal cached Toad wheel build;
+source/package proof and original receiving/cohort delivery remain next.
+Continuous468 controls are normally adopted separately; configured execution,
+loaded scaling and startup/frame/CPU gains remain unfinished.
+
+MCP472/682 preparation identified an inactive network preload. OriginalSch
+published685 canonical pre-SDK fetch-origin guard; Parent reviewed its transport
+replacement and refusal path and authorized one necessary fresh native assembly
+plus matching Core wheel through existing commitment owners. Shared7a stays
+immutable. No guard execution or all-process network containment is proved.
+Mendel's independent typed-only path has actual stage-only grant e7c2fcb4 on
+former style22, current465 floor1477; only ToAdb2e needs staging. FullTrust is
+false and no native artifact authority is involved. Exact proof and one mounted
+90-second release remain Bohr's subsequent steps; native four-case acceptance
+waits the new committed guard and separately issued scope.
+
+S4 source683 is normally merged208b8f07 after review of complete arm acquisition,
 inputs/cuts/probes and cleanup clocks. Four authored orchestration controls and
 all ten source/raw hashes match; actual configured SDK execution and the paid
-study remain unqualified/unapproved. OriginalEinstein published684 source
-correction for genuine old integer-FD writer custody and incarnation-only target
-acquisition. Parent authorized one normal exact-Git720 source wheel build using
-the verified cached Hatchling backend. This will be a newly built old producer,
-not historical installation proof. Bohr is identifying two existing nonlive
-holders; no stage or old/current qualification run is authorized yet.
+study remain unqualified/unapproved. Einstein's exactGit720 normal wheel build
+passed once; c3e41356 is a newly built genuine old source producer, not a historical
+installation. Bohr verified existing source540 and unchanged target334. Source
+restore uses the normal5f wheel and510-file snapshot; no whole-prefix TAR is
+required. Target consumes installed5f347 with all eight relevant files equal,
+so no target install/build is needed. Its actual native declaration is086,
+requiring fresh matching READ-only rather than7a. Einstein is completing the
+paired command/proof/cleanup tuple before Bohr issues execution; no run yet.
 
 Core681 fork-source delivery is actually merged38a0533e at frozen3dc11331.
 Its nine authored source checks support recorded inheritance, not independent
