@@ -29,3 +29,16 @@ The original656 installed product remains its truthful old filewheel source;
 it is not declared equal to current main. New private reader bytes are separately
 pinned in the command. All current runtime/native/tool owners remain untouched.
 USD75/30-pair study is still unapproved.
+
+
+The prepared outer controller `run_published_reader.py` launches only the exact
+unchanged command.json tuple. It uses the existing `ParentedProcess` and
+`ExitStack` to own identity, pipes, reap and group retirement; no PID-as-outcome
+policy, copied shutdown algorithm, observer, model actor or arbitrary timeout.
+It writes actual raw stdout/stderr and terminal/identity after the joined read.
+It imports current source only for the outer child owner, never overlays the
+leased reader's imported product. The leased child environment remains exactly
+`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tests:tools/cutover`; both source scopes are
+named separately. The command remains literal hashb9738b21, determining private
+reader source remains merged577347d1. This controller has only been parsed, not
+run. Actual issued purpose bytes must be read before execution; no loan inferred.
