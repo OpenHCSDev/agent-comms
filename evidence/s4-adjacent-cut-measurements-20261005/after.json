@@ -1,0 +1,536 @@
+{
+  "parser": "NRA SourceModuleBatchParser",
+  "modules": 739,
+  "parse_omissions": [],
+  "scope": "tracked Python src/tests/tools/experiments; lexical evidence, dynamic resolution not proved; JS/native untouched",
+  "sites": [
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 612,
+      "node": "Attribute",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 54,
+      "node": "FunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 106,
+      "node": "AsyncFunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 126,
+      "node": "AsyncFunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 198,
+      "node": "AsyncFunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 280,
+      "node": "AsyncFunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 344,
+      "node": "AsyncFunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 363,
+      "node": "Attribute",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 353,
+      "node": "Attribute",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 218,
+      "node": "Attribute",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 213,
+      "node": "FunctionDef",
+      "name": "checkpoints_for"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 251,
+      "node": "FunctionDef",
+      "name": "observe_acquired"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 589,
+      "node": "FunctionDef",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1115,
+      "node": "FunctionDef",
+      "name": "revision_intervals"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1187,
+      "node": "FunctionDef",
+      "name": "compare_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1209,
+      "node": "FunctionDef",
+      "name": "compare_native_pairs"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 77,
+      "node": "Attribute",
+      "name": "compare_native_pairs"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1185,
+      "node": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1195,
+      "node": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1196,
+      "node": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1434,
+      "node": "Attribute",
+      "name": "compare_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1439,
+      "node": "Attribute",
+      "name": "compare_native_pairs"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1458,
+      "node": "Attribute",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 239,
+      "node": "Attribute",
+      "name": "checkpoints_for"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 274,
+      "node": "Attribute",
+      "name": "compare_acquired"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 275,
+      "node": "Constant",
+      "name": "observed_interval"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 277,
+      "node": "Constant",
+      "name": "source_changes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 277,
+      "node": "Constant",
+      "name": "source_changes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 280,
+      "node": "Attribute",
+      "name": "revision_intervals"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 282,
+      "node": "Constant",
+      "name": "revision_mass"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1130,
+      "node": "Constant",
+      "name": "observed_interval"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1218,
+      "node": "Attribute",
+      "name": "compare_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 243,
+      "node": "Attribute",
+      "name": "observe_acquired"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 619,
+      "node": "Attribute",
+      "name": "revision_intervals"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1137,
+      "node": "Constant",
+      "name": "revision_mass"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 332,
+      "node": "FunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 346,
+      "node": "FunctionDef",
+      "name": "compare_acquired"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 396,
+      "node": "FunctionDef",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 214,
+      "node": "Constant",
+      "name": "revision_mass"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 359,
+      "node": "Constant",
+      "name": "revision_mass"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 360,
+      "node": "Constant",
+      "name": "source_changes"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 359,
+      "node": "Attribute",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 342,
+      "node": "Attribute",
+      "name": "compare_acquired"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack_successor.py",
+      "line": 42,
+      "node": "FunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/test_image_inputs.py",
+      "line": 312,
+      "node": "Constant",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/test_image_inputs.py",
+      "line": 210,
+      "node": "Constant",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/test_image_inputs.py",
+      "line": 305,
+      "node": "Constant",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/test_image_inputs.py",
+      "line": 228,
+      "node": "Constant",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/test_message_page_request.py",
+      "line": 62,
+      "node": "FunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 133,
+      "node": "Attribute",
+      "name": "revision_intervals"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 147,
+      "node": "Attribute",
+      "name": "revision_intervals"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1319,
+      "node": "Attribute",
+      "name": "compare_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2061,
+      "node": "Attribute",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 131,
+      "node": "Constant",
+      "name": "observed_interval"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 132,
+      "node": "Constant",
+      "name": "observed_interval"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 149,
+      "node": "Constant",
+      "name": "observed_interval"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 152,
+      "node": "Attribute",
+      "name": "revision_intervals"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 521,
+      "node": "Attribute",
+      "name": "compare_native_pairs"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2042,
+      "node": "Attribute",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2047,
+      "node": "Attribute",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2050,
+      "node": "Attribute",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2056,
+      "node": "Attribute",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 131,
+      "node": "Constant",
+      "name": "revision_mass"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 132,
+      "node": "Constant",
+      "name": "revision_mass"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 139,
+      "node": "Attribute",
+      "name": "revision_intervals"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 150,
+      "node": "Constant",
+      "name": "revision_mass"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 180,
+      "node": "Constant",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 181,
+      "node": "Attribute",
+      "name": "observe_acquired"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 182,
+      "node": "Constant",
+      "name": "observed_interval"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 188,
+      "node": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 191,
+      "node": "Attribute",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1859,
+      "node": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2049,
+      "node": "Attribute",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2059,
+      "node": "Attribute",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 184,
+      "node": "Constant",
+      "name": "revision_mass"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 192,
+      "node": "Constant",
+      "name": "revision_mass"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 193,
+      "node": "Constant",
+      "name": "source_changes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 193,
+      "node": "Constant",
+      "name": "source_changes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 195,
+      "node": "Attribute",
+      "name": "compare_acquired"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 198,
+      "node": "Attribute",
+      "name": "compare_acquired"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 185,
+      "node": "Constant",
+      "name": "revision_mass"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 186,
+      "node": "Constant",
+      "name": "revision_mass"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 189,
+      "node": "Constant",
+      "name": "revision_mass"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1864,
+      "node": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 190,
+      "node": "Constant",
+      "name": "revision_mass"
+    },
+    {
+      "path": "tests/test_response_policy.py",
+      "line": 32,
+      "node": "Constant",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 214,
+      "node": "Attribute",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 381,
+      "node": "Constant",
+      "name": "revision_mass"
+    }
+  ]
+}

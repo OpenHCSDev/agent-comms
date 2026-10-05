@@ -124,6 +124,79 @@ class RecordedMeasurementTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'artifact changed'):
             RecordedNativeCheckpoint.read_bytes(reference)
 
+    def test_adjacent_revision_intervals_keep_every_frozen_pair(self):
+        scenario = coding_scenario()
+        mass = {'evaluated': True, 'constraints': {'eligible': 2, 'unauthorized': 0}}
+        reports = {'r1': {},
+            'r2': {'observed_interval': {'from_round': 'r1', 'to_round': 'r2', 'revision_mass': mass}},
+            'r3': {'observed_interval': {'from_round': 'r2', 'to_round': 'r3', 'revision_mass': mass}}}
+        complete = scenario.revision_intervals(reports)
+        self.assertEqual(tuple(complete), ('r2', 'r3'))
+        self.assertTrue(all(value['evaluated'] for value in complete.values()))
+        self.assertIs(complete['r2']['constraints'], mass['constraints'])
+        for missing in ('r1', 'r2', 'r3'):
+            with self.subTest(missing=missing):
+                partial = scenario.revision_intervals({key: value for key, value in reports.items()
+                                                      if key != missing})
+                self.assertEqual(tuple(partial), ('r2', 'r3'))
+                for before, after in (('r1', 'r2'), ('r2', 'r3')):
+                    self.assertEqual(partial[after]['evaluated'], missing not in (before, after))
+                    if not partial[after]['evaluated']:
+                        self.assertEqual(partial[after]['missing_checkpoints'], (missing,))
+                        self.assertNotIn('constraints', partial[after])
+        no_comparison = scenario.revision_intervals({'r1': {}, 'r2': {}})
+        self.assertFalse(no_comparison['r2']['evaluated'])
+        contradicted = {**reports, 'r3': {'observed_interval': {
+            'from_round': 'r1', 'to_round': 'r3', 'revision_mass': mass}}}
+        with self.assertRaisesRegex(ValueError, 'frozen adjacent rounds'):
+            scenario.revision_intervals(contradicted)
+
+    def test_wide_observed_cut_interval_cannot_fill_missing_round(self):
+        rows = ({'type': 'session', 'id': self.identity.session_id},
+                {'type': 'compaction', 'id': 'first', 'summary': 'First'},
+                {'type': 'compaction', 'id': 'middle', 'parentId': 'first', 'summary': 'Middle'},
+                {'type': 'compaction', 'id': 'last', 'parentId': 'middle', 'summary': 'Last'},
+                {'type': 'compaction', 'id': 'other', 'summary': 'Other branch'})
+        self.session.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+        self.session.chmod(0o600)
+        first = replace(self.checkpoint, reference=SummaryOperationIdentity(str(self.session), 'first'))
+        last = replace(self.checkpoint, reference=SummaryOperationIdentity(str(self.session), 'last'))
+        request = manual_summary_record(self.session)
+        attempts = {key: SelectedSummaryAttempt(key, str(self.session), request.journal_json(),
+                                                request, ReservedSummary())
+                    for key in ('first', 'last')}
+        run = RecordedNativeProbes({}, {'r1': first, 'r3': last})
+        mass = {'evaluated': True, 'constraints': {'eligible': 2, 'unauthorized': 0}}
+        # Journal/authored-scope corroboration is separately qualified. Exercise
+        # the real source branch owner and both callers' shared comparison here.
+        with NativeEntry.open_evidence(self.session) as evidence:
+            _, entries = evidence.observe()
+            by_id = {entry.id: entry for entry in entries}
+            captures = {key: (attempts[key], by_id[key], frozenset(), None) for key in attempts}
+            def capture(cut, session, reader):
+                return captures[cut.reference.operation_id]
+            with patch.object(RecordedNativeCheckpoint, 'capture', autospec=True, side_effect=capture), \
+                    patch.object(RecordedNativeCheckpoint, 'summary_usage', return_value={'evaluated': False}), \
+                    patch.object(RecordedNativeCheckpoint, 'revision_from', return_value=mass):
+                reports, _, _ = run.observe_acquired(coding_scenario(), {self.session: evidence}, run.checkpoints)
+                wide = reports['r3']['observed_interval']
+                self.assertEqual((wide['from_round'], wide['to_round']), ('r1', 'r3'))
+                self.assertIs(wide['revision_mass'], mass)
+                self.assertFalse(reports['r3']['revision_mass']['evaluated'])
+                self.assertEqual(reports['r3']['revision_mass']['missing_checkpoints'], ('r2',))
+                scored = coding_scenario().score(Condition.TASK_MEMORY, RecordedAnswers({}))
+                result = scored.public_native(reports, {}, {})
+                self.assertEqual(tuple(result['revision_mass']), ('r2', 'r3'))
+                self.assertTrue(all(not value['evaluated'] for value in result['revision_mass'].values()))
+                direct = last.inspect(first)
+                self.assertIs(direct['revision_mass'], mass)
+                self.assertEqual(direct['source_changes'], wide['source_changes'])
+                with self.assertRaisesRegex(ValueError, 'distinct original ancestor'):
+                    last.compare_acquired(first, captures['first'], captures['first'], evidence)
+                unrelated = (attempts['first'], by_id['other'], frozenset(), None)
+                with self.assertRaisesRegex(ValueError, 'distinct original ancestor'):
+                    last.compare_acquired(first, unrelated, captures['last'], evidence)
+
     def submitted_capture(self):
         owner = Thread('original', frozenset(), str(self.root), created_at=12)
         turn = RecordedContextTurn(TurnId('original-turn'), TurnIdentity(owner.incarnation, 11))
