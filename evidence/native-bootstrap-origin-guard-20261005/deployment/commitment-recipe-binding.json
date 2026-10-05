@@ -1,0 +1,17 @@
+{
+  "recipe": "canonical stack/bin/prepare-pi-native with existing commitment-capture preparation boundary; verify/publication held for actualfullcomparison+pin",
+  "canonical_sha256": "f51062ca921d539948fd35db2fc65207b60d4f017a52d6b4e338fd5c810035cc",
+  "capture": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/capture-stock-recipe.sh",
+  "capture_sha256": "50cb2d4814a9a57e2c46a53ea6ed603b00276808789dbc906d63642769178754",
+  "capture_only_adaptations": [
+    "ownstack_root literal",
+    "existing-target block absent for fresh unverified assembly",
+    "final verify(stage) held until actual new full-tree commitment",
+    "stage renamed into own fresh-unverified rather than committed target"
+  ],
+  "MCP_input": "existing fullyverified7a subtree; currentmanifest ORIGINAL7a before anypin write; no npm ci or resolve",
+  "expected_native_delta": [
+    "dist/agent-comms-project-bootstrap.mjs"
+  ],
+  "no_runtime_execution_authority": true
+}
