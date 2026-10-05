@@ -3115,11 +3115,15 @@ BLOCKED/ACTIVE observations remain historical, with no goal-tool resume/replay.
 - [x] Viewport worker466 is merged0bc37f7a after one mounted cancellation-before-
   entry, same-source resume, coalescing and joined-close acceptance. Former485
   floor and all claims independently closed; original failures remain preserved.
-- [ ] Deliver merged466 in the local public cohort. Separate471 preparation is
-  issued; Sch's one retained Core/Toad stage passed0.395s and the installed-file
-  check passed7.633s: all953 assets/full69 and protected originals match. Bohr
-  binds the original receipts for canonical/cohort preparation next. Public
-  publication remains unexecuted; the user's live installation is unchanged.
+- [x] Deliver merged466 in the local public cohort. Prepared471 passed all
+  canonical/cohort steps, froze107 members and independently closeda758. Parent
+  published once under NEW27bf after19-idle/no-client admission: publisher
+  passed64.806s, readback1.050s; all19 owners alive with original thread births,
+  settings/history/root and actual default links on target485. Native schema
+  remains10 via Preserve; receipt0c603573 and one-use return55ff39ca retained.
+- [ ] Verify the fresh471 ordinary default UI attachment. OriginalMendel owns
+  stationary saved-body/Ready/actual exit verification with a copied UI state;
+  no18-check ordinary journey, accepted466 control or speed claim is repeated.
 - [ ] Heis460 final06 includes accepted466 in one normal union wheel and fixes
   right-sidebar disclosure plus all related worker observers. The unchanged
   full150s cold/wheel/width/reversal/End/B-A run reached all motion/tab phases

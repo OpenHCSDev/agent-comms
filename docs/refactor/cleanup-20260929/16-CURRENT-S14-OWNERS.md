@@ -4,6 +4,20 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+Current live release: Parent published merged471 once under NEW27bf native
+authority after independent private closurea758 and the original fresh guard
+(19 idle owners, no clients). Publisher1846050/b71369847 passed64.806s and
+joined; original readback1849791/b71377138 passed1.050s and joined. Receipt
+0c603573 records all19 restarted with unchanged thread births/settings/root,
+actual defaults and route pointing to485, and schema10-to10 Preserve. Accepted
+466 worker behavior is now enabled in the real public bundle (selected Core3931/
+Toad289f/Text67, not later MAIN681 or unqualified Heis native71). Parent returned
+the one-use native claim in55ff39ca; keeper remains shared by the real runtime.
+Fresh stationary ordinary default UI verification is assigned to originalMendel;
+it is still pending, with no repeated18-check journey or speed claim. Heis07
+must reconcile its later source decoder with this actual new publication before
+source READ/App release; stage/proof remain independent.
+
 Latest installed verification: 460 successor05 reached saved-body/draft paint
 and failed its width action because the right SessionThreadSidebar was still
 collapsed. Its floor and claims are independently closed at8aea263f/readbackf876;
@@ -73,8 +87,9 @@ Parent; receipt/preimages are absent and the commands have not executed. Sch
 returned package/import/preparation and native/source READ claims. Bohr independently closed existing5c99 at a758055f/readbackd005bc05: all107
 frozen members,953 assets/full69 and protected records match; fresh212-process
 census found no private borrowers or permission gaps. Fresh matching keeper
-authority and original live client admission remain required before the
-one publication; no stage, build or accepted worker check is repeated.
+authority27bf and original live client admission subsequently passed; the
+one publication/readback succeeded as described above. No stage, build or
+accepted worker check was repeated.
 The selected Core3931/Toad289f cohort is deliberate and does not claim latest
 MAIN681/470 source equality. This separate delivery does not hold Heis's scrolling work.
 
@@ -95,7 +110,12 @@ merged470b6702008; historical navigation evidence and JSON analyzers remain.
 The three MCP/typed controls remain because AC_MCP_TOAD_ADAPTER is a genuine
 external selection seam. Parent assigned their three-file MCP/typed producer
 and consumer migration to Mendel, preserving the external open_observer contract
-and current turn/permission owners. Source-only work has no runtime grant. Heis
+and current turn/permission owners. Source-only work has no runtime grant.
+Coherent three-file472 source checkpoint8c84 is published. Parent found the
+matching Core test_mcp_acceptance imports and two consumers still using deleted
+Started/Settled facts, and extended originalMendel ownership to that exact
+qualifier family in a finished isolated Core checkout; no compatibility aliases
+or manufactured terminal events are permitted. Native qualification remains unrun. Heis
 owns current l0a migration in continuous468, separate from frozen06. No new
 production decomposition or runtime acceptance is inferred.
 
