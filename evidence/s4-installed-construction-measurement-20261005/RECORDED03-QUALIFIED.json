@@ -1,0 +1,196 @@
+{
+  "state": "SCOPED READY original same-record paired constructor/request measurement with matching original producer Core decoder",
+  "source_head": "2d69c971f53ba123dd2d53005de4d1e69bc38750",
+  "reader_source": "e0fe71a454629b4f31675315123f56b3f208d11d",
+  "product_source": "48b7db675f65fc312826a55db1bec20410ca7c70",
+  "wheel_sha256": "3fe14077293b691000394831ed7458ecae92afd9b667af4501be2945ab86051d",
+  "issued_sha256": "9d6fe9c6164f17a360f132ddb781f1f1ce13b3f08e256df2b7d5337de75b7cfe",
+  "release_lifecycle_sha256": "11d4708880b39e49295911438aad16ab14c8025a85dc074ed8a5cf5e1cf3d3fe",
+  "raw_whole_handback": {
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/whole-handback.json",
+    "sha256": "252c4878c874df10f1980ef1eb995aa045a4c811547b34d429f6c2778a9e21f1"
+  },
+  "raw_keepers": {
+    "stage-proof-preservation.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/stage-proof-preservation.json",
+      "sha256": "ba9f182d3d5da2496d999d323d549685594178ce3c2c249e06feab8267c55bef",
+      "bytes": 6126
+    },
+    "holder-postrun.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/holder-postrun.json",
+      "sha256": "4a9c3356e22776a8962050c31bc029eaaf9c71786de15d8f73aa5f4a5d72df17",
+      "bytes": 904
+    },
+    "recorded-functional-scope.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/recorded-functional-scope.json",
+      "sha256": "12df8203b816740afdf548b33349df9f7da93675ddde31b4f9f767a38c1ac6ca",
+      "bytes": 1140
+    },
+    "stage/terminal.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/stage/terminal.json",
+      "sha256": "077c39c8737635be11fa8a637ff68bbf88a0bbf1eb3cda15e76217501f04a162",
+      "bytes": 793
+    },
+    "stage/stderr.log": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/stage/stderr.log",
+      "sha256": "9efee12881e77fc6633212c454f28c0cdf16667f5a52adb44a23b49a5924dc01",
+      "bytes": 929
+    },
+    "stage/stdout.log": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/stage/stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stage/live-handle.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/stage/live-handle.json",
+      "sha256": "910635d5c215d6ca13a3c34e9d9a82aa54103f8d67bbfdd01ebad27a8955bdd3",
+      "bytes": 667
+    },
+    "proof/installed-source-proof.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/proof/installed-source-proof.json",
+      "sha256": "8aea4829bee1af6043f1473aa7cf484b7255abc9f3decb4b53e21e44b1120531",
+      "bytes": 1628
+    },
+    "proof/terminal.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/proof/terminal.json",
+      "sha256": "8c6d795039ae898486471f9de74789eff8d626e9bd2eb5f5650ae24d800e85fb",
+      "bytes": 4016
+    },
+    "proof/stderr.log": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/proof/stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "proof/stdout.log": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/proof/stdout.log",
+      "sha256": "23ca515a926e034a5891b99c2713836eeb5dc26f084d91a811abf7f7c3f7cb6e",
+      "bytes": 117
+    },
+    "proof/live-handle.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/proof/live-handle.json",
+      "sha256": "1e11e9c16559b0e1afb3e867dedb25650aba275889600919edb127c8a5de36c4",
+      "bytes": 3890
+    },
+    "read/paired-measurements.private.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/read/paired-measurements.private.json",
+      "sha256": "5d0b35d389cf3d54c04306b2946570dc71da2b5215fa4c41700f038b39e5cce4",
+      "bytes": 5544939
+    },
+    "read/terminal.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/read/terminal.json",
+      "sha256": "825ffbb3c9589ebf4e4831d9fe13ed9a248d70819af08dbb43d3b143ac53d368",
+      "bytes": 1503
+    },
+    "read/stderr.log": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/read/stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "read/live-handle.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/read/live-handle.json",
+      "sha256": "86ab1592a154ea014ea3eebe1719459773b6c3588edebf5c26f5a919b112013c",
+      "bytes": 1033
+    },
+    "restore/terminal.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/restore/terminal.json",
+      "sha256": "aa9a4001e929ca2138c59027b223a7dac3bc71f7c28abde7a30659e2993a66ff",
+      "bytes": 1115
+    },
+    "restore/stderr.log": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/restore/stderr.log",
+      "sha256": "f7bd6367cc0540094987d591cc19e8e674ffcaf6d68ab68b4c441e547dd4e5b3",
+      "bytes": 927
+    },
+    "restore/stdout.log": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/restore/stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "restore/live-handle.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded03/restore/live-handle.json",
+      "sha256": "0896d9b3fb69ee097bf1b9834c54c1ae35d63ffe34f33dac3095b72cd9ddbcfb",
+      "bytes": 656
+    }
+  },
+  "actual_scope": {
+    "same_original_inputs": {
+      "candidate": "418f47055bbda3c50b6e45ec753b42a6",
+      "baseline": "1bb01921773446af3e3cb1678c183755"
+    },
+    "paired_condition_construction_evaluated": true,
+    "arms": {
+      "candidate": {
+        "condition": "task-memory",
+        "entire_constructed_prefix_available": true,
+        "preserved_rounds": [
+          "r1"
+        ],
+        "changed_rounds": [],
+        "native_request_admission": true,
+        "sdk_entry_selection": false,
+        "full_history_capacity": false,
+        "full_history_sdk_admission": false
+      },
+      "baseline": {
+        "condition": "bounded",
+        "entire_constructed_prefix_available": true,
+        "preserved_rounds": [
+          "r1"
+        ],
+        "changed_rounds": [],
+        "native_request_admission": true,
+        "sdk_entry_selection": false,
+        "full_history_capacity": false,
+        "full_history_sdk_admission": false
+      }
+    },
+    "study_acceptance": {
+      "evaluated": false,
+      "reason": "One recorded sample is not a registered comparative study or margin result"
+    },
+    "new_provider_SDK_native_inputs": 0,
+    "historical_reports_refusals_STARTED_UNKNOWN_unchanged": true
+  },
+  "read_exit_code": 0,
+  "read_seconds": 9.454678536974825,
+  "restore_exit_code": 0,
+  "source_and_old_measurements_negatives_STARTED_UNKNOWN_immutable": true,
+  "new_native_SDK_provider_input": 0,
+  "observed_processes": [
+    {
+      "pid": 1361553,
+      "birth_ticks": 70596936,
+      "process_group": 1361553
+    },
+    {
+      "pid": 1361563,
+      "birth_ticks": 70596977,
+      "process_group": 1361563
+    },
+    {
+      "pid": 1361587,
+      "birth_ticks": 70596992,
+      "process_group": 1361587
+    },
+    {
+      "pid": 1368553,
+      "birth_ticks": 70618065,
+      "process_group": 1368553
+    },
+    {
+      "pid": 1368563,
+      "birth_ticks": 70618087,
+      "process_group": 1368563
+    },
+    {
+      "pid": 1368766,
+      "birth_ticks": 70619032,
+      "process_group": 1368766
+    }
+  ],
+  "all_observed_processes_absent": true,
+  "observed_groups_remaining": [],
+  "whole_claim_returned": true,
+  "Bohr_independent_close": "requested; not asserted by recipient",
+  "future_study_provider_capacity_acceptance": false
+}
