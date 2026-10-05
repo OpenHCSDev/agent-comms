@@ -1,0 +1,21 @@
+{
+  "state": "SCOPED READY: installed authored stopped9->10 custody PASS; public/runtime/native/UI unqualified",
+  "determining_tools": "88e8d2f9983df69de876401abf0d3ec506235985",
+  "tools_sha256": {
+    "tools/cutover/native_schema_carry.py": "08d5b673910f96634ad017eb7e8224cb440e5b5cfea7c07d597b3ddf0f209c2b",
+    "tools/cutover/native_schema_carry_controls.py": "450678fe8a510273f89aad9c9bcc260eab52d1f25be58f24b3056821df930420",
+    "tools/cutover/runtime_installation.py": "77841672b6d9d99e3cb4c724706ffdad7eefd604aab583743f2e4b341156224c"
+  },
+  "normal_main_join": "69346035167d7fc604bafbec0a29872c4c93aab3",
+  "product_vs_main": "ZERO src/stack/.pi/pyproject",
+  "tools_vs_qualified88e8": "ZERO",
+  "installed_target": "3aac/0ed355 Core only with actual CURRENT444 floor Toadec36/Text73d/NRA8d",
+  "carry_receipt_sha256": "48236fe4fbb5d604662afa153bdb208a0e054e6db79e7f6b7a2b06ab964dfb65",
+  "Mendel_whole_return_sha256": "75483dca014c186bee8cd3f1c500e9105977bab4e8ae408d8fb2b12da545e285",
+  "Einstein_whole_floor_return_sha256": "825884c812e53554d05c671746dd497bfe086f867a21307bdb4b8a564207cef8",
+  "scope": "ONE genuine installed9 source declaration child inside original control; original stopped-copy acquisition/install/preimages and5refusals; preserved original15/rows/absence; annotation tables EMPTY",
+  "no_reruns_after_main_join": true,
+  "no_active_owned_process_or_READ_claim": true,
+  "independent_Bohr_closure": "separate lifecycle receipt; do not infer from owner return",
+  "required_final_head_Debt": "automatic upon push; no merge before exact green"
+}
