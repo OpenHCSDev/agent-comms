@@ -1,4 +1,4 @@
-"""Installed stopped-copy carry controls using actual original Native5 stores.
+"""Installed stopped-copy carry controls using authentic original declarations.
 
 The release owner supplies a stopped, privately retained original root. This
 control neither seeds history/proofs nor stops, launches, retries or prompts an
@@ -20,7 +20,7 @@ import sys
 from agent_comms.field_codec import FieldCodec
 from agent_comms.private_path import PrivateDirectoryRole
 from native_schema_carry import (
-    NativeSchemaDeclaration, NativeSchemaCarryPlan, RuntimeNativeFiles,
+    NativeSchemaDeclaration, NativeSchemaCarryPlan, RuntimeNativeFiles, CompactionNativeStore,
     carry_compaction, inventory, row_digest,
 )
 from publish_openhcs_recovery import digest
@@ -120,10 +120,13 @@ def run(base, source_python, root):
     if (base/'receipt.json').exists() or (base/'receipt.json').is_symlink():
         raise ValueError('Control receipt must be fresh')
     original = original_declaration(source_python)
+    target = NativeSchemaDeclaration.observe()
+    original.require_carry_target(target)
     source_hashes = {path.name:digest(path) for path in RuntimeNativeFiles(root).paths
-                     if path.exists()}
-    before_journal = journal_observation(root/'compaction-commits.sqlite3')
-    if not before_journal['selected_summary_attempts']:
+                      if path.exists()}
+    journal_path = root/CompactionNativeStore.name
+    before_journal = journal_observation(journal_path) if journal_path.exists() else {}
+    if original.version != target.version and not before_journal.get('selected_summary_attempts'):
         raise ValueError('Actual historical selected summary evidence is required')
     installed = CarryNativeRuntimeInstallation(
         original=original,
@@ -133,6 +136,24 @@ def run(base, source_python, root):
     if installed.original_goal() is not installed.original.goal:
         raise AssertionError('Carry goal declaration is not derived from original source')
     refused = []
+    if original.coordination_version != target.coordination_version:
+        from agent_comms.coordination_tables.metadata import SchemaMeta
+
+        # An ordinary target reader must refuse the original release. The
+        # only authorized transformation below is the stopped installation.
+        with closing(sqlite3.connect((root/'coordination.sqlite3').absolute().as_uri()+'?mode=ro', uri=True)) as db:
+            db.execute('PRAGMA query_only=ON')
+            db.execute('BEGIN')
+            try:
+                original.require_coordination(db)
+                try:
+                    SchemaMeta.require_current(db)
+                except ValueError:
+                    refused.append('ordinary-reader-original-schema')
+                else:
+                    raise AssertionError('Ordinary reader accepted the old coordination declaration')
+            finally:
+                db.execute('ROLLBACK')
     # One-use custody refusals operate on ONLY this private copy, with exact
     # original bytes restored afterward. No original session or proof is edited.
     for case in ('existing-candidate','existing-attempt','companion'):
@@ -170,7 +191,7 @@ def run(base, source_python, root):
         receipt = installed.install(acquired, base/'original-preimages')
     plan = FieldCodec.decode(NativeSchemaCarryPlan, json.loads(
         (base/'original-preimages/reviewed-carry.json').read_text()))
-    path=plan.candidate/'compaction-commits.sqlite3'
+    path=plan.candidate/next(item.name for item in plan.stores)
     prior=path.read_bytes()
     path.write_bytes(prior+b'changed')
     try:
@@ -184,14 +205,26 @@ def run(base, source_python, root):
         path.write_bytes(prior)
     if any(digest(base/'original-preimages'/name) != sha for name,sha in source_hashes.items()):
         raise AssertionError('Original preimages were not retained exactly')
-    relation=require_journal_preserved(before_journal,journal_observation(root/'compaction-commits.sqlite3'),
-                                      original, plan.target)
+    if before_journal:
+        relation=require_journal_preserved(before_journal,journal_observation(journal_path),
+                                           original, plan.target)
+    else:
+        if journal_path.exists():
+            raise AssertionError('Carry created a journal absent from the original source')
+        relation={'classification':'original-journal-absent', 'created':False}
+    from agent_comms.coordination_tables.metadata import SchemaMeta
+    from agent_comms.coordination_session import CoordinationSession
+    with CoordinationSession(root/'coordination.sqlite3').read() as db:
+        plan.target.require_coordination(db)
+        SchemaMeta.require_current(db)
     from agent_comms.compaction_journal import CompactionJournal
     from agent_comms.compaction_records import JournalTable
     from agent_comms.typed_table import TypedTable
-    with CompactionJournal(root/'compaction-commits.sqlite3').transaction() as db:
-        installed_rows = {table.declared_name: len(table.select(db))
-                          for table in TypedTable.members_with(JournalTable)}
+    installed_rows = {}
+    if journal_path.exists():
+        with CompactionJournal(journal_path).transaction() as db:
+            installed_rows = {table.declared_name: len(table.select(db))
+                              for table in TypedTable.members_with(JournalTable)}
     result={'classification':'private-stopped-copy-installed-operator-control',
             'original_release':list(original.release_versions),
             'target_release':list(plan.target.release_versions),

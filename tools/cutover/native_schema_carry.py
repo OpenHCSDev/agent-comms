@@ -154,20 +154,34 @@ class NativeSchemaDeclaration:
         return self.coordination_version, self.snapshot_version, self.response_version, self.version
 
     def require_carry_target(self, target):
-        """Authenticate the reviewed source conversion or additive journal DDL.
+        """Authenticate the reviewed conversion from original declarations.
 
         A same-release declaration change cannot reinterpret any original fact.
-        New journal members start empty; only their actual producer can create
-        enrollment, native coverage or fork evidence later.
+        New declaration members start empty; only their original producer can
+        create annotations, enrollment, native coverage or fork evidence later.
         """
         if self.release_versions == (9, 3, 3, 5) and target.release_versions == (9, 3, 3, 6):
             return
-        if self.release_versions != target.release_versions or target.release_versions != (9, 3, 3, 6):
-            raise ValueError('Unreviewed native release conversion')
-        if (self.runtime_objects != target.runtime_objects or self.binding != target.binding
-                or self.writable_columns != target.writable_columns
-                or self.metadata_rows != target.metadata_rows):
-            raise ValueError('Same-release carry cannot change original native declarations')
+        metadata = dict(self.metadata_rows)
+        if self.release_versions == (9, 3, 3, 6) and target.release_versions == (10, 3, 3, 6):
+            from agent_comms.coordination_tables.metadata import SchemaMeta
+
+            if (not self.coordination.items() <= target.coordination.items()
+                    or not self.writable_columns.items() <= target.writable_columns.items()):
+                raise ValueError('Coordination carry cannot reinterpret original declarations')
+            # The existing metadata declaration owns the release marker. No
+            # fact row, native proof or response schema gets a new meaning.
+            metadata[SchemaMeta.declared_name] = target.metadata_rows[SchemaMeta.declared_name]
+        elif (self.release_versions != target.release_versions
+              or target.release_versions not in ((9, 3, 3, 6), (10, 3, 3, 6))):
+            raise ValueError('Unreviewed native or coordination release conversion')
+        elif (self.coordination != target.coordination
+              or self.writable_columns != target.writable_columns):
+            raise ValueError('Same-release carry cannot change original coordination declarations')
+        if (self.runtime != target.runtime or self.runtime_digest != target.runtime_digest
+                or self.binding != target.binding or self.binding_digest != target.binding_digest
+                or metadata != target.metadata_rows):
+            raise ValueError('Carry cannot reinterpret original native or response declarations')
         if (not self.compaction_columns.items() <= target.compaction_columns.items()
                 or not self.compaction.items() <= target.compaction.items()):
             raise ValueError('Additive journal carry cannot reinterpret original declarations')
@@ -382,21 +396,44 @@ def carry_goal(db, target):
 
 
 def carry_coordination(db, original, target):
-    """Native5 already owns source identity; Native6 separates acquisition phases."""
+    """Carry declaration members; existing facts keep their original identities."""
+    from agent_comms.coordination_schema import CoordinatorTable
+    from agent_comms.coordination_response import ResponseTable
+    from agent_comms.native_runtime_input import NativeRuntimeTable
+    from agent_comms.typed_table import TypedTable
+
+    original.require_carry_target(target)
     original.require_coordination(db)
     if db.execute('PRAGMA foreign_key_check').fetchall():
         raise ValueError('Original coordinator relations require their owning review')
     before_objects, before_rows = objects(db), inventory(db)
-    if original.writable_columns != target.writable_columns:
-        raise ValueError('Native6 carry cannot invent or discard original writable facts')
-    payload = {
-        name: (fields, list(target.metadata_rows[name]) if name in target.metadata_rows
-               else rows(db, name, fields))
-        for name, fields in target.writable_columns.items()
-    }
-    sequence = rows(db, 'sqlite_sequence') if 'sqlite_sequence' in before_rows else ()
+    if not original.writable_columns.items() <= target.writable_columns.items():
+        raise ValueError('Carry cannot invent or discard original writable facts')
+    additions = target.writable_columns.keys() - original.writable_columns.keys()
+    if (target.runtime_objects.keys() - original.runtime_objects.keys()) & before_objects.keys():
+        raise ValueError('New declaration collides with an unrelated original schema object')
+    tables = {table.declared_name: table
+              for family in (CoordinatorTable, ResponseTable, NativeRuntimeTable)
+              for table in TypedTable.members_with(family)}
+    identities, payload = {}, {}
+    for name, fields in target.writable_columns.items():
+        if name in additions:
+            payload[name] = (fields, [])
+            continue
+        identity_fields = fields if tables[name].without_rowid else ('rowid', *fields)
+        values = rows(db, name, identity_fields)
+        identities[name] = (identity_fields, values)
+        if (original.runtime_objects[name] == target.runtime_objects[name]
+                and original.metadata_rows.get(name) == target.metadata_rows.get(name)):
+            continue
+        if name in target.metadata_rows:
+            metadata = target.metadata_rows[name]
+            values = (list(metadata) if identity_fields == fields else
+                      [(row[0], *value) for row, value in zip(values, metadata, strict=True)])
+        payload[name] = (identity_fields, values)
+    sequence = rows(db, 'sqlite_sequence') if 'sqlite_sequence' in before_objects else ()
     rebuild(db, target.runtime_objects, payload)
-    if 'sqlite_sequence' in before_rows:
+    if 'sqlite_sequence' in objects(db):
         db.execute('DELETE FROM sqlite_sequence')
         db.executemany('INSERT INTO sqlite_sequence(name,seq) VALUES (?,?)', sequence)
     db.execute(f'PRAGMA user_version={target.coordination_version}')
@@ -405,11 +442,19 @@ def carry_coordination(db, original, target):
     owned = original.runtime_objects.keys() | target.runtime_objects.keys()
     if {k:v for k,v in before_objects.items() if k not in owned} != {
             k:v for k,v in after_objects.items() if k not in owned}:
-        raise ValueError('Native6 carry changed unrelated coordination declarations')
+        raise ValueError('Carry changed unrelated coordination declarations')
     unchanged = {name:values for name,values in before_rows.items()
                  if name not in target.metadata_rows}
     if any(after_rows[name] != values for name,values in unchanged.items()):
-        raise ValueError('Native6 carry changed original coordination facts')
+        raise ValueError('Carry changed original coordination facts')
+    for name, (fields, values) in identities.items():
+        expected = payload[name][1] if name in target.metadata_rows and name in payload else values
+        if rows(db, name, fields) != expected:
+            raise ValueError('Carry changed original row identity: ' + name)
+    if after_rows.keys() != before_rows.keys() | additions or any(after_rows[name] for name in additions):
+        raise ValueError('New declaration members must remain empty')
+    if 'sqlite_sequence' in objects(db) and rows(db, 'sqlite_sequence') != sequence:
+        raise ValueError('Carry changed original autoincrement allocations')
     from agent_comms.native_runtime_input import NativeRuntimeInput, CurrentNativeCursor
     # The target declarations reject partial references. Reading cannot create
     # a selected session, proof, cursor, assignment, or new admission.
@@ -419,6 +464,12 @@ def carry_coordination(db, original, target):
         raise ValueError('Carried original native relations violate foreign keys')
     return {'original_release':list(original.release_versions),
             'target_release':list(target.release_versions),
+            'original_ddl_sha256':row_digest(before_objects),
+            'target_ddl_sha256':row_digest(target.runtime_objects),
+            'created_empty_tables':sorted(additions),
+            'rebuilt_tables':sorted(payload.keys() - additions),
+            'original_identity_rows_sha256':row_digest(identities),
+            'autoincrement_rows_sha256':row_digest(sequence),
             'unchanged_rows_sha256':row_digest(unchanged),
             'original_rows':{name:len(values) for name,values in before_rows.items()}}
 
@@ -699,7 +750,7 @@ class NativeSchemaCarryPlan:
 
     @staticmethod
     def install_prepared(root, candidate, stores, acquired, destination, review,
-                         classification='runtime/native6-original-source-carry'):
+                         classification='runtime/declaration-original-source-carry'):
         """One retained-preimage/publication lifetime for every carried store."""
         with ExitStack() as custody:
             publishers = {item.name:item.publisher(root, custody) for item in stores}
