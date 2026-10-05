@@ -9,7 +9,7 @@ refresh has passed, and the same-input configured construction reader has
 passed; their original negative receipts remain preserved. Historical Explorer
 read/search/export and the authored stopped9-to10 carry have now passed their
 distinct installed scopes and whole-purpose closures. Remaining requirements
-are ordinary functional Explorer publication/default acceptance, full
+are ordinary functional Explorer public UI acceptance, full
 performance/workflow, W7/W8, full S4, and the
 original cutover writer cross-version restart scope.
 The writer current-schema private boundary has passed; that narrower result
@@ -1713,6 +1713,32 @@ not establish current live usability. Checked PR dispositions below were fetched
 from GitHub during this checkpoint; merge ancestry was checked against Core7fcf826a
 and Toad43949ee. Historical acceptance remains in
 `plans/integration-live-completion-20260928.md` and each code-bearing PR's receipts.
+
+## Latest publication checkpoint — 2026-10-05
+
+Explorer448 publication is now executed once, terminal0/49.403900879s.
+The original readback passed: all19 owners retain thread incarnations, original
+root and settings; all new process identities are alive. The reviewed native
+schema9-to10 carry was applied through the original publisher. Receipt SHA
+4ce7a47aafd66a1253f8e6bdc673968520c6c87e789a4c533eb1d012ece1711b;
+Parent raw command/handle/terminal/readback live in
+`.release-private/receiving448-functional-20261005`. The earlier client refusal
+is preserved; that client was absent before the new original admission passed.
+Heis owns ONE ordinary fresh-admitted public still-image UI acceptance next.
+Publication/readback does not prove physical UI, wheel cadence or full workflow.
+
+Mendel675 effective dfae3c4f and wheel a685578e/proof fa564c57 were personally
+hash-verified. Bohr issued fresh THIN540 f0e2cf98: sole stage/proof first,
+canonical controls held on bound installed proof, native settlement additionally
+held on NEW matching7a authority and canonical PASS. No old673/086 inheritance.
+
+Einstein454 publishes the TC1 pending tree reader/viewport owner correction;
+Heis remains integration owner. Its affected mounted App control is unrun.
+Kepler's independent geometry successor and Heis's changed453 control/source
+repair continue; fast useful paint, smooth moving-frame wheel cadence, complete
+loaded scaling and configured continuous workflow remain unqualified.
+
+The following dated checkpoints preserve their earlier state.
 
 ## Current authoritative checkpoint — 2026-10-05
 

@@ -2800,3 +2800,27 @@ paired-driver consumers; canonical USER case events and their original wire
 lineage/current recipient scope remain unfinished. Native prose delivery and
 request presence do not substitute for that authority. No provider, paired
 study or holder permission follows from this source review.
+
+### Public Explorer publication and independent continuations, 2026-10-05
+
+Explorer448 original one-use publisher completed terminal0/49.403900879s.
+Original readback confirms19 live replacement processes, same thread
+incarnations/settings/root and declared9-to10 native carry. Public defaults
+now target the qualified style22 Explorer953 candidate; the former334447
+publication remains historical. Receipt4ce7a47a and Parent original terminal/
+readback are in `.release-private/receiving448-functional-20261005`.
+Heis owns ONE ordinary fresh-admitted still-image UI journey. Physical display,
+wheel cadence and configured continuous workflow acceptance remain pending.
+
+Mendel675 now has source-verified a685578e355 wheel and effective dfae3c4f
+matching7a operands. Fresh Bohr f0e2 purpose grants sole540 stage; canonical
+and native execution releases retain their actual proof/authority prerequisites.
+The six new canonical cases and two localhost settlement cases have not yet
+qualified. Source-defined ownership and full installed/live C3 remain distinct.
+
+Einstein454 owns pending ProjectPanel reader/viewport restoration capture;
+its three-file source correction and actual mounted App control are prepared,
+control unrun. Heis remains TC1 integrator, with disjoint453 source repairs.
+Kepler owns original geometry projection lookup continuation. These independent
+source families stay active alongside public acceptance; no installed/native
+permission follows from their source checkpoints.
