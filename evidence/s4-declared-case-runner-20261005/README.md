@@ -179,3 +179,36 @@ The original functional design/plan/source contract remain frozen as consumed
 operands. They do not authorize or describe execution of the corrected constructor.
 The summary, both installed arms and full S4 remain unfinished; the paid study
 remains unapproved, and the closed purpose grants no further execution.
+
+
+## Corrected functional02 acceptance
+
+The corrected `RecallRound` source/probe construction at `10fa51e0` ran once
+from exact published operands `58bf9137`. The actual configured Sol/HIGH journey
+completed one source stimulus, one manual compaction and both same-owner SDK
+arms. The source acknowledged the synthetic data; both arms answered the root
+question as `/data/run-a`, with zero tool calls. The driver completed in 295.312s
+and its original controller exited 0 in 315.471s. No original input was replayed.
+
+The original strict observer, constructor/install/converter/request reader,
+canonical budget/terminal, selected-child retirement and parent restoration
+were exercised. The paired report still refuses complete condition construction:
+declared arm selection and complete-history eligibility are not established by
+these partial SDK observations. One-question descriptive recall is available;
+registered margin, independent paired costs, capacity, HTTP and billing are not.
+Full S4 and the unapproved USD75/30-pair study remain unfinished.
+
+All 109 observed process identities joined; remaining groups and sockets were
+empty. The original saved source and input proof stayed unchanged. Normal restore
+returned all 510 declared logical records, 347 Core ZIP assets, 94 keepers, 69
+metadata files, ten distributions and original archive origin. An initial own
+metadata comparison incorrectly treated the selected dependency witnesses as an
+exhaustive dependency inventory; its refusal is retained separately. It caused no
+product change. The corrected check preserves the original declared floor and
+complete Core namespace. Both Sch claims and the whole holder purpose were
+explicitly returned; independent closure belongs to Bohr's existing lifecycle.
+
+`FUNCTIONAL02-QUALIFIED.json` binds the original raw receipts and whole handback.
+The historical functional01 proposal, plan, STARTED input, private BLOCKED goal,
+question and negative receipts remain unchanged. No additional run is required
+for this scoped working checkpoint.
