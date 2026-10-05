@@ -1,0 +1,43 @@
+{
+  "state": "Source/authored reader-scorer scope qualified; corrected original recorded-input measurement not yet run",
+  "source_head": "e0fe71a454629b4f31675315123f56b3f208d11d",
+  "source_sha256": {
+    "tests/retained_native_fixture.py": "1ff04911176987f181d43ad535f7b8bad44cc7707602848d9f5fbbfb7915364b",
+    "tests/compaction_retention_fixture.py": "cb5ce98c1e10701ccd966e2c5f54ec3027ed535b4793bccb5351bf61a598f885",
+    "tests/test_recorded_retention_measurements.py": "2a1459e99e30ff6ee9f414639eec87cb4defbfefc2731a8bd71fd29259569000"
+  },
+  "keepers": {
+    "source-consumers.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-installed-construction-measurement-20261005/source-consumers.json",
+      "sha256": "c78d74a935174aeeba0337cddbc1ad4822d6adb92a4b2cff23aee3faab557660"
+    },
+    "authored-final.log": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-installed-construction-measurement-20261005/authored-final.log",
+      "sha256": "41d2dbcde76159a2bb4a934a4176de213ffb52912cf6d442244de2f9e24de544"
+    }
+  },
+  "authored_checks": {
+    "passed": 5,
+    "seconds": 0.089,
+    "prevents": [
+      "missing frozen rounds or absent metadata counted as construction",
+      "direct summary replacement promoted without converter or retirement",
+      "changed constructor prefix called preserved; missing manifest/selection invented",
+      "declared arm label or full-history/capacity substituted for source partition",
+      "partial or different original request/converter message sequence treated as binding"
+    ]
+  },
+  "production_runtime_native_tools_delta": false,
+  "original_report": {
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional02/journey/paired-measurements.private.json",
+    "sha256": "cbe1442930461ac98e5a7634f6b069835e4e578b1b0f29ad985fa1c84c6b73b8",
+    "rewritten": false
+  },
+  "original_whole_handback": {
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional02/whole-handback.json",
+    "sha256": "a62071f5d314852e4a8d3b8b93a213079b86b0897beaa2f7a7c701adc9a0bab0",
+    "keeper_count": 133
+  },
+  "SDK_provider_inputs_holder_artifact_runs": 0,
+  "remaining": "Read same sealed original paired records through changed reader/scorer under NEW recordedREAD-only purpose; no replay. Full-history selection/capacity and registered study remain unavailable."
+}

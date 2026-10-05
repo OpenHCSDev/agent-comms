@@ -42,4 +42,10 @@ across their callers. The configured journey's independently named
 `condition_application` coroutine is a real prompt resource and is unchanged.
 Runtime, native stack, configuration and compiled artifacts are unchanged.
 
-Final proportionate authored checks are pending; no configured or study claim.
+Five proportionate authored checks passed in 0.089s. They cover missing rounds,
+partial/unretired replacement, whole-prefix preservation/change, constructor
+agreement and full converter/request binding. The same original records have
+not yet been evaluated through this changed reader. `SOURCE-QUALIFIED.json`
+binds the source and checks; `PROPOSED-RECORDED-READ.json` declares a new
+read-only CLI purpose for the same completed paired inputs, not a new run.
+No holder, native, configured provider or study authority is inferred.
