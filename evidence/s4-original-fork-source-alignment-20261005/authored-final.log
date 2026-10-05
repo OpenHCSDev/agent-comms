@@ -1,0 +1,10 @@
+test_alignment_requires_distinct_originals_and_keeps_missing_rounds (test_recorded_retention_measurements.RecordedMeasurementTests.test_alignment_requires_distinct_originals_and_keeps_missing_rounds) ... ok
+test_recorded_fork_chain_corroborates_each_acquired_prefix_and_position (test_recorded_retention_measurements.RecordedMeasurementTests.test_recorded_fork_chain_corroborates_each_acquired_prefix_and_position) ... ok
+test_recorded_fork_chain_refuses_cycles_identity_and_missing_edges (test_recorded_retention_measurements.RecordedMeasurementTests.test_recorded_fork_chain_refuses_cycles_identity_and_missing_edges) ... ok
+test_distinct_fork_sources_require_entire_ordered_frozen_stimulus_prefix (test_recorded_retention_measurements.RecordedMeasurementTests.test_distinct_fork_sources_require_entire_ordered_frozen_stimulus_prefix) ... ok
+test_stimulus_group_uses_scenario_source_and_same_acquired_reader (test_recorded_retention_measurements.RecordedMeasurementTests.test_stimulus_group_uses_scenario_source_and_same_acquired_reader) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.079s
+
+OK
