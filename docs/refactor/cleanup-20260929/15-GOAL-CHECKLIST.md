@@ -3119,19 +3119,23 @@ BLOCKED/ACTIVE observations remain historical, with no goal-tool resume/replay.
   source/wheel/receiving proposal separately; this grants no current access.
 - [ ] Heis460 final06 includes accepted466 in one normal union wheel and fixes
   right-sidebar disclosure plus all related worker observers. The unchanged
-  full150s cold/wheel/width/reversal/End/B-A scope has not run yet. Fast useful
-  paint, frame cadence, CPU and actual loaded scaling remain unfinished.
+  full150s cold/wheel/width/reversal/End/B-A run is now live with exact controller
+  and child birth identities verified. No result yet. Fast useful paint, frame
+  cadence, CPU and actual loaded scaling remain unfinished.
 - [ ] Complete the original continuous saved/channel/DM/fork/notification/reply/
   handling/queue/status journey. Draft468 is adopted on a separate Heis source
   integration; no current affected configured acceptance is inferred.
 - [ ] Complete the original and round-two deletion/resource scope. Mendel's bounded T4 production ownership
-  receipt469 is merged289f1c6c; stale control consumers are being reconciled with
-  Heis before edits. Heis retains TC1/budget/workflow integration.
+  receipt469 is merged289f1c6c. Dead replay/current README commands are removed
+  by merged470b6702008, preserving historical evidence/analyzers. The genuine
+  external MCP selector remains unresolved; Heis owns current l0a migration and
+  TC1/budget/workflow integration.
 - [ ] Full S4 remains unfinished. Source679/680 is merged and recorded678 reads
   are independently closed; clocks/accounting and genuine original SDK source
   selection/capacity/matched workflows retain their evidence gaps. Arendt's
-  draft681 owns recorded-fork ancestry/frozen-source alignment only. No study,
-  provider input or holder access is inferred.
+  681 is merged38a0533e after nine authored delivery-family cases and complete
+  reader review. This closes recorded-fork ancestry/frozen-source alignment at
+  source strength only. No study, provider input or holder access is inferred.
 
 Current exact owners, artifacts and acceptance limits are in
 16-CURRENT-S14-OWNERS.md. Historical checkpoints below remain preserved; their

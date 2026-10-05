@@ -16,8 +16,11 @@ normal union wheel2ece83e3 contains the accepted worker fix and otherwise matche
 old7f401 across318 assets. Parent matched all20 current helpers, the three other
 controls and all three wheel hashes. Bohr issued fresh06 at8bda24bc against final e06cb. Its one three-wheel stage
 passed in0.236s; NEW native READ05965 and exclusive proof-helperfd749 are bound.
-The existing lifecycle4ab8 now releases one proof only. No06 App has run or
-demonstrated fast wheel/frame/CPU/whole-journey acceptance.
+The one proof passed6.758s with all953 assets/full69 and protected originals
+verified. NEW native EXEC7724 is bound by lifecyclebee4. Heis launched the one
+full150s job; Parent verified controller1682527/b71101208 and child1682564/
+b71101314 alive with exact birth identities. No result or fast wheel/frame/CPU/
+whole-journey acceptance is available yet. Keep the same handle; no second launch.
 
 466 SessionView03 passed the actual mounted check in6.138s: cancellation before
 entry, same-source resume, three coalesced requests and joined close/App and
@@ -30,16 +33,24 @@ worker delivery from actual merged source and truthful retained artifacts; that
 proposal confers no access, reservation or publication authority and does not
 hold Heis's full scrolling run.
 
-Core680 is source-qualified and merged3931f16f. Arendt's new draft681 owns
-original recorded-fork ancestry/source matching; independent whole-workflow cost
-and p95 acceptance remain unfinished. Core678 READ03 is independently closedfb5e
+Core680 is source-qualified and merged3931f16f. Core681 is normally merged
+38a0533e after Parent reviewed the complete recorded-reader delivery family and
+matched final receipt/source hashes. Nine authored cases passed, including the
+root-to-child-to-leaf acquisition path; every recorded inherited edge must carry
+the original input and answer. This is authored source evidence, not configured
+SDK execution. Independent whole-workflow cost and p95 acceptance remain
+unfinished. Sch's worker receiving bundle deliberately selects actual merged
+Core3931/retained3fe; it must not claim equality to later MAIN681. Core678 READ03 is independently closedfb5e
 with readback9d392; its recorded-only strengths and remaining gaps are unchanged.
 Mendel's bounded T4 source receipt469025afe is normally merged289f1c6c after
 Parent reviewed all five production roles, the original deletion scope and exact
 Core owner/protected-control bytes. Existing owners implement the original
-production responsibilities. Stale replay/ACP/turn-event controls remain a
-separate unqualified consumer family, coordinated with Heis before any shared
-edits. No new production decomposition or runtime acceptance is inferred.
+production responsibilities. Dead replay executable/current README instructions are removed by normally
+merged470b6702008; historical navigation evidence and JSON analyzers remain.
+The three MCP/typed controls remain because AC_MCP_TOAD_ADAPTER is a genuine
+external selection seam. Heis owns current l0a migration in continuous468,
+separate from frozen06. No new production decomposition or runtime acceptance
+is inferred.
 
 | Work | Actual state | Remaining delivery |
 | --- | --- | --- |
