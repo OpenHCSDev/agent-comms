@@ -1,0 +1,17 @@
+{
+  "python": "3.11.11 (main, Mar 17 2025, 21:02:09) [Clang 20.1.0 ]",
+  "collector": "original Package.load under actual3.11",
+  "revision": "78d14b8b28fc6da227bd2f1e47b3ed95b36fc4f1",
+  "parsed": 315,
+  "omissions": [
+    "src/agent_comms/tracked_turn.py"
+  ],
+  "unsupported_syntax": [
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 54,
+      "reason": "invalid syntax",
+      "source_line": "class NativeCommitObservation[T](ABC):"
+    }
+  ]
+}
