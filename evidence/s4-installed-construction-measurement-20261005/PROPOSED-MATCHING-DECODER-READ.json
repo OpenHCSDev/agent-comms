@@ -688,5 +688,13 @@
   "no_build_source_overlay_env_dependency_copy": true,
   "phase_policy": "One stage/proof/read, first failed/uncertain phase stops measurement. Always restore original5f floor then joined cleanup/whole handback. No automatic retry or expired b7ac inheritance.",
   "preservation": "Original133keepers/first refusal/old report/STARTED/UNKNOWN unchanged; only normal Core package+Core metadata staged, other94keepers/9dist origins unchanged; after restore510/347+94/69metadata10/RAWorigin exact. Actual process births/groups/sockets and independent Bohr closure.",
-  "execution_authority": "Source only until Bohr NEW literal package+import/READ-only issue. No Sch native loan is needed: native package is neither read nor executed."
+  "execution_authority": "Source only until Bohr NEW literal package+import/READ-only issue. No Sch native loan is needed: native package is neither read nor executed.",
+  "proof_source_sha256": {
+    "tools/cutover/publish_retained_summary.py": "025babf120563228d99920617d34f2e4142307d38e049405d4af49b2ecd7a960",
+    "tools/cutover/publish_openhcs_recovery.py": "27516db16a4bec25bb37fb394e1c7bc04c567eb0a780fb1e0ed62235ca0ed9ff",
+    "tools/cutover/retained_summary_reset.py": "86d28cc9f9c74c9156ee258d061168a17003ab94f6c9ba1fdaac2dd01eb8dd12",
+    "tools/cutover/native_schema_carry.py": "08d5b673910f96634ad017eb7e8224cb440e5b5cfea7c07d597b3ddf0f209c2b",
+    "tools/cutover/runtime_installation.py": "77841672b6d9d99e3cb4c724706ffdad7eefd604aab583743f2e4b341156224c",
+    "tools/cutover/cutover_child.py": "26b307ce045a4642a8dc2a9c6fef9b94900726250bb663413f256abda11fa1e3"
+  }
 }
