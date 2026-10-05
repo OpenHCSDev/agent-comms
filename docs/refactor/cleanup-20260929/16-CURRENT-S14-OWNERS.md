@@ -4,6 +4,24 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+Latest installed verification: both corrected proofs passed, but their affected
+Apps stopped before full acceptance. 460 successor05 reached saved-body/draft
+paint and failed the width action; all three original captured snapshots keep
+the right SessionThreadSidebar collapsed at3 columns. The visible resize handle
+belongs to the left sidebar, so the original within-parent refusal is correct.
+Heis is tracing opening click/geometry and the existing collapse owner; no
+wrong-sidebar drag or visibility override is permitted. Bohr independently
+closed05 at8aea263f/readbackf876 after exact restoration; SDK journals and movie
+remain held. Fast wheel/frame/CPU/whole journey acceptance is still unfinished.
+
+466 corrected02 is independently closed ate492/readback3aee. Fresh SessionView03
+purpose3e280 binds the corrected existing-owner control, retained b2e wheel and
+one previously unqualified mounted worker journey; no rebuild/native execution
+or460 wait. Core680 is source-qualified and merged3931f16f, with accounting
+ownership required for conditional cost claims; Arendt continues original
+fork-ancestry/source matching. Core678 READ03 is independently closedfb5e with
+readback9d392; its recorded-only strengths and remaining gaps stay unchanged.
+
 | Work | Actual state | Remaining delivery |
 | --- | --- | --- |
 | Current accepted build465 | Installed on PUBLICstyle22. Corrected directory permissions allowed the original publisher to finish once: exit0 in67.257s; original readback exit0 in1.532s verifies19 same incarnations/settings/root, all new owner processes alive and all five default links. Source953/full69 is the accepted Core676/Toad461+458+464+462/Text67 cohort. The original failed permission attempt is retained. | The single corrected-environment ordinary UI run passed all18 original checks. Recorder/App/st exit0, joined cleanup empty, backend/runtime unchanged; Parent personally inspected five original after-terminal images showing readable saved/channel history, tab return, draft and Undo. Heis owns fast useful paint, mouse-wheel cadence and frame work separately; those performance obligations remain unfinished. No reset, carry, provider input or replay occurred in publication. |
