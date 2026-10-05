@@ -125,38 +125,6 @@ class RecordedMeasurementTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'artifact changed'):
             RecordedNativeCheckpoint.read_bytes(reference)
 
-    def test_configured_history_uses_original_public_bodies_and_cumulative_additions(self):
-        bodies = ('Original binding archive /artifacts/S4/α/source, λ 🙂.',
-                  'Never replay an uncertain input.',
-                  'cold-review remains an available alternative.')
-        publications = tuple(Message('human', 'agent', body, MessageType.INFO,
-                                     seq=index, timestamp=1.0)
-                             for index, body in enumerate(bodies, 1))
-        before = tuple(FieldCodec.encode(message) for message in publications)
-        scenario = RecallScenario.configured_retention('original-declaration-reference', publications)
-        steps = scenario.construction_rounds()
-        self.assertEqual(steps[0]['history_additions'], bodies)
-        self.assertEqual(steps[0]['source_text'], '\n'.join(bodies))
-        self.assertEqual(tuple(len(round_.history) for round_ in scenario.rounds), (3, 4, 5))
-        for previous, current in zip(scenario.rounds, scenario.rounds[1:]):
-            addition, = current.history_after(previous.history)
-            self.assertEqual(current.history, previous.history + (addition,))
-        self.assertEqual(steps[1]['history_additions'], (
-            'Authorized correction: the binding archive root is now /artifacts/S4/β/corrected.',))
-        self.assertEqual(steps[2]['history_additions'], (
-            'Explicitly drop the archive-root constraint. No binding archive root remains for this task.',))
-        for step in steps:
-            question = json.loads(step['probe_text'].split('\n', 1)[1])
-            self.assertTrue(all(set(item) == {'id', 'prompt'} for item in question['questions']))
-        self.assertEqual(tuple(FieldCodec.encode(message) for message in publications), before)
-        self.assertEqual(FieldCodec.decode(RecallScenario, FieldCodec.encode(scenario)), scenario)
-        # Existing historical placeholders still fail the original prefix
-        # owner; there is no inferred wording or compatibility reconstruction.
-        historical = replace(scenario, rounds=tuple(replace(round_, history=(f'private-source-cut-{index}',))
-            for index, round_ in enumerate(scenario.rounds, 1)))
-        with self.assertRaisesRegex(ValueError, 'preceding frozen history prefix'):
-            historical.construction_rounds()
-
     def test_adjacent_revision_intervals_keep_every_frozen_pair(self):
         scenario = coding_scenario()
         mass = {'evaluated': True, 'constraints': {'eligible': 2, 'unauthorized': 0}}
@@ -325,11 +293,16 @@ class RecordedMeasurementTests(unittest.TestCase):
             with self.subTest(scenario=scenario.identity):
                 history = ()
                 for round_, operands in zip(scenario.rounds, scenario.construction_rounds()):
+                    previous = history
                     history += operands['history_additions']
                     self.assertEqual(history, round_.history)
                     self.assertEqual(operands['round'], round_.identity)
-                    self.assertEqual(operands['source_text'], '\n'.join(operands['history_additions']))
+                    self.assertEqual(operands['source_text'], round_.source_text(previous))
+                    self.assertIn(round_.evaluation_instructions(), operands['source_text'])
+                    self.assertEqual(json.loads(operands['source_text'].split('\n', 1)[1]),
+                        {'round': round_.identity, 'history': list(operands['history_additions'])})
                     self.assertEqual(operands['probe_text'], round_.probe_text())
+                    self.assertIn(round_.evaluation_instructions(), operands['probe_text'])
                     self.assertEqual(json.loads(operands['probe_text'].split('\n', 1)[1]),
                         {'round': round_.identity, 'questions': [q.public() for q in round_.questions]})
                 with self.assertRaisesRegex(ValueError, 'preceding frozen history prefix'):
@@ -352,6 +325,13 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertEqual(plan['rounds'], scenario.construction_rounds())
         self.assertIs(plan['comparison_design'], design)
         self.assertEqual(tuple(item['sample'] for item in plan['trajectories']), tuple(range(1, 11)))
+        for selected in (1, 5, 10):
+            one = design.construction_plan(17, trajectory=selected)
+            self.assertEqual(one['trajectories'], (plan['trajectories'][selected - 1],))
+            self.assertEqual(one['rounds'], plan['rounds'])
+        for invalid in (0, 11):
+            with self.subTest(trajectory=invalid), self.assertRaisesRegex(ValueError, 'outside the supplied design'):
+                design.construction_plan(17, trajectory=invalid)
         for item in plan['trajectories']:
             self.assertEqual(set(item['condition_order']), {design.candidate, design.baseline})
         self.assertEqual(plan, design.construction_plan(17))
@@ -362,6 +342,119 @@ class RecordedMeasurementTests(unittest.TestCase):
         Path(original.path).write_text('{}')
         with self.assertRaisesRegex(ValueError, 'artifact changed'):
             design.construction_plan(17)
+
+    def test_selected_case_requires_native_source_operands_without_changing_preview(self):
+        # A malformed prospective case must not spend earlier round calls or
+        # borrow the public source before discovering a missing source operand.
+        scenario = coding_scenario()
+        original = self.artifact('missing-source-oracle.json', replace(scenario,
+            rounds=(scenario.rounds[0], replace(scenario.rounds[1], history=scenario.rounds[0].history))))
+        design = PairedRecallDesign(original, Condition.TASK_MEMORY, Condition.BOUNDED,
+            'openai-codex/gpt-6.1-sol', 10, 0.95, -0.02, 10000, 20261004)
+        self.assertEqual(design.construction_plan(17)['rounds'][1]['source_text'], '')
+        with self.assertRaisesRegex(ValueError, 'declared new history'):
+            design.construction_plan(17, trajectory=1)
+
+    def test_authored_case_events_use_real_user_lineage_and_admitted_decision(self):
+        # Detect prose-only authorization, fake previous refs, pin-body wording,
+        # lost drops and choices published outside their original lease.
+        from goal_owner_fixture import canonical_goal_wire
+
+        service = canonical_goal_wire(self.root / 'authored-case-wire')
+        owner = service.registry.declare(Thread('case-owner', frozenset({'case'}), str(service.root)))
+        question = Question('root', 'What root is permitted?', '/private-b', 'original USER')
+        history = ('Use /private-a; never overwrite unresolved inputs.',
+                   'Correct the original root to /private-b; preserve unresolved inputs.',
+                   'Drop that original export-root restriction; do not change input dispositions.',
+                   'Choose inspect-original; keep verify-scope as a valid rejected alternative.')
+        scenario = RecallScenario('authored-user-task-events', (
+            RecallRound('r1', history[:1], (question,), constraint_sources=(0,)),
+            RecallRound('r2', history[:2], (question,), constraint_corrections=((1, 0),)),
+            RecallRound('r3', history[:3], (question,), constraint_drops=((2, 0),))))
+        first, second, third = scenario.rounds
+        self.assertEqual(FieldCodec.decode(RecallScenario, FieldCodec.encode(scenario)), scenario)
+        planned = scenario.construction_rounds()
+        self.assertEqual(planned[1]['authored_task_sources']['constraint_corrections'], ((1, 0),))
+        publications = first.publish_task_sources(service, owner.name)
+        pin = dict(publications)[0]
+        captured = first.observe_task_events(service, owner.name, ((0, pin),))
+        self.assertEqual(captured['events'][0]['publication'], pin.reference)
+        self.assertEqual(captured['events'][0]['wording'], WireProvenance(pin.task.subject))
+        self.assertEqual(captured['lineages'], ((pin, pin),))
+        self.assertNotEqual(pin.body, history[0])
+        publications = second.publish_task_sources(service, owner.name, publications)
+        corrected = dict(publications)[1]
+        captured = second.observe_task_events(service, owner.name, ((0, pin), (1, corrected)))
+        self.assertEqual(captured['lineages'], ((pin, corrected),))
+        self.assertNotEqual(corrected.task.subject, pin.task.subject)
+        publications = third.publish_task_sources(service, owner.name, publications)
+        dropped = dict(publications)[2]
+        captured = third.observe_task_events(service, owner.name,
+            ((0, pin), (1, corrected), (2, dropped)))
+        self.assertEqual(captured['lineages'], ((pin, dropped),))
+        self.assertEqual(dropped.task.selected_sources(dropped), ())
+        before = (service.root / 'bus.jsonl').read_bytes()
+        with self.assertRaisesRegex(ValueError, 'never replay'):
+            third.publish_task_sources(service, owner.name, publications)
+        self.assertEqual((service.root / 'bus.jsonl').read_bytes(), before)
+        with self.assertRaisesRegex(ValueError, 'wording differs'):
+            third.observe_task_events(service, owner.name, ((1, pin),))
+        with self.assertRaisesRegex(ValueError, 'certified original'):
+            third.observe_task_events(service, owner.name, ((0, replace(pin, body='invented')),))
+        peer = service.registry.declare(Thread('case-peer', frozenset(), str(service.root)))
+        with self.assertRaisesRegex(ValueError, 'certified original'):
+            third.observe_task_events(service, peer.name, ((0, pin),))
+        for position in (-1, len(first.history)):
+            before = (service.root / 'bus.jsonl').read_bytes()
+            with self.assertRaisesRegex(ValueError, 'outside the frozen'):
+                first.publish_constraint(service, owner.name, position)
+            self.assertEqual((service.root / 'bus.jsonl').read_bytes(), before)
+
+        decision_round = RecallRound('explicit-decision', history, (question,))
+        before = (service.root / 'bus.jsonl').read_bytes()
+        with self.assertRaises(RelationViolationError):
+            decision_round.publish_decision(service, owner.name, peer.name, 3,
+                chosen='inspect-original', rejected=('verify-scope',))
+        self.assertEqual((service.root / 'bus.jsonl').read_bytes(), before)
+        author = admit(service, 'decision-author')
+        try:
+            decision = decision_round.publish_decision(service, author.name, peer.name, 3,
+                chosen='inspect-original', rejected=('verify-scope',))
+            observed = decision_round.observe_task_events(service, author.name, ((3, decision),))
+            self.assertEqual(observed['events'][0]['task'], decision.task)
+            self.assertEqual(decision.task.source_turn_id.value, author.turn_lease.turn_id)
+            self.assertEqual(decision.task.rejected, ('verify-scope',))
+        finally:
+            service.registry.release_turn(author.turn_lease)
+
+    def test_declared_task_coordinates_preserve_old_records_and_refuse_invalid_recipes(self):
+        # Prevent historical stories gaining authority, guessed correction refs
+        # or a malformed later recipe spending an earlier source/model input.
+        scenario = coding_scenario()
+        encoded = FieldCodec.encode(scenario)
+        for round_ in encoded['rounds']:
+            self.assertNotIn('constraint_sources', round_)
+            self.assertNotIn('constraint_corrections', round_)
+            self.assertNotIn('constraint_drops', round_)
+        self.assertEqual(FieldCodec.decode(RecallScenario, encoded), scenario)
+        question = scenario.rounds[0].questions[0]
+        with self.assertRaisesRegex(ValueError, 'exactly one'):
+            RecallRound('duplicated', ('pin', 'drop'), (question,),
+                constraint_sources=(0,), constraint_drops=((0, 0),))
+        with self.assertRaisesRegex(ValueError, 'earlier authored'):
+            RecallRound('forward', ('correction', 'original'), (question,),
+                constraint_corrections=((0, 1),))
+        undeclared = RecallScenario('no-original', (
+            RecallRound('first', ('story',), (question,)),
+            RecallRound('second', ('story', 'change'), (question,),
+                constraint_corrections=((1, 0),))))
+        with self.assertRaisesRegex(ValueError, 'declared original'):
+            undeclared.construction_rounds()
+        repeated = RecallScenario('republished', (
+            RecallRound('first', ('pin',), (question,), constraint_sources=(0,)),
+            RecallRound('second', ('pin', 'later'), (question,), constraint_sources=(0,))))
+        with self.assertRaisesRegex(ValueError, 'republish'):
+            repeated.construction_rounds()
 
     def test_stimulus_delivery_requires_exact_source_and_original_earlier_branch(self):
         # Detect edits, later source and sibling ancestry being credited as
