@@ -30,8 +30,8 @@ from agent_comms.native_tools import CodingTool
 from agent_comms.pi_payloads import ReportedModel
 from agent_comms.message_reference import MessageReference
 from agent_comms.task_sources import (
-    CurrentTaskScopeSelection, Decision, OriginalTaskChange, TaskChange,
-    TaskScopeSelection, UserTaskSupersession,
+    CorrectionTaskChange, CurrentTaskScopeSelection, Decision, OriginalTaskChange,
+    TaskChange, TaskScopeSelection, UserTaskDrop, UserTaskSupersession,
 )
 from agent_comms.turn_context import FileProvenance, JournalProvenance, SystemLayerSegment, ToolCatalogSegment
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
@@ -1089,6 +1089,9 @@ class RecallRound:
     identity: str
     history: tuple[str, ...]
     questions: tuple[Question, ...]
+    constraint_sources: tuple[int, ...] = field(default=(), metadata={'wire_omit_default': True})
+    constraint_corrections: tuple[tuple[int, int], ...] = field(default=(), metadata={'wire_omit_default': True})
+    constraint_drops: tuple[tuple[int, int], ...] = field(default=(), metadata={'wire_omit_default': True})
 
     def __post_init__(self) -> None:
         identities = tuple(question.identity for question in self.questions)
@@ -1096,13 +1099,89 @@ class RecallRound:
             raise ValueError("A frozen round requires unique question identities")
         if not self.identity or not self.history or not self.questions:
             raise ValueError("A frozen round requires identity, history and questions")
+        positions = self.publication_positions()
+        if len(set(positions)) != len(positions):
+            raise ValueError('A case source requires exactly one declared publication action')
+        for position in positions:
+            self.source_wording(position)
+        for position, original in chain(self.constraint_corrections, self.constraint_drops):
+            self.source_wording(original)
+            if original >= position:
+                raise ValueError('A case correction/drop requires an earlier authored source')
+
+    def publication_positions(self):
+        """Explicit source coordinates, never labels extracted from history."""
+        return (*self.constraint_sources,
+                *(position for position, _ in self.constraint_corrections),
+                *(position for position, _ in self.constraint_drops))
+
+    def publication_plan(self):
+        return {'constraint_sources': self.constraint_sources,
+                'constraint_corrections': self.constraint_corrections,
+                'constraint_drops': self.constraint_drops}
+
+    def require_publication_prefix(self, previous, original_constraints):
+        """Validate the authored recipe before any source or model publication.
+
+        A prior case coordinate is not a wire reference. It only selects the
+        original constraint whose committed result will bind a TaskChange.
+        """
+        self.history_after(previous)
+        if any(position < len(previous) for position in self.publication_positions()):
+            raise ValueError('A later round cannot republish an earlier case source')
+        available = set(original_constraints) | set(self.constraint_sources)
+        for _, original in chain(self.constraint_corrections, self.constraint_drops):
+            if original not in available:
+                raise ValueError('A case correction/drop requires a declared original constraint')
+        return available
+
+    def publish_task_sources(self, service, recipient, prior=()):
+        """Bind declared case coordinates to genuine returned publications.
+
+        The original publishers own authorization and lineage. The sorted
+        operations preserve authored source order, including mixed actions in
+        one round. Earlier results are authenticated before using their refs;
+        no USER event is inferred from prose or native delivery.
+        """
+        self.observe_task_events(service, recipient, prior)
+        originals = dict(prior)
+        if len(originals) != len(prior):
+            raise ValueError('A prior case coordinate has multiple publication results')
+
+        def correction(position, original):
+            return self.publish_constraint(service, recipient, position,
+                change=CorrectionTaskChange(originals[original].reference))
+
+        def drop(position, original):
+            return self.publish_user_change(service, recipient, position,
+                change=UserTaskDrop(CorrectionTaskChange(originals[original].reference)))
+
+        actions = (
+            *((position, lambda position=position: self.publish_constraint(service, recipient, position))
+              for position in self.constraint_sources),
+            *((position, lambda position=position, original=original: correction(position, original))
+              for position, original in self.constraint_corrections),
+            *((position, lambda position=position, original=original: drop(position, original))
+              for position, original in self.constraint_drops),
+        )
+        if set(self.publication_positions()) & originals.keys():
+            raise ValueError('Case publication already has an original result; never replay it')
+        for _, original in chain(self.constraint_corrections, self.constraint_drops):
+            if original not in originals and original not in self.constraint_sources:
+                raise ValueError('Original case publication result is unavailable')
+        for position, publish in sorted(actions, key=lambda action: action[0]):
+            originals[position] = publish()
+        return tuple(sorted(originals.items()))
 
     def public(self) -> dict:
-        return {
+        result = {
             "id": self.identity,
             "history": self.history,
             "questions": [question.public() for question in self.questions],
         }
+        if self.publication_positions():
+            result['authored_task_sources'] = self.publication_plan()
+        return result
 
     def probe_text(self) -> str:
         """Held-out questions, without expected, stale or evidence metadata."""
@@ -1263,11 +1342,13 @@ class RecallScenario:
         These operands do not repeat cumulative source at each cut or disclose
         scoring metadata as provider instructions.
         """
-        previous, rounds = (), []
+        previous, rounds, original_constraints = (), [], set()
         for round_ in self.rounds:
+            original_constraints = round_.require_publication_prefix(previous, original_constraints)
             rounds.append({'round': round_.identity,
                            'history_additions': round_.history_after(previous),
-                           'probe_text': round_.probe_text()})
+                           'probe_text': round_.probe_text(),
+                           'authored_task_sources': round_.publication_plan()})
             rounds[-1]['source_text'] = '\n'.join(rounds[-1]['history_additions'])
             previous = round_.history
         return tuple(rounds)

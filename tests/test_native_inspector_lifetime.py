@@ -156,3 +156,29 @@ def test_original_controller_releases_all_owned_children_on_caller_failure(tmp_p
             child.__exit__.assert_called_once()
             assert call.kwargs['output'].closed
     assert NativePiRpcLaunch.bootstrap == original
+
+
+def test_nested_original_observers_only_acquire_their_declared_launch(tmp_path):
+    # Parent restoration uses its original launch; an arm must not attach both
+    # inspectors to that one child or leave its override on the parent.
+    children = [MagicMock(), MagicMock(), MagicMock()]
+    bootstrap = classmethod(lambda cls, cli, args, cwd, env, config: (('node', 'native'), env))
+    with patch.object(NativePiRpcLaunch, 'bootstrap', bootstrap), patch(
+            'summary_prefix_configured_installed_journey.ParentedProcess.launch',
+            side_effect=children) as launch:
+        with observe_native_requests(tmp_path, tmp_path/'parent') as parent:
+            parent_environment = {}
+            parent(parent_environment)
+            NativePiRpcLaunch.bootstrap((), (), tmp_path, parent_environment, None)
+            with observe_native_requests(tmp_path, tmp_path/'arm') as arm:
+                arm_environment = dict(parent_environment)
+                arm(arm_environment)
+                argv, _ = NativePiRpcLaunch.bootstrap((), (), tmp_path, arm_environment, None)
+                assert sum(arg.startswith('--inspect-brk=') for arg in argv) == 1
+                assert launch.call_count == 2
+            NativePiRpcLaunch.bootstrap((), (), tmp_path, parent_environment, None)
+        assert launch.call_count == 3
+        assert [call.args[0][4] for call in launch.call_args_list] == [
+            str(tmp_path/'parent'), str(tmp_path/'arm'), str(tmp_path/'parent')]
+        for child in children:
+            child.__exit__.assert_called_once()

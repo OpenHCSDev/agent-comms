@@ -362,26 +362,36 @@ class RecordedMeasurementTests(unittest.TestCase):
                    'Correct the original root to /private-b; preserve unresolved inputs.',
                    'Drop that original export-root restriction; do not change input dispositions.',
                    'Choose inspect-original; keep verify-scope as a valid rejected alternative.')
-        scenario = RecallScenario('authored-user-task-events', tuple(
-            RecallRound(f'r{index}', history[:index], (question,)) for index in (1, 2, 3)))
+        scenario = RecallScenario('authored-user-task-events', (
+            RecallRound('r1', history[:1], (question,), constraint_sources=(0,)),
+            RecallRound('r2', history[:2], (question,), constraint_corrections=((1, 0),)),
+            RecallRound('r3', history[:3], (question,), constraint_drops=((2, 0),))))
         first, second, third = scenario.rounds
-        pin = first.publish_constraint(service, owner.name, 0)
+        self.assertEqual(FieldCodec.decode(RecallScenario, FieldCodec.encode(scenario)), scenario)
+        planned = scenario.construction_rounds()
+        self.assertEqual(planned[1]['authored_task_sources']['constraint_corrections'], ((1, 0),))
+        publications = first.publish_task_sources(service, owner.name)
+        pin = dict(publications)[0]
         captured = first.observe_task_events(service, owner.name, ((0, pin),))
         self.assertEqual(captured['events'][0]['publication'], pin.reference)
         self.assertEqual(captured['events'][0]['wording'], WireProvenance(pin.task.subject))
         self.assertEqual(captured['lineages'], ((pin, pin),))
         self.assertNotEqual(pin.body, history[0])
-        corrected = second.publish_constraint(service, owner.name, 1,
-            change=CorrectionTaskChange(pin.reference))
+        publications = second.publish_task_sources(service, owner.name, publications)
+        corrected = dict(publications)[1]
         captured = second.observe_task_events(service, owner.name, ((0, pin), (1, corrected)))
         self.assertEqual(captured['lineages'], ((pin, corrected),))
         self.assertNotEqual(corrected.task.subject, pin.task.subject)
-        dropped = third.publish_user_change(service, owner.name, 2,
-            change=UserTaskDrop(CorrectionTaskChange(pin.reference)))
+        publications = third.publish_task_sources(service, owner.name, publications)
+        dropped = dict(publications)[2]
         captured = third.observe_task_events(service, owner.name,
             ((0, pin), (1, corrected), (2, dropped)))
         self.assertEqual(captured['lineages'], ((pin, dropped),))
         self.assertEqual(dropped.task.selected_sources(dropped), ())
+        before = (service.root / 'bus.jsonl').read_bytes()
+        with self.assertRaisesRegex(ValueError, 'never replay'):
+            third.publish_task_sources(service, owner.name, publications)
+        self.assertEqual((service.root / 'bus.jsonl').read_bytes(), before)
         with self.assertRaisesRegex(ValueError, 'wording differs'):
             third.observe_task_events(service, owner.name, ((1, pin),))
         with self.assertRaisesRegex(ValueError, 'certified original'):
@@ -411,6 +421,35 @@ class RecordedMeasurementTests(unittest.TestCase):
             self.assertEqual(decision.task.rejected, ('verify-scope',))
         finally:
             service.registry.release_turn(author.turn_lease)
+
+    def test_declared_task_coordinates_preserve_old_records_and_refuse_invalid_recipes(self):
+        # Prevent historical stories gaining authority, guessed correction refs
+        # or a malformed later recipe spending an earlier source/model input.
+        scenario = coding_scenario()
+        encoded = FieldCodec.encode(scenario)
+        for round_ in encoded['rounds']:
+            self.assertNotIn('constraint_sources', round_)
+            self.assertNotIn('constraint_corrections', round_)
+            self.assertNotIn('constraint_drops', round_)
+        self.assertEqual(FieldCodec.decode(RecallScenario, encoded), scenario)
+        question = scenario.rounds[0].questions[0]
+        with self.assertRaisesRegex(ValueError, 'exactly one'):
+            RecallRound('duplicated', ('pin', 'drop'), (question,),
+                constraint_sources=(0,), constraint_drops=((0, 0),))
+        with self.assertRaisesRegex(ValueError, 'earlier authored'):
+            RecallRound('forward', ('correction', 'original'), (question,),
+                constraint_corrections=((0, 1),))
+        undeclared = RecallScenario('no-original', (
+            RecallRound('first', ('story',), (question,)),
+            RecallRound('second', ('story', 'change'), (question,),
+                constraint_corrections=((1, 0),))))
+        with self.assertRaisesRegex(ValueError, 'declared original'):
+            undeclared.construction_rounds()
+        repeated = RecallScenario('republished', (
+            RecallRound('first', ('pin',), (question,), constraint_sources=(0,)),
+            RecallRound('second', ('pin', 'later'), (question,), constraint_sources=(0,))))
+        with self.assertRaisesRegex(ValueError, 'republish'):
+            repeated.construction_rounds()
 
     def test_stimulus_delivery_requires_exact_source_and_original_earlier_branch(self):
         # Detect edits, later source and sibling ancestry being credited as

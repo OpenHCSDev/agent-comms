@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 import sys
+from unittest.mock import patch
 
 from acp.agent.router import build_agent_router
 from agent_comms.acp_extension import CompactRequest, encode_request
@@ -18,6 +20,8 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.native_fork import ForkSessionRequest
+from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.native_entries import NativeEntry
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.pi_vocabulary import ThinkingLevel
@@ -39,53 +43,36 @@ def record(path, value):
     return FileProvenance(str(path), digest(path))
 
 
-async def condition_application(stage,package,original_python,selected_condition: Condition,
-                                checkpoint: RecordedNativeCheckpoint, *, core_source,
-                                core_artifacts=(), prompt_text: str):
-    """Install one selection on an original SDK fork, then submit distinct input.
+async def condition_application(application_stage, package, agent, owner, fork,
+                                selected_condition: Condition, checkpoint: RecordedNativeCheckpoint,
+                                *, prompt_text: str, receipt):
+    """Borrow the caller's selected owner, install one arm and record its input.
 
-    Borrow the existing completed cut/capture. This path neither repeats its
-    compaction nor produces missing historical evidence from today's sources.
-    Configured launch/model/auth/settings still come from the original owner.
+    Source selection/restoration belongs to SessionLifecycle. This body creates
+    no registry or owner and transfers no USER sources. Its observer and RAM
+    environment close before the caller restores parent native custody.
     """
-    captured=CurrentTypedCapture(Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'),original_python
-        ).read('openhcs-architecture-memory')
-    original=captured.require_current()
-    assert original.model=='openai-codex/gpt-6.1-sol'
-    assert ThinkingLevel.optional_name(original.thinking_level)=='high'
-    with checkpoint.original_source() as (identity,evidence):
-        checkpoint.capture(identity,evidence)
-        captured_source=identity.path
-    stage.mkdir(mode=0o700,exist_ok=False)
-    def capture_source():
-        return captured.require_current(),captured.retained
-    class Receiver:
-        async def session_update(self,**value):
-            pass
-
-    application_stage=stage/'application'
     contexts=application_stage/'sdk-contexts'
     observer_output=application_stage/'condition-observation.jsonl'
     condition_file=application_stage/'fork-condition-source.private.json'
-    receipt={'complete':False,'public_inputs':0,'input_replays':0,'paid_comparison':False,
-        'installed_UI':False,'acceptance_scope':'original completed cut/capture/SDK fork/installed SDK input and distinct answer',
-        'selected_condition':selected_condition}
+    service=agent._comms
+    contexts.mkdir(mode=0o700)
+    condition=checkpoint.fork_condition_source(
+        service.root/'compaction-commits.sqlite3',Path(fork.session_file))
+    record(condition_file,condition)
     with observe_native_requests(package,observer_output,
             contexts=contexts,condition_source=condition_file,condition=selected_condition) as launch:
-        async with configured_saved_agent(application_stage,package,captured_source,Receiver(),receipt,
-                capture_source=capture_source,observe_launch=launch,
-                core_source=core_source,core_artifacts=core_artifacts) as (agent,owner,fork):
-            contexts.mkdir(mode=0o700)
-            service=agent._comms
-            condition=checkpoint.fork_condition_source(
-                service.root/'compaction-commits.sqlite3',Path(fork.session_file))
-            record(condition_file,condition)
+        environment=dict(os.environ)
+        launch(environment)
+        with patch.dict(os.environ,environment,clear=True):
+            await agent.turns.prepare_selected_session(owner.name,owner)
+            before=set(InputDispositions(service.root/InputDispositions.filename).read().rows)
             print('CONFIGURED_FORK_INSTALLED_DISTINCT_INPUT',flush=True)
             result=await build_agent_router(agent)('session/prompt',{'sessionId':owner.name,
                 'prompt':[{'type':'text','text':prompt_text}]},False)
             assert result.stop_reason=='end_turn'
             document=InputDispositions(service.root/InputDispositions.filename).read()
-            row,=document.rows.values()
+            row,=(row for key,row in document.rows.items() if key not in before)
             assert row.has_started and row.source_text==prompt_text
             session=NativeSessionIdentity(fork.session_id,fork.session_file)
             probe=RecordedNativeProbe.capture_input(service,owner,session,row,contexts,
@@ -109,7 +96,46 @@ async def condition_application(stage,package,original_python,selected_condition
                 canonical_request_budget_and_terminal=True,distinct_answer=True,new_original_inputs=1,
                 model_steps=len(measured['model_steps']),model_recall_evaluated=False,
                 final_HTTP_bytes_evaluated=False)
+            # The original idle retirement joins the child while its inspector
+            # is still available to release Node completion. Parent restoration
+            # happens later, outside both the observer and RAM environment.
+            await agent.turns.close_idle_backend(owner.name)
             return probe, measured
+
+
+async def verify_condition_application(stage, package, original_python, selected_condition,
+                                       checkpoint, *, core_source, core_artifacts=(), prompt_text):
+    """Acquire one outer private owner for the standalone functional command.
+
+    Paired arms do not use this acquisition: they borrow the source trajectory's
+    same owner through selected_native_fork and the shared application body.
+    """
+    captured=CurrentTypedCapture(Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'),original_python
+        ).read('openhcs-architecture-memory')
+    original=captured.require_current()
+    assert original.model=='openai-codex/gpt-6.1-sol'
+    assert ThinkingLevel.optional_name(original.thinking_level)=='high'
+    with checkpoint.original_source() as (identity,evidence):
+        checkpoint.capture(identity,evidence)
+        captured_source=identity.path
+    stage.mkdir(mode=0o700,exist_ok=False)
+
+    def capture_source():
+        return captured.require_current(),captured.retained
+
+    class Receiver:
+        async def session_update(self,**value):
+            pass
+
+    receipt={'complete':False,'public_inputs':0,'input_replays':0,'paid_comparison':False,
+        'installed_UI':False,'acceptance_scope':'original completed cut/SDK fork/installed SDK input and distinct answer',
+        'selected_condition':selected_condition}
+    application_stage=stage/'application'
+    async with configured_saved_agent(application_stage,package,captured_source,Receiver(),receipt,
+            capture_source=capture_source,core_source=core_source,core_artifacts=core_artifacts
+            ) as (agent,owner,fork):
+        return await condition_application(application_stage,package,agent,owner,fork,
+            selected_condition,checkpoint,prompt_text=prompt_text,receipt=receipt)
 
 
 async def request_construction(stage, package, original_python, *, core_source, core_artifacts=()):
@@ -212,7 +238,7 @@ async def run(stage, package, original_python, *, design: PairedRecallDesign,
     contexts = parent_stage / 'sdk-contexts'
     summaries = parent_stage / 'summary-assemblies'
     probes = {condition: {} for condition in selected['condition_order']}
-    stimuli, checkpoints = {}, {}
+    stimuli, checkpoints, task_events = {}, {}, ()
     with observe_native_requests(package, parent_stage / 'request-observation.jsonl',
                                  contexts=contexts, summaries=summaries) as observe_launch:
         async with configured_saved_agent(parent_stage, package, source_file, Receiver(), receipt,
@@ -236,8 +262,12 @@ async def run(stage, package, original_python, *, design: PairedRecallDesign,
                                                  worktree=owner.worktree)
             for number, operands in enumerate(plan['rounds'], 1):
                 identity = operands['round']
+                round_ = scenario.rounds[number - 1]
                 round_stage = stage / f'round-{number}'
                 round_stage.mkdir(mode=0o700)
+                task_events = round_.publish_task_sources(service,owner.name,task_events)
+                record(round_stage/'authored-task-events.private.json',
+                       round_.observe_task_events(service,owner.name,task_events))
                 # Each source body is the original construction operand, not a
                 # caller-built cumulative history or oracle answer payload.
                 before = set(inputs.read().rows)
@@ -274,9 +304,23 @@ async def run(stage, package, original_python, *, design: PairedRecallDesign,
                 checkpoints[identity] = checkpoint
                 record(round_stage / 'checkpoint.private.json', checkpoint)
                 for position, condition in enumerate(selected['condition_order'], 1):
-                    probe, observed = await condition_application(round_stage / f'arm-{position}',
-                        package, original_python, condition, checkpoint, core_source=core_source,
-                        core_artifacts=core_artifacts, prompt_text=operands['probe_text'])
+                    arm_stage=round_stage/f'arm-{position}'
+                    arm_stage.mkdir(mode=0o700)
+                    original_owner=RegistryOwner.capture_local(service.registry.snapshot(),owner.name)
+                    child=await journal.private_inputs.fork(ForkSessionRequest(
+                        str(package),original_owner.thread.require_saved_session(),owner.worktree,
+                        str(arm_stage/'forks')),cwd=Path(owner.worktree))
+                    arm_receipt={'complete':False,'public_inputs':0,'input_replays':0,
+                        'paid_comparison':False,'selected_condition':condition,
+                        'acceptance_scope':'same-owner selected SDK fork and original installed input; not study'}
+                    try:
+                        async with agent.sessions.selected_native_fork(owner.name,original_owner,child) as selected_owner:
+                            probe, observed = await condition_application(arm_stage,package,agent,
+                                selected_owner.thread,child,condition,checkpoint,
+                                prompt_text=operands['probe_text'],receipt=arm_receipt)
+                        arm_receipt['original_source_restored']=True
+                    finally:
+                        record(arm_stage/'receipt.json',arm_receipt)
                     probes[condition][identity] = probe
                     record(round_stage / f'arm-{position}-measurement.private.json', observed)
                     record(stage / f'arm-{position}-run.private.json',
@@ -308,7 +352,7 @@ if __name__ == '__main__':
         if len(arguments)!=6:
             raise ValueError('--condition-application requires Condition and original checkpoint file')
         marker=f'ORIGINAL_INSTALLED_S4_APPLICATION_{stage.name.upper().replace("-", "_")}_VERIFIED'
-        _, measured = asyncio.run(condition_application(stage,package,original,
+        _, measured = asyncio.run(verify_condition_application(stage,package,original,
             FieldCodec.decode(Condition,arguments[4]),
             FieldCodec.decode(RecordedNativeCheckpoint,json.loads(Path(arguments[5]).read_text())),
             core_source=source,core_artifacts=artifacts,
