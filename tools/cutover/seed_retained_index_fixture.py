@@ -26,7 +26,8 @@ def main():
     sender = service.registry.require('original_sender')
     service.registry.rename('original_sender', 'renamed_sender')
     service.registry.register(replace(service.registry.require('beta'), tags=frozenset({'other'})))
-    print(json.dumps({'root_id': root_id, 'sender': FieldCodec.encode(sender),
+    print(json.dumps({'root_id': root_id, 'sender': FieldCodec.encode(sender.incarnation),
+                      'registry_guard': str(service.registry.store.private_guard_unlocked().path),
                       'original': original.to_wire()}), flush=True)
 
 
