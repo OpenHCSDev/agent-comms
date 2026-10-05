@@ -1,6 +1,6 @@
 {
   "classification": "source-only-stopped-declaration-carry-not-installed-ready",
-  "determining_head": "137be40c37fcc6065138be9985d1962e737816fd",
+  "determining_head": "88e8d2f9983df69de876401abf0d3ec506235985",
   "base": "a38c06de24315fa868de45786e01fefadb0aaef1",
   "reviewed_target_producer": "b7e688292074a854870d7ca78397111c1dae1c7b",
   "source_release": [
@@ -16,8 +16,8 @@
     6
   ],
   "tools": {
-    "tools/cutover/native_schema_carry.py": "e3a519be373280870cd1a414be934962b8acf16d4c3bf016c33d13e467cee9a5",
-    "tools/cutover/native_schema_carry_controls.py": "6da0e8f31718efc0db45f77988b77b4cb677d968e34f3ca1f9e49b0048863b95",
+    "tools/cutover/native_schema_carry.py": "08d5b673910f96634ad017eb7e8224cb440e5b5cfea7c07d597b3ddf0f209c2b",
+    "tools/cutover/native_schema_carry_controls.py": "450678fe8a510273f89aad9c9bcc260eab52d1f25be58f24b3056821df930420",
     "tools/cutover/runtime_installation.py": "77841672b6d9d99e3cb4c724706ffdad7eefd604aab583743f2e4b341156224c"
   },
   "unchanged_product_roots": [
@@ -35,7 +35,8 @@
     "original NRA Package/FunctionFacts before and after AST",
     "changed tools AST parsing",
     "git diff --check",
-    "byte equality of ordinary metadata/database/session/schema source"
+    "byte equality of ordinary metadata/database/session/schema source",
+    "AST call arities matched actual SchemaMeta declaration; both controls borrow observing DB resource"
   ],
   "store_or_product_execution": false,
   "package_writes": 0,

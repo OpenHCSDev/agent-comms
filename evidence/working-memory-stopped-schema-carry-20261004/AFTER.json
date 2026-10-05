@@ -1,5 +1,5 @@
 {
-  "revision": "137be40c37fcc6065138be9985d1962e737816fd",
+  "revision": "88e8d2f9983df69de876401abf0d3ec506235985",
   "collector": "original audit.findings.Package / FunctionFacts",
   "roots": [
     {
@@ -1350,5 +1350,89 @@
       "arguments": "self, acquired, destination",
       "calls": []
     }
-  ]
+  ],
+  "control_correction_at": "88e8d2f9983df69de876401abf0d3ec506235985",
+  "corrected_tool_root": {
+    "root": "tools/cutover",
+    "parsed": 52,
+    "unparsed": [],
+    "consumers": [
+      {
+        "function": "tools/cutover/native_schema_carry.py::carry_goal",
+        "calls": [
+          "rebuild"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry.py::carry_coordination",
+        "calls": [
+          "rebuild",
+          "require_carry_target",
+          "require_coordination"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry.py::carry_compaction",
+        "calls": [
+          "rebuild",
+          "require_carry_target"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry.py::capture_requests",
+        "calls": [
+          "require_carry_target"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry.py::carry_journal_members",
+        "calls": [
+          "rebuild",
+          "require_carry_target"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry.py::carry",
+        "calls": [
+          "carry_coordination"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry.py::prepare",
+        "calls": [
+          "require_carry_target"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry.py::require_candidate",
+        "calls": [
+          "require_carry_target"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry_controls.py::run_journal_inventory",
+        "calls": [
+          "require_carry_target"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry_controls.py::run",
+        "calls": [
+          "install",
+          "observing",
+          "read",
+          "require_carry_target",
+          "require_coordination",
+          "require_current"
+        ]
+      },
+      {
+        "function": "tools/cutover/runtime_installation.py::install",
+        "calls": [
+          "install",
+          "prepare"
+        ]
+      }
+    ]
+  }
 }
