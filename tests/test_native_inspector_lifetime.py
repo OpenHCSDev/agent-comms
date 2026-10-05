@@ -28,7 +28,7 @@ def test_pair_acquires_separate_arm_trajectories_from_one_untouched_seed(tmp_pat
     # Execute the runner body with authored resource boundaries only. Detect
     # source reuse, order/stimulus drift and erasure of a completed first arm.
     # No native files, model calls, original records or installed imports.
-    from compaction_retention_fixture import RecordedNativeProbes, coding_scenario
+    from compaction_retention_fixture import RecordedNativeProbes, RecallScenario, coding_scenario
 
     source = Path(__file__).with_name('three_cut_retention_configured_journey.py')
     declarations = [node for node in ast.parse(source.read_text()).body
@@ -68,7 +68,8 @@ def test_pair_acquires_separate_arm_trajectories_from_one_untouched_seed(tmp_pat
     from agent_comms.turn_context import FileProvenance
     namespace = dict(Path=Path, json=json, FieldCodec=FieldCodec, FileProvenance=FileProvenance,
         digest=lambda path: hashlib.sha256(path.read_bytes()).hexdigest(),
-        CurrentTypedCapture=lambda *args: captured,
+        CurrentTypedCapture=lambda *args: SimpleNamespace(read=lambda name: captured),
+        RecallScenario=RecallScenario,
         RecordedNativeCheckpoint=SimpleNamespace(read_record=lambda *args: scenario),
         configured_saved_agent=acquire, run_arm=arm)
     exec(compile(ast.fix_missing_locations(module), str(source), 'exec'), namespace)
@@ -117,7 +118,7 @@ def test_arm_clock_completes_only_after_agent_and_inspector_join(tmp_path, clean
     agent = MagicMock()
     agent._comms.root = tmp_path/'unread-wire'
     owner = SimpleNamespace(name='authored-owner', worktree='authored-worktree')
-    creation = SimpleNamespace(session_id='authored-session', session_file='authored-session-file')
+    creation = SimpleNamespace(session_id='authored-session', session_file=str(tmp_path/'unread-saved.jsonl'))
 
     @contextmanager
     def observe(*args, **kwargs):
