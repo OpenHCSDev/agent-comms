@@ -111,6 +111,21 @@ one, whose receiver rebind leaves the CoreEvent subscription at the old widget.
 OperationalSessionPresentation and DirectoryWatcher own the complete repair;
 446 frozen controls remain unchanged and no runtime cause is inferred.
 
+## S4 frozen adjacent comparison closure
+
+Arendt667 frozen886c62ac is scoped Ready: RecallScenario.revision_intervals
+owns every original adjacent pair, and RecordedNativeCheckpoint.compare_acquired
+owns ancestry and retained-fact differences for both standalone and trajectory
+readers. Parent read complete selection and comparison consumers: cuts are
+ordered by the frozen scenario, same-session ancestry is corroborated, and a
+supplied r1-to-r3 observation remains visible without filling missing r1-to-r2
+or r2-to-r3 measurements. Scorer/CLI derive the same original interval owner.
+Authored4PASS/3subtests and empty original trajectory CLI are source controls,
+not configured comparative acceptance. Required exact Debt job111577763639
+remains queued with no assigned runner at this read; no duplicate workflow or
+provider/input is requested. Recorded configured-input664 acceptance remains
+separate and merged; HTTP/capacity/recall/study/fullS4 remain unfinished.
+
 ## Historical integration evidence
 
 Parent retired its unused standalone channel_recovery_physical_journey wrapper.
