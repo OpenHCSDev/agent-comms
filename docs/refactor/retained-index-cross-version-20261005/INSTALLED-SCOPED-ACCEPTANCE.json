@@ -1,0 +1,191 @@
+{
+  "state": "SCOPED INSTALLED PASS; package and native READ claims explicitly returned, independent Bohr close pending",
+  "determining_tool_head": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+  "frozen_operator_head": "48ba1c98d58426f9cfcc45bd4bfa6a4105927497",
+  "whole_handback": {
+    "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/whole-handback.json",
+    "sha256": "a4eab2904880cf0d7835d1a621cf9a019f5699d0a73c6d166f2320dfad9568cb",
+    "bytes": 10806
+  },
+  "original_receipts": [
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/authored-fixture-postcontrol-manifest.json",
+      "sha256": "754762e7ce116fc44bd60fe974089cdbe64216f80d87659ae93609adb23b3f89",
+      "bytes": 4817
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/candidate-source-proof.json",
+      "sha256": "00fef9b3a681f98241e1bcd9c3d5ad94d4b5b4fec0bc03d8dc1c655fe06331c3",
+      "bytes": 4854
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/command.json",
+      "sha256": "bef540076cc653852eecb6514e8b0a54feb38431cab3a5bdc8f71a524fb22e3b",
+      "bytes": 1975
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/controller-launch.json",
+      "sha256": "8e5cff7a5ab47dfe33c99f95cd85dbdcf10955e798911aa5f3e58b7d6f6fb94a",
+      "bytes": 2513
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/controller-terminal.json",
+      "sha256": "676bca0df4964569189deae0e149581b8dffef2baf7d68b30800397746038a8f",
+      "bytes": 168
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/controller.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/controller.stdout.log",
+      "sha256": "7f880d1607def56304cc7ba68617da11302c5a42d9b7bc879b6911dfe657be82",
+      "bytes": 889
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/handle.json",
+      "sha256": "b59038e94a01ffa243de2dafe8235d3c471355821f2258bf64d62c26792037b6",
+      "bytes": 349
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/proof-handle.json",
+      "sha256": "9833a658a94f1e903077508b69106005676a9000e1c8030aec91ae7dcbeda160",
+      "bytes": 62
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/proof-terminal.json",
+      "sha256": "aa9c86ed23b320abc31a6ed9092f0d8496786606a04e07870f8a143359276a13",
+      "bytes": 1066
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/proof.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/proof.stdout.log",
+      "sha256": "fad790e4d079d956231ed1daa18f7dc3e957f82a9438072fe35854f281d5de04",
+      "bytes": 285
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/resolved-controller-operands.json",
+      "sha256": "cc9cf930ac6c1e63bb124b41004bba86a0d05d2a58c0afb35ac1bc29f6dc0fcf",
+      "bytes": 4497
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/resolved-proof-operands.json",
+      "sha256": "78367a251718379be82fa8f7e20b783af2d7dbb2889ce5ffc26957f55ad4df5b",
+      "bytes": 2308
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/restore-command.json",
+      "sha256": "9de3ef3d41464b344a6a100904601657a1af40b6f42ecc8dcf61056f44f6e836",
+      "bytes": 670
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/restore-handle.json",
+      "sha256": "26cf81b2ef0274b6646dd1520f153b663b094bf11e2288f8f56b370dc7fe15fb",
+      "bytes": 62
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/restore-terminal.json",
+      "sha256": "53ba0d4a45d7a11dcaa4e52e0e05e6f61335026ea8cf313cdea9d903cfb64a17",
+      "bytes": 216
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/restore.stderr.log",
+      "sha256": "05ebc64fb4bac0509c28fec3523d990ed5ca8efdd416d66960ef70e09d4a4289",
+      "bytes": 904
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/restore.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/stage-command.json",
+      "sha256": "820580ce37f6c9be9beb0d56915b400b524715c38fafd7911c53db2f72b5b516",
+      "bytes": 787
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/stage-handle.json",
+      "sha256": "675258c8fb8f488248e5a08d8e6b7056adde4a07f9b375c460c138636567fcb4",
+      "bytes": 62
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/stage-terminal.json",
+      "sha256": "d5f8ad1806565f81cce988bd12e0f59ffab5bc87e12a7fd836a5c1c49d0e601a",
+      "bytes": 218
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/stage.stderr.log",
+      "sha256": "cc56be8cecf7aa5e615873f37e08739ae27a65326cd8f4cac6fb9c8e47bef91d",
+      "bytes": 905
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/stage.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/stdout.log",
+      "sha256": "99fe108e9c308f458bdfb57c51e4e1658b5964ad08117ae59ac887bb162880bb",
+      "bytes": 713
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/terminal.json",
+      "sha256": "7116af1e3a632fb63a8cf90f2ff762b32e989494d3e9938f1eea0a0ddd6a0229",
+      "bytes": 612
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/whole-floor-readback.json",
+      "sha256": "46be1af36536d02125e312549d06b634ceecba4fdfea7807a80812b82c9d66ae",
+      "bytes": 3735
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/einstein-retained-index-cross-version-20261005/installed01/receipt.json",
+      "sha256": "0662b335236f869850a9172d8f8c1bf6a24e95f737965ff2765bd1b5d06192b4",
+      "bytes": 625
+    }
+  ],
+  "qualifier_returncode": 0,
+  "qualifier_elapsed_seconds": 9.264327308977954,
+  "outer_elapsed_seconds": 10.89055172004737,
+  "accepted": {
+    "old_python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "new_python": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+    "old_schema_refusal": "Private bus checkpoint schema is unavailable.",
+    "original_bytes_unchanged": true,
+    "original_frozen_sender_and_audience_unchanged": true,
+    "original_registry_and_guard_unchanged": true,
+    "central_batch_used": false,
+    "joined_authored_seed": true,
+    "new_owner_launches": 0,
+    "provider_calls": 0,
+    "original_input_replays": 0
+  },
+  "source_restore_attempts": 1,
+  "target_stage_restore_attempts": 0,
+  "floor_readback": {
+    "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/whole-floor-readback.json",
+    "sha256": "46be1af36536d02125e312549d06b634ceecba4fdfea7807a80812b82c9d66ae",
+    "bytes": 3735
+  },
+  "native_READ_returned": true,
+  "native_EXEC": false,
+  "original_authored_fixture_preserved": "/home/ts/.cache/agent-scratch/einstein-retained-index-cross-version-20261005/installed01",
+  "nested_identity_honest_limit": "Original seed/declaration/writer/installer subprocess.run synchronously joined; individual nested births not captured. Actual controller/pilot/installer recorded identities all absent.",
+  "remaining_unqualified": [
+    "routing native-page old-registry consumer",
+    "central-batch cross-version joint acceptance",
+    "historical original installed720 artifact equivalence"
+  ],
+  "no_public_effect": true,
+  "no_repeat_authority": true
+}

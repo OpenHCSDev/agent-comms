@@ -1,0 +1,75 @@
+{
+  "status": "SOURCE ONLY; build and both installed holder purposes unissued",
+  "source_implementation": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+  "tools": [
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_index_cutover.py",
+      "sha256": "43321c362d4a5c610aa0743872a3457f60363cda0c0b8913247db56cd28e44b6"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_index_writer.py",
+      "sha256": "12b95a6de335bffd741163f66daa183209690d1cf9f514efb3a891e3d0a8674f"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_index_installed_pilot.py",
+      "sha256": "4b66f5d2399313cb1313404ec1dd9416a444d285e411bc4ccf23207db801b166"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/seed_retained_index_fixture.py",
+      "sha256": "d89b7561882c0a0a69700f24eda02e4ad8dca939582f1155a50f8bc1d88745f4"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/checkpoint_schema.py",
+      "sha256": "0d32c74d741572f9f5a242eb34750f7c3353ee88a480957d59380afb1147adee"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/install_retained_index.py",
+      "sha256": "3060f64db3d180452452b5ec12c5cd2730f8f8052ab5676c8807f49c42b3982d"
+    }
+  ],
+  "old_source": "72062939239b0f07707406309305a056a23f925f",
+  "old_source_relation": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-index-cross-version-20261005/OLD720-NORMAL-BUILD-PROPOSAL.json",
+  "old_source_relation_sha256": "dadea5e2953a40092af3376a3d57aba51c7abe7c69ef0c58f2dba24839641347",
+  "old_historical_installation_claim": false,
+  "future_source_prefix": null,
+  "future_target_prefix": null,
+  "holder_selection": "Bohr names two genuinely eligible existing closed private holders and their actual floors/archives/borrowers; current public485, other public/default prefixes and active334/540 excluded. No reservation.",
+  "target_source_requirement": "Actual qualified installed target must match its original production declarations/reader family; tools loaded by absolute path, no application source overlay. This branch changes no src/stack/build inputs. Prefer an already matched target Core; no target rebuild inferred.",
+  "future_stage": "Original normal installer --no-deps --no-cache only after exact floor/origin/source/wheel grant. Source wheel newly normal-built from exact old Git and original build inputs, no historical-installed equality.",
+  "operator": "Einstein, only after literal source+target package/import/run purposes; one bounded pilot, no replay on failure or unknown",
+  "argv_after_target_python": [
+    "-B",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_index_installed_pilot.py"
+  ],
+  "cwd": "/home/ts/wt/comms-field-codec-closure-20260928",
+  "environment": {
+    "PYTHONPATH": "ABSENT",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "AC_INDEX_ORIGINAL_PYTHON": "UNBOUND literal original source-prefix/bin/python",
+    "AC_INDEX_FIXTURE_STAGE": "/home/ts/.cache/agent-scratch/einstein-retained-index-cross-version-20261005/installed01",
+    "AC_NATIVE_COPIED_PACKAGE": "UNBOUND matching immutable native keeper READ only; variable is historical spelling, no copy or execution"
+  },
+  "output_receipt": "/home/ts/.cache/agent-scratch/einstein-retained-index-cross-version-20261005/installed01/receipt.json",
+  "controller_requirement": "Use original BoundedRun/AttachedChild ownership with exact issued bound/output/interpreter; retain joined seed, source declaration, writer and installer child births/groups/raw outputs. No new controller framework.",
+  "actual_chain": [
+    "target pilot runs old source seed ONCE through original Comms/registry/initial protocol",
+    "old child exits/joined; all authored registry processes point to that dead child",
+    "target original WireLog refuses mismatched checkpoint without decoding old registry",
+    "RetainedIndexCutover original source preflight observes declaration digest and native keeper READ",
+    "target retains existing wire lock; same quiet_install owner launches original int-OFD writer",
+    "source verifies original certificate, root and differing declarations before checkpoint reset",
+    "target installer inherits same OFD and verifies fstat/inode/flock/root before declaration-owned install",
+    "target AssignedTranscriptSource uses original ThreadIncarnation, retains frozen renamed sender/audience/events and exact bus/registry/guard bytes"
+  ],
+  "central_batch_used": false,
+  "central_batch_scope": "Existing actual whole-owner selection/stop/start acceptance stays separate and unchanged",
+  "same_format_behavior": "Existing equal-schema refusals remain before reset; current lock API is not duck-adapted. Original integer FD is checked before any index retirement.",
+  "routing_215_remaining": "RetainedRoutingCutover inherits quiet_install through after_stopped unchanged. Its installed page/renderer qualifier still requires an old-registry-compatible source-acquired transcript provenance; target Comms registry decoding is not proven or repaired by this index gate.",
+  "failure": "Stop on first failure/UNKNOWN, preserve authored fixture/raws/preimages/old marker state; never replay seed or restore an old checkpoint after target mutation. Restore both actual issued package floors, join children/groups/socket resources and return native READ plus both holder claims.",
+  "native_execution": false,
+  "provider_calls": 0,
+  "saved_or_original_data_access": false,
+  "new_environment": false,
+  "new_builds_now": 0,
+  "installed_runs_now": 0
+}
