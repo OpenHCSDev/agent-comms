@@ -42,3 +42,36 @@ leased reader's imported product. The leased child environment remains exactly
 named separately. The command remains literal hashb9738b21, determining private
 reader source remains merged577347d1. This controller has only been parsed, not
 run. Actual issued purpose bytes must be read before execution; no loan inferred.
+
+
+## Actual original-input read completed
+
+Fresh original Bohr purpose `b33607dd` was read/hash matched before import. The
+literal b973 command/cwd/env/output and three source operands matched. The ONE
+recorded read exited **0 in 6.647768527s** through the published existing-child
+controller; no SDK/native/observer/provider/input was launched. The runtime
+resource check reported warnings (about9.5GiB availableRAM), so this remained one
+serial reader with no arbitrary cap or fleet.
+
+The existing strict reader corroborates **nine original wire references, five
+original declaration-to-wording relations, and all11 retained facts in the exact
+SDK envelope** for original input119d and request digest38ab. The six original
+serialized segments/185673UTF-8 bytes, budget and terminal/exactmarker remain
+verified. This is genuine original recorded configured-input evidence, rather
+than an authored source result. Native stimulus delivery, HTTP bytes, capacity,
+model recall, matched interventions and full S4 study remain unqualified.
+
+All17 protected preimages and three source operands match after the read. The
+old controllerexit1, old probe0c519/reference refusal and STARTED disposition
+remain unchanged. Output lives only in the separate configured02-source-read01
+namespace. `recorded-source-request-scope.json` pins five raw keeper hashes and
+all17 original after-hashes; private measurement contents are not recopied here.
+The exact reader338558/birth64662517 was joined/retired through ParentedProcess
+and is absent. Outer control command exited0, but its PID/birth was not retained;
+that limit is explicit, with no invented controller identity.
+
+The WHOLE540 import/READ claim was explicitly returned to Bohr. Independent
+current347Core+94keepers+69metadata/10distributions/truthful5forigin readback,
+fresh privileged census and closure of only the existing671 lifecycle belong to
+him and remain pending at this checkpoint. No expired or next purpose is reused.
+There is no native086 authority to return. No rerun is needed for this result.
