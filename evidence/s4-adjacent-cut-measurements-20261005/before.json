@@ -1,0 +1,339 @@
+{
+  "source_head": "69346035167d7fc604bafbec0a29872c4c93aab3",
+  "parser": "NRA SourceModuleBatchParser",
+  "modules": 739,
+  "parse_omissions": [],
+  "scope": "tracked Python src/tests/tools/experiments; lexical sites, dynamic resolution not proved; JS/native untouched",
+  "sites": [
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 612,
+      "node": "Attribute",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 54,
+      "node": "FunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 106,
+      "node": "AsyncFunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 126,
+      "node": "AsyncFunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 198,
+      "node": "AsyncFunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 280,
+      "node": "AsyncFunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 344,
+      "node": "AsyncFunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 363,
+      "node": "Attribute",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 353,
+      "node": "Attribute",
+      "name": "inspect"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 218,
+      "node": "Attribute",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 213,
+      "node": "FunctionDef",
+      "name": "checkpoints_for"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 251,
+      "node": "FunctionDef",
+      "name": "observe_acquired"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 585,
+      "node": "FunctionDef",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1157,
+      "node": "FunctionDef",
+      "name": "compare_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1179,
+      "node": "FunctionDef",
+      "name": "compare_native_pairs"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 77,
+      "node": "Attribute",
+      "name": "compare_native_pairs"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1155,
+      "node": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1165,
+      "node": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1166,
+      "node": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1404,
+      "node": "Attribute",
+      "name": "compare_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1409,
+      "node": "Attribute",
+      "name": "compare_native_pairs"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1428,
+      "node": "Attribute",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 239,
+      "node": "Attribute",
+      "name": "checkpoints_for"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 275,
+      "node": "Constant",
+      "name": "source_changes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 276,
+      "node": "Constant",
+      "name": "revision_mass"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 276,
+      "node": "Attribute",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1188,
+      "node": "Attribute",
+      "name": "compare_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 243,
+      "node": "Attribute",
+      "name": "observe_acquired"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 615,
+      "node": "Constant",
+      "name": "revision_mass"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 332,
+      "node": "FunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 383,
+      "node": "FunctionDef",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 214,
+      "node": "Constant",
+      "name": "revision_mass"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 346,
+      "node": "Constant",
+      "name": "revision_mass"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 346,
+      "node": "Attribute",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 347,
+      "node": "Constant",
+      "name": "source_changes"
+    },
+    {
+      "path": "tests/test_dm_scoped_ack_successor.py",
+      "line": 42,
+      "node": "FunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/test_image_inputs.py",
+      "line": 312,
+      "node": "Constant",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/test_image_inputs.py",
+      "line": 210,
+      "node": "Constant",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/test_image_inputs.py",
+      "line": 305,
+      "node": "Constant",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/test_image_inputs.py",
+      "line": 228,
+      "node": "Constant",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/test_message_page_request.py",
+      "line": 62,
+      "node": "FunctionDef",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1246,
+      "node": "Attribute",
+      "name": "compare_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1988,
+      "node": "Attribute",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 448,
+      "node": "Attribute",
+      "name": "compare_native_pairs"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1969,
+      "node": "Attribute",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1974,
+      "node": "Attribute",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1977,
+      "node": "Attribute",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1983,
+      "node": "Attribute",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1786,
+      "node": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1976,
+      "node": "Attribute",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1986,
+      "node": "Attribute",
+      "name": "revision_from"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1791,
+      "node": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/test_response_policy.py",
+      "line": 32,
+      "node": "Constant",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 214,
+      "node": "Attribute",
+      "name": "inspect"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 381,
+      "node": "Constant",
+      "name": "revision_mass"
+    }
+  ]
+}

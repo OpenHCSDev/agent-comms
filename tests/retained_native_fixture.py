@@ -330,26 +330,39 @@ class RecordedNativeCheckpoint:
         return captured
 
     def inspect(self, previous: RecordedNativeCheckpoint | None = None):
-        """Read a checkpoint or adjacent-cut difference without a new model input.
+        """Read a checkpoint or original ancestor interval without new input.
 
         The optional previous reference is external evaluation input. It neither
         selects a live source nor carries native lifecycle/admission state.
         """
         with self.original_source() as (session, evidence):
-            current_attempt, current_entry, covered, assembly = self.capture(session, evidence)
-            report = self._report(current_attempt, current_entry, covered, assembly)
+            current = self.capture(session, evidence)
+            report = self._report(*current)
             if previous is not None:
-                previous_attempt, previous_entry, _, _ = previous.capture(session, evidence)
-                branch = evidence.branch(current_entry.id, evidence.entries)
-                if previous_entry.id == current_entry.id or previous_entry not in branch:
-                    raise ValueError("Checkpoint comparison requires distinct original ancestor cuts")
-                report["revision_mass"] = self.revision_from(previous, previous_attempt, current_attempt)
-                report["source_changes"] = {
-                    "previous": FieldCodec.encode(previous_attempt.identity),
-                    "current": FieldCodec.encode(current_attempt.identity),
-                    **current_attempt.request.retained.changed_from(previous_attempt.request.retained),
-                }
+                report.update(self.compare_acquired(previous,
+                    previous.capture(session, evidence), current, evidence))
             return report
+
+    def compare_acquired(self, previous, before, after, evidence):
+        """Compare the two already corroborated original cuts once.
+
+        This owns source ancestry and the original retained-fact difference.
+        The frozen scenario separately owns which interval was requested; an
+        observed wider interval cannot fill a missing adjacent-round measure.
+        """
+        prior_attempt, prior_entry, _, _ = before
+        current_attempt, current_entry, _, _ = after
+        branch = evidence.branch(current_entry.id, evidence.entries)
+        if prior_entry.id == current_entry.id or prior_entry not in branch:
+            raise ValueError("Checkpoint comparison requires distinct original ancestor cuts")
+        return {
+            "revision_mass": self.revision_from(previous, prior_attempt, current_attempt),
+            "source_changes": {
+                "previous": FieldCodec.encode(prior_attempt.identity),
+                "current": FieldCodec.encode(current_attempt.identity),
+                **current_attempt.request.retained.changed_from(prior_attempt.request.retained),
+            },
+        }
 
     def authored_scope(self, attempt):
         """Acquire the original captured scope and certify its authored rows.
