@@ -24,7 +24,10 @@ outcomes, zero new inputs and joined cleanup. Bohr independently closed43b54
 at3f477272 after exact floor restoration; Sch READ/EXEC claims are returned.
 No public source witness, private operator claim or retry remains active.
 
-Latest merge: reviewed460 frozenb51a68b6 is normally merged5fc73b1b.
+Latest source merge: reviewed474 frozen8373e796 is normally mergedab5f5e0f,
+including the adopted continuous468 source (GitHub records mergedadda2bc).
+The public runtime is still471; this source merge is not publication or
+continuous acceptance. Reviewed460 frozenb51a68b6 remains merged5fc73b1b.
 The full installed07 motion path passed, including width, wheel reversal, End,
 B/A return, draft/Undo and graceful UI/st exits. The earlier blank-body image
 interpretation was mistaken and is retracted: original central saved text,
@@ -46,8 +49,11 @@ and Bohr independently closed its purpose29026 after exact current465 floor
 restoration. This is a possible receiving holder; a fresh final command plan,
 actual floor/origins/reference checks and specific grant remain necessary.
 Receiving preparation advances independently of performance and native guard work.
-Continuous468 controls are normally adopted separately; configured execution,
-loaded scaling and startup/frame/CPU gains remain unfinished.
+Continuous468 controls are now normally landed through474; configured execution,
+loaded scaling and startup/frame/CPU gains remain unfinished. Sch published
+receiving475; its effective planfa833 corrects both receipt/preimage descriptors
+to the new own output while retaining the actual command body and203 evidence
+references. Bohr is advancing its fresh preparation-only holder checks.
 Parent found the future continuous output would exceed the original Unix
 socket path limit before any run; Heis published the short operand correction
 in8373e796 without product/helper/build changes. The
@@ -70,7 +76,11 @@ whole71a78 with30 receipts, and Bohr independently closed29026 with exact
 1477-file/current465 floor and69 raw origins. NativeFullTrust, artifact READ/EXEC
 and public source authority remained false. His admission correction is source
 only and does not authorize a retry. Native four-case acceptance needs the new
-committed guard and its separately issued installed scope.
+committed guard and its separately issued installed scope. Mendel published
+effective future9e3b with the selected new4b deployment/5d661 Core wheel and
+explicit direct-loopback proxy-selector removal. Parent has directed Bohr to
+assess the returned334 installation independently of receiving style22. This
+source preparation creates no reservation, runtime access or test result.
 
 S4 source683 is normally merged208b8f07 after review of complete arm acquisition,
 inputs/cuts/probes and cleanup clocks. Four authored orchestration controls and
