@@ -16,14 +16,14 @@ grant = json.loads(issued.read_text())
 lifecycle_path = Path(grant['lifecycle'])
 lifecycle_bytes = lifecycle_path.read_bytes()
 lifecycle = json.loads(lifecycle_bytes)
-phase = 'native_batch'
+phase = sys.argv[3]
 assert Path(sys.prefix) == Path(grant['prefix'])
 assert not os.environ.get('PYTHONPATH')
 assert lifecycle['execution_authorized'] and lifecycle['native_EXEC_authorized']
 assert lifecycle['native_attempts_consumed'] == 0
 exec_grant = Path(lifecycle['native_EXEC_authority']['path'])
 assert sha(exec_grant.read_bytes()) == lifecycle['native_EXEC_authority']['sha256']
-assert lifecycle['native_batch'] == grant['native_batch']
+assert lifecycle[phase] == grant[phase]
 for relative, expected in grant['control_sha256'].items():
     assert sha((Path(grant[phase]['cwd']) / relative).read_bytes()) == expected
 specification = grant[phase]
@@ -47,7 +47,7 @@ async def main():
     child = None
     exchange = None
     try:
-        async with BoundedRun.session(tuple(specification['argv']), timeout=120,
+        async with BoundedRun.session(tuple(specification['argv']), timeout=specification['operation_bound_seconds'],
                                       cwd=specification['cwd'], env=env) as child:
             observed[child.pid] = child.identity
             (output / 'live-handle.json').write_text(json.dumps({

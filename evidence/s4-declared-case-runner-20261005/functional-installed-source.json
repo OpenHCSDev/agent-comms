@@ -1,0 +1,13 @@
+{
+  "module": "agent_comms",
+  "head": "48b7db675f65fc312826a55db1bec20410ca7c70",
+  "location": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms",
+  "files": 355,
+  "python_files": 324,
+  "byte_equal": true,
+  "direct_url": {
+    "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "inventory_sha256": "ebf17deee98766a697a4b64a9e9b04bc4941f0edd7f62af38903f643d40e148c"
+}

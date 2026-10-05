@@ -1,0 +1,15 @@
+{
+  "oracle": {
+    "kind": "file",
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-declared-case-runner-20261005/functional-oracle.json",
+    "sha256": "9e0bb206e3b458a77f19d38032cce2eff1fa8244906b1cf33458ab486793c4ba"
+  },
+  "candidate": "task-memory",
+  "baseline": "bounded",
+  "model": "openai-codex/gpt-6.1-sol",
+  "sample_count": 10,
+  "confidence": 0.95,
+  "recall_margin": -0.02,
+  "bootstrap_samples": 10000,
+  "bootstrap_seed": 20261004
+}
