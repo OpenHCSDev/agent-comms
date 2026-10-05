@@ -448,9 +448,14 @@ class NativeForkCreation(NativeSessionIdentity, SessionJournalHistory, TypedTabl
         matches source ownership only; frozen inputs and request controls still
         need their own evidence. Missing older edges cannot be reconstructed.
         """
-        return next(((original, control) for original in left for control in right
-            if original.source.same_session(control.source)
-            and original.source_revision == control.source_revision), None)
+        positions = tuple((original, control) for original in left for control in right
+                          if original.source.same_session(control.source))
+        if not positions:
+            return None
+        for original, control in positions:
+            if original.source_revision == control.source_revision:
+                return original, control
+        raise CompactionJournalError("Common recorded native source revisions differ")
 
     @classmethod
     def recorded_prefix(cls, db, evidence, entries):

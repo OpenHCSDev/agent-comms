@@ -1396,8 +1396,10 @@ class RecordedMeasurementTests(unittest.TestCase):
         a = {'r1': observation('parent')}
         control = different.rounds['r1']
         b = {'r1': observation('parent', probe=control)}
-        with self.assertRaisesRegex(ValueError, 'source identity'):
-            candidate.alignment(different, a, {'r1': observation('other-parent', probe=control)}, scenario.rounds, {}, {})
+        missing_ancestry = candidate.alignment(different, a,
+            {'r1': observation('other-parent', probe=control)}, scenario.rounds, {}, {})
+        self.assertFalse(missing_ancestry['r1']['evaluated'])
+        self.assertFalse(missing_ancestry['r1']['original_source']['evaluated'])
         with self.assertRaisesRegex(ValueError, 'model/effort'):
             candidate.alignment(different, a, {'r1': observation('parent', 'other/model', probe=control)}, scenario.rounds, {}, {})
         observed = candidate.alignment(different, a, b, scenario.rounds, {}, {})
@@ -1435,7 +1437,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         changed['construction']['fork'] = replace(changed['construction']['fork'],
             source_revision=replace(revision := changed['construction']['fork'].source_revision, size=revision.size+1))
         changed['construction']['fork_ancestry'] = (changed['construction']['fork'],)
-        with self.assertRaisesRegex(ValueError, 'source revisions'):
+        with self.assertRaisesRegex(CompactionJournalError, 'source revisions'):
             candidate.alignment(different, a, {'r1': changed}, scenario.rounds, {}, {})
         unavailable = observation('parent', probe=control)
         unavailable['construction']['request_budget'] = {'evaluated': False, 'reason': 'Historical record absent'}
@@ -1574,9 +1576,10 @@ class RecordedMeasurementTests(unittest.TestCase):
         # a contradiction. Missing a creation never authorizes guessing it.
         changed = {'fork_ancestry': (right, replace(right_parent,
             source_revision=replace(revision, size=revision.size + 1)))}
-        for other in (changed, {'fork_ancestry': (right,)}):
-            with self.subTest(other=other), self.assertRaisesRegex(ValueError, 'source revisions'):
-                owner.source_alignment(originals, other, stimuli, stimuli, rounds)
+        with self.assertRaisesRegex(CompactionJournalError, 'source revisions'):
+            owner.source_alignment(originals, changed, stimuli, stimuli, rounds)
+        self.assertFalse(owner.source_alignment(originals, {'fork_ancestry': (right,)},
+            stimuli, stimuli, rounds)['evaluated'])
         self.assertFalse(owner.source_alignment(originals, {'fork_ancestry': ()},
             stimuli, stimuli, rounds)['evaluated'])
         # The original same-cut path preserves its proof, without promoting

@@ -380,7 +380,8 @@ class RecordedNativeProbes:
             return {'evaluated': False, 'reason': 'Original SDK creation ancestry unavailable'}
         common = NativeForkCreation.common_recorded_source(*ancestry)
         if common is None:
-            raise ValueError('Matched probes lack a common original source identity and source revisions')
+            return {'evaluated': False,
+                    'reason': 'No common original source position in the available recorded ancestry'}
         shared_cut = common == (ancestry[0][0], ancestry[1][0])
         missing = tuple(round_.identity for round_ in rounds
             if any(round_.identity not in arm or not arm[round_.identity]['source_delivery']['evaluated']
