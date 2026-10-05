@@ -4,6 +4,7 @@ Authored records exercise measurement plumbing only, never model recall.
 """
 
 from dataclasses import replace
+from contextlib import contextmanager
 import hashlib
 import json
 from pathlib import Path
@@ -15,6 +16,8 @@ from unittest.mock import patch
 from agent_comms.comms import Comms
 from agent_comms.compaction_identity import NativeCommitIdentity, SummaryOperationIdentity
 from agent_comms.compaction_records import NativeForkCreation, SelectedSummaryAttempt
+from agent_comms.compaction_journal import CompactionJournal
+from agent_comms.compaction_errors import CompactionJournalError
 from agent_comms.compaction_states import ReservedSummary
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageType
@@ -476,19 +479,19 @@ class RecordedMeasurementTests(unittest.TestCase):
             NativeInputCommit(probe.input_id, self.identity.session_id, 'source'),
             'submitted_source': {'scope': 'original native user text'}}
         with NativeEntry.open_evidence(self.session) as evidence:
-            observed = probe.source_delivery(original['prompt'], original, evidence, 'boundary', None)
+            observed = probe.source_delivery(original['prompt'], original, evidence, 'boundary', journal=None, sources={self.session: evidence})
             self.assertTrue(observed['evaluated'])
             self.assertIs(observed['input'], original['native_input'])
             with self.assertRaisesRegex(ValueError, 'frozen authored source'):
-                probe.source_delivery('Edited source', original, evidence, 'boundary', None)
+                probe.source_delivery('Edited source', original, evidence, 'boundary', journal=None, sources={self.session: evidence})
             for boundary in ('source', 'answer', 'sibling'):
                 with self.subTest(boundary=boundary):
                     with self.assertRaisesRegex(ValueError, 'does not precede'):
-                        probe.source_delivery(original['prompt'], original, evidence, boundary, None)
+                        probe.source_delivery(original['prompt'], original, evidence, boundary, journal=None, sources={self.session: evidence})
 
     def test_stimulus_inheritance_requires_existing_exact_sdk_prefix(self):
-        # Equal copied IDs are insufficient: authenticate child position/bytes
-        # through NativeForkCreation, then use the reader's original branch.
+        # Authored returned rows, not an SDK run. Equal copied IDs alone cannot
+        # establish delivery; original journal membership/prefix stays required.
         child = self.root / 'child.jsonl'
         rows = ({'type': 'session', 'id': 'child', 'parentSession': self.identity.session_file},
                 {'type': 'message', 'id': 'source',
@@ -501,6 +504,9 @@ class RecordedMeasurementTests(unittest.TestCase):
         fork = NativeForkCreation(session_id='child', session_file=str(child), source=self.identity,
             source_revision=FileRevision.from_stat(self.session.stat()),
             revision=FileRevision.from_stat(child.stat()), prefix_digest=TextDigest.of(prefix), entry_count=3)
+        journal = CompactionJournal(self.root / 'delivery.sqlite3')
+        with journal.transaction() as db:
+            fork.insert(db)
         with child.open('a') as stream:
             stream.write(json.dumps({'type': 'message', 'id': 'boundary', 'parentId': 'answer',
                 'message': {'role': 'user', 'content': 'Recall?'}}) + '\n')
@@ -509,19 +515,24 @@ class RecordedMeasurementTests(unittest.TestCase):
             NativeInputCommit(probe.input_id, self.identity.session_id, 'source'),
             'submitted_source': {'scope': 'original native user text'}}
         with NativeEntry.open_evidence(child) as evidence:
+            sources = {child: evidence}
             self.assertTrue(probe.source_delivery(original['prompt'], original,
-                evidence, 'boundary', fork)['evaluated'])
-            with self.assertRaisesRegex(ValueError, 'SDK ancestry'):
-                probe.source_delivery(original['prompt'], original, evidence, 'boundary', None)
-            with self.assertRaises(ValueError):
-                probe.source_delivery(original['prompt'], original, evidence, 'boundary',
-                    replace(fork, source=NativeSessionIdentity('other', str(self.root / 'other.jsonl'))))
-            with self.assertRaises(ValueError):
-                probe.source_delivery(original['prompt'], original, evidence, 'boundary',
-                    replace(fork, entry_count=2))
-            with self.assertRaisesRegex(NativePiUnavailable, 'original prefix changed'):
-                probe.source_delivery(original['prompt'], original, evidence, 'boundary',
-                    replace(fork, prefix_digest=TextDigest.of('edited prefix')))
+                evidence, 'boundary', journal=journal.path, sources=sources)['evaluated'])
+            self.assertFalse(probe.source_delivery(original['prompt'], original,
+                evidence, 'boundary', journal=None, sources=sources)['evaluated'])
+            for changes, error, message in (
+                    ({'source': NativeSessionIdentity('other', str(self.root / 'other.jsonl'))},
+                     CompactionJournalError, 'source differs'),
+                    ({'entry_count': 2}, CompactionJournalError, 'inherited prefix'),
+                    ({'prefix_digest': TextDigest.of('edited prefix')},
+                     NativePiUnavailable, 'original prefix changed')):
+                with journal.transaction() as db:
+                    NativeForkCreation.update(db, where='session_file=?', parameters=(fork.session_file,),
+                        source=fork.source, entry_count=fork.entry_count, prefix_digest=fork.prefix_digest)
+                    NativeForkCreation.update(db, where='session_file=?', parameters=(fork.session_file,), **changes)
+                with self.subTest(changes=changes), self.assertRaisesRegex(error, message):
+                    probe.source_delivery(original['prompt'], original,
+                        evidence, 'boundary', journal=journal.path, sources=sources)
 
     def test_stimulus_group_uses_scenario_source_and_same_acquired_reader(self):
         # Close run/scenario/reader consumers without substituting a native
@@ -536,7 +547,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         operand = scenario.construction_rounds()[0]['source_text']
         readers = []
 
-        def read(selected, evidence, parent):
+        def read(selected, evidence, parent, sources):
             self.assertIs(evidence, parent)
             readers.append(evidence)
             return {'prompt': operand if selected == source else scenario.rounds[0].probe_text(),
@@ -544,12 +555,13 @@ class RecordedMeasurementTests(unittest.TestCase):
                                                       'source' if selected == source else 'probe'),
                     'construction': {'fork': None}}
 
-        def delivery(selected, expected, original, evidence, boundary, fork):
+        def delivery(selected, expected, original, evidence, boundary, *, journal, sources):
             self.assertIs(selected, source)
             self.assertEqual(expected, operand)
             self.assertIs(evidence, readers[0])
             self.assertEqual(boundary, 'probe')
-            self.assertIsNone(fork)
+            self.assertIsNone(journal)
+            self.assertIs(sources[self.session], evidence)
             return {'evaluated': True}
 
         with patch.object(RecordedNativeProbe, 'read', read), patch.object(
@@ -577,7 +589,7 @@ class RecordedMeasurementTests(unittest.TestCase):
         readers = []
         refusal = ValueError('second original arm refused')
 
-        def read(probe, evidence, source):
+        def read(probe, evidence, source, sources):
             self.assertIs(source, evidence)
             self.assertEqual(evidence.observe()[0].id, self.identity.session_id)
             readers.append(evidence)
@@ -1360,8 +1372,8 @@ class RecordedMeasurementTests(unittest.TestCase):
         candidate = RecordedNativeProbes({'r1': original})
         evidence = {'r1': {}}
         with self.assertRaisesRegex(ValueError, 'reuse'):
-            candidate.alignment(candidate, evidence, evidence, scenario.rounds)
-        missing = candidate.alignment(RecordedNativeProbes({}), evidence, {}, scenario.rounds)
+            candidate.alignment(candidate, evidence, evidence, scenario.rounds, {}, {})
+        missing = candidate.alignment(RecordedNativeProbes({}), evidence, {}, scenario.rounds, {}, {})
         self.assertEqual(tuple(missing), ('r1', 'r2', 'r3'))
         self.assertTrue(all(not row['evaluated'] for row in missing.values()))
         different = RecordedNativeProbes({'r1': replace(original,
@@ -1381,7 +1393,7 @@ class RecordedMeasurementTests(unittest.TestCase):
                     'd' * 64, 20, 4),
                  SegmentManifest(ToolCatalogSegment, (JournalProvenance(probe.session.session_file, ('original',)),),
                     'c' * 64, 10, 2),), 'native', request_id='request')
-            return {'construction': {'fork': fork, 'sdk_manifest': manifest,
+            return {'construction': {'fork': fork, 'fork_ancestry': (fork,), 'sdk_manifest': manifest,
                 'request_budget': {'evaluated': True, 'observations': (point,)},
                 'input_request_measurements': RecordedNativeProbe.input_request_measurements({'request': (point,)}),
                 'request_completion': RecordedNativeProbe.request_completion(
@@ -1393,11 +1405,13 @@ class RecordedMeasurementTests(unittest.TestCase):
         a = {'r1': observation('parent')}
         control = different.rounds['r1']
         b = {'r1': observation('parent', probe=control)}
-        with self.assertRaisesRegex(ValueError, 'source identity'):
-            candidate.alignment(different, a, {'r1': observation('other-parent', probe=control)}, scenario.rounds)
+        missing_ancestry = candidate.alignment(different, a,
+            {'r1': observation('other-parent', probe=control)}, scenario.rounds, {}, {})
+        self.assertFalse(missing_ancestry['r1']['evaluated'])
+        self.assertFalse(missing_ancestry['r1']['original_source']['evaluated'])
         with self.assertRaisesRegex(ValueError, 'model/effort'):
-            candidate.alignment(different, a, {'r1': observation('parent', 'other/model', probe=control)}, scenario.rounds)
-        observed = candidate.alignment(different, a, b, scenario.rounds)
+            candidate.alignment(different, a, {'r1': observation('parent', 'other/model', probe=control)}, scenario.rounds, {}, {})
+        observed = candidate.alignment(different, a, b, scenario.rounds, {}, {})
         self.assertTrue(observed['r1']['evaluated'])
         self.assertIs(observed['r1']['input_requests']['candidate'],
                       a['r1']['construction']['input_request_measurements'])
@@ -1413,12 +1427,12 @@ class RecordedMeasurementTests(unittest.TestCase):
         changed_system['construction']['sdk_manifest'] = replace(manifest,
             segments=(replace(manifest.segments[0], sha256='e' * 64), *manifest.segments[1:]))
         with self.assertRaisesRegex(ValueError, 'Matched original request'):
-            candidate.alignment(different, a, {'r1': changed_system}, scenario.rounds)
+            candidate.alignment(different, a, {'r1': changed_system}, scenario.rounds, {}, {})
         # Historical absence is not a match and cannot enter paired inference.
         missing_system = observation('parent', probe=control)
         manifest = missing_system['construction']['sdk_manifest']
         missing_system['construction']['sdk_manifest'] = replace(manifest, segments=manifest.segments[1:])
-        unavailable_alignment = candidate.alignment(different, a, {'r1': missing_system}, scenario.rounds)
+        unavailable_alignment = candidate.alignment(different, a, {'r1': missing_system}, scenario.rounds, {}, {})
         unavailable_controls = unavailable_alignment['r1']
         self.assertFalse(unavailable_controls['evaluated'])
         self.assertFalse(unavailable_controls['request_controls']['evaluated'])
@@ -1431,20 +1445,235 @@ class RecordedMeasurementTests(unittest.TestCase):
         changed = observation('parent', probe=control)
         changed['construction']['fork'] = replace(changed['construction']['fork'],
             source_revision=replace(revision := changed['construction']['fork'].source_revision, size=revision.size+1))
-        with self.assertRaisesRegex(ValueError, 'source revisions'):
-            candidate.alignment(different, a, {'r1': changed}, scenario.rounds)
+        changed['construction']['fork_ancestry'] = (changed['construction']['fork'],)
+        with self.assertRaisesRegex(CompactionJournalError, 'source revisions'):
+            candidate.alignment(different, a, {'r1': changed}, scenario.rounds, {}, {})
         unavailable = observation('parent', probe=control)
         unavailable['construction']['request_budget'] = {'evaluated': False, 'reason': 'Historical record absent'}
-        self.assertFalse(candidate.alignment(different, a, {'r1': unavailable}, scenario.rounds)['r1']['evaluated'])
+        self.assertFalse(candidate.alignment(different, a, {'r1': unavailable}, scenario.rounds, {}, {})['r1']['evaluated'])
         # No-summary controls can match original request/terminal selections;
         # absent captured settings are still unevaluated, never inherited.
         no_summary = observation('parent', probe=control)
         no_summary['scoped_facts'] = {'configured_settings': {'evaluated': False}}
-        match = candidate.alignment(different, a, {'r1': no_summary}, scenario.rounds)['r1']
+        match = candidate.alignment(different, a, {'r1': no_summary}, scenario.rounds, {}, {})['r1']
         self.assertTrue(match['evaluated'])
         self.assertFalse(match['captured_settings']['model']['evaluated'])
         no_summary['construction']['request_completion'] = {'evaluated': False, 'reason': 'Different terminal selection'}
-        self.assertFalse(candidate.alignment(different, a, {'r1': no_summary}, scenario.rounds)['r1']['evaluated'])
+        self.assertFalse(candidate.alignment(different, a, {'r1': no_summary}, scenario.rounds, {}, {})['r1']['evaluated'])
+
+    def test_recorded_fork_chain_corroborates_each_acquired_prefix_and_position(self):
+        # Authored private files/rows, not an SDK run. No unrecorded donor read:
+        # every opened source is a recorded child and its resource is closed.
+        journal = CompactionJournal(self.root / 'ancestry.sqlite3')
+        def authored(name, source):
+            path = self.root / f'{name}.jsonl'
+            rows = ({'type': 'session', 'id': name, 'parentSession': source.session_file},
+                    {'type': 'label', 'id': f'{name}-entry'})
+            raw = ''.join(json.dumps(row) + '\n' for row in rows)
+            path.write_text(raw)
+            path.chmod(0o600)
+            return NativeForkCreation(name, str(path), NativeSessionIdentity(source.session_id, source.session_file),
+                FileRevision.from_stat(source.path.stat()), FileRevision.from_stat(path.stat()),
+                TextDigest.of(raw), len(rows))
+        first = authored('first', self.identity)
+        middle = authored('middle', first)
+        child = authored('child', middle)
+        with journal.transaction() as db:
+            for creation in (first, middle, child):
+                creation.insert(db)
+        probe = RecordedNativeProbe(child, 'a' * 32, 'answer', fork_journal=journal.path)
+        acquired = []
+        opener = NativeEntry.open_evidence
+        @contextmanager
+        def tracked(path):
+            self.assertNotEqual(path, self.session)
+            with opener(path) as reader:
+                acquired.append(reader)
+                yield reader
+        with patch.object(NativeEntry, 'open_evidence', side_effect=tracked) as opened:
+            with probe.original_readers((probe,)) as sources:
+                evidence, parent = sources[child.path], sources[first.path]
+                ancestry = probe.fork_ancestry(journal.path, evidence, sources)
+                self.assertEqual(ancestry, (child, middle, first))
+                self.assertEqual(opened.call_count, 3)
+                self.assertEqual({call.args[0] for call in opened.call_args_list},
+                                 {child.path, middle.path, first.path})
+                middle.require_inherited_creation(first, parent)
+                for position in (replace(middle.source_revision, size=first.revision.size - 1),
+                                 replace(middle.source_revision, identity=child.revision.identity)):
+                    with self.subTest(position=position), self.assertRaisesRegex(
+                            CompactionJournalError, 'ancestor position'):
+                        replace(middle, source_revision=position).require_inherited_creation(first, parent)
+            self.assertTrue(all(reader.source.stream.closed for reader in acquired))
+            with journal.transaction() as db:
+                NativeForkCreation.update(db, where='session_file=?', parameters=(middle.session_file,),
+                    prefix_digest=TextDigest.of('changed prefix'))
+            with self.assertRaisesRegex(NativePiUnavailable, 'original prefix changed'):
+                with probe.original_readers((probe,)) as sources:
+                    probe.fork_ancestry(journal.path, sources[child.path], sources)
+        self.assertEqual(len(acquired), 6)
+        self.assertTrue(all(reader.source.stream.closed for reader in acquired))
+
+    def test_multi_edge_delivery_flows_through_observe_and_selected_cut(self):
+        # Actual small authored journal/files and acquired branch/prefix reads.
+        # Only unrelated native input-proof and managed-cut reporting are spies;
+        # delivery, acquisition, every SDK edge and boundary are the real owners.
+        scenario = coding_scenario()
+        operand = scenario.construction_rounds()[0]['source_text']
+        rows = ({'type': 'session', 'id': self.identity.session_id},
+                {'type': 'message', 'id': 'source', 'message': {'role': 'user', 'content': operand}},
+                {'type': 'message', 'id': 'source-answer', 'parentId': 'source',
+                 'message': {'role': 'assistant', 'content': [], 'stopReason': 'stop'}})
+        self.session.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+        self.session.chmod(0o600)
+        def authored(name, parent):
+            path = self.root / f'{name}.jsonl'
+            inherited = ({'type': 'session', 'id': name, 'parentSession': parent.session_file}, *rows[1:])
+            raw = ''.join(json.dumps(row) + '\n' for row in inherited)
+            path.write_text(raw)
+            path.chmod(0o600)
+            return NativeForkCreation(name, str(path), NativeSessionIdentity(parent.session_id, parent.session_file),
+                FileRevision.from_stat(parent.path.stat()), FileRevision.from_stat(path.stat()),
+                TextDigest.of(raw), len(inherited))
+        first = authored('first', self.identity)
+        leaf = authored('leaf', first)
+        journal = CompactionJournal(self.root / 'delivery-chain.sqlite3')
+        with journal.transaction() as db:
+            first.insert(db)
+            leaf.insert(db)
+        with leaf.path.open('a') as stream:
+            for row in ({'type': 'compaction', 'id': 'cut', 'parentId': 'source-answer', 'summary': 'Authored cut'},
+                        {'type': 'message', 'id': 'probe', 'parentId': 'cut',
+                         'message': {'role': 'user', 'content': 'Recall?'}},
+                        {'type': 'message', 'id': 'probe-answer', 'parentId': 'probe',
+                         'message': {'role': 'assistant', 'content': [], 'stopReason': 'stop'}}):
+                stream.write(json.dumps(row) + '\n')
+        source = RecordedNativeProbe(self.identity, 'a' * 32, 'source-answer', fork_journal=journal.path)
+        probe = RecordedNativeProbe(NativeSessionIdentity(leaf.session_id, leaf.session_file),
+            'b' * 32, 'probe-answer', fork_journal=journal.path)
+        cut = RecordedNativeCheckpoint(journal.path, SummaryOperationIdentity(leaf.session_file, 'operation'), 'cut')
+        readers = []
+        def read(selected, evidence, parent, sources):
+            readers.extend(sources.values())
+            evidence.observe()
+            return {'prompt': operand if selected == source else 'Recall?',
+                    'native_input': NativeInputCommit(selected.input_id, selected.session.session_id,
+                        'source' if selected == source else 'probe'),
+                    'submitted_source': {'scope': 'authored original input'},
+                    'construction': {'fork_ancestry': selected.fork_ancestry(
+                        selected.original_journal, evidence, sources)}}
+        def capture(selected, session, evidence):
+            self.assertEqual(session.session_id, leaf.session_id)
+            _, entries = evidence.observe()
+            return None, next(entry for entry in entries if entry.id == 'cut'), frozenset(), None
+        with patch.object(RecordedNativeProbe, 'read', read), patch.object(
+                RecordedNativeCheckpoint, 'capture', capture), patch.object(
+                RecordedNativeCheckpoint, '_report', return_value={}):
+            for selected in (probe, replace(probe, checkpoint=cut)):
+                with self.subTest(selected_cut=selected.checkpoint is not None):
+                    run = RecordedNativeProbes({'r1': selected}, stimuli={'r1': source})
+                    _, _, stimuli = run.observe(scenario)
+                    delivered = stimuli['r1']['source_delivery']
+                    self.assertTrue(delivered['evaluated'])
+                    self.assertEqual(delivered['boundary_entry'], 'cut' if selected.checkpoint else 'probe')
+            self.assertTrue(all(reader.source.stream.closed for reader in readers))
+            run = RecordedNativeProbes({'r1': probe}, stimuli={'r1': source})
+            # Leaf still carries both IDs: an earlier edge excluding the answer
+            # must refuse instead of trusting the latest copied members alone.
+            with journal.transaction() as db:
+                NativeForkCreation.update(db, where='session_file=?', parameters=(first.session_file,), entry_count=2)
+            with self.assertRaisesRegex(CompactionJournalError, 'inherited prefix'):
+                run.observe(scenario)
+            with journal.transaction() as db:
+                NativeForkCreation.update(db, where='session_file=?', parameters=(first.session_file,),
+                    entry_count=first.entry_count, prefix_digest=TextDigest.of('changed original prefix'))
+            with self.assertRaisesRegex(NativePiUnavailable, 'original prefix changed'):
+                run.observe(scenario)
+            with journal.transaction() as db:
+                db.execute(f'DELETE FROM "{NativeForkCreation.declared_name}" WHERE session_file=?',
+                           (first.session_file,))
+            _, _, stimuli = run.observe(scenario)
+            self.assertFalse(stimuli['r1']['source_delivery']['evaluated'])
+        self.assertTrue(all(reader.source.stream.closed for reader in readers))
+
+    def test_recorded_fork_chain_refuses_cycles_identity_and_missing_edges(self):
+        journal = CompactionJournal(self.root / 'chain.sqlite3')
+        revision = FileRevision.from_stat(self.session.stat())
+        def edge(name, source):
+            return NativeForkCreation(name, str(self.root / f'{name}.jsonl'),
+                NativeSessionIdentity(source.session_id, source.session_file),
+                revision, revision, TextDigest.of(name), 1)
+        first = edge('first', self.identity)
+        child = edge('child', first)
+        with journal.transaction() as db:
+            for creation in (first, child):
+                creation.insert(db)
+            self.assertEqual(NativeForkCreation.recorded_ancestry(db, child.session_file), (child, first))
+            self.assertEqual(NativeForkCreation.recorded_ancestry(db, str(self.root / 'missing')), ())
+            # The terminal source is an original observed anchor. No made-up
+            # older row is manufactured from a name/header/condition label.
+            self.assertEqual(NativeForkCreation.recorded_ancestry(db, first.session_file), (first,))
+            NativeForkCreation.update(db, where='session_file=?', parameters=(child.session_file,),
+                source=replace(child.source, session_id='another-id'))
+            with self.assertRaisesRegex(ValueError, 'source identity'):
+                NativeForkCreation.recorded_ancestry(db, child.session_file)
+            NativeForkCreation.update(db, where='session_file=?', parameters=(child.session_file,),
+                source=NativeSessionIdentity(first.session_id, first.session_file))
+            NativeForkCreation.update(db, where='session_file=?', parameters=(first.session_file,),
+                source=NativeSessionIdentity(child.session_id, child.session_file))
+            with self.assertRaisesRegex(CompactionJournalError, 'cyclic'):
+                NativeForkCreation.recorded_ancestry(db, child.session_file)
+
+    def test_distinct_fork_sources_require_entire_ordered_frozen_stimulus_prefix(self):
+        # Authored relation controls only. Acquired prefix corroboration lives
+        # in the reader test above, and existing request controls stay required.
+        revision = FileRevision.from_stat(self.session.stat())
+        def edge(name, source):
+            return NativeForkCreation(name, str(self.root / f'{name}.jsonl'),
+                NativeSessionIdentity(source.session_id, source.session_file),
+                revision, revision, TextDigest.of(name), 1)
+        left_parent, right_parent = edge('left', self.identity), edge('right', self.identity)
+        left, right = edge('left-probe', left_parent), edge('right-probe', right_parent)
+        originals = {'fork_ancestry': (left, left_parent)}
+        controls = {'fork_ancestry': (right, right_parent)}
+        owner = RecordedNativeProbes({})
+        rounds = coding_scenario().rounds[:2]
+        stimuli = {round_.identity: {'prompt': f'frozen input {index}',
+            'source_delivery': {'evaluated': True}} for index, round_ in enumerate(rounds)}
+        matched = owner.source_alignment(originals, controls, stimuli, stimuli, rounds)
+        self.assertTrue(matched['evaluated'])
+        self.assertEqual(matched['common_creations'], (left_parent, right_parent))
+        self.assertFalse(matched['shared_immediate_cut'])
+        self.assertIn('not absence of extra work', matched['scope'])
+        for missing in ({}, {rounds[1].identity: stimuli[rounds[1].identity]},
+                        dict(stimuli, **{rounds[0].identity: {'prompt': 'same',
+                            'source_delivery': {'evaluated': False}}})):
+            with self.subTest(missing=tuple(missing)):
+                unavailable = owner.source_alignment(originals, controls, stimuli, missing, rounds)
+                self.assertFalse(unavailable['evaluated'])
+                self.assertIn(rounds[0].identity, unavailable['missing_stimulus_rounds'])
+        swapped = {round_.identity: dict(stimuli[round_.identity],
+            prompt=stimuli[rounds[1 - index].identity]['prompt'])
+            for index, round_ in enumerate(rounds)}
+        with self.assertRaisesRegex(ValueError, 'frozen authored source prefix'):
+            owner.source_alignment(originals, controls, stimuli, swapped, rounds)
+        duplicate = dict(stimuli, **{rounds[1].identity: stimuli[rounds[0].identity]})
+        with self.assertRaisesRegex(ValueError, 'frozen authored source prefix'):
+            owner.source_alignment(originals, controls, stimuli, duplicate, rounds)
+        # A matching root name with a different original recorded position is
+        # a contradiction. Missing a creation never authorizes guessing it.
+        changed = {'fork_ancestry': (right, replace(right_parent,
+            source_revision=replace(revision, size=revision.size + 1)))}
+        with self.assertRaisesRegex(CompactionJournalError, 'source revisions'):
+            owner.source_alignment(originals, changed, stimuli, stimuli, rounds)
+        self.assertFalse(owner.source_alignment(originals, {'fork_ancestry': (right,)},
+            stimuli, stimuli, rounds)['evaluated'])
+        self.assertFalse(owner.source_alignment(originals, {'fork_ancestry': ()},
+            stimuli, stimuli, rounds)['evaluated'])
+        # The original same-cut path preserves its proof, without promoting
+        # missing historical authored source rows into observations.
+        same_cut = {'fork_ancestry': (edge('sibling', left_parent), left_parent)}
+        self.assertTrue(owner.source_alignment(originals, same_cut, {}, {}, rounds)['evaluated'])
 
     def test_request_controls_preserve_order_multiplicity_and_whole_system_value(self):
         # Annotation sources can differ across forks; the captured root value
@@ -1570,19 +1799,19 @@ class RecordedMeasurementTests(unittest.TestCase):
             _, entries = evidence.observe()
             branch = evidence.branch('answer', entries)
             measured = probe.construction(evidence, evidence, branch,
-                                         manifest(str(self.session), ('first', 'probe')), {}, None, {'evaluated': False}, branch[-1], context, MissingInput())['source_coverage']
+                                         manifest(str(self.session), ('first', 'probe')), {}, None, {'evaluated': False}, branch[-1], context, MissingInput(), {self.session: evidence})['source_coverage']
             self.assertTrue(measured['complete_message_reference_coverage'])
             self.assertEqual(measured['included_message_entries'], ('first', 'probe'))
             self.assertFalse(measured['full_context_capacity']['evaluated'])
             partial = probe.construction(evidence, evidence, branch,
-                                         manifest(str(self.session), ('probe',)), {}, None, {'evaluated': False}, branch[-1], context, MissingInput())['source_coverage']
+                                         manifest(str(self.session), ('probe',)), {}, None, {'evaluated': False}, branch[-1], context, MissingInput(), {self.session: evidence})['source_coverage']
             self.assertEqual(partial['unreferenced_message_entries'], ('first',))
             self.assertFalse(partial['complete_message_reference_coverage'])
             for path, ids in ((str(self.root / 'foreign'), ('probe',)),
                               (str(self.session), ('missing',)), (str(self.session), ('answer',))):
                 with self.assertRaises(ValueError):
-                    probe.construction(evidence, evidence, branch, manifest(path, ids), {}, None, {'evaluated': False}, branch[-1], context, MissingInput())
-            self.assertFalse(probe.construction(evidence, evidence, branch, None, {}, None, {'evaluated': False}, branch[-1], context, MissingInput())['source_coverage']['evaluated'])
+                    probe.construction(evidence, evidence, branch, manifest(path, ids), {}, None, {'evaluated': False}, branch[-1], context, MissingInput(), {self.session: evidence})
+            self.assertFalse(probe.construction(evidence, evidence, branch, None, {}, None, {'evaluated': False}, branch[-1], context, MissingInput(), {self.session: evidence})['source_coverage']['evaluated'])
 
     def test_proposed_action_uses_original_scoped_decision_not_answer_label(self):
         # Prevent exact-answer success from becoming an execution or authority
