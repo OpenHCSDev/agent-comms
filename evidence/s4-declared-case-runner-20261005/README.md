@@ -50,6 +50,24 @@ author, recipient incarnation and scope. `CorrectionTaskChange` and
 case supplies that chain. `RecordedNativeCheckpoint.authored_scope` and
 `revision_from` correctly require captured registry and certified wire sources.
 
+`RecallRound` now also owns explicit authored source operations:
+`publish_constraint` sends selected case wording and pins the returned real
+reference; its `TaskChange` may reference a real earlier declaration.
+`publish_user_change` borrows `UserTaskSupersession`/`UserTaskDrop` directly.
+`publish_decision` uses `Decision.from_admission` and requires the original live
+lease. It does not classify case prose or certify provider authorship.
+`observe_task_events` borrows one existing certified retained-source cut, checks
+each returned publication and its exact case wording, and derives lineage from
+`RetainedTaskFacts`. No new type, source store or reference namespace is added.
+
+One continuous authored source control passed in 0.493s: initial pin, referenced
+correction, explicit drop, admitted Decision and refusals for changed wording,
+another recipient, invalid source coordinates and an unadmitted choice. It used
+a small generated private certified wire, not a saved session, SDK or provider.
+The maintenance-unavailable warning is retained in the raw log. Frozen original
+cases and recorded 119d inputs remain unchanged. These source operations have
+not yet been integrated into a configured paired case or run.
+
 Each installed arm currently acquires a fresh private root. Its SDK fork and
 `fork_condition_source` corroborate inherited native entries and narrative;
 they do not transfer original wire task authority to that new owner. Pinning
@@ -57,3 +75,7 @@ parent narrative or copying wire rows would not close this relation. Before
 prospective paired inputs, case publications and arm scopes must be bound
 through the existing task-source and owner mechanisms. Neither native stimulus
 delivery nor task-memory installation grants that missing relation.
+Mendel owns the selected-source/custody integration. The required caller contract
+is a fenced saved-fork selection and restoration under the same idle owner,
+retiring/reopening its retained native child without changing task scope or
+copying wire rows. S4 owns the private case/arm consumers after that handoff.
