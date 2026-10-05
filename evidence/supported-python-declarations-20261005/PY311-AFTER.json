@@ -1,0 +1,11 @@
+{
+  "python": "3.11.11 (main, Mar 17 2025, 21:02:09) [Clang 20.1.0 ]",
+  "python_path": "/home/ts/.local/share/uv/python/cpython-3.11-linux-x86_64-gnu/bin/python3.11",
+  "collector": "original Package.load under actual Python3.11",
+  "revision": "40c71d6860361126c218b0f9312d2af942f809ed",
+  "parsed_and_compiled_production_modules": 316,
+  "omissions": [],
+  "cursor_class_no_eager_self_name_load": true,
+  "cursor_AST_unchanged_except_future_import": true,
+  "limits": "Compilation is not full package import, SDK execution or installed/live acceptance."
+}
