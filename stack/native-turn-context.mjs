@@ -1,6 +1,5 @@
 /** Observe SDK Context values; never edit, load, queue, or replay model input. */
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { estimateTokens } from './compaction/compaction.js';
 import { sessionEntryToContextMessages } from './session-manager.js';
 import { SessionContext } from './session-context.js';
@@ -128,7 +127,53 @@ class ContextSegment {
     }
     recordedValues() { return []; }
 }
-class SystemLayerSegment extends ContextSegment {
+export class SystemLayerSegment extends ContextSegment {
+    constructor(provenance, value, sourceSpans=[]) {
+        super(provenance, value);
+        this.sourceSpans=sourceSpans;
+    }
+    static unattributed(value) {
+        const source={kind:'unattributed'};
+        const segment=new this([source],'');
+        segment.append(value,[source]);
+        return segment;
+    }
+    static fromFile(path, raw, content=raw.toString('utf8')) {
+        const segment=new this([file(path,raw)],'');
+        segment.append(content,segment.provenance);
+        return segment;
+    }
+    static fromResource(path, raw, representation) {
+        return new this([{kind:'resource',path,sha256:hash(raw),representation}],'');
+    }
+    append(content, provenance=this.provenance) {
+        if (!content) return;
+        this.sourceSpans.push({kind:kind(this.constructor),provenance,
+            offset:Buffer.byteLength(this.value),length:Buffer.byteLength(content),sha256:hash(content)});
+        this.value+=content;
+    }
+    extend(segment) {
+        const offset=Buffer.byteLength(this.value);
+        this.sourceSpans.push(...segment.sourceSpans.map(span=>({...span,offset:span.offset+offset})));
+        this.value+=segment.value;
+    }
+    replaced(content) {
+        // Extension replacements are new wording, not evidence of file inclusion.
+        return content===this.value ? this : this.constructor.unattributed(content);
+    }
+    sourceFile() { return this.provenance.find(source=>source.kind==='file'); }
+    projection() {
+        const projection=super.projection();
+        projection.manifest.source_spans=this.sourceSpans;
+        projection.value.source_spans=this.sourceSpans;
+        return projection;
+    }
+    observed(provenance, content) {
+        const original=this.replaced(content);
+        return new this.constructor(this.constructor.originalSources([...provenance,...original.provenance,
+                ...original.sourceSpans.flatMap(span=>span.provenance)]),
+            original.value,original.sourceSpans);
+    }
     tokens() { return estimateTokens({role:'user', content:[{type:'text', text:this.value}], timestamp:0}); }
     payload() { return {content:this.value}; }
     render(provider) { provider.systemPrompt = this.value; }
@@ -185,22 +230,10 @@ export class TurnContext {
     constructor(identity, segments) { this.identity=identity; this.segments = segments; }
     static async capture(session, context, source,
                          sourceEntries=session.sessionManager.buildContextEntries()) {
-        const loader = session.resourceLoader;
         const identity = {sessionId:session.sessionId,sessionFile:session.sessionFile};
         const provenance = [source ? {kind:'native',identity,
             request_generation:source.request_generation,context_digest:source.context_digest}
             : {kind:'preview',identity,context_digest:hash(`pi-assembled-context-v1\n${JSON.stringify(context)}`)}];
-        const systemSources = [...provenance,
-            file(new URL('./system-prompt.js',import.meta.url).pathname,readFileSync(new URL('./system-prompt.js',import.meta.url)))];
-        const custom = loader.getSystemPromptSource();
-        if (custom) systemSources.push(file(custom.path,loader.getSystemPrompt()));
-        loader.getAppendSystemPromptSources().forEach((source,index) =>
-            systemSources.push(file(source.path,loader.getAppendSystemPrompt()[index])));
-        for (const source of loader.getAgentsFiles().agentsFiles)
-            systemSources.push(file(source.path,source.content));
-        for (const skill of loader.getSkills().skills)
-            systemSources.push({kind:'resource', path:skill.filePath,
-                representation:'SDK skill prompt metadata',sha256:hash(JSON.stringify(skill))});
         const entries = Array.from(sourceEntries);
         const journal = {kind:'journal', path:session.sessionFile ?? '', entries:entries.map(entry=>entry.id)};
         // SDK owns entry-to-context interpretation. Exact source equality permits
@@ -216,7 +249,7 @@ export class TurnContext {
             }
         }
         for (const [encoded,matches] of identified) identified.set(encoded,matches.values());
-        const segments=[new SystemLayerSegment(systemSources,context.systemPrompt)];
+        const segments=[session._baseSystemPrompt.observed(provenance,context.systemPrompt)];
         const contributions=new Map();
         for (const item of source?.contributors ?? []) {
             const originals=contributions.get(item.input_id) ?? [];

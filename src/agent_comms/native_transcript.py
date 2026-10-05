@@ -82,6 +82,31 @@ class NativeTranscript:
     def __init__(self, path: Path):
         self.path = path
 
+    def imported_sources(self):
+        """Read original metadata before conversation, including native configuration.
+
+        The importer writes its metadata after the header. A native saved-file
+        producer may also prepend model/settings records. Stop at conversation;
+        never scan the remaining history or claim this was a model request.
+        """
+        from .selected_source import SessionRevision
+
+        revision = SessionRevision.observe(str(self.path)).require_available()
+        with self.path.open("rb") as stream:
+            header = NativeEntry.read(stream.readline())
+            if not isinstance(header, SessionEntry):
+                raise ValueError("Imported source has no original native session header")
+            header.require_header()
+            sources = []
+            for raw in stream:
+                entry = NativeEntry.read(raw)
+                if entry.is_message:
+                    break
+                sources.extend(entry.imported_sources())
+        if not revision.current(str(self.path)):
+            raise ValueError("Imported context saved source changed while reading")
+        return tuple(sources)
+
     def fragments(self, records, *, max_records, max_bytes):
         """Borrow original decoded records within the caller's page budget.
 

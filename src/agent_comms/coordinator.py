@@ -16,6 +16,7 @@ from .execution_store import ExecutionStore
 from .participant_store import ParticipantStore
 from .private_runtime_schema import PrivateRuntimeSchema
 from .recovery_reader import RecoveryReader
+from .working_memory_annotations import WorkingMemoryAnnotations
 
 Result = TypeVar("Result")
 
@@ -67,6 +68,7 @@ class Coordination:
             self.session, self.participants, self.assignments, self.snapshots
         )
         self.attempts = AttemptStore(self.session, self.participants, self.snapshots)
+        self.annotations = WorkingMemoryAnnotations(self.session)
 
     def install_private_runtime(self) -> None:
         """Explicit protocol/owner bootstrap, never invoked by a reader."""

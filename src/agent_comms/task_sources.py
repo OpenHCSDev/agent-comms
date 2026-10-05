@@ -196,6 +196,12 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
     def require_human_constraint(self) -> HumanConstraintPin:
         raise RelationViolationError("Original wire message has no USER constraint pin")
 
+    def require_annotation_grant(self):
+        raise RelationViolationError("Original wire message has no human disclosure grant")
+
+    def annotation_rules(self, message: Message, facts) -> tuple[str, ...]:
+        return ()
+
     def original_text_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
         return message
 
@@ -455,6 +461,9 @@ class HumanConstraintPin(ScopedTaskDeclaration):
     def require_human_constraint(self):
         return self
 
+    def annotation_rules(self, message: Message, facts) -> tuple[str, ...]:
+        return (self.original_wording(facts.original_text_source(message)),)
+
     def require_previous(self, original):
         return original.task.require_human_constraint()
 
@@ -610,3 +619,43 @@ class Constraint(ModelTaskDeclaration):
         from .retained_task_facts import ConstraintTaskFact
 
         return (ConstraintTaskFact(message),)
+
+
+from .working_memory_labels import ClassifierVersion, JevClassifier
+from .turn_context import ContextSegment
+
+
+@dataclass(frozen=True, kw_only=True)
+class AnnotationDisclosureGrant(HumanConstraintPin):
+    """Borrow human authorship, recipient, scope and correction from the pin."""
+    per_hour: int
+    segments: tuple[type[ContextSegment], ...]
+    classifier: ClassifierVersion = field(default_factory=JevClassifier.version)
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.per_hour < 1:
+            raise ValueError("Disclosure grant requires a positive hourly request budget")
+        if not self.segments:
+            raise ValueError("Disclosure grant requires permitted segment kinds")
+
+    def require_annotation_grant(self):
+        return self
+
+    def annotation_rules(self, message, facts):
+        # Permission to spend/disclose is not a rule to classify as instructions.
+        return ()
+
+    def require_segment(self, segment: ContextSegment):
+        if type(segment) not in self.segments:
+            raise RelationViolationError("Human grant does not disclose this segment kind")
+
+
+    def window_start(self, now: int) -> int:
+        return now - 3_600_000
+
+    def require_budget(self, submitted: int) -> None:
+        from .working_memory_requests import AnnotationBudgetExhausted
+
+        if submitted >= self.per_hour:
+            raise AnnotationBudgetExhausted("Original disclosure grant's hourly request budget is exhausted")

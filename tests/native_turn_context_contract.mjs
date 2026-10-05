@@ -1,6 +1,6 @@
 /** SDK source contract. No provider input, credentials or public session. */
 import assert from 'node:assert/strict';
-import {mkdirSync, writeFileSync, readFileSync} from 'node:fs';
+import {mkdirSync, writeFileSync, readFileSync, existsSync} from 'node:fs';
 import {join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
@@ -11,9 +11,27 @@ import {constructNativeConditions,applyNativeCondition,
 const [pkg, suppliedRoot] = process.argv.slice(2);
 const root=resolve(suppliedRoot);
 globalThis.fetch = async () => {throw new Error('SOURCE_CONTRACT_FORBIDS_NETWORK');};
+if (process.argv.includes('--system-source-builder-child')) {
+    // Compare the original builder, not a second implementation of its prompt.
+    // Both imports borrow the same declared PI_PACKAGE_DIR for documentation
+    // paths. The source artifact and its hashes remain distinct.
+    const {buildSystemPrompt}=await import(pathToFileURL(join(pkg,'dist/core/system-prompt.js')));
+    let input=''; for await (const bytes of process.stdin) input+=bytes;
+    const cases=JSON.parse(input);
+    const output=JSON.stringify(cases.map(item=>({name:item.name,
+        prompt:buildSystemPrompt(item.options)})))+'\n';
+    await new Promise((resolve,reject)=>process.stdout.write(output,
+        error=>error ? reject(error) : resolve()));
+    process.exit(0);
+}
+if (process.argv.includes('--system-source-spans')) process.env.PI_PACKAGE_DIR=resolve(pkg);
 const pi = await import(pathToFileURL(join(pkg,'dist/index.js')));
 const {TurnContext,NativeInputClaim} = await import(pathToFileURL(join(pkg,'dist/core/turn-context.js')));
 const {estimateTokens} = await import(pathToFileURL(join(pkg,'dist/core/compaction/compaction.js')));
+if (process.argv.includes('--system-source-spans')) {
+    console.log(JSON.stringify(await systemSourceSpans(),null,2));
+    process.exit(0);
+}
 if (process.argv.includes('--comparison-child')) {
     // Each SDK keeps its original committed import boundary. The child borrows
     // this fixture's selected file/coordinates and acquired JSON values only.
@@ -502,6 +520,128 @@ async function observeConditionLoop(session,pkg,root,compaction,before) {
 
 function hashFile(path) {
     return createHash('sha256').update(readFileSync(path)).digest('hex');
+}
+
+async function systemSourceSpans() {
+    const comparisonIndex=process.argv.indexOf('--comparison-package');
+    assert(comparisonIndex>=0,'W1 byte parity requires the original builder package');
+    const comparisonPackage=resolve(process.argv[comparisonIndex+1]);
+    const cwd=join(root,'project'), agentDir=join(root,'config');
+    const agents=join(cwd,'AGENTS.md'), append=join(cwd,'.pi','APPEND_SYSTEM.md');
+    const custom=join(root,'custom-system.md'), skill=join(root,'skills','audit','SKILL.md');
+    for (const path of [cwd,agentDir,join(cwd,'.pi'),join(root,'skills','audit')])
+        mkdirSync(path,{recursive:true,mode:0o700});
+    const authored=new Map([
+        [agents,'\uFEFFProject rule π 🙂.\n'],
+        [append,'\uFEFFAppend rule café.\n'],
+        [custom,'\uFEFFCustom system rule λ.\n'],
+        [skill,'---\nname: audit\ndescription: Audit original source π\n---\nPRIVATE_SKILL_BODY_NOT_LOADED\n'],
+    ]);
+    for (const [path,content] of authored) writeFileSync(path,content,{mode:0o600});
+    const runtime=await pi.ModelRuntime.create({authPath:join(agentDir,'auth.json'),
+        modelsPath:join(agentDir,'models.json'),modelsStorePath:join(agentDir,'models-store.json')});
+    const cases=[
+        {name:'default'},
+        {name:'custom-file',systemPrompt:custom},
+        {name:'unchanged-overrides',systemPrompt:custom,
+            systemPromptOverride:value=>value,appendSystemPromptOverride:values=>values},
+        {name:'changed-system',systemPrompt:custom,
+            systemPromptOverride:value=>value+'Extension-owned replacement.\n'},
+        {name:'changed-append',appendSystemPromptOverride:values=>
+            [...values,'Extension-owned appended wording.\n']},
+        {name:'literal-system',systemPrompt:'Literal source has no file authority.\n'},
+    ];
+    const parity=[], receipts=[];
+    const hash=value=>createHash('sha256').update(value).digest('hex');
+    for (const {name,...overrides} of cases) {
+        const settings=pi.SettingsManager.inMemory({compaction:{enabled:false},retry:{enabled:false}});
+        const loader=new pi.DefaultResourceLoader({cwd,agentDir,settingsManager:settings,
+            noExtensions:true,noPromptTemplates:true,noThemes:true,
+            additionalSkillPaths:[join(root,'skills','audit')],...overrides});
+        await loader.reload();
+        const manager=pi.SessionManager.create(cwd,join(root,'sessions',name));
+        let session;
+        try {
+            ({session}=await pi.createAgentSession({cwd,agentDir,modelRuntime:runtime,
+                settingsManager:settings,sessionManager:manager,resourceLoader:loader}));
+            // A new SDK session has an original in-memory header until its
+            // first append. Inspection must neither flush it nor create input.
+            const saved=manager.getSessionFile();
+            const before=existsSync(saved) ? readFileSync(saved) : null;
+            const context={systemPrompt:session.systemPrompt,messages:[],tools:session.agent.state.tools};
+            const captured=await TurnContext.capture(session,context);
+            const system=captured.full().segments.find(segment=>segment.kind==='system_layer');
+            const bytes=Buffer.from(system.content);
+            assert.equal(system.content,session.systemPrompt);
+            // Whole manifests measure the original JSON representation;
+            // contribution coordinates address the emitted raw UTF8 text.
+            const encoded=JSON.stringify(system.content);
+            assert.equal(system.sha256,hash(encoded));
+            assert.equal(system.utf8_bytes,Buffer.byteLength(encoded));
+            let offset=0;
+            for (const span of system.source_spans) {
+                assert.equal(span.kind,'system_layer');
+                assert.equal(span.offset,offset,'assembly spans must cover their original ordered writes');
+                assert.equal(span.sha256,hash(bytes.subarray(span.offset,span.offset+span.length)));
+                offset+=span.length;
+            }
+            assert.equal(offset,bytes.length);
+            const fromFile=path=>system.source_spans.filter(span=>
+                span.provenance.some(source=>source.kind==='file' && source.path===path));
+            for (const path of [agents,...(name==='changed-append' ? [] : [append]),
+                ...(['custom-file','unchanged-overrides'].includes(name) ? [custom] : [])]) {
+                const [span]=fromFile(path);
+                assert(span,`${name}: missing original file span ${path}`);
+                assert.equal(span.provenance.find(source=>source.kind==='file').sha256,hashFile(path));
+                assert.equal(bytes.subarray(span.offset,span.offset+span.length).toString(),
+                    authored.get(path).replace(/^\uFEFF/,''),'BOM removal must not corrupt UTF8 coordinates');
+            }
+            if (name==='changed-system') assert.equal(fromFile(custom).length,0);
+            if (name==='changed-append') assert.equal(fromFile(append).length,0);
+            const skillSpan=system.source_spans.find(span=>span.provenance.some(source=>
+                source.kind==='resource' && source.path===skill));
+            assert(skillSpan,'SDK skill metadata must retain its own resource source');
+            const skillText=bytes.subarray(skillSpan.offset,skillSpan.offset+skillSpan.length).toString();
+            assert(skillText.includes('Audit original source π'));
+            assert(!system.content.includes('PRIVATE_SKILL_BODY_NOT_LOADED'));
+            assert.equal(fromFile(skill).length,0,'skill metadata is not skill-file wording');
+            const requestId=`source-only-${name}`;
+            const observation=captured.observation(requestId);
+            assert.equal(observation.requestId,requestId);
+            const manifest=observation.segments.find(segment=>segment.kind==='system_layer');
+            const value=observation.values.find(segment=>segment.kind==='system_layer');
+            assert.deepEqual(manifest.source_spans,system.source_spans);
+            assert.deepEqual(value.source_spans,system.source_spans);
+            assert.equal(value.content,system.content);
+            assert.deepEqual(captured.render(),context);
+            // A transformed full extension value cannot inherit file attribution.
+            const transformed=await TurnContext.capture(session,{...context,
+                systemPrompt:context.systemPrompt+'Transformed full value.\n'});
+            const changed=transformed.full().segments.find(segment=>segment.kind==='system_layer');
+            assert(changed.source_spans.every(span=>
+                span.provenance.every(source=>source.kind==='unattributed')));
+            assert.deepEqual(existsSync(saved) ? readFileSync(saved) : null,before);
+            parity.push({name,options:{...session._baseSystemPromptOptions,systemSources:undefined},
+                prompt:session.systemPrompt});
+            receipts.push({name,utf8_bytes:bytes.length,spans:system.source_spans.length,
+                captured_values_and_request_id:true,journal_unchanged:true});
+        } finally {session?.dispose();manager.entryStore.close();}
+    }
+    const child=spawn(process.execPath,[new URL(import.meta.url).pathname,
+        comparisonPackage,root,'--system-source-builder-child'],{stdio:['pipe','pipe','pipe']});
+    let output='',error='';
+    child.stdout.on('data',bytes=>{output+=bytes;});
+    child.stderr.on('data',bytes=>{error+=bytes;});
+    const exited=new Promise((resolve,reject)=>{
+        child.on('error',reject);child.on('close',code=>resolve(code));
+    });
+    child.stdin.end(JSON.stringify(parity.map(({name,options})=>({name,options}))));
+    assert.equal(await exited,0,error);
+    assert.deepEqual(JSON.parse(output),parity.map(({name,prompt})=>({name,prompt})),
+        'default/custom byte parity must be exact against the original SDK builder');
+    for (const [path,content] of authored) assert.equal(readFileSync(path).toString(),content);
+    return {scope:'Original SDK source-only assembly/capture; no committed provider request',
+        provider_requests:0,native_inputs:0,original_builder_byte_parity:true,cases:receipts};
 }
 
 async function measureCapture(declaration,session,context,entries) {

@@ -64,6 +64,15 @@ def test_declared_table_family(tmp_path):
         child.upsert(db)
         assert TableChildRow.one(db, key="c") == child
         TableChildRow.update(db, where="key=?", parameters=("c",), enabled=False)
+        assert TableChildRow.select(db, where="enabled=?", parameters=(False,),
+                                    order_by=("key",)) == [replace(child, enabled=False)]
+        assert TableChildRow.one(db) == replace(child, enabled=False)
+        with pytest.raises(ValueError, match="Unknown fields"):
+            TableChildRow.select(db, missing=1)
+        with pytest.raises(ValueError, match="Update requires fields"):
+            TableChildRow.update(db, where="key=?", parameters=("c",))
+        with pytest.raises(ValueError, match="Empty column list"):
+            TableChildRow._column_list(())
         with pytest.raises(ValueError):
             TableChildRow.update(db, where="key=?", parameters=("c",), missing=1)
         with pytest.raises(ValueError):

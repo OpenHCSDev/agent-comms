@@ -166,6 +166,7 @@ class ThreadManagement:
             snapshot.messages_seen - len(snapshot.messages),
             snapshot.truncated_messages,
             snapshot.notices,
+            snapshot.historical_instructions,
         )
 
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
