@@ -45,12 +45,35 @@ def record(path, value):
 
 async def condition_application(application_stage, package, agent, owner, fork,
                                 selected_condition: Condition, checkpoint: RecordedNativeCheckpoint,
-                                *, prompt_text: str, receipt):
-    """Borrow the caller's selected owner, install one arm and record its input.
+                                *, prompt_text: str, receipt, retire_selected):
+    """Observe one selected arm and retire its exact acquired child on any exit.
 
-    Source selection/restoration belongs to SessionLifecycle. This body creates
-    no registry or owner and transfers no USER sources. Its observer and RAM
-    environment close before the caller restores parent native custody.
+    Source selection/restoration belongs to SessionLifecycle. The yielded
+    retirement capability owns custody checks and cancellation-safe joining;
+    this consumer neither selects a current backend nor repeats those checks.
+    """
+    with observe_native_requests(package,application_stage/'condition-observation.jsonl',
+            contexts=application_stage/'sdk-contexts',
+            condition_source=application_stage/'fork-condition-source.private.json',
+            condition=selected_condition) as launch:
+        environment=dict(os.environ)
+        launch(environment)
+        with patch.dict(os.environ,environment,clear=True):
+            try:
+                return await apply_condition_input(application_stage,agent,owner,fork,
+                    selected_condition,checkpoint,prompt_text=prompt_text,receipt=receipt)
+            finally:
+                await retire_selected()
+
+
+async def apply_condition_input(application_stage, agent, owner, fork,
+                                selected_condition: Condition, checkpoint: RecordedNativeCheckpoint,
+                                *, prompt_text: str, receipt):
+    """One prepare/prompt/original-capture algorithm serves both resources.
+
+    The paired selection and the standalone owned agent have different
+    retirement authorities. Their resource scopes surround this shared body;
+    neither creates a second USER/registry or reconstructs a missing receipt.
     """
     contexts=application_stage/'sdk-contexts'
     observer_output=application_stage/'condition-observation.jsonl'
@@ -60,47 +83,38 @@ async def condition_application(application_stage, package, agent, owner, fork,
     condition=checkpoint.fork_condition_source(
         service.root/'compaction-commits.sqlite3',Path(fork.session_file))
     record(condition_file,condition)
-    with observe_native_requests(package,observer_output,
-            contexts=contexts,condition_source=condition_file,condition=selected_condition) as launch:
-        environment=dict(os.environ)
-        launch(environment)
-        with patch.dict(os.environ,environment,clear=True):
-            await agent.turns.prepare_selected_session(owner.name,owner)
-            before=set(InputDispositions(service.root/InputDispositions.filename).read().rows)
-            print('CONFIGURED_FORK_INSTALLED_DISTINCT_INPUT',flush=True)
-            result=await build_agent_router(agent)('session/prompt',{'sessionId':owner.name,
-                'prompt':[{'type':'text','text':prompt_text}]},False)
-            assert result.stop_reason=='end_turn'
-            document=InputDispositions(service.root/InputDispositions.filename).read()
-            row,=(row for key,row in document.rows.items() if key not in before)
-            assert row.has_started and row.source_text==prompt_text
-            session=NativeSessionIdentity(fork.session_id,fork.session_file)
-            probe=RecordedNativeProbe.capture_input(service,owner,session,row,contexts,
-                application_stage,checkpoint,observer_output)
-            record(application_stage/'recorded-probe.private.json',probe)
-            measured=probe.observe()
-            record(application_stage/'recorded-application.private.json',measured)
-            construction=measured['construction']
-            installed=construction['condition_installation']
-            assert installed['evaluated']
-            for item in installed['installations']:
-                item.require_condition(selected_condition.value)
-            assert construction['request_budget']['evaluated']
-            assert construction['request_completion']['evaluated']
-            assert service.registry.require(owner.name).active_turn is None
-            receipt.update(complete=True,original_cut_correlated=True,
-                SDK_child_binding=True,installed_source_in_actual_SDK_request=True,
-                installed_narrative_source_evaluated=installed['narrative_source']['evaluated'],
-                constructed_source_prefix=installed['constructed_prefix'],
-                full_history_sdk_admission=construction['full_history_sdk_admission'],
-                canonical_request_budget_and_terminal=True,distinct_answer=True,new_original_inputs=1,
-                model_steps=len(measured['model_steps']),model_recall_evaluated=False,
-                final_HTTP_bytes_evaluated=False)
-            # The original idle retirement joins the child while its inspector
-            # is still available to release Node completion. Parent restoration
-            # happens later, outside both the observer and RAM environment.
-            await agent.turns.close_idle_backend(owner.name)
-            return probe, measured
+    await agent.turns.prepare_selected_session(owner.name,owner)
+    before=set(InputDispositions(service.root/InputDispositions.filename).read().rows)
+    print('CONFIGURED_FORK_INSTALLED_DISTINCT_INPUT',flush=True)
+    result=await build_agent_router(agent)('session/prompt',{'sessionId':owner.name,
+        'prompt':[{'type':'text','text':prompt_text}]},False)
+    assert result.stop_reason=='end_turn'
+    document=InputDispositions(service.root/InputDispositions.filename).read()
+    row,=(row for key,row in document.rows.items() if key not in before)
+    assert row.has_started and row.source_text==prompt_text
+    session=NativeSessionIdentity(fork.session_id,fork.session_file)
+    probe=RecordedNativeProbe.capture_input(service,owner,session,row,contexts,
+        application_stage,checkpoint,observer_output)
+    record(application_stage/'recorded-probe.private.json',probe)
+    measured=probe.observe()
+    record(application_stage/'recorded-application.private.json',measured)
+    construction=measured['construction']
+    installed=construction['condition_installation']
+    assert installed['evaluated']
+    for item in installed['installations']:
+        item.require_condition(selected_condition.value)
+    assert construction['request_budget']['evaluated']
+    assert construction['request_completion']['evaluated']
+    assert service.registry.require(owner.name).active_turn is None
+    receipt.update(complete=True,original_cut_correlated=True,
+        SDK_child_binding=True,installed_source_in_actual_SDK_request=True,
+        installed_narrative_source_evaluated=installed['narrative_source']['evaluated'],
+        constructed_source_prefix=installed['constructed_prefix'],
+        full_history_sdk_admission=construction['full_history_sdk_admission'],
+        canonical_request_budget_and_terminal=True,distinct_answer=True,new_original_inputs=1,
+        model_steps=len(measured['model_steps']),model_recall_evaluated=False,
+        final_HTTP_bytes_evaluated=False)
+    return probe, measured
 
 
 async def verify_condition_application(stage, package, original_python, selected_condition,
@@ -131,11 +145,15 @@ async def verify_condition_application(stage, package, original_python, selected
         'installed_UI':False,'acceptance_scope':'original completed cut/SDK fork/installed SDK input and distinct answer',
         'selected_condition':selected_condition}
     application_stage=stage/'application'
-    async with configured_saved_agent(application_stage,package,captured_source,Receiver(),receipt,
-            capture_source=capture_source,core_source=core_source,core_artifacts=core_artifacts
-            ) as (agent,owner,fork):
-        return await condition_application(application_stage,package,agent,owner,fork,
-            selected_condition,checkpoint,prompt_text=prompt_text,receipt=receipt)
+    with observe_native_requests(package,application_stage/'condition-observation.jsonl',
+            contexts=application_stage/'sdk-contexts',
+            condition_source=application_stage/'fork-condition-source.private.json',
+            condition=selected_condition) as launch:
+        async with configured_saved_agent(application_stage,package,captured_source,Receiver(),receipt,
+                capture_source=capture_source,observe_launch=launch,
+                core_source=core_source,core_artifacts=core_artifacts) as (agent,owner,fork):
+            return await apply_condition_input(application_stage,agent,owner,fork,
+                selected_condition,checkpoint,prompt_text=prompt_text,receipt=receipt)
 
 
 async def request_construction(stage, package, original_python, *, core_source, core_artifacts=()):
@@ -314,10 +332,11 @@ async def run(stage, package, original_python, *, design: PairedRecallDesign,
                         'paid_comparison':False,'selected_condition':condition,
                         'acceptance_scope':'same-owner selected SDK fork and original installed input; not study'}
                     try:
-                        async with agent.sessions.selected_native_fork(owner.name,original_owner,child) as selected_owner:
+                        async with agent.sessions.selected_native_fork(owner.name,original_owner,child) as (selected_owner,retire_selected):
                             probe, observed = await condition_application(arm_stage,package,agent,
                                 selected_owner.thread,child,condition,checkpoint,
-                                prompt_text=operands['probe_text'],receipt=arm_receipt)
+                                prompt_text=operands['probe_text'],receipt=arm_receipt,
+                                retire_selected=retire_selected)
                         arm_receipt['original_source_restored']=True
                     finally:
                         record(arm_stage/'receipt.json',arm_receipt)
