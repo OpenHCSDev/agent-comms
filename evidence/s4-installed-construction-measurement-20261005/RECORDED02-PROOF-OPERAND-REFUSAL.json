@@ -1,0 +1,21 @@
+{
+  "state": "Original UVstage passed, proof caller refused before355byte proof/recorded read; originalfloor restored/whole returned",
+  "issued_sha256": "8f53bc99e317ae480bb5e287407988b35b2bf32af34336b8f7adbae9f6e0524a",
+  "refusal": "KeyError: 'cwd' at proof Git source lookup; literal phase already owns directory",
+  "corrected_caller": "cwd=phase['cwd']",
+  "producer_payload_runtime_changes": false,
+  "keeper": {
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded02/whole-handback.json",
+    "sha256": "c93560703c4330f5f0de66aefff18e9dad9cb3f3f239b554a26eca6c1a6a8b2f",
+    "immutable": true,
+    "reader_started": false
+  },
+  "postrun": {
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-installed-construction-measurement-20261005/recorded02/holder-postrun.json",
+    "sha256": "b223ac7a38f4faa4dbce17837176d1dda322ed1ef881bff088f77ec96f74b6d5"
+  },
+  "original_records_first_refusal_floor_source_preserved": true,
+  "reader_started": false,
+  "native_provider_input_SDK": false,
+  "no_retry": true
+}
