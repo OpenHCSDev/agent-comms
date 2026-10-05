@@ -3046,3 +3046,28 @@ Parent integration checkout normally joined main with zero conflicts, preserving
 untracked artifacts and release evidence. No local public package or native owner
 was changed. Sch/Heis have the actual merge relation for a future coherent cohort;
 Mendel begins separate S4 custody source work after the frozen675 checkpoint.
+
+### Move source checkpoints into affected verification, 2026-10-05
+
+Kepler was idle after66 source2e8e and SDK destination declaration follow-up.
+Parent resumed exact original compositor control completion and authorized one
+proportionate affected SOURCE native App batch in the owned WT with existing
+dependencies. No installed holder, package/artifact loan, new environment,
+recording or provider operation is authorized by that source check. It must cover
+original origins, bounded capture/cuts, damage/exposure and metadata/retirement;
+no measured frame-time gain follows from a pass.
+
+Heis455 uses genuine private retained OriginalTurn acquisition, reconnect and
+observed AgentReady, both original RPC result lifetimes held, editor/resize and
+WorkspaceSessions.close task joining. Parent identified the old pilot's main
+entrypoint as reopening a historical UNKNOWN compaction fixture; that root is
+not implicitly available. The current control callback must consume the existing
+private retained fixture rather than fabricate compatible history or replay.
+
+Parent delivered literal a685 wheel/full355 prooffa564c and merged7b68 buildinput
+equality to Heis. After coherent source/control freeze, one cached normalHatch1.28
+Toad wheel is authorized in the owned WT, with all319 Git/local/ZIP verified before
+any future fresh specific package purpose. Current stage/runtime claims remain
+absent. Text65/e253 is usable for this useful joint loading checkpoint; unqualified
+Text66 or final frame targets do not hold its delivery. Actual smooth wheel and
+configured continuous acceptance remain required separately.
