@@ -2845,3 +2845,23 @@ no installed prefix, native keeper or recording permission is granted. Kepler
 owns that artifact, coordinates directly with Heis and preserves08e3/487.
 Heis retains the integrated loading/scrolling workflow and public UI acceptance;
 Einstein454 pending project-reader correction stays a disjoint source family.
+
+### Public UI selection refusal and C3 staged proof, 2026-10-05
+
+The one public448 ordinary still-image attempt stopped before UI/gestures:
+original receipt9679fd28 rejects historical PREFIXactivation versus actual ACP
+native launch. Owned runtime probe exited0, cleanup has no remaining processes
+or errors, and original nra1817557/birth65371423 remains alive unchanged. No UI
+images or performance acceptance follows. Heis owns RuntimeSelection.receipt
+source repair: actual selected route/native launch owns runtime observation;
+explicit verify_stage retains supplied typed activation/sourceproof checks.
+Historical floor activation remains immutable; no package/native/route patch,
+retry or second publication is authorized by this negative.
+
+Parent personally read/hash-matched675 candidate proof185270ed and original
+NativeFullTrust0c92b1ab:355 candidate assets exact,94 old keepers/69metadata/
+10 distributions and other9 origins unchanged, matching7a trust PASS under NEW
+READ1f53. Stage occurred once; canonical/native controls remain unrun at these
+receipts. Bohr owns canonical release after proof binding; native additionally
+requires canonical PASS and NEW matching7a execution authority. No old673 result
+or native086 lease qualifies those new settlement consumers.
