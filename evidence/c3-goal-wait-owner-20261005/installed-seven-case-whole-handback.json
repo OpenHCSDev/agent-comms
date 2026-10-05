@@ -1,0 +1,55 @@
+{
+  "issued_sha256": "ce6ae8dc0dd9a6529db38bdffb5149d753a3990e86375c42e46cccbca31f6536",
+  "terminal": {
+    "controller": {
+      "pid": 1410583,
+      "start_time": 65096806
+    },
+    "argv": [
+      "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+      "-B",
+      "-c",
+      "import pathlib,sys,agent_comms; assert pathlib.Path(agent_comms.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()); sys.path.append('/usr/lib/python3.14/site-packages'); import pytest; raise SystemExit(pytest.main(['-o', 'addopts=', '--basetemp', '/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-check/authored', '-q', 'tests/test_goal_standby.py::test_standby_rejects_closed_wait_cycle_while_both_turns_are_active', 'tests/test_goal_standby.py::test_standby_allows_independent_alternative_to_wait_cycle', 'tests/test_goal_standby.py::test_liveness_check_releases_preexisting_closed_wait_group', 'tests/test_goal_standby.py::test_new_live_dependency_turn_keeps_old_wait_group_open', 'tests/test_goal_standby_liveness.py::test_terminal_hook_rechecks_goal_and_owner_identity', 'tests/test_goal_standby_liveness.py::test_last_target_finishes_silently_releases_once_and_reopens', 'tests/test_goal_standby_liveness.py::test_replaced_target_cannot_report_for_old_incarnation']))"
+    ],
+    "cwd": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+    "lifecycle_sha256": "b061f756d6321ddd722b1836cf638f4032f7a89ba23eef667244c86b2e9ec003",
+    "child": {
+      "pid": 1410603,
+      "start_time": 65096903
+    },
+    "returncode": 1,
+    "outcome": "ExitedOutcome",
+    "successful": false,
+    "elapsed_seconds": 6.110651238937862,
+    "child_alive_after_retirement": false,
+    "remaining_group": []
+  },
+  "result": "6failed3passed in3.12s; all sixfailures private durable protocol marker absent before waitgraph assertions",
+  "restore_command_terminal": 0,
+  "restore_command_evidence": "Original uv command/API tool output preserved in Parent conversation; no duplicate install.",
+  "restoration": {
+    "original_records": 510,
+    "original_wheel_assets": 347,
+    "extra_core_assets": [],
+    "errors": [],
+    "cache_scope": "Preexisting compiled caches excluded from original510 authority; no claim of cachebyte equality",
+    "whole_restoration_pass": true
+  },
+  "controller_and_child_proc_absent": true,
+  "authored_scratch_removed": true,
+  "claim": "Whole package/import/read/execution returned; no future use inferred",
+  "native_artifact_or_provider_operation": false,
+  "readback_adapter_negative": "Original verifier expected readlink field; original receipt uses target. Negative/source preserved; only adapter corrected, no restoration repeat.",
+  "keepers": {
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-check/terminal.json": "41d62367ac603494d5d2cb1320491c27661c0fde2fe3655dd157d377b45bf2f0",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-check/handle.json": "45837d8987fd118528ce08606d111cf5f60dd5847bb4ec18764c7b4421f738e0",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-check/command.json": "866528fd53bcd6c7cb7f53a4298015792da9e6a2c1de0f04b43e0f6c70c04342",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-check/stdout.log": "5a4a5e39587947986c9ff6367f56ceec209338a1a8870035619149e36e6370f7",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/installed-check/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/candidate-source-proof.json": "03a35ce246a14e6826f829febaa2bb79686842338e7fd6bf4da5465296281fde",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/runner-path-correction.json": "3783a882bc1c8c59e95cead26cb2495578582afa11559894f6ed640ab4d8a99f",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/floor-restoration-readback.json": "f1b7d2df3c95a83609bc026dd0290b219dc76967e607309d9dd81b2cdadb72c2",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/floor-restoration-readback-before-adapter-correction.json": "2b97f836bc2a4083bbfb18c72aa6909ac90cbe0d47e48ea67d0c8141fe802c0e",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/c3-goal-wait673-source-wheel-20261005/own-preimage.json": "f6dcc5cb613c5c89b2acc429ac8d521da6ed0098bf9a73ea49c54db239879abd"
+  }
+}
