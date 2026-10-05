@@ -1761,6 +1761,14 @@ configured continuous workflow.
   fresh arm roots also need supported original wire lineage and recipient scope.
   Arendt owns that remaining construction chain. No paired/provider/study run is
   authorized by this review; the USD75/30-pair study remains unapproved.
+- Kepler now owns the independent Textual viewport-projection successor.
+  Parent read current SubtreeGeometry.project_into: it still visits every
+  retained geometry entry per viewport; restore_into also unions complete
+  widget sets. Existing spatial arrangements are a source lead. The successor
+  must preserve complete capture/full-map queries, explicit targets, ordering
+  and resource retirement while removing repeated work through the original
+  geometry owner. Frozen Textual08e3/487 and Heis453 qualification stay unchanged.
+  This is source ownership, not measured CPU dominance or smooth-frame acceptance.
 - Original C0 family/source ledger and C4 stated class-size target have current
   evidence. Full six-file C3, TC1/T9 resource closure, loaded scaling, configured
   continuous workflow and smooth wheel/useful paint remain explicitly unfinished.
