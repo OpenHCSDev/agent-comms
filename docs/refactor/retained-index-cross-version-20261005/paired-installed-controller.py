@@ -102,7 +102,7 @@ async def main():
             dest.write(json.dumps(terminal, indent=2) + '\n')
         print('INDEX_TERMINAL', json.dumps(terminal), flush=True)
         await asyncio.get_running_loop().shutdown_default_executor()
-        return 124 if timed_out else 1 if error or errors or child is None or child.returncode is None else child.returncode
+    return 124 if timed_out else 1 if error or errors or child is None or child.returncode is None else child.returncode
 
 
 raise SystemExit(asyncio.run(main()))

@@ -1,6 +1,6 @@
 {
   "status": "SOURCE-ONLY final proposal; neither issued authority nor access/reservation",
-  "source_receipt_head": "174534e0056671e25040afe4e76b78e65ecbc7b3",
+  "source_receipt_head": "7871e90e9f37bda692d3964d4bb5258fb1fb91c8",
   "source_tools_determining": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
   "two_holder_readback": {
     "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/684-two-existing-private-source-target-holder-readback.json",
@@ -39,7 +39,7 @@
     },
     {
       "path": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-index-cross-version-20261005/paired-installed-controller.py",
-      "sha256": "aba73ba54f6c7f93fb13a6c80db0c33bd968adc6e39c93adfa0b67135981869e"
+      "sha256": "8006225a05c204c5fee9f08c8cafaca75ca29d9ba6f6bd3aed0ab3ac4db25773"
     }
   ],
   "source": {
@@ -376,7 +376,8 @@
   "proposed_grants": {
     "source": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Einstein684-old720-source-producer-package-issued-grant.json",
     "target": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Einstein684-retained-index-target-reader-issued-grant.json",
-    "issued_sha256s": "UNBOUND until Bohr actual issue; literal substitutions below only at phase binding"
+    "issued_sha256s": "UNBOUND until Bohr actual issue; literal substitutions below only at phase binding",
+    "literal_substitution_rule": "Replace only the explicitly labelled @ACTUAL_*@ grant/proposal SHA and @NEW_NATIVE_READ_*@ receipt fields at issue/release, then bind the resolved argv in the existing lifecycles. No competing argv/tail or implicit lease."
   },
   "owned_output": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01",
   "fixture": "/home/ts/.cache/agent-scratch/einstein-retained-index-cross-version-20261005/installed01",
