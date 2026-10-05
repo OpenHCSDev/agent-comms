@@ -43,8 +43,8 @@ whose native shutdown completes before observer exit. Both resources use one
 `apply_condition_input` prepare/prompt/capture algorithm. An observer only attaches to its declared launch, preventing
 nested parent/arm scopes from attaching two inspectors to one child.
 
-The production resource comes from normally joined #676 `c628a6b4`
-(production `a264da8f`); S4 edits are private fixtures only. The corrected
+The production resource comes from normally joined main #676 `7800f714`
+(production `a264da8f`, frozen source `97d4a687`); S4 edits are private fixtures only. The corrected
 two-capability publication, pre-effect custody checks and acquired parent
 preparation remain Mendel's implementation. The normal merge preserves all
 `src`, `stack` and `tools` bytes from that checkpoint and both corrected private
@@ -107,3 +107,7 @@ and control bytes are unchanged from the joined checkpoint. This qualifies the
 selected-fork resource, not this S4 paired runner, external configured provider,
 UI, performance or study. Owner handback reports joined children and exact floor
 restoration; Bohr's independent closure remains separate.
+The merged `WHOLE-CLOSURE.json` subsequently records Bohr's independent close
+and Sch's artifact return. Those completed purposes grant no new access here.
+Normal main integration changed no production or private test bytes and does
+not imply installation or S4 paired-workflow acceptance.
