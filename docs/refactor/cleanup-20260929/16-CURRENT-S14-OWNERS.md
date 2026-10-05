@@ -2935,3 +2935,47 @@ to retained a685. Bohr closed consumed675e455 after exact original540 restoratio
 Fresh successor request selects only the changed reply case then originally
 unrun native2 after PASS/new7a authority; the five original passing scopes are
 not repeated and the failed private peer lease stays untouched.
+
+### Joint workflow source continuation and corrected C3 reply, 2026-10-05
+
+Heis completed normal source join454 into a successor in the same owned WT,
+keeping frozen453/454/Explorer receipts unchanged. Text65 actual067/e253 relation
+is bound for source pin reconciliation. Its remaining concrete connected-agent
+change migrates all four Conversation readiness/watch callbacks from awaited
+SessionObservation.refresh to the existing invalidate/task/revision/close owner.
+Parent read that complete owner: invalidate returns None, so native callback
+invocation does not await its task; explicit user/history refresh still waits.
+Original real surface release joins observation.close before retiring/clearing
+its agent, while warm detach retains the source/read lifetime. This removes the
+queued pump await; it does not prove new-source snapshot latency. Existing
+connected native observation/read-first-paint acceptance stays separately needed;
+NoAgent controls cannot qualify those four connected-agent paths.
+
+Einstein's disjoint project mounted App remains prepared/unrun. One coherent
+future joint ToAd artifact and exact affected control tuple precede any eligible
+private purpose. Actual public style22 remains protected, former485 eligibility
+is not inferred. Heis retains full startup/unopened/return/fork-before-answer/
+notification/reply/queue/status/held-scroll/End/width/loaded scaling integration.
+
+C3 corrected reply67502 passed one installed case, terminalff4a00ea/exit0/
+2.971592639s and XML02b04656. Actual original registry lease, certified reply,
+wrong-recipient and duplicate checks passed; the five earlier passing cases were
+not repeated, original failed peer lease/raw01 remain unchanged. Controller
+1999940/birth65521386 retired/groups/sockets empty. Two native settlement cases
+remain originally unrun, held only on NEW literal matching7a execution authority
+and original Bohr binding; no new stage/build/probe or Parent approval gate.
+
+Arendt674 was idle after preserving the canonical USER authority and fresh-arm
+root gaps. Parent resumed its explicit source implementation through original
+constraint/correction/drop/decision declarations and certified wire/recipient
+scope, with no whole-prose pin, invented reference, copied row or relaxed reader.
+No provider, SDK, native, holder or costly study operation is authorized there.
+
+Original T4 known residuals were also read against current source: TurnOwner/
+ConversationTurn own permissions, ContentNavigation owns movement, TabOrder owns
+order/history, Clipboard owns selected transport and AgentProcess owns process/
+task custody. The original private tab/clipboard fields, turn-string comparisons
+and BlockProtocol navigation checks are absent at the read scope. No second
+implementation task is created for those landed families. Remaining whole-class
+responsibility justification and installed resource/continuous acceptance stay
+with the existing T4/TC1/T9 owner; this is not a whole-T4 closure claim.
