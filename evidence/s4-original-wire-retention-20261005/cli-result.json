@@ -1,0 +1,32 @@
+{
+  "terminal": 0,
+  "retained_publications": {
+    "r1": {
+      "evaluated": false,
+      "reason": "No original retained-publication observation supplied"
+    },
+    "r2": {
+      "evaluated": false,
+      "reason": "No original retained-publication observation supplied"
+    },
+    "r3": {
+      "evaluated": false,
+      "reason": "No original retained-publication observation supplied"
+    }
+  },
+  "source_delivery": {
+    "r1": {
+      "evaluated": false,
+      "reason": "Original authored-history stimulus not captured"
+    },
+    "r2": {
+      "evaluated": false,
+      "reason": "Original authored-history stimulus not captured"
+    },
+    "r3": {
+      "evaluated": false,
+      "reason": "Original authored-history stimulus not captured"
+    }
+  },
+  "scope": "Empty authored recorded-run CLI; no original records, SDK, input or provider"
+}

@@ -1,0 +1,82 @@
+..F..                                                                    [100%]
+=================================== FAILURES ===================================
+_ RecordedMeasurementTests.test_retained_publications_verify_original_wording_separately_from_pin _
+
+self = <test_recorded_retention_measurements.RecordedMeasurementTests testMethod=test_retained_publications_verify_original_wording_separately_from_pin>
+
+    def test_retained_publications_verify_original_wording_separately_from_pin(self):
+        # A certified pin must not hide changed/missing original USER wording.
+        # The real private wire owns publication; no native input is authored.
+        comms = Comms(self.root / 'wording')
+        comms.messaging.initialize_private_initial_protocol()
+        owner = comms.registry.declare(Thread('recipient', frozenset(), str(self.root)))
+        subject = comms.messaging.send_user_message(owner.name, 'Keep /archive/λ exact',
+                                                   worktree=owner.worktree)
+        pin = comms.messaging.pin_user_constraint(owner.name, subject.reference,
+                                                  worktree=owner.worktree)
+        retained = comms.bus.log.retained_context(owner.name, comms.registry).retained
+        cut = replace(self.checkpoint, wire=comms.root / 'bus.jsonl',
+            registry_scope=self.artifact('wording-scope.json', comms.registry.store.read()))
+    
+        def attempt(facts):
+            request = manual_summary_record(self.session, incarnation=owner.incarnation, retained=facts)
+            return SelectedSummaryAttempt('wording', str(self.session), request.journal_json(),
+                                          request, ReservedSummary())
+    
+        measured = cut.scoped_facts(attempt(retained))['retained_publications']
+        self.assertTrue(measured['evaluated'])
+        self.assertEqual(set(measured['references']), {subject.reference, pin.reference})
+        self.assertEqual(measured['source_digest'], retained.source_digest.value)
+        self.assertEqual(measured['authored_wordings'], (
+            {'declaration': pin.reference, 'wording': WireProvenance(subject.reference)},))
+        changed = RetainedTaskFacts(tuple(replace(fact, source=replace(subject, body='Changed λ'))
+            if subject in fact.wire_sources() else fact for fact in retained.facts))
+        with self.assertRaises(RelationViolationError):
+            cut.scoped_facts(attempt(changed))
+        missing = RetainedTaskFacts(tuple(fact for fact in retained.facts
+                                         if subject not in fact.wire_sources()))
+        with self.assertRaisesRegex(RelationViolationError, 'original captured wording'):
+            cut.scoped_facts(attempt(missing))
+        self.assertFalse(replace(cut, wire=None).scoped_facts(attempt(retained))
+                         ['retained_publications']['evaluated'])
+        empty = cut.scoped_facts(attempt(RetainedTaskFacts(())))['retained_publications']
+        self.assertFalse(empty['evaluated'])
+        self.assertEqual(empty['references'], ())
+    
+        # Frozen missing rounds remain unavailable, and retained publications
+        # cannot fill native source_delivery or request-presence measurements.
+        scenario = coding_scenario()
+>       result = scenario.score(Condition.TASK_MEMORY, RecordedAnswers({})).public_native(
+            {'r1': {'scoped_facts': {'retained_publications': measured}}}, {}, {})
+
+tests/test_recorded_retention_measurements.py:2140: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/compaction_retention_fixture.py:603: in public_native
+    recorded_resources=self.recorded_resources(checkpoints, evidence, stimuli),
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ScoredScenario(source=RecallScenario(identity='coding-corrections-v1', rounds=(RecallRound(identity='r1', history=('Us...ement.PROHIBITION: 'prohibition'>, decision_source=None, action_source=None, expected_tool=None))), answer_values={})))
+checkpoints = {'r1': {'scoped_facts': {'retained_publications': {'evaluated': True, 'references': (MessageReference(seq=1, message_i...ge_id='af5e9d1eda06'), 'wording': WireProvenance(source=MessageReference(seq=1, message_id='e292c0c4e560'))},), ...}}}}
+evidence = {}, stimuli = {}
+
+    def recorded_resources(self, checkpoints, evidence, stimuli):
+        """Total acquired original completions, never estimates or billing.
+    
+        A missing usage/counter leaves that metric unavailable. Summary and
+        assistant records remain separate so shared cuts cannot be hidden in a
+        paired cost comparison. Frozen rounds own completeness, not the subset
+        of supplied records. Output already includes reported reasoning;
+        neither tokens nor cost is reconstructed from component counters.
+        """
+        rounds = tuple(round_.identity for round_ in self.source.rounds)
+        summaries = {identity: (report['summary_usage']['usage']
+>           if report['summary_usage']['evaluated'] else None,)
+               ^^^^^^^^^^^^^^^^^^^^^^^
+            for identity, report in checkpoints.items()}
+E       KeyError: 'summary_usage'
+
+tests/compaction_retention_fixture.py:711: KeyError
+=========================== short test summary info ============================
+FAILED tests/test_recorded_retention_measurements.py::RecordedMeasurementTests::test_retained_publications_verify_original_wording_separately_from_pin
+1 failed, 4 passed, 42 deselected in 1.27s
