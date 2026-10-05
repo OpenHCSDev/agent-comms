@@ -1,0 +1,16 @@
+.....F                                                                   [100%]
+=================================== FAILURES ===================================
+_______________ test_certified_reply_consumes_only_original_wait _______________
+
+selected_goal = (<agent_comms.comms.Comms object at 0x7fe43e0cf770>, Goal(text='Original objective', id='d83fda0689bd44258e62809c592b8...dac3786808cec7d4a322b539c', owner_name='worker', owner_created_at=1791178744.794762, bindings=()), state=ActiveGoal()))
+
+    def test_certified_reply_consumes_only_original_wait(selected_goal):
+        comms, original = selected_goal
+>       peer = comms.agents.begin_turn("peer", "original-peer-work").require_turn_lease()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'RegistryOwner' object has no attribute 'require_turn_lease'
+
+tests/test_goal_selection_owner.py:124: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_goal_selection_owner.py::test_certified_reply_consumes_only_original_wait
+1 failed, 5 passed in 1.90s

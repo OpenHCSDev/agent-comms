@@ -121,7 +121,7 @@ def test_model_edit_and_resume_use_current_goal_selection(selected_goal, monkeyp
 
 def test_certified_reply_consumes_only_original_wait(selected_goal):
     comms, original = selected_goal
-    peer = comms.agents.begin_turn("peer", "original-peer-work").require_turn_lease()
+    peer = comms.agents.begin_turn("peer", "original-peer-work").turn_lease
     owner = None
     try:
         comms.goals.update_goal("worker", StandbyGoalAction(
@@ -130,7 +130,7 @@ def test_certified_reply_consumes_only_original_wait(selected_goal):
         wait = comms.goals.goal_wait("worker")
         wrong = comms.messaging.send_message("peer", "other", "Different recipient")
         reply = comms.messaging.send_message("peer", "worker", "Original reply")
-        owner = comms.agents.begin_turn("worker", "original-reply-consumer").require_turn_lease()
+        owner = comms.agents.begin_turn("worker", "original-reply-consumer").turn_lease
         captured = RegistryOwner.capture_local(comms.registry.snapshot(), "worker")
         assert not comms.goals.consume_reply_wait(captured, wrong.reference)
         assert comms.goals.goal_wait("worker") == wait
