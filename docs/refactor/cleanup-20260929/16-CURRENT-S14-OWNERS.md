@@ -3174,3 +3174,30 @@ recorder path remains, with later actual-route verification and warm-return jour
 composition. No lost production owner was found in this comparison. Earlier PRs
 remain open until qualified joint455 normal merge;446's full warm/configured scope
 is separate and is not satisfied by these three affected checks.
+
+### Accepted build installation stopped before restart, 2026-10-05
+
+PR465 is merged at cac7268a733f62f6db57580fd63b64abd52be359. The
+staged candidate and all 111 frozen files match; the independent final check
+confirmed 953 installed assets, 69 distribution versions/origins and the original
+protected files. This is preparation evidence, not live delivery.
+
+The Parent publisher ran once and stopped at the original output-directory
+permission check before creating its publication receipt or calling the owner
+restart. PID1036478/birth69882087 exited1, joined and is absent. The exact logs
+and terminal are retained in .release-private/receiving465-public-20261005.
+Sch owns the permission correction; the failed attempt and frozen files remain
+unchanged. A corrected, explicitly issued next attempt is needed; no package
+rebuild, application rerun or weakened permission check is warranted.
+
+Heis460 also stopped before its application started: two incorrect launcher
+filename literals prevented reading its grant. Its original package floor is
+restored and its public-source read was returned unused. Heis owns the corrected
+launcher and still owes actual cold-paint, wheel and frame verification. This
+failure proves no product or performance result and does not hold installation.
+
+Next: correct the output folder permissions, install the unchanged accepted
+build through the original publisher, verify the actual restarted owners and
+run Mendel's prepared ordinary saved/channel/tab-return UI journey. Continue
+Heis's affected performance check separately; full continuous workflow and
+frame/speed targets remain unfinished. CI remains deferred.
