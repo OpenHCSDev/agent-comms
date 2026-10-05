@@ -17,7 +17,7 @@ from collections.abc import Callable
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
 from enum import Enum
 from pathlib import Path
-from typing import Any, ClassVar, Self, get_args, get_origin, get_type_hints
+from typing import Any, ClassVar, Literal, Self, get_args, get_origin, get_type_hints
 
 from .activity import ActivityState
 from .channels import Channel
@@ -37,6 +37,9 @@ from .exporting import (
     SelectableWireExportFormat,
 )
 from .importing import ImportFormat, ImportLimits
+from .turn_context import ContextSegment
+from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
+from .working_memory_questions import SpanAnswer
 from .messages import MessageType
 from .message_reference import MessageReference
 from .thread_management import ForkSpec
@@ -548,6 +551,53 @@ class PinInputConstraintCliCommand(PinConstraintCliCommand, declared_name="pin-i
 
 
 @dataclass(frozen=True, kw_only=True)
+class ApproveAnnotationsCliCommand(PinConstraintCliCommand, declared_name="approve-annotations"):
+    help = "Approve a pinned external classifier using original human wording and an hourly request budget"
+    per_hour: int = option("--per-hour", help="Maximum classifier requests in the rolling hour")
+    segments: tuple[type[ContextSegment], ...] = option("--segments", normalize=json.loads,
+        help="JSON list of original segment kinds permitted for disclosure")
+
+    def pin_original(self, ctx: Comms, source):
+        return ctx.messaging.approve_annotations(self.thread, source, worktree=self.worktree,
+                                                per_hour=self.per_hour, segments=self.segments)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CorrectAnnotationCliCommand(CliCommand, declared_name="correct-annotation"):
+    help = "Correct one original stored model answer through the human identity owner"
+    label: ModelLabel = option("--label", normalize=json.loads)
+    answer: type[SpanAnswer] = option("--answer")
+    worktree: str = option("--worktree", default_factory=os.getcwd)
+
+    def apply(self, ctx: Comms):
+        from .coordinator import Coordination
+
+        author = ctx.messaging.user_identity(self.worktree).incarnation
+        snapshot = ctx.registry.snapshot()
+        with Coordination(str(ctx.root / "coordination.sqlite3")) as store:
+            return store.annotations.correct(self.label, self.answer, author, snapshot)
+
+
+@dataclass(frozen=True, kw_only=True)
+class AnnotationsCalibrationCliCommand(CliCommand, declared_name="annotations"):
+    help = "Report human-reviewed accuracy and probability frequencies for exact annotation versions"
+    operation: Literal["calibration"] = option("operation", help="calibration")
+    question: QuestionVersion = option("--question", normalize=json.loads,
+        help="JSON of the original question member and version digest")
+    classifier: ClassifierVersion = option("--classifier", normalize=json.loads,
+        help="JSON of the original classifier member and pinned release")
+
+    def apply(self, ctx: Comms):
+        from .working_memory_annotations import WorkingMemoryAnnotations
+
+        return WorkingMemoryAnnotations.calibration(
+            ctx.root / "coordination.sqlite3", self.question, self.classifier)
+
+    def encode_result(self, result):
+        return result.public_report()
+
+
+@dataclass(frozen=True, kw_only=True)
 class SupersedeConstraintCliCommand(CliCommand, declared_name="supersede-constraint"):
     help = "Publish a human's exact replacement for an authored constraint"
     thread: str = option("thread")
@@ -1020,16 +1070,18 @@ class ContextCliCommand(CliCommand):
     thread: str = option("thread")
     turn: int | None = option("--turn", default=None, help="Original admitted turn generation")
     diff: bool = option("--diff", default=False, action="store_true")
+    imported: bool = option("--imported", default=False, action="store_true",
+                            help="Original imported instruction references, not current context")
 
     def apply(self, ctx: Comms) -> Any:
-        import asyncio
-        from .private_nk_entrypoint import PrivateNkLaunch
-        from .context_tokens import NativeTokenCounter
-        from .field_codec import FieldCodec
-        from .native_turn_context import NativeContextData
-        from .runtime import RuntimeConnection, socket_path
-        from .turn_context import NextContextTurn
+        from .importing import ImportedSessionMetadata
 
+        if self.imported:
+            if self.turn is not None or self.diff:
+                raise ValueError("Imported source references are not recorded native turns")
+            owner = ctx.registry.require(self.thread)
+            return {"scope": "historical-imported-instructions; not current or recorded native context",
+                    "sources": ImportedSessionMetadata.sources_for_owner(ctx.registry, owner)}
         if self.turn is not None or self.diff:
             manifests = ctx.bus.log.context_manifests(self.thread, ctx.registry)
             selected = tuple(
@@ -1042,6 +1094,14 @@ class ContextCliCommand(CliCommand):
                 return selected[-1].changed_from_history(manifests)
             return {"manifests": selected,
                     "text_recorded": all(manifest.public_text_recorded for manifest in selected)}
+        import asyncio
+        from .private_nk_entrypoint import PrivateNkLaunch
+        from .context_tokens import NativeTokenCounter
+        from .field_codec import FieldCodec
+        from .native_turn_context import NativeContextData
+        from .runtime import RuntimeConnection, socket_path
+        from .turn_context import NextContextTurn
+
         owner = ctx.registry.require(self.thread)
         launch = PrivateNkLaunch.from_environment(
             ctx.root, ctx.owners.restart_environment(os.environ)
@@ -1070,6 +1130,11 @@ class ContextCliCommand(CliCommand):
             "native_manifest": native_context.segments,
             "manifest": context.manifest(counts.counts, counter=counts.counter),
             "native_provider_context": native_context.render().provider,
+            "native_source_spans": [
+                {"segment": position, "sha256": segment.measured_manifest().sha256,
+                 "spans": FieldCodec.encode(segment.source_ranges())}
+                for position, segment in enumerate(native.segments)
+            ],
             "segments": [
                 dict(
                     kind=type(segment),

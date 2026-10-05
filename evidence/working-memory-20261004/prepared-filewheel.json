@@ -1,0 +1,15 @@
+{
+  "source": "e1d15072bf451a67eb213d1ce9242691fec3cfc4",
+  "wheel": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-w6-filewheels-e1d15072/agent_comms-0.1.0-py3-none-any.whl",
+  "sha256": "800b9b0ced5cbd668a26c552434ee33ac7e23b531491eaa230bba4db834640b1",
+  "bytes": 900668,
+  "qualified": "Git/filewheel byte identity only; not installed or App",
+  "native_manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+  "purpose": "prepared only; parent C4-654 loan active, W6 future explicit grant required",
+  "installations": 0,
+  "provider_calls": 0,
+  "new_environments": 0,
+  "asset_count": 355,
+  "inventory": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-w6-filewheels-e1d15072/source-proof.json",
+  "inventory_sha256": "540ca3d862a0faa4d60d5a950ed7079551a48030798c0f1ce97a967e6fa2b4f2"
+}

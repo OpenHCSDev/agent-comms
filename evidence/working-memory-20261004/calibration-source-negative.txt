@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "<stdin>", line 20, in <module>
+  File "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/working_memory_disclosure.py", line 61, in capture
+    return cls(policy.require_text(span.public_text(segment)), type(segment),
+               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/working_memory_disclosure.py", line 21, in require_text
+    raise ValueError("This original segment does not permit third-party disclosure")
+ValueError: This original segment does not permit third-party disclosure

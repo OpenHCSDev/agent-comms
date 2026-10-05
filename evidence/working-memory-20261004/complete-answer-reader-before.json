@@ -1,0 +1,361 @@
+{
+  "head": "b8448ffa8f7e1ae6cec15e2bc1eb9c084e28db27",
+  "parsed": 319,
+  "omissions": [],
+  "sites": [
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 44,
+      "node": "FunctionDef",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 39,
+      "node": "Name",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 77,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 41,
+      "node": "Name",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 41,
+      "node": "Name",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 50,
+      "node": "Attribute",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 46,
+      "node": "Name",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 49,
+      "node": "Name",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 46,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/private_path.py",
+      "line": 106,
+      "node": "FunctionDef",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 241,
+      "node": "Name",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 241,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 242,
+      "node": "Name",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 271,
+      "node": "Name",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 271,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 272,
+      "node": "Name",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway_client.py",
+      "line": 110,
+      "node": "Name",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway_client.py",
+      "line": 110,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway_client.py",
+      "line": 112,
+      "node": "Name",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/retained_task_facts.py",
+      "line": 335,
+      "node": "Name",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/retained_task_facts.py",
+      "line": 341,
+      "node": "Name",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/retained_task_facts.py",
+      "line": 343,
+      "node": "Name",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/retained_task_facts.py",
+      "line": 344,
+      "node": "Name",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 172,
+      "node": "Name",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 172,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 341,
+      "node": "Name",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 174,
+      "node": "Name",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 341,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 342,
+      "node": "Name",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 420,
+      "node": "ClassDef",
+      "name": "ContextAnnotationsRuntimeRequest"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 427,
+      "node": "Attribute",
+      "name": "for_segment"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 440,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 440,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 442,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 302,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 7,
+      "node": "alias",
+      "name": "KindQuestion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 19,
+      "node": "FunctionDef",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 45,
+      "node": "FunctionDef",
+      "name": "for_segment"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 25,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 47,
+      "node": "Name",
+      "name": "KindQuestion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 61,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 20,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 41,
+      "node": "Name",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 94,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 41,
+      "node": "Attribute",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 57,
+      "node": "Attribute",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 40,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 42,
+      "node": "Name",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 55,
+      "node": "Attribute",
+      "name": "address"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 75,
+      "node": "FunctionDef",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 116,
+      "node": "FunctionDef",
+      "name": "working_memory_section"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 140,
+      "node": "FunctionDef",
+      "name": "working_memory_section"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 141,
+      "node": "Attribute",
+      "name": "working_memory_section"
+    },
+    {
+      "file": "src/agent_comms/working_memory_questions.py",
+      "line": 121,
+      "node": "ClassDef",
+      "name": "KindQuestion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_questions.py",
+      "line": 117,
+      "node": "FunctionDef",
+      "name": "working_memory_section"
+    },
+    {
+      "file": "src/agent_comms/working_memory_questions.py",
+      "line": 126,
+      "node": "FunctionDef",
+      "name": "working_memory_section"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 16,
+      "node": "alias",
+      "name": "KindQuestion"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 61,
+      "node": "Attribute",
+      "name": "effective"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 84,
+      "node": "Name",
+      "name": "KindQuestion"
+    }
+  ]
+}

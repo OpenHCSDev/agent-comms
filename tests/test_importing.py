@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import stat
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,105 @@ from agent_comms import ImportFormat, ImportLimits
 from agent_comms.cli import main
 from agent_comms.comms import wire
 from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.field_codec import FieldCodec
+from agent_comms.importing import ImportReceipt, ImportedSessionMetadata
+from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
+from agent_comms.turn_context import CodexRolloutProvenance
+
+
+def test_codex_instructions_are_authenticated_historical_references_not_current_messages(tmp_path, capsys):
+    source = tmp_path / "historical.jsonl"
+    instructions = [
+        {"type": "message", "role": "system", "content": "Historical base π.\n"},
+        {"type": "message", "role": "developer", "content": [
+            {"type": "input_text", "text": "Historical developer λ.\n"}]},
+    ]
+    records = [{"type": "session_meta", "payload": {"id": "original", "cwd": str(tmp_path)}},
+               {"type": "compacted", "payload": {"message": "Original summary",
+                 "replacement_history": instructions + [
+                     {"type": "message", "role": "user", "content": "Original question"}],
+                 "guardian_history": [{"type": "message", "role": "developer",
+                                       "content": "Private guardian wording"}]}},
+               {"type": "response_item", "payload": {
+                   "type": "message", "role": "assistant", "content": "Original answer"}}]
+    source.write_text("".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records))
+    original = source.read_bytes()
+    comms = wire(tmp_path / "wire")
+    receipt = comms.threads.import_thread(source, ImportFormat.CODEX, name="historical")
+    assert source.read_bytes() == original
+    refs = receipt.historical_instructions
+    assert all(isinstance(ref, CodexRolloutProvenance) for ref in refs)
+    assert tuple(ref.public_text(comms) for ref in refs) == (
+        "Historical base π.\n", "Historical developer λ.\n")
+    assert FieldCodec.decode(ImportReceipt, receipt.to_wire()) == receipt
+    saved = [json.loads(line) for line in Path(receipt.session_file).read_text().splitlines()]
+    metadata = next(record["data"] for record in saved if record["type"] == "custom")
+    assert FieldCodec.decode(tuple[CodexRolloutProvenance, ...],
+                             metadata["historical_instructions"]) == refs
+    original_owner = comms.registry.require("historical")
+    assert ImportedSessionMetadata.sources_for_owner(comms.registry, original_owner) == refs
+    entry = NativeEntry.from_wire(saved[1])
+    assert isinstance(entry, ImportedMetadataEntry)
+    assert entry.to_wire() == saved[1]
+    assert ImportedSessionMetadata.public_source_text(
+        comms.registry, original_owner, refs[1], comms).text == "Historical developer λ.\n"
+    with pytest.raises(ValueError, match="outside the original imported snapshot"):
+        ImportedSessionMetadata.public_source_text(
+            comms.registry, original_owner, replace(refs[1], instruction=999), comms)
+    with pytest.raises(ValueError, match="incarnation changed"):
+        ImportedSessionMetadata.sources_for_owner(
+            comms.registry, replace(original_owner, created_at=original_owner.created_at + 1))
+    with pytest.raises(ValueError, match="selected session changed"):
+        ImportedSessionMetadata.sources_for_owner(
+            comms.registry, replace(original_owner, session_file=str(tmp_path / "other.jsonl")))
+    assert main(["--root", str(comms.root), "context", "historical", "--imported"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert FieldCodec.decode(tuple[CodexRolloutProvenance, ...], result["sources"]) == refs
+    assert result["scope"].startswith("historical-imported-instructions")
+    # Native configuration records can precede the same original import metadata;
+    # conversation remains outside this prefix-only metadata read.
+    session_path = Path(receipt.session_file)
+    saved.insert(1, {"type": "model_change", "id": "native-config",
+                     "provider": "authored", "modelId": "authored"})
+    session_path.write_text("".join(json.dumps(record) + "\n" for record in saved)
+                            + "not part of the metadata prefix\n")
+    assert ImportedSessionMetadata.sources_for_owner(comms.registry, original_owner) == refs
+    messages = json.dumps([record for record in saved if record["type"] == "message"], ensure_ascii=False)
+    assert "Historical base π." not in messages and "Historical developer λ." not in messages
+    assert "Private guardian wording" not in Path(receipt.session_file).read_text()
+    assert "Original question" in messages and "Original answer" in messages
+    # Appending future turns preserves the original exact record reference.
+    with source.open("ab") as output:
+        output.write(b'{"type":"future","payload":{}}\n')
+    assert refs[1].public_text(comms) == "Historical developer λ.\n"
+    source.write_bytes(source.read_bytes().replace("developer λ".encode(), "developer ψ".encode()))
+    with pytest.raises(ValueError, match="changed or is unavailable"):
+        refs[1].public_text(comms)
+
+
+def test_codex_historical_membership_comes_from_selected_checkpoint_not_prior_request_probe(tmp_path):
+    source = tmp_path / "selected.jsonl"
+    records = [
+        {"type": "session_meta", "payload": {"id": "original", "cwd": str(tmp_path)}},
+        {"type": "response_item", "payload": {"type": "message", "role": "user", "content": "Prior question"}},
+        {"type": "response_item", "payload": {"type": "message", "role": "developer", "content": "Old cut only"}},
+        {"type": "compacted", "payload": {"message": "Selected summary", "replacement_history": [
+            {"type": "message", "role": "developer", "content": "Selected historical wording"}]}},
+    ]
+    source.write_text("".join(json.dumps(record) + "\n" for record in records))
+    snapshot = ImportFormat.CODEX.read(source, ImportLimits(), "original")
+    assert snapshot.latest_request == "Prior question"
+    assert tuple(ref.public_text(None) for ref in snapshot.historical_instructions) == (
+        "Selected historical wording",)
+
+
+def test_codex_role_members_do_not_become_item_envelopes():
+    from agent_comms.import_records import CodexItem, IgnoredCodexItem
+
+    assert isinstance(CodexItem.from_wire({"type": "developer", "role": "developer",
+                                          "content": "Not a message envelope"}), IgnoredCodexItem)
+    assert isinstance(CodexItem.from_wire({"type": "message", "role": "guardian",
+                                          "content": "Unknown role"}), IgnoredCodexItem)
 
 
 def opencode_export(path, project):

@@ -22,6 +22,8 @@ from .field_codec import FieldCodec
 from .goal_actions import GoalAction
 from .thread_presentation import LiveThreadOwnerBinding
 from .turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn
+from .working_memory_labels import ClassifierVersion, ModelLabel
+from .working_memory_questions import SpanAnswer
 
 if TYPE_CHECKING:
     from .runtime import RuntimeServer, SocketClient
@@ -399,9 +401,12 @@ class ContextReferenceRuntimeRequest(RecordedContextRuntimeRequest):
 class ContextRecordedSegmentRuntimeRequest(RecordedContextRuntimeRequest):
     contributors: tuple[int, ...] = ()
 
-    async def result(self, ctx):
+    async def selected_segment(self, ctx):
         manifest = await self.manifest(ctx)
-        segment = manifest.selected_segment(self.segment, self.contributors)
+        return manifest.selected_segment(self.segment, self.contributors)
+
+    async def result(self, ctx):
+        segment = await self.selected_segment(ctx)
         agent = ctx.server.agent
         owner = await Coordination.run_worker(partial(agent._comms.registry.require, ctx.name))
 
@@ -410,3 +415,35 @@ class ContextRecordedSegmentRuntimeRequest(RecordedContextRuntimeRequest):
 
         text = await segment.public_text(read_reference)
         return FieldCodec.encode(ContextSourceText(segment.public_description(), text))
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContextAnnotationsRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
+    classifier: ClassifierVersion
+
+    async def result(self, ctx):
+        from .working_memory_annotations import WorkingMemoryAnnotations
+
+        segment = await self.selected_segment(ctx)
+        labels = await Coordination.run_worker(partial(WorkingMemoryAnnotations.for_segment,
+            ctx.server.agent._comms.root / "coordination.sqlite3",
+            segment, self.classifier))
+        return FieldCodec.encode(labels)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContextAnnotationCorrectionRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
+    label: ModelLabel
+    answer: type[SpanAnswer]
+    worktree: str
+
+    async def result(self, ctx):
+        from .cli_commands import CorrectAnnotationCliCommand
+
+        segment = await self.selected_segment(ctx)
+        if not segment.contains_span(self.label.span):
+            raise ValueError("Correction belongs to another original context source")
+        request = CorrectAnnotationCliCommand(
+            label=self.label, answer=self.answer, worktree=self.worktree)
+        corrected = await Coordination.run_worker(partial(request.apply, ctx.server.agent._comms))
+        return FieldCodec.encode(corrected)

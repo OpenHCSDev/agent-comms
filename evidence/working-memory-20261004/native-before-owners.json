@@ -1,0 +1,356 @@
+{
+  "root": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent/dist/core/",
+  "modules": 5,
+  "omissions": [],
+  "sites": [
+    {
+      "file": "agent-session.js",
+      "line": 40,
+      "type": "Identifier",
+      "name": "buildSystemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 40,
+      "type": "Identifier",
+      "name": "buildSystemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 143,
+      "type": "Identifier",
+      "name": "_baseSystemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 458,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 458,
+      "type": "Identifier",
+      "name": "_baseSystemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 827,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 828,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 874,
+      "type": "Identifier",
+      "name": "_baseSystemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 874,
+      "type": "Identifier",
+      "name": "_rebuildSystemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 875,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 875,
+      "type": "Identifier",
+      "name": "_baseSystemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 941,
+      "type": "Identifier",
+      "name": "_rebuildSystemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 957,
+      "type": "Identifier",
+      "name": "appendSystemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 965,
+      "type": "Identifier",
+      "name": "appendSystemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 965,
+      "type": "Identifier",
+      "name": "appendSystemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 970,
+      "type": "Identifier",
+      "name": "buildSystemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 1211,
+      "type": "Identifier",
+      "name": "_baseSystemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 1227,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 1228,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 1229,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 1229,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 1234,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 1234,
+      "type": "Identifier",
+      "name": "_baseSystemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 2296,
+      "type": "Identifier",
+      "name": "_baseSystemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 2296,
+      "type": "Identifier",
+      "name": "_rebuildSystemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 2297,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 2297,
+      "type": "Identifier",
+      "name": "_baseSystemPrompt"
+    },
+    {
+      "file": "agent-session.js",
+      "line": 2441,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "resource-loader.js",
+      "line": 17,
+      "type": "Identifier",
+      "name": "resolvePromptInput"
+    },
+    {
+      "file": "resource-loader.js",
+      "line": 143,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "resource-loader.js",
+      "line": 145,
+      "type": "Identifier",
+      "name": "appendSystemPrompt"
+    },
+    {
+      "file": "resource-loader.js",
+      "line": 175,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "resource-loader.js",
+      "line": 176,
+      "type": "Identifier",
+      "name": "appendSystemPrompt"
+    },
+    {
+      "file": "resource-loader.js",
+      "line": 192,
+      "type": "Identifier",
+      "name": "appendSystemPrompt"
+    },
+    {
+      "file": "resource-loader.js",
+      "line": 219,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "resource-loader.js",
+      "line": 225,
+      "type": "Identifier",
+      "name": "appendSystemPrompt"
+    },
+    {
+      "file": "resource-loader.js",
+      "line": 382,
+      "type": "Identifier",
+      "name": "resolvePromptInput"
+    },
+    {
+      "file": "resource-loader.js",
+      "line": 383,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "resource-loader.js",
+      "line": 392,
+      "type": "Identifier",
+      "name": "resolvePromptInput"
+    },
+    {
+      "file": "resource-loader.js",
+      "line": 394,
+      "type": "Identifier",
+      "name": "appendSystemPrompt"
+    },
+    {
+      "file": "system-prompt.js",
+      "line": 5,
+      "type": "Identifier",
+      "name": "formatSkillsForPrompt"
+    },
+    {
+      "file": "system-prompt.js",
+      "line": 5,
+      "type": "Identifier",
+      "name": "formatSkillsForPrompt"
+    },
+    {
+      "file": "system-prompt.js",
+      "line": 7,
+      "type": "Identifier",
+      "name": "buildSystemPrompt"
+    },
+    {
+      "file": "system-prompt.js",
+      "line": 8,
+      "type": "Identifier",
+      "name": "appendSystemPrompt"
+    },
+    {
+      "file": "system-prompt.js",
+      "line": 8,
+      "type": "Identifier",
+      "name": "appendSystemPrompt"
+    },
+    {
+      "file": "system-prompt.js",
+      "line": 10,
+      "type": "Identifier",
+      "name": "appendSystemPrompt"
+    },
+    {
+      "file": "system-prompt.js",
+      "line": 10,
+      "type": "Identifier",
+      "name": "appendSystemPrompt"
+    },
+    {
+      "file": "system-prompt.js",
+      "line": 31,
+      "type": "Identifier",
+      "name": "formatSkillsForPrompt"
+    },
+    {
+      "file": "system-prompt.js",
+      "line": 113,
+      "type": "Identifier",
+      "name": "formatSkillsForPrompt"
+    },
+    {
+      "file": "skills.js",
+      "line": 275,
+      "type": "Identifier",
+      "name": "formatSkillsForPrompt"
+    },
+    {
+      "file": "turn-context.js",
+      "line": 131,
+      "type": "Identifier",
+      "name": "SystemLayerSegment"
+    },
+    {
+      "file": "turn-context.js",
+      "line": 134,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "turn-context.js",
+      "line": 219,
+      "type": "Identifier",
+      "name": "SystemLayerSegment"
+    },
+    {
+      "file": "turn-context.js",
+      "line": 219,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "turn-context.js",
+      "line": 236,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "turn-context.js",
+      "line": 236,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "turn-context.js",
+      "line": 293,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    },
+    {
+      "file": "turn-context.js",
+      "line": 293,
+      "type": "Identifier",
+      "name": "systemPrompt"
+    }
+  ],
+  "limits": "Acorn lexical references do not prove dynamic resolution. Captured immutable086 source; source edits preceded native AST collection, semantic seams were read before editing."
+}

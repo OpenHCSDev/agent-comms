@@ -1,0 +1,44 @@
+{
+  "state": "Futurecurrent-source schema10 target operands ONLY; no target/donorREAD grant/access/reservation",
+  "target_repo": "/home/ts/wt/comms-field-codec-closure-20260928",
+  "target_source": "3aacd708fb9c699cc80c6b864e0ae8cf9ccff7f8",
+  "target_main": "69346035",
+  "target_wheel": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-historical-main3aac-source/agent_comms-0.1.0-py3-none-any.whl",
+  "target_wheel_sha256": "0ed358e9a1d845f3fdceca138d0f2fa02824ac61161b3d8ba9a5e32b1cc3b6e3",
+  "target_wheel_bytes": 901585,
+  "target_assets": 355,
+  "target_inventory": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-historical-main3aac-source/source-proof.json",
+  "target_inventory_sha256": "8d0205a430a006157f7616d7c88da838ee7f663256a49aa14e49eb71effd83e7",
+  "all_Git_local_ZIP_equal_noextra": true,
+  "superseded_target": {
+    "Core": "a59ea3901c120988f2f16812b80479478c0569eb",
+    "wheel": "ab640f006531a4b45515d1c6319217c2ed010532e37c20d42ac7101b9017b072",
+    "relation": "Originalaccepted keeper retained; newmain665/666 notbyteequal. Exactly3 supportedPython declaration modules changed; SQLitedeclaration/DDL/markerfamily unchanged bysourcecomparison."
+  },
+  "schema_source": "Existing CoordinatorTable/SchemaMeta owns schema10; NativeSchemaDeclaration/NativeSchemaCarryPlan + RuntimeInstallation own stoppedcarry; ordinaryreaders strict/read-only. No reader migration/guessedDDL/version.",
+  "Mendel_control_proposal_git": {
+    "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+    "revision": "9d6e2c956f490a337ae43f9f55f6950d1e7bb3f9",
+    "path": "evidence/working-memory-stopped-schema-carry-20261004/PROPOSED-OPERANDS.json",
+    "sha256": "b3afc8496e4dc016179f56ebfd177c338cbd6c7e112a74e697352f4f60c8cf04",
+    "note": "OriginalpublishedGit is authoritative. MendelWT currentlyon supportedPython branch70bc; future toolfile materialization belongsMendel, no peer checkout/edit."
+  },
+  "donor_whole_handback": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/source-donor-whole-handback.json",
+  "donor_whole_handback_sha256": "7f827a066132799f487345cbe54644c6aca1a03af3ad88149665e4f21b17a0b8",
+  "source9_tuple": [
+    9,
+    3,
+    3,
+    6
+  ],
+  "carry_root_only_new_authored_stopped_copy": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/stopped-original9",
+  "future_existing_holder_candidate": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002",
+  "eligibility": "Formerpubliccurrent444 NOT automaticallyreleased. Bohr must nameactualeligiblefloor/archive/ref/importclearance and NEWspecifictargetpackage/readpurpose; PUBLIC334CURRENT447excluded. Do notimport/install/restage beforeactualgrant.",
+  "package_writer": "Einstein sole newCore/Toad filewheel stage/wholefloorhandback, onlyoriginalnormal --no-deps --no-cache installer; no build/native/environment/copy",
+  "carry_operator": "Mendel663 separateREAD/stoppedcopycarry only with explicitmatchingtargetREADbinding + NEWsource9re-declarationREADpurpose; ownresult/childrenjoined, no W6/livecorpus borrowing",
+  "GUI_independent": "HistoricalApp runs oneoriginal90s; sharedcarry onlyifready/explicitbound withoutGUIdelay/extension/secondstage; otherwiseclosewindownormally",
+  "native": "Mendelcarry zeroNative/provider/input/App. GUIuses immutable7a onlyafterNEWSchrenewalreadingactualnewissuedpurpose; nativeproducers/pin unchanged",
+  "historical_proposal": "/home/ts/wt/toad-regression-widget-cost-20261001/evidence/working-memory-view-20261004/historical-current-main-successor-operands.json",
+  "historical_proposal_sha256": "94be0b0061f9b038ec444ff6b19829397c6ce49bd3cb5a68e1771390345e1470",
+  "no_actual_root_or_package_operation": true
+}

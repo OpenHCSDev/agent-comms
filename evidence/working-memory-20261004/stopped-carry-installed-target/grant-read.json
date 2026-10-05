@@ -1,0 +1,10 @@
+{
+  "grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/style22-Einstein-Mendel663-Core-only-stopped-carry-issued-grant.json",
+  "sha256": "ab31680dffc051b2eafb251ae3f5d5cf1183716d53199a1f670a65d00c757b86",
+  "source_grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel663-carry-only-source-redeclaration-READ-issued-grant.json",
+  "source_grant_sha256": "d7f12b1c1f092c6123abaf2880ef87c37e1f863f705e26c3000c2574ac53415c",
+  "preimage": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/style22-actual444-after-public447-preimage.json",
+  "members_verified": 1469,
+  "protected": 519,
+  "scope": "Core-only stage; carry held pending proof/source acknowledgment; no native or App operation"
+}

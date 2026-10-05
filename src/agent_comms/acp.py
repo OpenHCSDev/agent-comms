@@ -127,6 +127,10 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         # Enabled for verified native owners by default. Explicit construction
         # may disable it; model/tool content cannot change this owner policy.
         self._runtime = RuntimeServer(self)
+        from .working_memory_policy import AnnotationPolicy
+        from .working_memory_worker import AnnotationWorker
+
+        self.annotations = AnnotationWorker(comms, self._runtime, self, AnnotationPolicy.configured())
         self.cursors = CursorPublication(comms, self._runtime, private_nk_wire_root_id)
         self.turns = TurnRunner(
             comms,
@@ -444,6 +448,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             retirement.push_async_callback(self.turns.close)
             retirement.push_async_callback(self.sessions.close_proxies)
             retirement.push_async_callback(self.inputs.close)
+            retirement.push_async_callback(self.annotations.close)
 
     async def _emit_text(
         self, session_id: str, text: str, client: Any = None, route: MessageRoute | None = None

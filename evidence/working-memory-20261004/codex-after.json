@@ -1,0 +1,670 @@
+{
+  "source": "68aaeaa5e2bd9c584fdde6a0dd93131365a6e4a5",
+  "main": "62b0f706891ad4517fa2fbe466902ebec15823d4",
+  "modules": 324,
+  "omissions": [],
+  "sites": [
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 103,
+      "node": "ClassDef",
+      "name": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 126,
+      "node": "ClassDef",
+      "name": "MessageCodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 157,
+      "node": "ClassDef",
+      "name": "HistoricalInstructionCodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 215,
+      "node": "ClassDef",
+      "name": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 354,
+      "node": "ClassDef",
+      "name": "CodexImportScan"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 111,
+      "node": "FunctionDef",
+      "name": "historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 116,
+      "node": "Name",
+      "name": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 126,
+      "node": "Name",
+      "name": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 157,
+      "node": "Name",
+      "name": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 171,
+      "node": "FunctionDef",
+      "name": "historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 176,
+      "node": "Name",
+      "name": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 197,
+      "node": "Name",
+      "name": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 239,
+      "node": "FunctionDef",
+      "name": "historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 242,
+      "node": "FunctionDef",
+      "name": "instruction_sources"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 250,
+      "node": "Name",
+      "name": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 257,
+      "node": "Name",
+      "name": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 271,
+      "node": "Name",
+      "name": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 288,
+      "node": "Name",
+      "name": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 309,
+      "node": "FunctionDef",
+      "name": "historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 330,
+      "node": "Name",
+      "name": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 349,
+      "node": "FunctionDef",
+      "name": "historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 375,
+      "node": "FunctionDef",
+      "name": "historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 128,
+      "node": "Name",
+      "name": "ImportRole"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 331,
+      "node": "Name",
+      "name": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 361,
+      "node": "Name",
+      "name": "instruction_sources"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 361,
+      "node": "Name",
+      "name": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 290,
+      "node": "Name",
+      "name": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 350,
+      "node": "Attribute",
+      "name": "historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 87,
+      "node": "Name",
+      "name": "ImportRole"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 100,
+      "node": "Name",
+      "name": "ImportRole"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 149,
+      "node": "Name",
+      "name": "HistoricalInstructionCodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 150,
+      "node": "Name",
+      "name": "ImportRole"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 189,
+      "node": "Name",
+      "name": "ImportRole"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 208,
+      "node": "Name",
+      "name": "ImportRole"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 371,
+      "node": "Attribute",
+      "name": "instruction_sources"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 371,
+      "node": "Attribute",
+      "name": "instruction_sources"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 376,
+      "node": "Attribute",
+      "name": "instruction_sources"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 244,
+      "node": "Name",
+      "name": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 335,
+      "node": "Name",
+      "name": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 367,
+      "node": "Attribute",
+      "name": "instruction_sources"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 367,
+      "node": "Attribute",
+      "name": "instruction_sources"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 311,
+      "node": "Attribute",
+      "name": "historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 246,
+      "node": "Attribute",
+      "name": "historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/import_records.py",
+      "line": 298,
+      "node": "Name",
+      "name": "CodexItem"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 70,
+      "node": "ClassDef",
+      "name": "ImportRole"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 119,
+      "node": "ClassDef",
+      "name": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 497,
+      "node": "ClassDef",
+      "name": "CodexImporter"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 540,
+      "node": "ClassDef",
+      "name": "ImportReceipt"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 66,
+      "node": "Name",
+      "name": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 112,
+      "node": "Name",
+      "name": "ImportRole"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 130,
+      "node": "Name",
+      "name": "historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 260,
+      "node": "Name",
+      "name": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 288,
+      "node": "Name",
+      "name": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 293,
+      "node": "Name",
+      "name": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 336,
+      "node": "Name",
+      "name": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 498,
+      "node": "Name",
+      "name": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 549,
+      "node": "Name",
+      "name": "historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 212,
+      "node": "Name",
+      "name": "ImportRole"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 528,
+      "node": "Attribute",
+      "name": "instruction_sources"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 130,
+      "node": "Name",
+      "name": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 235,
+      "node": "Name",
+      "name": "ImportRole"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 263,
+      "node": "Name",
+      "name": "ImportSnapshot"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 274,
+      "node": "Name",
+      "name": "historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 463,
+      "node": "Name",
+      "name": "ImportRole"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 502,
+      "node": "Name",
+      "name": "CodexImportScan"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 549,
+      "node": "Name",
+      "name": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 240,
+      "node": "Name",
+      "name": "ImportRole"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 535,
+      "node": "Attribute",
+      "name": "historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 259,
+      "node": "Name",
+      "name": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 331,
+      "node": "Name",
+      "name": "ImportRole"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 468,
+      "node": "Name",
+      "name": "ImportRole"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 166,
+      "node": "Attribute",
+      "name": "historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 179,
+      "node": "Name",
+      "name": "ImportRole"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 197,
+      "node": "Name",
+      "name": "ImportRole"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 515,
+      "node": "Name",
+      "name": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 508,
+      "node": "Name",
+      "name": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/importing.py",
+      "line": 524,
+      "node": "Name",
+      "name": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/input_origin.py",
+      "line": 44,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 73,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 362,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 390,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 211,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 535,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 544,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 119,
+      "node": "Name",
+      "name": "ImportReceipt"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 160,
+      "node": "Name",
+      "name": "ImportReceipt"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 169,
+      "node": "Attribute",
+      "name": "historical_instructions"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 28,
+      "node": "ClassDef",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 73,
+      "node": "ClassDef",
+      "name": "CodexRolloutProvenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 58,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 73,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 110,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 119,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 131,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 144,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 158,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 174,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 184,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 395,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 881,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 950,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 219,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 335,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 395,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 410,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 881,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 896,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 950,
+      "node": "Name",
+      "name": "Provenance"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 99,
+      "node": "Name",
+      "name": "CodexRecord"
+    },
+    {
+      "file": "src/agent_comms/turn_context.py",
+      "line": 101,
+      "node": "Attribute",
+      "name": "historical_instructions"
+    }
+  ],
+  "native_manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+  "limits": "Original NRA Package lexical source mapping. Imported historical source references do not establish a recorded SDK request or current instructions; imported Explorer membership remains unfinished."
+}

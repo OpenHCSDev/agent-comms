@@ -26,16 +26,18 @@ class NativeContextManifestData(PiResponseData):
         return ContextManifest(thread, turn, tuple(segment.capture_public(self.values)
             for segment in self.segments), self.counter, request_id=self.request_id)
 
-    async def record(self, log, thread, lease) -> None:
+    async def record(self, log, thread, lease) -> ContextManifest:
         """Publish the original SDK observation under its leased owner turn."""
         from .coordinator import Coordination
         from .thread_identity import TurnId
         from .turn_context import RecordedContextTurn
 
         turn = RecordedContextTurn(TurnId(lease.turn_id), lease.identity)
+        manifest = self.for_turn(thread.incarnation, turn)
         await Coordination.run_worker(
-            partial(log.record_context, self.for_turn(thread.incarnation, turn))
+            partial(log.record_context, manifest)
         )
+        return manifest
 
 
 @dataclass(frozen=True)

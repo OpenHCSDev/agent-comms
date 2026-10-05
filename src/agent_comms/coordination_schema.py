@@ -14,7 +14,7 @@ from agent_comms.typed_table import (
 )
 from agent_comms.wake_policy import WakePolicy
 
-COORDINATION_SCHEMA_VERSION: Final = 9
+COORDINATION_SCHEMA_VERSION: Final = 10
 
 
 COORDINATION_SNAPSHOT_VERSION: Final = 3

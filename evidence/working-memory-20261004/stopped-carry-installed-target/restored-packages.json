@@ -1,0 +1,366 @@
+[
+  {
+    "name": "agent-client-protocol",
+    "version": "0.12.1",
+    "direct_url": null
+  },
+  {
+    "name": "agent-comms",
+    "version": "0.1.0",
+    "direct_url": {
+      "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+      "archive_info": {}
+    }
+  },
+  {
+    "name": "aiohappyeyeballs",
+    "version": "2.7.1",
+    "direct_url": null
+  },
+  {
+    "name": "aiohttp",
+    "version": "3.14.3",
+    "direct_url": null
+  },
+  {
+    "name": "aiohttp-jinja2",
+    "version": "1.6",
+    "direct_url": null
+  },
+  {
+    "name": "aiosignal",
+    "version": "1.4.0",
+    "direct_url": null
+  },
+  {
+    "name": "aiosqlite",
+    "version": "0.22.1",
+    "direct_url": null
+  },
+  {
+    "name": "annotated-types",
+    "version": "0.8.0",
+    "direct_url": null
+  },
+  {
+    "name": "anyio",
+    "version": "4.14.2",
+    "direct_url": null
+  },
+  {
+    "name": "attrs",
+    "version": "26.1.0",
+    "direct_url": null
+  },
+  {
+    "name": "bashlex",
+    "version": "0.18",
+    "direct_url": null
+  },
+  {
+    "name": "batrachian-toad",
+    "version": "0.6.20",
+    "direct_url": {
+      "url": "file:///home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/transcript442-checkpoint-source-lifetime-20261004/toad-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "archive_info": {}
+    }
+  },
+  {
+    "name": "certifi",
+    "version": "2026.7.22",
+    "direct_url": null
+  },
+  {
+    "name": "click",
+    "version": "8.4.0",
+    "direct_url": null
+  },
+  {
+    "name": "format-currency",
+    "version": "0.0.10",
+    "direct_url": null
+  },
+  {
+    "name": "frozenlist",
+    "version": "1.8.0",
+    "direct_url": null
+  },
+  {
+    "name": "h11",
+    "version": "0.16.0",
+    "direct_url": null
+  },
+  {
+    "name": "httpcore",
+    "version": "1.0.9",
+    "direct_url": null
+  },
+  {
+    "name": "httpx",
+    "version": "0.28.1",
+    "direct_url": null
+  },
+  {
+    "name": "idna",
+    "version": "3.20",
+    "direct_url": null
+  },
+  {
+    "name": "jeepney",
+    "version": "0.9.0",
+    "direct_url": null
+  },
+  {
+    "name": "Jinja2",
+    "version": "3.1.6",
+    "direct_url": null
+  },
+  {
+    "name": "linkify-it-py",
+    "version": "2.2.0",
+    "direct_url": null
+  },
+  {
+    "name": "loguru",
+    "version": "0.6.0",
+    "direct_url": null
+  },
+  {
+    "name": "markdown-it-py",
+    "version": "4.2.0",
+    "direct_url": null
+  },
+  {
+    "name": "MarkupSafe",
+    "version": "3.0.3",
+    "direct_url": null
+  },
+  {
+    "name": "mdit-py-plugins",
+    "version": "0.6.1",
+    "direct_url": null
+  },
+  {
+    "name": "mdurl",
+    "version": "0.1.2",
+    "direct_url": null
+  },
+  {
+    "name": "metaclass-registry",
+    "version": "0.2.1",
+    "direct_url": null
+  },
+  {
+    "name": "multidict",
+    "version": "6.9.1",
+    "direct_url": null
+  },
+  {
+    "name": "nominal-refactor-audit",
+    "version": "0.1.0",
+    "direct_url": {
+      "url": "file:///home/ts/wt/nra-skill-publish-20261002/.artifacts/family-flattened-collector-20261004/wheels/nominal_refactor_audit-0.1.0-py3-none-any.whl",
+      "archive_info": {}
+    }
+  },
+  {
+    "name": "notify_py",
+    "version": "0.3.43",
+    "direct_url": null
+  },
+  {
+    "name": "packaging",
+    "version": "26.2",
+    "direct_url": null
+  },
+  {
+    "name": "pathspec",
+    "version": "1.1.1",
+    "direct_url": null
+  },
+  {
+    "name": "platformdirs",
+    "version": "4.9.6",
+    "direct_url": null
+  },
+  {
+    "name": "propcache",
+    "version": "0.5.4",
+    "direct_url": null
+  },
+  {
+    "name": "psutil",
+    "version": "7.2.2",
+    "direct_url": null
+  },
+  {
+    "name": "pydantic",
+    "version": "2.13.5",
+    "direct_url": null
+  },
+  {
+    "name": "pydantic_core",
+    "version": "2.46.5",
+    "direct_url": null
+  },
+  {
+    "name": "Pygments",
+    "version": "2.21.0",
+    "direct_url": null
+  },
+  {
+    "name": "pyperclip",
+    "version": "1.11.0",
+    "direct_url": null
+  },
+  {
+    "name": "rich",
+    "version": "15.0.0",
+    "direct_url": null
+  },
+  {
+    "name": "setproctitle",
+    "version": "1.3.7",
+    "direct_url": null
+  },
+  {
+    "name": "textual",
+    "version": "8.2.8",
+    "direct_url": {
+      "url": "file:///home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native59-filewheel-20261004/textual-8.2.8-py3-none-any.whl",
+      "archive_info": {}
+    }
+  },
+  {
+    "name": "textual-diff-view",
+    "version": "0.1.5",
+    "direct_url": {
+      "url": "https://github.com/OpenHCSDev/textual-diff-view.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+        "requested_revision": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9"
+      }
+    }
+  },
+  {
+    "name": "textual-serve",
+    "version": "1.1.3",
+    "direct_url": null
+  },
+  {
+    "name": "textual-speedups",
+    "version": "0.2.1",
+    "direct_url": null
+  },
+  {
+    "name": "tree-sitter",
+    "version": "0.26.0",
+    "direct_url": null
+  },
+  {
+    "name": "tree-sitter-bash",
+    "version": "0.25.1",
+    "direct_url": null
+  },
+  {
+    "name": "tree-sitter-css",
+    "version": "0.25.0",
+    "direct_url": null
+  },
+  {
+    "name": "tree-sitter-go",
+    "version": "0.25.0",
+    "direct_url": null
+  },
+  {
+    "name": "tree-sitter-html",
+    "version": "0.23.2",
+    "direct_url": null
+  },
+  {
+    "name": "tree-sitter-java",
+    "version": "0.23.5",
+    "direct_url": null
+  },
+  {
+    "name": "tree-sitter-javascript",
+    "version": "0.25.0",
+    "direct_url": null
+  },
+  {
+    "name": "tree-sitter-json",
+    "version": "0.24.8",
+    "direct_url": null
+  },
+  {
+    "name": "tree-sitter-markdown",
+    "version": "0.5.1",
+    "direct_url": null
+  },
+  {
+    "name": "tree-sitter-python",
+    "version": "0.25.0",
+    "direct_url": null
+  },
+  {
+    "name": "tree-sitter-regex",
+    "version": "0.25.0",
+    "direct_url": null
+  },
+  {
+    "name": "tree-sitter-rust",
+    "version": "0.24.2",
+    "direct_url": null
+  },
+  {
+    "name": "tree-sitter-sql",
+    "version": "0.3.11",
+    "direct_url": null
+  },
+  {
+    "name": "tree-sitter-toml",
+    "version": "0.7.0",
+    "direct_url": null
+  },
+  {
+    "name": "tree-sitter-xml",
+    "version": "0.7.0",
+    "direct_url": null
+  },
+  {
+    "name": "tree-sitter-yaml",
+    "version": "0.7.2",
+    "direct_url": null
+  },
+  {
+    "name": "typeguard",
+    "version": "4.5.2",
+    "direct_url": null
+  },
+  {
+    "name": "typing-inspection",
+    "version": "0.4.4",
+    "direct_url": null
+  },
+  {
+    "name": "typing_extensions",
+    "version": "4.15.0",
+    "direct_url": null
+  },
+  {
+    "name": "watchdog",
+    "version": "6.0.0",
+    "direct_url": null
+  },
+  {
+    "name": "xdg-base-dirs",
+    "version": "6.0.3",
+    "direct_url": null
+  },
+  {
+    "name": "yarl",
+    "version": "1.25.1",
+    "direct_url": null
+  }
+]

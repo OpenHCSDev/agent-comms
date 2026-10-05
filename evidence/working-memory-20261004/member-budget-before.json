@@ -1,0 +1,544 @@
+{
+  "revision": "HEAD",
+  "modules": 319,
+  "omissions": [],
+  "scope": "original declarations, field reads/writes, calls/import uses; lexical AST cannot prove dynamic resolution",
+  "sites": [
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 556,
+      "reference": "per_hour",
+      "context": "Store"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 562,
+      "reference": "self.per_hour",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 14,
+      "declaration": "SpanAnnotationsRow",
+      "bases": [
+        "CoordinatorTable",
+        "TypedTable"
+      ]
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 49,
+      "declaration": "AnnotationRequestsRow",
+      "bases": [
+        "CoordinatorTable",
+        "TypedTable"
+      ]
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 34,
+      "reference": "address",
+      "context": "Store"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 67,
+      "reference": "SpanAnnotationsRow.address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 36,
+      "reference": "address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 36,
+      "reference": "address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 67,
+      "reference": "SpanAnnotationsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 39,
+      "reference": "SpanAnnotationsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/coordinator.py",
+      "line": 71,
+      "reference": "WorkingMemoryAnnotations",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/input_disposition.py",
+      "line": 264,
+      "reference": "reserve",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/messaging.py",
+      "line": 184,
+      "reference": "AnnotationDisclosureGrant",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/messaging.py",
+      "line": 186,
+      "reference": "per_hour",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 46,
+      "reference": "address",
+      "context": "Store"
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 49,
+      "reference": "address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "line": 46,
+      "reference": "PrivateSocketRole.address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 131,
+      "reference": "TurnGoalAccount.reserve",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 279,
+      "reference": "original.reserve",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/owner_lifecycle.py",
+      "line": 386,
+      "reference": "reserve",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/private_send_admission.py",
+      "line": 106,
+      "reference": "stage.reserve",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 241,
+      "reference": "address",
+      "context": "Store"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 241,
+      "reference": "PrivateSocketRole.address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 242,
+      "reference": "address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 271,
+      "reference": "address",
+      "context": "Store"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 271,
+      "reference": "PrivateSocketRole.address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 272,
+      "reference": "address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway_client.py",
+      "line": 110,
+      "reference": "address",
+      "context": "Store"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway_client.py",
+      "line": 110,
+      "reference": "PrivateSocketRole.address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway_client.py",
+      "line": 112,
+      "reference": "address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 172,
+      "reference": "address",
+      "context": "Store"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 172,
+      "reference": "PrivateSocketRole.address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 341,
+      "reference": "address",
+      "context": "Store"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 174,
+      "reference": "address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 341,
+      "reference": "PrivateSocketRole.address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/runtime.py",
+      "line": 342,
+      "reference": "address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 134,
+      "reference": "journal.summaries.reserve",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/selected_request.py",
+      "line": 25,
+      "reference": "PrivateSendAdmission.reserve",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 440,
+      "reference": "self.address",
+      "context": "Store"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 440,
+      "reference": "PrivateSocketRole.address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 442,
+      "reference": "self.address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/selected_turn.py",
+      "line": 299,
+      "reference": "SelectedRequest.reserve",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/selected_turn.py",
+      "line": 230,
+      "reference": "SelectedRequest.reserve",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 629,
+      "declaration": "AnnotationDisclosureGrant",
+      "bases": [
+        "HumanConstraintPin"
+      ]
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 631,
+      "reference": "per_hour",
+      "context": "Store"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 637,
+      "reference": "self.per_hour",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/task_sources.py",
+      "line": 637,
+      "reference": "self.per_hour",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 302,
+      "reference": "self.tool_socket.address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/turn_goal_account.py",
+      "line": 164,
+      "reference": "store.reserve",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/turn_goal_account.py",
+      "line": 115,
+      "reference": "store.reserve",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 18,
+      "declaration": "WorkingMemoryAnnotations",
+      "bases": []
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 35,
+      "reference": "AnnotationRequestsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 23,
+      "reference": "QuestionVersion",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 29,
+      "reference": "self.address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 38,
+      "reference": "self.address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 52,
+      "reference": "AnnotationRequestsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 64,
+      "reference": "AnnotationRequestsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 24,
+      "reference": "SpanAnnotationsRow.address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 36,
+      "reference": "per_hour",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 46,
+      "reference": "per_hour",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 48,
+      "reference": "AnnotationRequestsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 74,
+      "reference": "self.address",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 80,
+      "reference": "SpanAnnotationsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 24,
+      "reference": "SpanAnnotationsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 36,
+      "reference": "per_hour",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 50,
+      "reference": "AnnotationRequestsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 57,
+      "reference": "AnnotationRequestsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 61,
+      "reference": "AnnotationRequestsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 66,
+      "reference": "AnnotationRequestsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 69,
+      "reference": "AnnotationRequestsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 31,
+      "reference": "SpanAnnotationsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 40,
+      "reference": "AnnotationRequestsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 60,
+      "reference": "SpanAnnotationsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 75,
+      "reference": "SpanAnnotationsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_annotations.py",
+      "line": 44,
+      "reference": "AnnotationRequestsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_disclosure.py",
+      "line": 40,
+      "declaration": "DisclosureState",
+      "bases": []
+    },
+    {
+      "file": "src/agent_comms/working_memory_disclosure.py",
+      "line": 42,
+      "reference": "segment_kind",
+      "context": "Store"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 38,
+      "declaration": "QuestionVersion",
+      "bases": []
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 61,
+      "reference": "QuestionVersion",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_labels.py",
+      "line": 134,
+      "reference": "QuestionVersion",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_requests.py",
+      "line": 27,
+      "reference": "QuestionVersion",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_requests.py",
+      "line": 29,
+      "reference": "DisclosureState",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_requests.py",
+      "line": 33,
+      "reference": "QuestionVersion",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 53,
+      "reference": "QuestionVersion",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 62,
+      "reference": "DisclosureState",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 61,
+      "reference": "SpanAnnotationsRow",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 69,
+      "reference": "owner.reserve",
+      "context": "Load"
+    },
+    {
+      "file": "src/agent_comms/working_memory_worker.py",
+      "line": 69,
+      "reference": "grant.per_hour",
+      "context": "Load"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "source": "bd210595422c068a459498bf9ce515b328c312bd",
+  "scope": "Source-only codec, genuine SQLite snapshot and original USER registry; no installed/native attestation",
+  "result": "3 passed in 0.52s",
+  "checks": [
+    "missing store read creates no directory or database",
+    "effective original human correction and calibration roundtrip without database mutation",
+    "file attribution requires original source identity and assembly byte range"
+  ],
+  "setup_negative": "First invocation lacked basetemp parent: 1 passed/2 fixture setup errors; no production failure. Parent directory created before final batch.",
+  "terminal_sha256": "1efbd5fc9da76a71b0acad1451577d9edfe50962077b19e434edf3ce3a299dba",
+  "external_requests": 0,
+  "provider_inputs": 0,
+  "installed_acceptance": false,
+  "original_sessions_touched": false,
+  "owned_children": []
+}

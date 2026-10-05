@@ -1,0 +1,13 @@
+{
+  "scope": "Source-only original codec/SQLite/CLI with controlled local response; not installed/runtime/native/Jev acceptance",
+  "reviewed": 1,
+  "accuracy": 0.0,
+  "question_version": "e9cde65a3b92d49c8d6d40ad5d24da08197f5885d61f2a2393bd73dbe35d8fce",
+  "classifier_pin": "typesafe/jev-1.13",
+  "unreviewed_refused": true,
+  "original_report_roundtrip": true,
+  "cli_declaration_decoded": true,
+  "providers": 0,
+  "external_requests": 0,
+  "fixture": "Explicitly unattributed local system text, zero token measurements; no native attestation claimed"
+}

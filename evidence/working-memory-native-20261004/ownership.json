@@ -1,0 +1,18 @@
+{
+  "producer_head": "fcbd30a1316ba6c1f4e39719591b39535425e946",
+  "producer_files": {
+    "stack/native-turn-context.mjs": "f42b792dea8cb7fd915c1c2fa5c2c7057be96a9dcd04171da7126d856a897417",
+    "stack/native-turn-context.d.ts": "d878289a4cd35eda8e7c49f0ef6925e2238fa4945d3c877ebe9d5f2615301f4a",
+    "stack/patch-native-turn-context.py": "8bfbfba2ae89ecf5f288639bf29ebbe52a99a8e1143557473835f97a80fbe61b"
+  },
+  "canonical_recipe": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/bin/prepare-pi-native",
+  "canonical_recipe_sha256": "5fe0b7c3b60ce0bb00b4025aa4aadd40c1157ac96103fe5420692da7eab6d100",
+  "capture_recipe_sha256": "9d196bcd35a1dc4ed5644f7f9744a8edcea31dce462ce1ed61c3c3fa129279ad",
+  "lifetime": "original608 capture-pins-normalverify; canonical patch order and share/seal retained; oldpin verification occurs only after deriving actual newtree",
+  "assemblies": 1,
+  "donor": "immutable086 readonly resource sharing under original same-fence policy; no bytes or inplace patching",
+  "sdk_acceptance": "Einstein existing native_turn_context_contract authored span/parity extension pending",
+  "provider_calls": 0,
+  "package_holder_changes": false,
+  "public_changes": false
+}

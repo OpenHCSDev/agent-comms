@@ -1,0 +1,206 @@
+{
+  "root": "src/agent_comms",
+  "revision": "HEAD",
+  "parsed_modules": 324,
+  "parse_omissions": [],
+  "limits": "Lexical AST sites and declarations; dynamic dispatch/resource freshness require semantic reading and final application validation",
+  "sites": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 131,
+      "import": "from .working_memory_worker import AnnotationWorker"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 133,
+      "consumer": "AnnotationWorker(comms, self._runtime, self, AnnotationPolicy.configured())"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 32,
+      "import": "from .working_memory_labels import ModelLabel"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 50,
+      "declaration": "ContextAnnotatedUpdate",
+      "bases": [
+        "AgentCommsUpdate"
+      ],
+      "fields": [
+        "context: ContextManifest",
+        "labels: tuple[ModelLabel, ...]"
+      ],
+      "methods": []
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 41,
+      "import": "from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 566,
+      "declaration": "CorrectAnnotationCliCommand",
+      "bases": [
+        "CliCommand"
+      ],
+      "fields": [
+        "label: ModelLabel = option('--label', normalize=json.loads)",
+        "answer: type[SpanAnswer] = option('--answer')",
+        "worktree: str = option('--worktree', default_factory=os.getcwd)"
+      ],
+      "methods": [
+        "apply"
+      ]
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 578,
+      "consumer": "store.annotations.correct(self.label, self.answer, author, snapshot)"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 12,
+      "import": "from agent_comms.working_memory_labels import Classifier, ModelLabel, SpanLabel"
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 19,
+      "import": "from .working_memory_annotations import WorkingMemoryAnnotations"
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 71,
+      "consumer": "WorkingMemoryAnnotations(self.session)"
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 420,
+      "declaration": "ContextAnnotationsRuntimeRequest",
+      "bases": [
+        "ContextRecordedSegmentRuntimeRequest"
+      ],
+      "fields": [
+        "classifier: ClassifierVersion"
+      ],
+      "methods": [
+        "result"
+      ]
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "line": 427,
+      "consumer": "store.annotations.for_segment(segment, self.classifier)"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 5,
+      "import": "from .working_memory_labels import CalibrationReport, ClassifierVersion, HumanLabel, ModelLabel, QuestionVersion"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 13,
+      "declaration": "WorkingMemoryAnnotations",
+      "bases": [],
+      "fields": [],
+      "methods": [
+        "__init__",
+        "address",
+        "labels",
+        "calibration",
+        "for_segment",
+        "reserve",
+        "complete",
+        "fail",
+        "correct"
+      ]
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 101,
+      "consumer": "HumanLabel.correct(original, answer, author)"
+    },
+    {
+      "path": "src/agent_comms/working_memory_labels.py",
+      "line": 91,
+      "declaration": "ModelLabel",
+      "bases": [
+        "SpanLabel"
+      ],
+      "fields": [
+        "classifier: ClassifierVersion",
+        "probabilities: tuple[AnswerProbability, ...]",
+        "confidence: float",
+        "request_id: str",
+        "returned_model: str"
+      ],
+      "methods": [
+        "__post_init__",
+        "probability",
+        "public_description",
+        "working_memory_section",
+        "evaluate_original"
+      ]
+    },
+    {
+      "path": "src/agent_comms/working_memory_labels.py",
+      "line": 127,
+      "declaration": "HumanLabel",
+      "bases": [
+        "ModelLabel"
+      ],
+      "fields": [
+        "author: ThreadIncarnation"
+      ],
+      "methods": [
+        "correct",
+        "public_description",
+        "working_memory_section",
+        "evaluate_original"
+      ]
+    },
+    {
+      "path": "src/agent_comms/working_memory_labels.py",
+      "line": 141,
+      "consumer": "self.question.question.working_memory_section(self.answer)"
+    },
+    {
+      "path": "src/agent_comms/working_memory_labels.py",
+      "line": 156,
+      "consumer": "HumanLabel.correct(self.original, self.review.answer, self.review.author)"
+    },
+    {
+      "path": "src/agent_comms/working_memory_labels.py",
+      "line": 227,
+      "consumer": "ModelLabel(span, question, family.decode(self.choice), classifier, tuple((AnswerProbability(family.decode(name), probability) for name, probability in self.probabilities.items())), self.confidence, response.id, response.model)"
+    },
+    {
+      "path": "src/agent_comms/working_memory_worker.py",
+      "line": 10,
+      "import": "from .acp_extension import ContextAnnotatedUpdate, encode_updates"
+    },
+    {
+      "path": "src/agent_comms/working_memory_worker.py",
+      "line": 20,
+      "declaration": "AnnotationWorker",
+      "bases": [],
+      "fields": [],
+      "methods": [
+        "__init__",
+        "observe",
+        "start",
+        "retired",
+        "close",
+        "store",
+        "answer",
+        "run"
+      ]
+    },
+    {
+      "path": "src/agent_comms/working_memory_worker.py",
+      "line": 95,
+      "consumer": "ContextAnnotatedUpdate(manifest, tuple(labels))"
+    }
+  ]
+}

@@ -96,10 +96,14 @@ class PiPayload:
     def to_wire(self):
         data = FieldCodec.encode(self)
         if isinstance(self, DeclaredFamily):
-            name = data.pop("kind")
+            data.pop("kind")
             if self.wire_tag is not None:
-                data[self.wire_tag] = name
+                data[self.wire_tag] = self.wire_discriminator()
         return data
+
+    def wire_discriminator(self):
+        """Refined internal members borrow their original external declaration."""
+        return FieldCodec.encode(type(self))
 
 
 @dataclass(frozen=True)
@@ -388,6 +392,11 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     def retained_tool_facts(self, session, entry, originals):
         return ()
 
+    def annotation_disclosure(self):
+        from .working_memory_disclosure import WithheldDisclosure
+
+        return WithheldDisclosure()
+
     def require_artifact_request(self, request):
         raise ValueError("Native message is not a completed file operation")
 
@@ -482,6 +491,11 @@ class AbsentMessage(PiMessage):
 
 @dataclass(frozen=True)
 class AssistantMessage(PiMessage):
+    def annotation_disclosure(self):
+        from .working_memory_disclosure import PublicInstructionDisclosure
+
+        return PublicInstructionDisclosure()
+
     def retained_tool_calls(self):
         return tuple(call for part in self.parts for call in part.tool_calls())
 
