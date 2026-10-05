@@ -29,7 +29,6 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_tools import CodingTool
 from agent_comms.pi_payloads import ReportedModel
 from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message
 from agent_comms.turn_context import FileProvenance, JournalProvenance, SystemLayerSegment, ToolCatalogSegment
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 
@@ -105,7 +104,7 @@ class PairedRecallDesign:
                 'scope': 'Observed original selections only; not complete capture, '
                          'returned model, HTTP, capacity or study acceptance'}
 
-    def construction_plan(self, sampling_seed: int):
+    def construction_plan(self, sampling_seed: int, *, trajectory: int | None = None):
         """Export prospective operands; never grant or launch a native turn.
 
         The pinned oracle owns source additions and held-out questions. The
@@ -115,12 +114,17 @@ class PairedRecallDesign:
         """
         scenario = RecordedNativeCheckpoint.read_record(self.oracle, RecallScenario)
         rounds = scenario.construction_rounds()
+        if trajectory is not None and not 1 <= trajectory <= self.sample_count:
+            raise ValueError("Selected trajectory is outside the supplied design")
         random = Random(sampling_seed)
+        trajectories = tuple({'sample': index + 1,
+            'condition_order': tuple(random.sample((self.candidate, self.baseline), 2))}
+            for index in range(self.sample_count))
+        if trajectory is not None:
+            trajectories = trajectories[trajectory - 1:trajectory]
         return {'comparison_design': self, 'scenario': scenario.identity,
                 'rounds': rounds, 'sampling_seed': sampling_seed,
-                'trajectories': tuple({'sample': index + 1,
-                    'condition_order': tuple(random.sample((self.candidate, self.baseline), 2))}
-                    for index in range(self.sample_count)),
+                'trajectories': trajectories,
                 'scope': 'Prospective authored source/probe operands and randomized arm order only; '
                          'no native input, checkpoint, intervention, registration, capacity or spending grant'}
 
@@ -1172,33 +1176,6 @@ class RecallScenario:
                 from_round=before.identity, to_round=after.identity)
         return intervals
 
-    @classmethod
-    def configured_retention(cls, root_reference, publications: tuple[Message, ...]):
-        """Freeze original public wording and prospective corrections before cuts.
-
-        Publication bodies belong to their original messages. Future wording is
-        declared once here, then the runner publishes these exact source additions.
-        Oracle answer/evidence metadata stays separate from those public operands.
-        This value is not proof of native delivery or a matched intervention.
-        """
-        history = tuple(message.body for message in publications)
-        additions = ((),
-            ('Authorized correction: the binding archive root is now /artifacts/S4/β/corrected.',),
-            ('Explicitly drop the archive-root constraint. No binding archive root remains for this task.',))
-        rounds = []
-        for number, path in enumerate(('/artifacts/S4/α/source', '/artifacts/S4/β/corrected', 'NONE'), 1):
-            history += additions[number - 1]
-            rounds.append(RecallRound(f'cut-{number}', history, (
-                Question('archive', 'What archive root is currently binding? Answer NONE if it was explicitly dropped.',
-                         path, root_reference, obsolete=tuple(value for value in
-                            ('/artifacts/S4/α/source', '/artifacts/S4/β/corrected') if value != path)),
-                Question('replay', 'May an uncertain input be replayed? Answer yes or no.',
-                         'no', 'persistent-prohibition', measurement=Measurement.PROHIBITION),
-                Question('alternative', 'What valid review alternative remained available although warm-review was chosen?',
-                         'cold-review', 'persistent-alternative', measurement=Measurement.ALTERNATIVE),
-            )))
-        return cls('configured-original-three-cut', tuple(rounds))
-
     def construction_rounds(self):
         """Derive ordered source additions and public probes from one oracle.
 
@@ -1430,6 +1407,8 @@ def main() -> None:
                         help="PairedRecallDesign for --recorded-pairs or --construction-plan; owns oracle, conditions and analysis parameters")
     parser.add_argument("--sampling-seed", type=int,
                         help="Explicit prospective arm-order seed for --construction-plan; distinct from bootstrap seed")
+    parser.add_argument("--trajectory", type=int,
+                        help="Select one prospective trajectory from --construction-plan; grants no execution")
     recorded.add_argument("--native-checkpoint", type=Path,
                           help="RecordedNativeCheckpoint reference to an original managed cut")
     parser.add_argument("--fork-journal", type=Path,
@@ -1469,6 +1448,8 @@ def main() -> None:
             parser.error("--construction-plan requires --comparison-design and --sampling-seed")
     elif args.sampling_seed is not None:
         parser.error("--sampling-seed requires --construction-plan")
+    if args.trajectory is not None and not args.construction_plan:
+        parser.error("--trajectory requires --construction-plan")
     condition = args.condition or Condition.BOUNDED
     baseline_condition = args.baseline_condition or Condition.BOUNDED
     scenario = RecallScenario.read(args.scenario_file) if args.scenario_file else coding_scenario()
@@ -1500,7 +1481,7 @@ def main() -> None:
         else:
             result = design.compare(pairs)
     if args.construction_plan:
-        result = design.construction_plan(args.sampling_seed)
+        result = design.construction_plan(args.sampling_seed, trajectory=args.trajectory)
     if args.native_checkpoint is not None:
         checkpoint = FieldCodec.decode(RecordedNativeCheckpoint, json.loads(
             args.native_checkpoint.read_text(), object_pairs_hook=unique_fields

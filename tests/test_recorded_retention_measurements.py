@@ -125,38 +125,6 @@ class RecordedMeasurementTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'artifact changed'):
             RecordedNativeCheckpoint.read_bytes(reference)
 
-    def test_configured_history_uses_original_public_bodies_and_cumulative_additions(self):
-        bodies = ('Original binding archive /artifacts/S4/α/source, λ 🙂.',
-                  'Never replay an uncertain input.',
-                  'cold-review remains an available alternative.')
-        publications = tuple(Message('human', 'agent', body, MessageType.INFO,
-                                     seq=index, timestamp=1.0)
-                             for index, body in enumerate(bodies, 1))
-        before = tuple(FieldCodec.encode(message) for message in publications)
-        scenario = RecallScenario.configured_retention('original-declaration-reference', publications)
-        steps = scenario.construction_rounds()
-        self.assertEqual(steps[0]['history_additions'], bodies)
-        self.assertEqual(steps[0]['source_text'], '\n'.join(bodies))
-        self.assertEqual(tuple(len(round_.history) for round_ in scenario.rounds), (3, 4, 5))
-        for previous, current in zip(scenario.rounds, scenario.rounds[1:]):
-            addition, = current.history_after(previous.history)
-            self.assertEqual(current.history, previous.history + (addition,))
-        self.assertEqual(steps[1]['history_additions'], (
-            'Authorized correction: the binding archive root is now /artifacts/S4/β/corrected.',))
-        self.assertEqual(steps[2]['history_additions'], (
-            'Explicitly drop the archive-root constraint. No binding archive root remains for this task.',))
-        for step in steps:
-            question = json.loads(step['probe_text'].split('\n', 1)[1])
-            self.assertTrue(all(set(item) == {'id', 'prompt'} for item in question['questions']))
-        self.assertEqual(tuple(FieldCodec.encode(message) for message in publications), before)
-        self.assertEqual(FieldCodec.decode(RecallScenario, FieldCodec.encode(scenario)), scenario)
-        # Existing historical placeholders still fail the original prefix
-        # owner; there is no inferred wording or compatibility reconstruction.
-        historical = replace(scenario, rounds=tuple(replace(round_, history=(f'private-source-cut-{index}',))
-            for index, round_ in enumerate(scenario.rounds, 1)))
-        with self.assertRaisesRegex(ValueError, 'preceding frozen history prefix'):
-            historical.construction_rounds()
-
     def test_adjacent_revision_intervals_keep_every_frozen_pair(self):
         scenario = coding_scenario()
         mass = {'evaluated': True, 'constraints': {'eligible': 2, 'unauthorized': 0}}
@@ -352,6 +320,13 @@ class RecordedMeasurementTests(unittest.TestCase):
         self.assertEqual(plan['rounds'], scenario.construction_rounds())
         self.assertIs(plan['comparison_design'], design)
         self.assertEqual(tuple(item['sample'] for item in plan['trajectories']), tuple(range(1, 11)))
+        for selected in (1, 5, 10):
+            one = design.construction_plan(17, trajectory=selected)
+            self.assertEqual(one['trajectories'], (plan['trajectories'][selected - 1],))
+            self.assertEqual(one['rounds'], plan['rounds'])
+        for invalid in (0, 11):
+            with self.subTest(trajectory=invalid), self.assertRaisesRegex(ValueError, 'outside the supplied design'):
+                design.construction_plan(17, trajectory=invalid)
         for item in plan['trajectories']:
             self.assertEqual(set(item['condition_order']), {design.candidate, design.baseline})
         self.assertEqual(plan, design.construction_plan(17))
@@ -362,6 +337,25 @@ class RecordedMeasurementTests(unittest.TestCase):
         Path(original.path).write_text('{}')
         with self.assertRaisesRegex(ValueError, 'artifact changed'):
             design.construction_plan(17)
+
+    def test_selected_case_validates_before_original_capture_or_configured_execution(self):
+        # A malformed prospective case must not spend earlier round calls or
+        # borrow the public source before discovering a missing source operand.
+        import asyncio
+        from three_cut_retention_configured_journey import run
+
+        scenario = coding_scenario()
+        original = self.artifact('missing-source-oracle.json', replace(scenario,
+            rounds=(scenario.rounds[0], replace(scenario.rounds[1], history=scenario.rounds[0].history))))
+        design = PairedRecallDesign(original, Condition.TASK_MEMORY, Condition.BOUNDED,
+            'openai-codex/gpt-6.1-sol', 10, 0.95, -0.02, 10000, 20261004)
+        output = self.root / 'unstarted-case'
+        with patch('three_cut_retention_configured_journey.CurrentTypedCapture',
+                   side_effect=AssertionError('Original source must not be acquired')):
+            with self.assertRaisesRegex(ValueError, 'declared new history'):
+                asyncio.run(run(output, Path('unused-package'), Path('unused-interpreter'),
+                    design=design, sampling_seed=17, trajectory=1, core_source=None))
+        self.assertFalse(output.exists())
 
     def test_stimulus_delivery_requires_exact_source_and_original_earlier_branch(self):
         # Detect edits, later source and sibling ancestry being credited as
