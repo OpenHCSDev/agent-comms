@@ -7,6 +7,40 @@ from GitHub during this checkpoint; merge ancestry was checked against Core7fcf8
 and Toad43949ee. Historical acceptance remains in
 `plans/integration-live-completion-20260928.md` and each code-bearing PR's receipts.
 
+## Current authoritative checkpoint — 2026-10-05
+
+The historical activation paragraphs below retain their dated evidence. Actual
+public defaults are now334447; its ordinary channel-lifetime still-image journey
+passed18 native checks in61.852s with readable original after-terminal images.
+That does not prove moving-frame cadence, fast useful first paint or the full
+configured continuous workflow.
+
+- Explorer448 is merged and its953-asset/107-file candidate is frozen Parent-held.
+  Authentic AnnotationNode GUI, historical read/search/export and authored9→10
+  carry have distinct accepted receipts. Public publication is still unexecuted:
+  the original client guard found Tristan's open Toad window. Keep performance
+  work independent; never kill that window or treat private census as admission.
+- Joint453 normally integrates session/watch450 and worker451 plus current448.
+  Its final319-asset b13 wheel is source-verified. Candidate Core0ed declares7a;
+  effective99eaf correction preserves the old086 wording as historical. Actual
+  NoAgent App and physical wheel cadence remain unqualified. Unused421 candidate
+  publication hold on485 is explicitly superseded; fresh actualfloor/ref/grant
+  required before any borrower access. Explorer953 is not that holder.
+- Core673's original one installed attempt produced6FAIL/3PASS before graph
+  assertions because the old fresh-bus fixtures lacked the durable marker.
+  Current355 candidate package was removed and original347/94/69metadata10
+  floor restored exactly; Bohr independently CLOSEDa71443/3a3764 with229 UID
+  references/gaps zero. Ten fresh constructions now use canonical_goal_wire;
+  crash reopen and40 assertion ASTs remain unchanged. Changed certified controls now pass all9 parameterized executions/5.00s,
+  bounded8.242110359s under distinctf05 purpose. Original347/94/69metadata10
+  floor restored exact again; whole claims returned. Independent CLOSED1e0759
+  /readback77c955 confirms235 UID holder/output references and gaps zero. Live native callback and wholeC3 remain separate; no expiredloan
+  inheritance.
+- Original C0 family/source ledger and C4 stated class-size target have current
+  evidence. Full six-file C3, TC1/T9 resource closure, loaded scaling, configured
+  continuous workflow and smooth wheel/useful paint remain explicitly unfinished.
+  Named original owners continue those families rather than opening duplicates.
+
 ## Original named PRs
 
 | Required scope | Verified current disposition | Remaining requirement |
