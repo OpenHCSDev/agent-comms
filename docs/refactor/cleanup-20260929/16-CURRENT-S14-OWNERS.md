@@ -148,6 +148,27 @@ Public334447 and all old acceptance/closure evidence remain unchanged. Fresh
 receiving purpose, installed candidate, reviewed one-use carry/publication and
 actual affected default workflow remain required for public Explorer delivery.
 
+## Warm446 first terminal and retained-source boundary
+
+Original saved-warm control exited1 in49.474142917s before its startup paint
+assertion saw NATIVE_RESPONSE_2. App/ACP/live beta admission reached; two
+authored localhost preparation requests are recorded, with provider errors[];
+no warm-return or configured-provider claim follows. Mixed/configured controls
+remain UNRUN. Controller3992375/birth64302610 exited1 with cleanup empty.
+Owner code-handback06d6f420 records actualCURRENT4441469/69origins/519
+restored and final-borrowers0e517a5a actual241UID0refs/gaps. Bohr independent
+closure remains separate; no retry is authorized.
+
+Parent source read confirms preparation and selected App both name beta; no
+wrong-owner oracle is established. It also identifies the original L0A fixture
+retention gap: without its existing fixture_stage operand, wire and application
+TemporaryDirectory contexts remove original private sources after exit while
+only diagnostic logs are copied. Heis owns actual retained/removed classification
+and complete affected fixture/caller lifetime repair through the existing
+persistent stage mechanism. Logs cannot substitute for deleted source/input
+proofs or authorize reconstruction/replay. This is separate from TC1 watcher
+source repair and does not modify the frozen negative.
+
 ## Historical integration evidence
 
 Parent retired its unused standalone channel_recovery_physical_journey wrapper.
