@@ -80,3 +80,32 @@ Both call arities match the parsed existing declaration; no runtime success is
 claimed. `PROPOSED-OPERANDS.json` binds source540, target627/ab640 on334 after
 Heis443 handback, unchanged canonical source seed, fresh authored/stopped roots,
 exact original-control argv and evidence paths. Both actual purposes are pending.
+
+## Current proposed target binding
+
+The current proposal uses Core627 determining3aacd708 and retained normal wheel
+0ed358e9 (355 assets), replacing only the old targeta59/ab640 tuple. Einstein's
+published stopped-carry-current-main-target-operands.json, SHA334b6db6, owns the
+new target source/wheel/inventory and proposed shared historical window.
+CURRENT-TARGET-RELATION.json records this accepted source binding: every355
+member matches its existing inventory's Git/local/ZIP source, including the
+three forced assets. Exactly native_admission_epoch, tracked_turn and
+transcript_outcomes differ from oldab640. All SQLite declarations, metadata
+owners and native manifest/producers remain unchanged at source scope.
+
+Original PROPOSED-OPERANDS.json stays byteexactb3af, recoverable at published9d6;
+its old334 interpreter/ab640 entries are historical, not current authority.
+The frozen88e8 tool hashes and existing control recipe remain unchanged. Future
+argv uses the newly issued eligible target interpreter in place of original334,
+then the same native_schema_carry_controls.py/base/--source-python540/
+--stopped-original stopped-original9 arguments. Existing output paths and only
+the newly authored stopped-copy root remain the same. No second seed or corpus
+copy is proposed. The genuine9 source loan is independently whole closed;
+a new source re-declaration read purpose is required for the actual control.
+
+PUBLIC334CURRENT447 is excluded. Formerstyle22 is only a future candidate after
+Bohr names its actual eligible floor and issues the exact target/source purposes.
+Einstein remains sole package writer and overall handback owner; Mendel owns
+only carry on the new stopped copy. Carry does not wait or extend the historical
+GUI and does not acquire a native/provider/input/App permission. No donor/target
+import, package/store access or carry operation ran in this source update.
