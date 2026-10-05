@@ -67,24 +67,34 @@ class NativeSessionPreparation(backend.TurnSession):
         session_file: str,
         observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
     ) -> StateData:
-        owner = asyncio.current_task()
         async with persistent.lock:
-            launch = await Coordination.run_worker(partial(
-                persistent.custody.managed_launch,
-                agent_bin, tuple(agent_args), worktree=Path(worktree),
-                environment=environment, session_file=session_file,
-            ))
-            preparation = cls(launch, "", persistent_session=persistent)
-            async with session_writer_fence(launch.session.session_file):
-                try:
-                    async with aclosing(preparation.run()) as stream:
-                        async for event in stream:
-                            if isinstance(event, events.Done) and not event.ok:
-                                raise NativePiUnavailable(event.text)
-                    state = preparation.native.attestation.state
-                    assert state is not None
-                    await observe(state, preparation.context_info())
-                    return state
-                finally:
-                    if owner is not None:
-                        await backend.terminate_task_process(owner)
+            return await cls.open_acquired(persistent, agent_bin, agent_args,
+                worktree=worktree, environment=environment, session_file=session_file, observe=observe)
+
+    @classmethod
+    async def open_acquired(
+        cls, persistent: backend.PersistentPiSession, agent_bin: str, agent_args: Sequence[str], *,
+        worktree: str, environment: dict[str, str], session_file: str,
+        observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
+    ) -> StateData:
+        """Borrow existing child custody through launch, observation and retention."""
+        owner = asyncio.current_task()
+        launch = await Coordination.run_worker(partial(
+            persistent.custody.managed_launch,
+            agent_bin, tuple(agent_args), worktree=Path(worktree),
+            environment=environment, session_file=session_file,
+        ))
+        preparation = cls(launch, "", persistent_session=persistent)
+        async with session_writer_fence(launch.session.session_file):
+            try:
+                async with aclosing(preparation.run()) as stream:
+                    async for event in stream:
+                        if isinstance(event, events.Done) and not event.ok:
+                            raise NativePiUnavailable(event.text)
+                state = preparation.native.attestation.state
+                assert state is not None
+                await observe(state, preparation.context_info())
+                return state
+            finally:
+                if owner is not None:
+                    await backend.terminate_task_process(owner)

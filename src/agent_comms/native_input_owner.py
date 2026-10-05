@@ -140,6 +140,23 @@ class RegistryOwner:
             snapshot, "Native source owner changed before publication", RegistryAdmissionCheck,
         )
 
+    def require_idle_source_snapshot(self, snapshot: RegistrySnapshot) -> Thread:
+        """Select history without granting a turn or borrowing its task scope.
+
+        Completed turns may change their generation and last-finished record.
+        The original process/admission/source/configuration and current task
+        scope must still agree; all actual turn fields stay with the document.
+        """
+        self.thread.require_idle()
+        current = self._snapshot_owner(
+            snapshot, "Idle native source owner changed", RegistryIdentityCheck,
+        )
+        current.role.require_executable()
+        current.execution.require_native()
+        current.require_idle()
+        self.thread.task_scope.require_current(current)
+        return current
+
     def require_registry(self, registry: Registration) -> None:
         try:
             actual, admission = registry.live_owner_with_admission(self.thread.name)

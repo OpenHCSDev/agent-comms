@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Literal
 
 from .child_process import ProcessIdentity
@@ -388,6 +389,25 @@ class NativeForkCreation(NativeSessionIdentity, SessionJournalHistory, TypedTabl
         except ValueError as error:
             raise CompactionJournalError("Original native fork source differs") from error
         evidence.source.verify_snapshot(self.revision.size, bytes.fromhex(self.prefix_digest.value))
+
+    def require_recorded_selection(self, journal: Path, original: str) -> None:
+        """Corroborate this returned fork without minting owner/task authority."""
+        from .compaction_journal import CompactionJournal
+        from .native_entries import NativeEntry
+
+        self.source.require_session(original)
+        recorded = CompactionJournal.observe_readonly(journal, lambda db:
+            type(self).one(db, session_file=self.session_file), absent=None)
+        if recorded != self:
+            raise CompactionJournalError("Native selection requires its original recorded SDK fork")
+        with NativeEntry.open_evidence(self.source.path) as parent, NativeEntry.open_evidence(self.path) as child:
+            parent.observe()
+            if not self.source.covers(parent, self.source_revision) or (
+                FileRevision.from_stat(self.source.path.stat()) != self.source_revision
+            ):
+                raise CompactionJournalError("Original native fork parent changed before selection")
+            _, entries = child.observe()
+            self.require_original_prefix(child, entries)
 
     @classmethod
     def recorded_prefix(cls, db, evidence, entries):

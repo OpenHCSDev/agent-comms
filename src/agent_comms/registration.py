@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .catalog_store import ChannelCatalog
 from .compaction_publication_lease import publication_identity_fence
@@ -17,12 +18,16 @@ from .registration_change import RegistrationChange
 from .registry_document import RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryStore
 from .routing import TurnRouting
+from .session_fence import idle_session_writer_fence
 from .store_files import _store_lock, file_revision
 from .thread_identity import GenerationCounter, TurnId
 from .thread_status import RunningThreadStatus, ThreadStatus
 from .threads import Thread
 from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
 from .turn_phase import TurnPhase
+
+if TYPE_CHECKING:
+    from .compaction_records import NativeForkCreation
 
 _RUNNING_STATUS = RunningThreadStatus()
 
@@ -56,6 +61,48 @@ class Registration:
             change = edit.document.prepare_native_source(original, session_file)
             self._commit_registration(edit, change)
             return replace(original, thread=change.installed_thread)
+
+    def selected_native_fork(self, original: RegistryOwner, creation: NativeForkCreation, *,
+                             retain: Callable[[RegistryOwner], None]) -> RegistryOwner:
+        """Publish SDK history after enrolling its exact original cleanup.
+
+        The runtime caller retires its child before entering/exiting this
+        resource. No writer, wire or registry lock survives either publication.
+        A later completed turn's records stay current; replaced authority or
+        changed scope refuses restoration without overwriting the successor.
+        """
+        creation.source.require_session(original.thread.require_saved_session())
+        with self._idle_fork_edit(creation) as edit:
+            change = edit.document.prepare_idle_native_source(original, creation.session_file)
+            selected = replace(original, thread=change.installed_thread)
+            retain(selected)
+            self._commit_registration(edit, change)
+        return selected
+
+    def restore_native_fork(self, selected: RegistryOwner, creation: NativeForkCreation) -> RegistryOwner:
+        """Restore only after the runtime joined this selection's owned child.
+
+        No deferred generator exit can publish after native retirement refused.
+        The acquired document still owns every source/admission/scope check.
+        """
+        with self._idle_fork_edit(creation) as edit:
+            change = edit.document.prepare_idle_native_source(selected, creation.source.session_file)
+            self._commit_registration(edit, change)
+            return replace(selected, thread=change.installed_thread)
+
+    @contextmanager
+    def _idle_fork_edit(self, creation: NativeForkCreation) -> Iterator[RegistryEdit]:
+        """Acquire native writer exclusion before the shared wire/registry cut."""
+        with (
+            idle_session_writer_fence(creation.source.session_file),
+            idle_session_writer_fence(creation.session_file),
+            _store_lock(self.store.path.parent / "wire", shared=True),
+            self.store.editing() as edit,
+        ):
+            creation.require_recorded_selection(
+                self.store.path.parent / "compaction-commits.sqlite3", creation.source.session_file,
+            )
+            yield edit
 
     def declare(self, thread: Thread, status: ThreadStatus = _RUNNING_STATUS) -> Thread:
         """Operational declaration and channel provenance use one locked current owner.
