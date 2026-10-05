@@ -1,0 +1,98 @@
+{
+  "execution_source_head": "10bd21f243d246e4fe79bcc1278fd6d5fd5e3247",
+  "issued_sha256": "30f8b9082de6348b27ab159078b5d9af5af1e7785be00647fda3694144a79556",
+  "state": "first-failure, original input/goal/tool effects preserved, holder restored and whole purpose independently closed",
+  "configured_model": "openai-codex/gpt-6.1-sol",
+  "configured_thinking": "high",
+  "input_id": "aee33220b1f7d1101f9d080251c8f773",
+  "input_disposition": "STARTED",
+  "model_steps": 4,
+  "successful_tools": [
+    "comms_set_goal",
+    "comms_goal",
+    "comms_send"
+  ],
+  "unassisted_recall": false,
+  "meaning": "Original not-tools classification; no incorrect-recall inference",
+  "private_goal_state": "BLOCKED",
+  "private_question": {
+    "id": "7a32ea65803a",
+    "seq": 5,
+    "from": "source529",
+    "to": "user"
+  },
+  "source_instruction_membership": {
+    "restriction_in_actual_sent_text": false,
+    "restriction_in_all_four_captured_SDK_request_values": false,
+    "source_path": "Original source input used bare history; published USER restriction remained a wire source pointer. No claim of a violated runtime inline-pin contract."
+  },
+  "manual_summaries": 0,
+  "arm_probes": 0,
+  "controller_exit": 1,
+  "elapsed_seconds": 77.40828945604153,
+  "source_and_input_proof_unchanged": true,
+  "joined_observed_births": 56,
+  "groups": [],
+  "sockets": [],
+  "restored_floor": {
+    "logical_records": 510,
+    "Core_ZIP_assets": 347,
+    "nonCore_keepers": 94,
+    "metadata_files": 69,
+    "distributions": 10,
+    "original_archive_origin": true
+  },
+  "Bohr_whole_close": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Arendt674-one-cut-two-arms-functional01-lifecycle.json",
+    "sha256": "7453c4d5839e8683d09a737d29ae9d3ba1aa2f16ea556a761ad06e9936c28cd1"
+  },
+  "raw_keepers": [
+    {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional01/whole-handback.json",
+      "sha256": "2874587b8929a12e29fa23994160fd0dff4c056c28366aa83921594f7bac1f28"
+    },
+    {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional01/controller/terminal.json",
+      "sha256": "63a9452f62a353f5acddc0d392dcb01d3cc1e211f0678330aeda3e192f3809c2"
+    },
+    {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional01/controller/stderr.log",
+      "sha256": "67e6e22a34a30e74d7e7e71cb7eac8a73945b37941ae1201bf227dea05933685"
+    },
+    {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional01/holder-postrun.json",
+      "sha256": "c51f5972856e9e105442cd0bdfd892e1274df9bfb92140ec415dc3c7ff729083"
+    },
+    {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional01/native-postrun-full-trust.json",
+      "sha256": "51ee6b382f1866e8c903c6d2296fd7dc0ce75e0fdcef51326ee069ad8b07dbfd"
+    },
+    {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional01/journey/source/receipt.json",
+      "sha256": "67e159900cbbeef3d7eabb47a60e77450860bd6251dd34851858d6728f5d9ef9"
+    },
+    {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional01/journey/round-1/source-input.private.json",
+      "sha256": "2bc9d72240d6a44e14a78342cc22ca8c29b765706e896886e5c2535593881f52"
+    },
+    {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional01/journey/round-1/source-measurement.private.json",
+      "sha256": "3a6d43dbe8a6a93b94ff30a2a6f2b9fa06823e9a6459b7f617f7b14670ecb417"
+    }
+  ],
+  "new_source_controls": {
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-source-input-final/source-controls-3.14.log",
+    "sha256": "a62142cf78de847bd7c884ca13a217c62e5173e1c6fe915879f35d9fccf3a47d",
+    "tests": 5,
+    "elapsed_seconds": 0.538,
+    "scope": "Source constructor/plan/reader/publication only"
+  },
+  "prior_import_negative": {
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-source-input-final/final-controls.log",
+    "sha256": "8be1449242c9876ead300b154ef2b13209ca55acc08e9cf58b3c2b2da3572e2f",
+    "reason": "Development Python3.11 lacks metaclass_registry; tests did not run"
+  },
+  "corrected_configured_execution": false,
+  "HTTP_capacity_registered_study": false,
+  "new_input_or_execution_granted": false
+}

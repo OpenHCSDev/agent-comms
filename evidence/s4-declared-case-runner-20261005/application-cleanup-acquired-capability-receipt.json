@@ -1,0 +1,35 @@
+{
+  "source": "9ff63473df438b2ce07df234d6164368096614e7",
+  "producer": "c628a6b41baa612b1d0b52cc31d00a7d490d546a",
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "-o",
+    "addopts=",
+    "-p",
+    "no:cacheprovider",
+    "-q",
+    "tests/test_native_inspector_lifetime.py::test_original_application_joins_retirement_before_observer_and_environment_exit"
+  ],
+  "environment": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "src:tests:tools/cutover"
+  },
+  "sha256": {
+    "tests/three_cut_retention_configured_journey.py": "6dc7610ec9cd8af7d26c6ed53151e969a68d5415c6831e364409fcd120e84149",
+    "tests/test_native_inspector_lifetime.py": "50e9106106b5ad1ec4cfbfbfc61b2b185eb38a161ff84335a65f36d3398a3a12",
+    "evidence/s4-declared-case-runner-20261005/application-cleanup-acquired-capability.log": "9c714207acdb4637742c0d3473ba4d87be7b978f65d5b0063c39ad919e6fa9d7"
+  },
+  "result": {
+    "exit": 0,
+    "passed": 4,
+    "seconds": 0.24
+  },
+  "scope": "Original private function declarations with controlled Python boundaries; failure/cancellation cleanup ordering and exception identity. Not full ACP module loading, native custody, installed/configured acceptance or study.",
+  "SDK": 0,
+  "native": 0,
+  "provider_inputs": 0,
+  "holder_access": 0,
+  "preserved": "Earlier intermediate generic-finally result and all original S4/STARTED/UNKNOWN/refusals unchanged."
+}

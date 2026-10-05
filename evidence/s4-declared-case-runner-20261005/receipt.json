@@ -1,0 +1,62 @@
+{
+  "source_revision": "25b661f0f54e774983bc7970c1726ff719ba20cc",
+  "source_hashes": {
+    "tests/compaction_retention_fixture.py": "b8cbbd3160c36144bc83599d41ab12231f8b0a1cffec0decc7b3c92000ac584a",
+    "tests/compaction_source_successor_installed_journey.py": "272453ec89460f3a7df71522ab4d2bc3dfd9eb1f06ee3bd8716a54d44a06da2c",
+    "tests/test_recorded_retention_measurements.py": "4f4c8a4a02a6cbe4fcc8b6c0de88fa8dfa00ee0bf81ff2ff9edfc08743fffd1f",
+    "tests/three_cut_retention_configured_journey.py": "d3febfa8be2e7c949a3a5ccd3e01e779ae6bd16883adf7eb25928099376a42a9"
+  },
+  "artifact_hashes": {
+    "README.md": "5e1197b7fb064701484895aec3d13dd1b7af760dd62567ecc217dc9dbeb9f3d4",
+    "after.json": "2124f1ca7b232714137ad515eb7ee7f2a228841e8a331ac43022ec379e483468",
+    "authored-design.json": "8964c82221acd430c48fa4052b16a22a28cc4ceb8889aa232f0a71142a1da0c7",
+    "authored-oracle.json": "06264176a3c69e2bc8ae94cc65c4782b94a50fd73482b355987e1f296f032d00",
+    "before.json": "79b0b5ff4361444ca4a7718193c776d4662da837c66d4d8947e278abc996e98f",
+    "construction-cli-command.json": "d3681aee0a7a48fb8e29bb9b2f4fed9223d38023a72bce8b018451a1c7453ecf",
+    "construction-cli.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "construction-cli.stdout.json": "edc3b9d4ff8dfd465462c14023faf516ee6aff62eb5ae467036deffd4b36589e",
+    "focused-final.log": "550bd797901a823fd1f67f7cd782a7eb04ff00bb49a3067212e17531fe37d3b3",
+    "focused-initial-dependency-refusal.log": "a61d462223738ea678151cb39b1933924bf7ff01f314ce3e4ca8cfe711c2aa0b"
+  },
+  "source_controls": {
+    "passed": 4,
+    "seconds": 0.049,
+    "scope": "Authored source operands, selection, refusal and stimulus ancestry; no configured backend"
+  },
+  "authored_cli": {
+    "trajectory": 5,
+    "returncode": 0,
+    "scope": "Design-owned prospective operands only"
+  },
+  "source_census": {
+    "modules": 1009,
+    "omissions": 0,
+    "dynamic_resolution": "Not proven"
+  },
+  "nested_environment": {
+    "owner": "configured_saved_agent",
+    "behavior": "patch.dict restores parent after original shutdown/receipt publication",
+    "scope": "Source reviewed, configured acquisition unexecuted"
+  },
+  "initial_failure": {
+    "type": "ModuleNotFoundError",
+    "module": "acp",
+    "original_log": "focused-initial-dependency-refusal.log",
+    "disposition": "Retained; source operand validation moved from backend caller to existing design"
+  },
+  "operations": {
+    "provider_inputs": 0,
+    "SDK_runs": 0,
+    "native_runs": 0,
+    "donor_reads": 0,
+    "holder_imports": 0,
+    "package_builds": 0
+  },
+  "remaining": [
+    "Configured source\u2192cut\u2192both arm installations/requests/terminal and original readers unexecuted",
+    "Shared preparation is not an independent cost comparison",
+    "Runtime constraint/action authority, capacity, HTTP, billing and full study unqualified",
+    "USD75/30-pair study remains unapproved"
+  ],
+  "preservation": "671/672 and prior STARTED/UNKNOWN/raw refusals unchanged; no expired holder/native loan reused"
+}

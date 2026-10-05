@@ -1,0 +1,51 @@
+{
+  "determining_source": "4521f50e12ed4f8e57546b0c699997fc4863032e",
+  "normal_main_integration": "b12b041e9cdadc127298eb917795a5e80c640fcc",
+  "integrated_main": "7b68d630caa654d3e9884f45cbd6493718752a0c",
+  "source_hashes": {
+    "tests/compaction_retention_fixture.py": "3fac97a90ddefba776e088b68127b78956c75f5093edb4611693cfa390121ab4",
+    "tests/compaction_source_successor_installed_journey.py": "272453ec89460f3a7df71522ab4d2bc3dfd9eb1f06ee3bd8716a54d44a06da2c",
+    "tests/test_recorded_retention_measurements.py": "bc2ae7a65938b654c142217e49f4db1791a792a0d547e788e1c67d42864752cf",
+    "tests/three_cut_retention_configured_journey.py": "d3febfa8be2e7c949a3a5ccd3e01e779ae6bd16883adf7eb25928099376a42a9"
+  },
+  "unchanged_after_main_merge": [
+    "tests/compaction_retention_fixture.py",
+    "tests/compaction_source_successor_installed_journey.py",
+    "tests/test_recorded_retention_measurements.py",
+    "tests/three_cut_retention_configured_journey.py"
+  ],
+  "artifact_hashes": {
+    "README.md": "de0eed6ea70033fad906ff2b6bd03717b164616f3d4721746fa48643c9077f8d",
+    "authored-task-events-initial.log": "74371186afb46fd7accac15908245b1de042ce287a39f7dd90c82b8708070d1f",
+    "task-source-contract.json": "c8940683dac2033c9f18b79b55607acf3bc1951a23840ddaa998ec94628ccf5a"
+  },
+  "source_controls": {
+    "passed": 1,
+    "seconds": 0.493,
+    "scope": "Authored certified USER pin/correction/drop and admitted Decision publication/read; no configured arm"
+  },
+  "source_census": {
+    "modules_before": 748,
+    "modules_after": 748,
+    "omissions": 0,
+    "lexical_sites_before": 298,
+    "lexical_sites_after": 338,
+    "limits": "Declared src/tests/tools roots; lexical sites do not prove external or dynamic dispatch"
+  },
+  "retained_warning": "Candidate maintenance unavailable (RelationViolationError)",
+  "original_receipt": "receipt.json and original README at 0d0ab5c3 remain in Git; current README supplements that earlier scope",
+  "operations": {
+    "provider_inputs": 0,
+    "SDK_runs": 0,
+    "native_runs": 0,
+    "holder_imports": 0,
+    "package_builds": 0
+  },
+  "remaining": [
+    "Existing configured driver has not integrated these explicit case declarations",
+    "Mendel owns same idle owner saved-fork selection/restoration and retained child retirement",
+    "Case Decision is explicitly authored, not provider-authorship proof",
+    "Configured paired execution, capacity, HTTP/billing and full S4 unfinished; USD75/30-pair study unapproved"
+  ],
+  "preservation": "Frozen oracles, original S4 artifacts, STARTED/UNKNOWN and prior refusals unchanged; no expired loan reused"
+}

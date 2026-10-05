@@ -1,0 +1,16 @@
+{
+  "command": [
+    "/usr/bin/python",
+    "tests/compaction_retention_fixture.py",
+    "--comparison-design",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-declared-case-runner-20261005/authored-design.json",
+    "--construction-plan",
+    "--sampling-seed",
+    "17",
+    "--trajectory",
+    "5"
+  ],
+  "cwd": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002",
+  "returncode": 0,
+  "scope": "Authored CLI operand selection; zero SDK/provider/original records"
+}

@@ -1,0 +1,137 @@
+{
+  "parser": "existing audit.findings.Package / FunctionFacts",
+  "test_modules": 373,
+  "unparsed": [],
+  "source_declaration": "RecallRound.evaluation_instructions",
+  "source_assembly": "RecallRound.source_text",
+  "probe_assembly": "RecallRound.probe_text",
+  "consumer_closure": [
+    {
+      "function": "tests/compaction_retention_fixture.py::main",
+      "calls": [
+        "construction_plan",
+        "probe_text"
+      ]
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::construction_plan",
+      "calls": [
+        "construction_rounds"
+      ]
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::observe_acquired",
+      "calls": [
+        "construction_rounds"
+      ]
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::source_text",
+      "calls": [
+        "evaluation_instructions"
+      ]
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::probe_text",
+      "calls": [
+        "evaluation_instructions"
+      ]
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::score_recorded",
+      "calls": [
+        "probe_text"
+      ]
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::construction_rounds",
+      "calls": [
+        "probe_text",
+        "source_text"
+      ]
+    },
+    {
+      "function": "tests/test_compaction_retention_fixture.py::test_recorded_native_recall_consumes_original_probe_and_preserves_source",
+      "calls": [
+        "probe_text"
+      ]
+    },
+    {
+      "function": "tests/test_compaction_retention_fixture.py::test_held_out_probe_uses_public_questions_only",
+      "calls": [
+        "probe_text"
+      ]
+    },
+    {
+      "function": "tests/test_compaction_retention_fixture.py::test_frozen_research_and_goal_traces_keep_distinctions_and_denominators",
+      "calls": [
+        "probe_text"
+      ]
+    },
+    {
+      "function": "tests/test_compaction_retention_fixture.py::test_cli_uses_frozen_scenario_for_public_probe_export",
+      "calls": [
+        "probe_text"
+      ]
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_construction_rounds_preserve_prefix_and_public_probe_boundary",
+      "calls": [
+        "construction_rounds",
+        "evaluation_instructions",
+        "probe_text",
+        "source_text"
+      ]
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_construction_plan_uses_original_oracle_and_separate_sampling_seed",
+      "calls": [
+        "construction_plan",
+        "construction_rounds"
+      ]
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_selected_case_requires_native_source_operands_without_changing_preview",
+      "calls": [
+        "construction_plan"
+      ]
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_authored_case_events_use_real_user_lineage_and_admitted_decision",
+      "calls": [
+        "construction_rounds"
+      ]
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_declared_task_coordinates_preserve_old_records_and_refuse_invalid_recipes",
+      "calls": [
+        "construction_rounds"
+      ]
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_stimulus_group_uses_scenario_source_and_same_acquired_reader",
+      "calls": [
+        "construction_rounds",
+        "probe_text"
+      ]
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::read",
+      "calls": [
+        "probe_text"
+      ]
+    },
+    {
+      "function": "tests/three_cut_retention_configured_journey.py::run",
+      "calls": [
+        "construction_plan",
+        "evaluation_instructions"
+      ]
+    }
+  ],
+  "deletions": [
+    "RecallScenario bare-history source_text assembly",
+    "Runner-owned evaluation restriction literal"
+  ],
+  "limits": "Lexical source sites; corrected configured construction unexecuted. Original functional01 failure/STARTED/tool effects unchanged."
+}

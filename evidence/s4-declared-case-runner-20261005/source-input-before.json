@@ -1,0 +1,452 @@
+{
+  "head": "10bd21f243d246e4fe79bcc1278fd6d5fd5e3247",
+  "parser": "existing audit.findings.Package / FunctionFacts",
+  "roots": {
+    "src/agent_comms": {
+      "parsed": 324,
+      "unparsed": []
+    },
+    "tests": {
+      "parsed": 373,
+      "unparsed": []
+    },
+    "tools": {
+      "parsed": 54,
+      "unparsed": []
+    }
+  },
+  "sites": [
+    {
+      "function": "src/agent_comms/message_bus.py::awareness_segments",
+      "calls": [],
+      "source_text_reads": []
+    },
+    {
+      "function": "src/agent_comms/messaging.py::pin_user_constraint",
+      "calls": [],
+      "source_text_reads": []
+    },
+    {
+      "function": "src/agent_comms/owned_turn.py::begin",
+      "calls": [
+        "prepare_prompt"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "src/agent_comms/owned_turn.py::prepare_prompt",
+      "calls": [
+        "for_owner"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "src/agent_comms/owned_turn.py::prepare_native",
+      "calls": [],
+      "source_text_reads": []
+    },
+    {
+      "function": "src/agent_comms/owned_turn.py::run_native",
+      "calls": [
+        "prepare_native"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "src/agent_comms/turn_context.py::for_inspection",
+      "calls": [
+        "awareness_segments",
+        "for_owner"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "src/agent_comms/turn_context.py::for_owner",
+      "calls": [],
+      "source_text_reads": []
+    },
+    {
+      "function": "src/agent_comms/wire_log.py::retained_context",
+      "calls": [
+        "for_owner"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::coding_scenario",
+      "calls": [
+        "RecallRound",
+        "RecallScenario"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::main",
+      "calls": [
+        "construction_plan",
+        "probe_text"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::construction_plan",
+      "calls": [
+        "construction_rounds"
+      ],
+      "source_text_reads": [
+        "operands"
+      ]
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::observe_acquired",
+      "calls": [
+        "construction_rounds"
+      ],
+      "source_text_reads": [
+        "item"
+      ]
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::publish_task_sources",
+      "calls": [],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::probe_text",
+      "calls": [],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::publish_constraint",
+      "calls": [
+        "pin_user_constraint"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::score_recorded",
+      "calls": [
+        "probe_text"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/compaction_retention_fixture.py::construction_rounds",
+      "calls": [
+        "probe_text"
+      ],
+      "source_text_reads": [
+        "rounds[-1]"
+      ]
+    },
+    {
+      "function": "tests/test_channel_bus_ownership.py::test_no_wake_observer_keeps_bounded_pointers_after_ui_ack",
+      "calls": [
+        "awareness_segments"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_channel_bus_ownership.py::test_awareness_refuses_changed_checkpoint_without_rebuild",
+      "calls": [
+        "awareness_segments"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_channel_bus_ownership.py::test_natural_owned_turn_prepares_observer_pointer_without_native_start",
+      "calls": [
+        "prepare_native"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_compaction_retention_fixture.py::test_recorded_native_recall_consumes_original_probe_and_preserves_source",
+      "calls": [
+        "probe_text"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_compaction_retention_fixture.py::test_held_out_probe_uses_public_questions_only",
+      "calls": [
+        "probe_text"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_compaction_retention_fixture.py::test_frozen_research_and_goal_traces_keep_distinctions_and_denominators",
+      "calls": [
+        "probe_text"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_compaction_retention_fixture.py::test_cli_uses_frozen_scenario_for_public_probe_export",
+      "calls": [
+        "probe_text"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_current_input_origin.py::test_original_human_followup_survives_forwarding_reservation_and_native_disposition",
+      "calls": [
+        "for_owner"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_current_input_origin.py::test_historical_unknown_author_stays_neutral_and_human_scope_invalidates",
+      "calls": [
+        "for_owner"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_current_input_origin.py::test_direct_human_input_pin_shares_original_source_lineage_without_replay",
+      "calls": [
+        "for_owner"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_current_input_origin.py::captured",
+      "calls": [
+        "for_owner"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_keyed_response_delivery.py::test_reply_has_frozen_awareness_and_selected_native_barrier",
+      "calls": [
+        "awareness_segments"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_construction_rounds_preserve_prefix_and_public_probe_boundary",
+      "calls": [
+        "construction_rounds",
+        "probe_text"
+      ],
+      "source_text_reads": [
+        "operands"
+      ]
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_construction_plan_uses_original_oracle_and_separate_sampling_seed",
+      "calls": [
+        "construction_plan",
+        "construction_rounds"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_selected_case_requires_native_source_operands_without_changing_preview",
+      "calls": [
+        "construction_plan"
+      ],
+      "source_text_reads": [
+        "design.construction_plan(17)['"
+      ]
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_authored_case_events_use_real_user_lineage_and_admitted_decision",
+      "calls": [
+        "RecallRound",
+        "RecallScenario",
+        "construction_rounds",
+        "publish_task_sources"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_declared_task_coordinates_preserve_old_records_and_refuse_invalid_recipes",
+      "calls": [
+        "RecallRound",
+        "RecallScenario",
+        "construction_rounds"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_stimulus_group_uses_scenario_source_and_same_acquired_reader",
+      "calls": [
+        "construction_rounds",
+        "probe_text"
+      ],
+      "source_text_reads": [
+        "scenario.construction_rounds()"
+      ]
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_paired_recall_uses_recall_questions_and_keeps_trajectory_denominators",
+      "calls": [
+        "RecallRound",
+        "RecallScenario"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_paired_inference_keeps_complete_samples_and_original_model_selection",
+      "calls": [
+        "RecallRound",
+        "RecallScenario"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_resource_totals_use_original_summary_and_all_assistant_usage",
+      "calls": [
+        "RecallScenario"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_workflow_resources_require_stimuli_and_keep_shared_preparation_separate",
+      "calls": [
+        "RecallScenario"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_resource_totals_keep_unreported_and_empty_denominators",
+      "calls": [
+        "RecallScenario"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_paired_resources_compare_original_totals_without_zero_or_billing_credit",
+      "calls": [
+        "RecallScenario"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_paired_resource_batch_keeps_all_trajectories_and_uses_aggregate_denominator",
+      "calls": [
+        "RecallScenario"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_sdk_presence_requires_original_request_and_unchanged_bytes",
+      "calls": [
+        "pin_user_constraint"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_installed_source_uses_original_witness_ancestry_and_request",
+      "calls": [
+        "RecallRound",
+        "RecallScenario"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_scope_original_publication_and_drop_own_revision_measurement",
+      "calls": [
+        "pin_user_constraint"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::test_retained_publications_verify_original_wording_separately_from_pin",
+      "calls": [
+        "pin_user_constraint"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_recorded_retention_measurements.py::read",
+      "calls": [
+        "probe_text"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_retained_context_operations.py::test_original_retained_source_inspection_diff_and_narrow_export",
+      "calls": [
+        "for_owner",
+        "pin_user_constraint"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_stack_send_now.py::prepare_prompt",
+      "calls": [],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_task_decisions.py::test_user_pin_original_source_without_model_lease_and_complete_lineage",
+      "calls": [
+        "for_owner",
+        "pin_user_constraint"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_task_decisions.py::test_user_pin_goal_scope_replacement_and_original_subject_fences",
+      "calls": [
+        "pin_user_constraint"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_task_decisions.py::test_constraint_original_wording_scope_correction_and_human_authority",
+      "calls": [
+        "for_owner"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_task_decisions.py::test_equal_text_choices_keep_original_identity_through_rename_and_goal_replacement",
+      "calls": [
+        "for_owner"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_task_decisions.py::test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_choice",
+      "calls": [
+        "for_owner"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_task_decisions.py::captured",
+      "calls": [
+        "for_owner"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_turn_context_wire.py::test_silent_manifest_continuous_original_message_and_cold_projection",
+      "calls": [
+        "awareness_segments"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/test_turn_context_wire.py::test_rendered_contributors_remain_original_bytes_through_prompt_boundary",
+      "calls": [
+        "for_owner"
+      ],
+      "source_text_reads": []
+    },
+    {
+      "function": "tests/three_cut_retention_configured_journey.py::run",
+      "calls": [
+        "construction_plan",
+        "pin_user_constraint",
+        "publish_task_sources"
+      ],
+      "source_text_reads": [
+        "operands"
+      ]
+    }
+  ],
+  "resolution": "Lexical references; dynamic ACP/native delivery was examined through original functional01 records, not inferred from AST."
+}

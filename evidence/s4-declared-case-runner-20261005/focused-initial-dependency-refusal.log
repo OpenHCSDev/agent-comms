@@ -1,0 +1,19 @@
+test_construction_rounds_preserve_prefix_and_public_probe_boundary (test_recorded_retention_measurements.RecordedMeasurementTests.test_construction_rounds_preserve_prefix_and_public_probe_boundary) ... ok
+test_construction_plan_uses_original_oracle_and_separate_sampling_seed (test_recorded_retention_measurements.RecordedMeasurementTests.test_construction_plan_uses_original_oracle_and_separate_sampling_seed) ... ok
+test_selected_case_validates_before_original_capture_or_configured_execution (test_recorded_retention_measurements.RecordedMeasurementTests.test_selected_case_validates_before_original_capture_or_configured_execution) ... ERROR
+test_stimulus_delivery_requires_exact_source_and_original_earlier_branch (test_recorded_retention_measurements.RecordedMeasurementTests.test_stimulus_delivery_requires_exact_source_and_original_earlier_branch) ... ok
+
+======================================================================
+ERROR: test_selected_case_validates_before_original_capture_or_configured_execution (test_recorded_retention_measurements.RecordedMeasurementTests.test_selected_case_validates_before_original_capture_or_configured_execution)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/tests/test_recorded_retention_measurements.py", line 345, in test_selected_case_validates_before_original_capture_or_configured_execution
+    from three_cut_retention_configured_journey import run
+  File "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/tests/three_cut_retention_configured_journey.py", line 15, in <module>
+    from acp.agent.router import build_agent_router
+ModuleNotFoundError: No module named 'acp'
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.055s
+
+FAILED (errors=1)

@@ -1,0 +1,158 @@
+{
+  "state": "SOURCE PROPOSAL ONLY. No holder/package/artifact/provider access or operation authorized by this document. Fresh Bohr purpose and Sch7a authority required.",
+  "source_head": "040e752f28abf66efa912fd2a14f97ea92233e0f",
+  "source_WT": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002",
+  "PR": 674,
+  "retained_product": {
+    "head": "48b7db675f65fc312826a55db1bec20410ca7c70",
+    "production": "a264da8f7251c72fae0ee0259c1d81de9ea5ed7e",
+    "main_delivery": "7800f714d09d2e180597ca9ff59a14de41469dba",
+    "assets": 355,
+    "python_modules": 324,
+    "source_delta": "ZERO src/stack/.pi/pyproject against delivered676; no new build required",
+    "archive": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl",
+    "sha256": "3fe14077293b691000394831ed7458ecae92afd9b667af4501be2945ab86051d",
+    "proof_declaration": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-declared-case-runner-20261005/functional-installed-source.json",
+    "declaration_role": "Original historical InstalledSource from676, not a claim about current restored540. Actual staging/origin/byte proof must establish it before execution."
+  },
+  "authored_original": {
+    "oracle": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-declared-case-runner-20261005/authored-oracle.json",
+    "sha256": "06264176a3c69e2bc8ae94cc65c4782b94a50fd73482b355987e1f296f032d00",
+    "selection": "Original r1, all six history lines, original root Question only. Explicit constraint_sources=(2,). No private expected/stale/evidence fields in probe.",
+    "functional_oracle": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-declared-case-runner-20261005/functional-oracle.json",
+    "design": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-declared-case-runner-20261005/functional-design.json",
+    "plan": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-declared-case-runner-20261005/functional-plan.json",
+    "sampling_seed": 17,
+    "trajectory": 1,
+    "selected_arm_order": [
+      "bounded",
+      "task-memory"
+    ],
+    "cuts": 1,
+    "prompt_inputs": 3,
+    "manual_summary_requests": 1,
+    "other_trajectories_executed": 0,
+    "new_input_role": "One fresh source stimulus and one fresh probe in each SDK arm. ACP allocates original distinct IDs; no old input ID is supplied.",
+    "USER_publications": "Real private USER restriction+pin, then original r1[2] wording+pin using RecallRound.publish_task_sources. Other goal/input/tool history remains synthetic narrative, not ledger/action authority."
+  },
+  "selected_configuration": {
+    "owner": "openhcs-architecture-memory",
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "capture": "Original CurrentTypedCapture + RetainedOwnerLaunch at use. Both interpreter operands are THIN540; root decoder READ only.",
+    "design_model": "openai-codex/gpt-6.1-sol",
+    "actual_model": null,
+    "actual_thinking": null,
+    "binding": "Not a current Sol/HIGH assertion. Actual model is inherited and must match the design; actual configured thinking is inherited including OFF. Never force HIGH/OFF, model, provider, auth, extensions or settings.",
+    "credentials": "RAM only through original retained launch environment; no credential snapshot/export."
+  },
+  "functional_batch": {
+    "argv": [
+      "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+      "-B",
+      "tests/three_cut_retention_configured_journey.py",
+      "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional01/journey",
+      "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent",
+      "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+      "--installed-source",
+      "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-declared-case-runner-20261005/functional-installed-source.json",
+      "--archive",
+      "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl",
+      "3fe14077293b691000394831ed7458ecae92afd9b667af4501be2945ab86051d",
+      "--paired-construction",
+      "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-declared-case-runner-20261005/functional-design.json",
+      "17",
+      "1"
+    ],
+    "cwd": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002",
+    "environment": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONPATH": "tests:tools/cutover",
+      "PYTHONHOME": null,
+      "AGENT_COMMS_ROOT": null
+    },
+    "output": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional01/controller",
+    "operation_bound_seconds": 600,
+    "terminal_receipt": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional01/controller/terminal.json",
+    "measurement_receipt": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional01/journey/receipt.json"
+  },
+  "controller": {
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/same-idle-owner-native-source-20261005/qualification/run-phase.py",
+    "invocation": "THIN540/bin/python -B original run-phase.py ACTUAL_NEW_ISSUED_PATH ACTUAL_NEW_ISSUED_SHA functional_batch; path/hash operands only exist after issuance.",
+    "contract": "Mandatory argv[3] phase; lifecycle[phase] == grant[phase]; timeout from issued phase operation_bound_seconds. Exactly those three substitutions; original census/process identity/join/cleanup algorithm unchanged.",
+    "bound_scope": "600s explicitly proposed for this whole functional purpose, not a Pi/provider timeout, token or RAM cap. Stop after the first failure/uncertain result; no extension/retry/resume.",
+    "source_sha256": "351bec68f3466d30ee72558ff27eb14155deacd28d5f0ae5ec1452f483f007f6"
+  },
+  "stage_argv": [
+    "uv",
+    "pip",
+    "install",
+    "--python",
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "--no-deps",
+    "--no-cache",
+    "--reinstall",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl"
+  ],
+  "native": {
+    "package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent",
+    "manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+    "tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d",
+    "authority": "Fresh literal Sch READ for original FullTrust; EXEC only after actual candidate proof and matching Bohr release. Prior676 grants CLOSED. No build/copy/link/mutation."
+  },
+  "original_custody": "CurrentTypedCapture authenticates original live owner/admission/birth and original configured launch. Original SDK fork creates source parent; both arms use same registered source529 owner/root/scope and selected_native_fork yields exact retirement capability. Constructor/inspector before preparation; probe/measurement then acquired child retirement INSIDE inspector/env; parent restored/reprepared by676. One outer configured_saved_agent shutdown joins final parent before outer inspector exits. No inner roots/registry replacements.",
+  "proof_strength": "Actual ACP/OwnedTurn native input -> corrected inspector JSON -> sealed wire/context -> exact SDK condition/converter/request/selected-source relation + budget/terminal/measurement + acquired retirement/parent restoration. Not HTTP bytes, capacity, registered recall margin, independent pairs, billed spend, performance or whole S4.",
+  "cost": {
+    "planned_fresh_prompt_inputs": 3,
+    "planned_manual_summaries": 1,
+    "reported_dollars": null,
+    "billed_dollars": null,
+    "budget_authority": "Standing selected-configured-provider functional verification only. No USD75/30-pair budget used/granted. Canonical request budgets/defaults unchanged.",
+    "actual_accounting": "Existing PiUsage/SummaryUsage and ScoredScenario.recorded_resources preserve reported values/missingness. Shared source and summary are one shared preparation, not independent arm costs. Actual additional native generations/summaries, if canonical owners require them, stay visible; no fabricated no-retry/billing claim."
+  },
+  "automatic_delivery": "Existing configured_saved_agent uses auto_wake=False; InputDrain.background_wakes_disabled/CommsAgent._drain_private_nk and DisabledWakeScheduleRule suppress private background model wakes. Real USER rows remain; no UI or public delivery qualification.",
+  "protected_originals": "119d, prior662 STARTED/raw strict refusals, original602/three-cuts/659/660/S4/UNKNOWN unchanged. No existing outputs resumed/replayed. Newly uncertain attempts retained; no state rewrite.",
+  "resource_observation": {
+    "home_free_gib": 9.6,
+    "root_free_gib": 6.0,
+    "RAM_available_gib": 12.9,
+    "swap_used_gib": 15.7,
+    "role": "Planning observation only; actual resources refreshed before released one serial operation. No fleet/new environment/arbitrary caps.",
+    "storage": "Original source read once/protected; three genuine SDK forks (source parent + two arm children) with distinct identities, no extra source/native package copies."
+  },
+  "source_sha256": {
+    "tests/three_cut_retention_configured_journey.py": "6dc7610ec9cd8af7d26c6ed53151e969a68d5415c6831e364409fcd120e84149",
+    "tests/compaction_retention_fixture.py": "578da8097064bc32464d4051aa07f49f0d0d9586ee767af89a63409e8a0a125f",
+    "tests/retained_native_fixture.py": "8213a71916223655b09fa9cfd2b3bc47220bf3205c179897b0f906a3c407592c",
+    "tests/retained_native_conditions.mjs": "fbc3f9ecae473a04f687366b04b9d2429b9c54c1de528a415f75211d1fe0c7ab",
+    "tests/compaction_source_successor_installed_journey.py": "272453ec89460f3a7df71522ab4d2bc3dfd9eb1f06ee3bd8716a54d44a06da2c",
+    "tests/summary_prefix_configured_installed_journey.py": "357457189d441cbee9e8d07fca6f16769fdfac4b95ab46bbf71e5ba8bf0ccc95",
+    "tests/summary_prefix_native_observer.mjs": "5cdc053dfb214f4c08ff5865889acb3c8c8f14021de6aa52891ba4e0e7dfb39a",
+    "tests/native_turn_context_contract.mjs": "c83f77da7463ac22e213fad7eccd450d695dc6b37b4a61edf8dc42984bc3d20a",
+    "tools/cutover/original_owner_capture.py": "d014a6828d518517e5bc93c3909bf227bd2197158f26fb75528c13c0d8934a80",
+    "tools/cutover/read_original_owner.py": "3e61cfce03adfa059020d81c40ac5f3ef90bab1c09f602ebd614bc56c54ff053",
+    "tools/cutover/owner_read_projection.py": "4ca5fb3d2714863ba6ddd7b01f23cd3ddccd790f612f4edd7086b4b7935876a0",
+    "tools/cutover/publish_retained_summary.py": "025babf120563228d99920617d34f2e4142307d38e049405d4af49b2ecd7a960",
+    "evidence/same-idle-owner-native-source-20261005/qualification/run-phase.py": "351bec68f3466d30ee72558ff27eb14155deacd28d5f0ae5ec1452f483f007f6",
+    "evidence/s4-declared-case-runner-20261005/functional-installed-source.json": "54befb469d88485cb7eaf217065ea4b6917d36fcdec6adc694bd16c13363c0f2",
+    "evidence/s4-declared-case-runner-20261005/functional-oracle.json": "9e0bb206e3b458a77f19d38032cce2eff1fa8244906b1cf33458ab486793c4ba",
+    "evidence/s4-declared-case-runner-20261005/functional-plan.json": "339ceae656821def132c57e9ca62cf6f10fb709231adf11cc6e356be97245ec3",
+    "evidence/s4-declared-case-runner-20261005/functional-design.json": "07323a974d2cfdaa4fbf978974262958171a44bef119e463e50040196f6e92e3",
+    "evidence/s4-declared-case-runner-20261005/functional-source-contract.json": "9a39c2eeccd11a86c9afcc34ce97bcfc201562064e21348f00aab3790221ea83"
+  },
+  "restoration": {
+    "archive": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+    "sha256": "5f1667ce64c58d67e153850be91dfb669ea9e347218f8d845937a1c12c778a9c",
+    "role": "Historical expected floor only. Fresh Bohr capture defines actual current floor and exact normal restore/preimages/origins; no assumption that347 equals current main."
+  },
+  "whole_handback": "Original controller/fixture/observer/native RuntimeServer/SDK/socket/birth/groups joined; original source/.input-proof and all old source/raw/UNKNOWN unchanged; actual original floor/assets/94keepers/69metadata/10distributions/modes/links/truthful origins restored/proved; explicit Sch return and Bohr independent lifecycle close. No next purpose inferred.",
+  "no_operations": [
+    "package/archive access",
+    "holder import/install",
+    "native artifact READ/EXEC",
+    "build/env/dependency/native copy",
+    "provider/model input",
+    "public session read/change",
+    "SDK/source fork"
+  ],
+  "CI": "Deferred per current product direction; no queued run called green and no new CI/design gate."
+}

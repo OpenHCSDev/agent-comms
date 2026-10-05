@@ -39,7 +39,7 @@ def observe_native_requests(package, observation, *, contexts=None, summaries=No
     def observed_bootstrap(cls, cli, arguments, cwd, environment, configuration):
         nonlocal observers
         argv, environment = bootstrap(cli, arguments, cwd, environment, configuration)
-        if environment.get('AC_PREFIX_OBSERVATION'):
+        if environment.get('AC_PREFIX_OBSERVATION') == str(observation):
             with socket.socket() as reservation:
                 reservation.bind(('127.0.0.1', 0))
                 port = reservation.getsockname()[1]

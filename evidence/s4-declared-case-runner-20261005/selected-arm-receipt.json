@@ -1,0 +1,59 @@
+{
+  "determining_source": "f8853c66513dee413940a8568bd222e3e09dac6b",
+  "dependency": {
+    "PR": 676,
+    "joined_source": "9636b7d9b16bda87a68bf63d0cdca522ea8ef0fa",
+    "state": "Unqualified; pre-effect owner/custody retirement ordering is being corrected by Mendel",
+    "own_production_delta": 0
+  },
+  "source_hashes": {
+    "tests/compaction_retention_fixture.py": "578da8097064bc32464d4051aa07f49f0d0d9586ee767af89a63409e8a0a125f",
+    "tests/summary_prefix_configured_installed_journey.py": "357457189d441cbee9e8d07fca6f16769fdfac4b95ab46bbf71e5ba8bf0ccc95",
+    "tests/test_native_inspector_lifetime.py": "7ade884e2dbf2dbc2d671711dbea3bc0b145a364cd0539afbb2bae7796838752",
+    "tests/test_recorded_retention_measurements.py": "8e613e58e116a14d49288514ff59a2626d6cc236aa2aa52a1db39ce6a139066e",
+    "tests/three_cut_retention_configured_journey.py": "d9bb231f62c183b65e0ddcdcdbb681bb7fc8ac71a0958e1d5eae9fe59c0ebc78"
+  },
+  "artifact_hashes": {
+    "README.md": "464f1de667dd03626c144d88f1ef252ce8ce9acbff9591745726bc94e1ac46d0",
+    "selected-arm-source-contract.json": "734d660408c8100026d22787c95aed190691ecd78351ed68ec75b9d2d72a177c",
+    "selected-arm-authored-final.log": "ded49edd1c9b502057e50fb47a04b1839039fd45df07cdc68a052f4562615f05",
+    "selected-arm-authored-config-refusal.log": "5caeb3a7f556ae66fa1ed4dc55751da886d38412e0d9d22d1adbab229156cffa"
+  },
+  "controls": {
+    "passed": 7,
+    "subtests": 5,
+    "seconds": 0.78,
+    "scope": "Authored case publications, selected-plan operands and controlled inspector ownership; not SDK/native/registered paired execution"
+  },
+  "removed_path": "condition_application no longer captures public owner or creates configured_saved_agent registry; both arms borrow same source owner with selected_native_fork",
+  "source_census": {
+    "before": {
+      "src": 324,
+      "tests": 372,
+      "tools": 54
+    },
+    "after": {
+      "src": 324,
+      "tests": 373,
+      "tools": 54
+    },
+    "parse_omissions": 0,
+    "limits": "Lexical call/member sites; external dynamic dispatch not proved"
+  },
+  "initial_failure": "Repository default xdist options unavailable; retained configuration refusal, executed one serial seven-control batch without package install",
+  "operations": {
+    "providers": 0,
+    "SDK": 0,
+    "native": 0,
+    "donor_reads": 0,
+    "holder_imports": 0,
+    "package_builds": 0
+  },
+  "remaining": [
+    "676 pre-effect authority correction and saved-SDK resource qualification",
+    "Configured paired original constructor/install/converter/onContextReady/wire/probe/restoration acceptance unexecuted",
+    "Frozen old cases contain no declared USER task actions; no retrospective task credit",
+    "Capacity/intervention/HTTP/billing/registered comparison/full S4 unqualified; USD75/30-pair study unapproved"
+  ],
+  "preserved": "Original S4 artifacts/frozen oracles, STARTED/UNKNOWN and negative receipts unchanged; no expired purpose reused"
+}

@@ -1,0 +1,28 @@
+{
+  "source": "ace7c5f5fe3f294d41bbc3530be3cb16866fcab3",
+  "source_hashes": {
+    "tests/three_cut_retention_configured_journey.py": "6dc7610ec9cd8af7d26c6ed53151e969a68d5415c6831e364409fcd120e84149",
+    "tests/test_native_inspector_lifetime.py": "50e9106106b5ad1ec4cfbfbfc61b2b185eb38a161ff84335a65f36d3398a3a12"
+  },
+  "evidence_hashes": {
+    "README.md": "266e0327747ba520cd4d5cd2e5a47b2dbd6b6647fb1d8dc1d8cab3c5af3d9e71",
+    "application-cleanup-source-contract.json": "17bdd98769fc680fecea2b6f076d22ae936b6d9c696be2bf7924316d08acadbb",
+    "application-cleanup-before-capability.log": "2207aede3effc76057a2a3e57150b95838d002e9383df950aadd0fec45f590e8"
+  },
+  "prior_control": {
+    "passed": 4,
+    "seconds": 0.18,
+    "scope": "Intermediate uncommitted generic-finally source, superseded; not new acquired capability"
+  },
+  "current_controls": "Four source-prepared cases: prepare refusal, prompt refusal, result assertion and cancellation; not executed for current contract",
+  "operations": {
+    "current_control_runs": 0,
+    "SDK": 0,
+    "native": 0,
+    "provider_inputs": 0,
+    "holder_imports": 0
+  },
+  "dependency": "Mendel676 coherent acquired-child retirement and restored parent preparation source; older purposes withdrawn",
+  "scope": "Private caller/resource correction only, not configured pair, native custody, registered study or full S4",
+  "preservation": "Original artifacts/STARTED/UNKNOWN/refusals unchanged; no expired loan reused"
+}
