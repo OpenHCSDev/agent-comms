@@ -115,3 +115,44 @@ the artifact relation to the preserved prospective proposal. This proves a
 new normal-built exact-Git old producer; it is not historical original installed
 artifact equivalence. #684 stays Draft. Both eligible nonlive holder tuples and
 controlled old/new acceptance remain unbound; centralbatch/routing are separate.
+
+## Paired 540 producer / 334 reader proposal
+
+Bohr's immutable read-only candidate record `bf7846f8` names source THIN540
+and target closed334. `PAIRED-540-334-INSTALLED-OPERANDS.json` binds their
+literal interpreters, stage/proof/control/environment/output and floor-return
+operands. This is a proposal, not a package/import or runtime grant.
+
+Source540 stages only the old wheel once. Its actual current5f normal wheel
+plus exact510 preimage/94 keepers/10 RAW origins/133 original raw keepers are
+sufficient restoration operands; no new whole-prefix archive is required.
+Target334 already has the qualified c656/5f347 files and eight consumed owner
+files equal to the helper source. It receives no stage or rebuild. Its full
+1468/69 RAW origins/428+1883/PREFIXactivation remain unchanged; normal restore
+is conditional on an actual mutation, not a mandatory target restage.
+
+The prepared proof uses the existing wheel/RECORD and original floor validation
+algorithm, parameterized for these two prefixes. It imports no application or
+native artifact. It verifies old297/target347 installed files, actual filewheel
+origin, all source nonCore records, target originals and packaged resource pins.
+It does not create a cohort activation or claim old native FullTrust.
+
+The actual retained target declaration is native manifest `086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872`,
+tree `dbc88ed9231d1275da3ce218aa8919a247e41ce1f010ce765e7ac0960193f4ac`.
+Bohr and Parent confirmed the matching original086 keeper. Fresh Sch READ-only
+authority is required because existing require_source verifies that whole tree
+inside the controlled pilot; no native execution is involved. The old wheel's
+own resource manifest `4ab91006` is preserved as declaration bytes only.
+
+The prepared controller retains original installed BoundedRun.session /
+AttachedChild, issued output/interpreter/bound derivations, byte drains,
+controller+pilot identities and joined group retirement. Existing nested tools
+use synchronous subprocess.run; their individual births are not retained, and
+no such evidence is fabricated. One pilot seeds a new authored private root
+once. All old source/registry/guard bytes and failed/UNKNOWN evidence remain
+preserved on failure; packages are restored independently of the authored root.
+
+Literal issued grant hashes and Sch READ receipt remain unbound until actual
+issue/phase release. Both helper scripts only parsed/compiled as source here.
+No package stage, prefix import/read proof, native keeper read or runtime control
+has run. The four determining tools and accepted build artifact are unchanged.

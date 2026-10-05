@@ -1,0 +1,472 @@
+{
+  "status": "SOURCE-ONLY final proposal; neither issued authority nor access/reservation",
+  "source_receipt_head": "174534e0056671e25040afe4e76b78e65ecbc7b3",
+  "source_tools_determining": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+  "two_holder_readback": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/684-two-existing-private-source-target-holder-readback.json",
+    "sha256": "bf7846f804b4f098bbd3999f7be323de6ca7f00a7275edf2e5da8921c39285d5",
+    "time": 1791240917.8292274,
+    "checkpoint_only": "Fresh floors/ref/alias readback required at issue, not a blanket source gate"
+  },
+  "tools": [
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_index_cutover.py",
+      "sha256": "43321c362d4a5c610aa0743872a3457f60363cda0c0b8913247db56cd28e44b6"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_index_writer.py",
+      "sha256": "12b95a6de335bffd741163f66daa183209690d1cf9f514efb3a891e3d0a8674f"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_index_installed_pilot.py",
+      "sha256": "4b66f5d2399313cb1313404ec1dd9416a444d285e411bc4ccf23207db801b166"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/seed_retained_index_fixture.py",
+      "sha256": "d89b7561882c0a0a69700f24eda02e4ad8dca939582f1155a50f8bc1d88745f4"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/checkpoint_schema.py",
+      "sha256": "0d32c74d741572f9f5a242eb34750f7c3353ee88a480957d59380afb1147adee"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/install_retained_index.py",
+      "sha256": "3060f64db3d180452452b5ec12c5cd2730f8f8052ab5676c8807f49c42b3982d"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-index-cross-version-20261005/paired-installed-proof.py",
+      "sha256": "cc872ead0747881608a2c5cb1aa4ef5f3f2a511ea7f58b1aaac80fc47580b498"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-index-cross-version-20261005/paired-installed-controller.py",
+      "sha256": "aba73ba54f6c7f93fb13a6c80db0c33bd968adc6e39c93adfa0b67135981869e"
+    }
+  ],
+  "source": {
+    "prefix": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002",
+    "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "site_packages": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages",
+    "commit": "72062939239b0f07707406309305a056a23f925f",
+    "wheel": {
+      "path": "/home/ts/.cache/agent-scratch/einstein-retained-index-cross-version-20261005/old720-wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "sha256": "c3e41356b1d84c67314de57dadc287aed199f249cfe88164aad0fe705242f44b",
+      "bytes": 727243
+    },
+    "wheel_proof": {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-index-cross-version-20261005/OLD720-BUILT-WHEEL-PROOF.json",
+      "sha256": "dc3d6cc6de3e1eba7165d2855bdf5a63f3e43d0a7db7d16c4650e4d2d1c4a2e5"
+    },
+    "build_receipt": {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-index-cross-version-20261005/OLD720-BUILD-RECEIPT.json",
+      "sha256": "17d458bde1b6c306d633b73bd2238d71e2c707da08a9271960c28715be00f537"
+    },
+    "built_relation": {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-index-cross-version-20261005/BUILT-OLD-SOURCE-INSTALLED-RELATION.json",
+      "sha256": "1bd268c9088e8d1ae336f1a836cbc7b9fbd126eb466eafaf6d4486de42b64567"
+    },
+    "historical_original_installed_equivalence": false,
+    "stage_argv": [
+      "uv",
+      "pip",
+      "install",
+      "--python",
+      "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+      "--no-deps",
+      "--no-cache",
+      "--reinstall",
+      "/home/ts/.cache/agent-scratch/einstein-retained-index-cross-version-20261005/old720-wheel/agent_comms-0.1.0-py3-none-any.whl"
+    ],
+    "stage_attempts": 1,
+    "stage_environment": {
+      "unset": [
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "UV_COMPILE_BYTECODE"
+      ],
+      "set": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      }
+    },
+    "floor_preimage": {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Parent673-at-grant-floor-source-readback.json",
+      "sha256": "cdca5684eef868acbdf0b6c8f1bf7491252f21b129d392b03cb23f06ddcf16c5"
+    },
+    "normal_distributions": {
+      "pydantic_core": "2.46.5",
+      "typing-inspection": "0.4.4",
+      "metaclass-registry": "0.2.1",
+      "annotated-types": "0.8.0",
+      "typing_extensions": "4.15.0",
+      "pydantic": "2.13.5",
+      "packaging": "26.2",
+      "agent-comms": "0.1.0",
+      "nominal-refactor-audit": "0.1.0",
+      "agent-client-protocol": "0.12.1"
+    },
+    "floor_counts": {
+      "Core_assets": 347,
+      "original_files": 510,
+      "nonCore_keepers": 94,
+      "metadata_files": 69,
+      "distributions": 10,
+      "raw_keepers": 133
+    },
+    "restore_wheel": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+      "sha256": "5f1667ce64c58d67e153850be91dfb669ea9e347218f8d845937a1c12c778a9c",
+      "bytes": 881624
+    },
+    "restore_argv": [
+      "uv",
+      "pip",
+      "install",
+      "--python",
+      "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+      "--no-deps",
+      "--no-cache",
+      "--reinstall",
+      "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl"
+    ],
+    "restore_rule": "Normal5f wheel + exact510 hash/mode/link and all10RAW origins +94/133protected keepers is sufficient. No current whole540 TAR required or asserted; old655 TAR excluded. Remove only added oldCore package files through normal installer.",
+    "native_resource_manifest_sha256": "4ab910061590d1e0d02e915478903aec24da5be3a1c76460a1e2896ab40563cc",
+    "native_resource_rule": "Forced resources bytes only; no old native artifact/fulltrust/read or execution, no old manifest equivalence to 7a or 086"
+  },
+  "target": {
+    "prefix": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002",
+    "python": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+    "site_packages": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages",
+    "commit": "c656a64c4887fae14227b1e0a04a2b263bdaeade",
+    "wheel": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+      "sha256": "5f1667ce64c58d67e153850be91dfb669ea9e347218f8d845937a1c12c778a9c",
+      "bytes": 881624
+    },
+    "existing_whole347_source_proof": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/wheel-source-proof.json",
+      "sha256": "6e2453b56c491f86719775ed5dd6ca647197856c3dc2f009c8b2ba37552e9b90",
+      "bytes": 79756
+    },
+    "matching_consumed_files": [
+      {
+        "installed": {
+          "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/transcript_receipts.py",
+          "sha256": "686720b2df490be1dd0cceb9e92ca91e70b25b3f91c9bf4e81098f6a2794f0a6",
+          "bytes": 13304
+        },
+        "source684": {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcript_receipts.py",
+          "sha256": "686720b2df490be1dd0cceb9e92ca91e70b25b3f91c9bf4e81098f6a2794f0a6",
+          "bytes": 13304
+        },
+        "byte_equal": true
+      },
+      {
+        "installed": {
+          "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/thread_identity.py",
+          "sha256": "e0bf0f6696640417876de1c66459e2571f74ae7b1f200e68bd5c88911fa200b3",
+          "bytes": 6556
+        },
+        "source684": {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/thread_identity.py",
+          "sha256": "e0bf0f6696640417876de1c66459e2571f74ae7b1f200e68bd5c88911fa200b3",
+          "bytes": 6556
+        },
+        "byte_equal": true
+      },
+      {
+        "installed": {
+          "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/owner_cutover.py",
+          "sha256": "690c931f0bd6b892b3b9001997d91a456923b07465b959047997fa8f48a8f758",
+          "bytes": 4660
+        },
+        "source684": {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/owner_cutover.py",
+          "sha256": "690c931f0bd6b892b3b9001997d91a456923b07465b959047997fa8f48a8f758",
+          "bytes": 4660
+        },
+        "byte_equal": true
+      },
+      {
+        "installed": {
+          "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/owner_restart.py",
+          "sha256": "472288254c4b3b5cba904254432f31efac7d47c421200684692094e100d56bf8",
+          "bytes": 11510
+        },
+        "source684": {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/owner_restart.py",
+          "sha256": "472288254c4b3b5cba904254432f31efac7d47c421200684692094e100d56bf8",
+          "bytes": 11510
+        },
+        "byte_equal": true
+      },
+      {
+        "installed": {
+          "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py",
+          "sha256": "8781540333878f04061de5049d5a485390c67b74178ff686384117f7b5f0eccb",
+          "bytes": 30213
+        },
+        "source684": {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/wire_log.py",
+          "sha256": "8781540333878f04061de5049d5a485390c67b74178ff686384117f7b5f0eccb",
+          "bytes": 30213
+        },
+        "byte_equal": true
+      },
+      {
+        "installed": {
+          "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/wire_metadata.py",
+          "sha256": "edd046807e316e3b43e20b1c46fc0aca6cdc59ed71d25445ede38f05f0fecbc2",
+          "bytes": 7606
+        },
+        "source684": {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/wire_metadata.py",
+          "sha256": "edd046807e316e3b43e20b1c46fc0aca6cdc59ed71d25445ede38f05f0fecbc2",
+          "bytes": 7606
+        },
+        "byte_equal": true
+      },
+      {
+        "installed": {
+          "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/store_files.py",
+          "sha256": "897f5940e8839db9dbd0d92601408cf65b28ba97def00697bcb1769f56525ae7",
+          "bytes": 10142
+        },
+        "source684": {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/store_files.py",
+          "sha256": "897f5940e8839db9dbd0d92601408cf65b28ba97def00697bcb1769f56525ae7",
+          "bytes": 10142
+        },
+        "byte_equal": true
+      },
+      {
+        "installed": {
+          "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/field_codec.py",
+          "sha256": "766db776e16b92c934cadd3079201bb2e812f5f23e8dd8e18a91402febe63699",
+          "bytes": 22271
+        },
+        "source684": {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/field_codec.py",
+          "sha256": "766db776e16b92c934cadd3079201bb2e812f5f23e8dd8e18a91402febe63699",
+          "bytes": 22271
+        },
+        "byte_equal": true
+      }
+    ],
+    "native_module_sha256_from_original_wheel": "f6832d49ee594855a1ad570bf5fb01ed1445c95c74c33f817bf3723c8fcc5c68",
+    "controller_owner_module_sha256_from_original_wheel": "6b7ca96a3f23eb74de9534d5c6c747486feae174333f227ae76e5515e2983ef4",
+    "source_relation": "347 whole c656/5f qualified and eight consumed owner files byte-equal 684; native and BoundedRun owners additionally source-read from original wheel. No latestMAIN equality.",
+    "stage_argv": null,
+    "stage_attempts": 0,
+    "floor_preimage": {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/released-holder-originals/334-current447-before-joint458460/current447-preimage.json",
+      "sha256": "fa647afa7eb8d1cc9cda6ce5df45fb48991aff1ac79ea44d2b7e43f7a34e2368"
+    },
+    "floor_archive": {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/released-holder-originals/334-current447-before-joint458460/original-current447-1468.tar.gz",
+      "sha256": "41b065384c8fa6854f813f02a4eebb9fa619a0f823b836a65d1430902fa5762e",
+      "bytes": 4028512,
+      "members": 1468,
+      "mode": 384
+    },
+    "normal_distributions": {
+      "Pygments": "2.21.0",
+      "pydantic_core": "2.46.5",
+      "typing-inspection": "0.4.4",
+      "loguru": "0.6.0",
+      "tree-sitter-go": "0.25.0",
+      "aiohttp": "3.14.3",
+      "propcache": "0.5.4",
+      "yarl": "1.25.1",
+      "tree-sitter-yaml": "0.7.2",
+      "format-currency": "0.0.10",
+      "tree-sitter-rust": "0.24.2",
+      "xdg-base-dirs": "6.0.3",
+      "certifi": "2026.7.22",
+      "frozenlist": "1.8.0",
+      "aiosignal": "1.4.0",
+      "platformdirs": "4.9.6",
+      "metaclass-registry": "0.2.1",
+      "idna": "3.20",
+      "tree-sitter-bash": "0.25.1",
+      "aiohappyeyeballs": "2.7.1",
+      "pyperclip": "1.11.0",
+      "Jinja2": "3.1.6",
+      "rich": "15.0.0",
+      "bashlex": "0.18",
+      "annotated-types": "0.8.0",
+      "textual": "8.2.8",
+      "aiohttp-jinja2": "1.6",
+      "httpx": "0.28.1",
+      "anyio": "4.14.2",
+      "batrachian-toad": "0.6.20",
+      "linkify-it-py": "2.2.0",
+      "click": "8.4.0",
+      "tree-sitter-json": "0.24.8",
+      "notify_py": "0.3.43",
+      "tree-sitter-javascript": "0.25.0",
+      "typing_extensions": "4.15.0",
+      "textual-diff-view": "0.1.5",
+      "markdown-it-py": "4.2.0",
+      "setproctitle": "1.3.7",
+      "MarkupSafe": "3.0.3",
+      "tree-sitter-html": "0.23.2",
+      "textual-serve": "1.1.3",
+      "tree-sitter": "0.26.0",
+      "attrs": "26.1.0",
+      "tree-sitter-xml": "0.7.0",
+      "watchdog": "6.0.0",
+      "pydantic": "2.13.5",
+      "pathspec": "1.1.1",
+      "jeepney": "0.9.0",
+      "mdurl": "0.1.2",
+      "packaging": "26.2",
+      "tree-sitter-markdown": "0.5.1",
+      "agent-comms": "0.1.0",
+      "aiosqlite": "0.22.1",
+      "tree-sitter-css": "0.25.0",
+      "tree-sitter-java": "0.23.5",
+      "psutil": "7.2.2",
+      "typeguard": "4.5.2",
+      "httpcore": "1.0.9",
+      "tree-sitter-sql": "0.3.11",
+      "mdit-py-plugins": "0.6.1",
+      "tree-sitter-python": "0.25.0",
+      "nominal-refactor-audit": "0.1.0",
+      "h11": "0.16.0",
+      "agent-client-protocol": "0.12.1",
+      "tree-sitter-toml": "0.7.0",
+      "multidict": "6.9.1",
+      "tree-sitter-regex": "0.25.0",
+      "textual-speedups": "0.2.1"
+    },
+    "floor_counts": {
+      "archive_members": 1468,
+      "protected": 428,
+      "other66_keepers": 1883,
+      "distributions": 69
+    },
+    "restore_argv": [
+      "uv",
+      "pip",
+      "install",
+      "--python",
+      "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+      "--no-deps",
+      "--no-cache",
+      "--no-index",
+      "--link-mode",
+      "copy",
+      "--reinstall",
+      "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+      "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/projected-prefetch443-current440-334-20261004/toad-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "/home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native59-filewheel-20261004/textual-8.2.8-py3-none-any.whl",
+      "/home/ts/wt/nra-skill-publish-20261002/.artifacts/family-flattened-collector-20261004/wheels/nominal_refactor_audit-0.1.0-py3-none-any.whl"
+    ],
+    "restore_rule": "Target package floor unchanged; prove all1468/69RAWorigins/428+1883/PREFIXactivation unchanged at terminal. Four-wheel + original archive metadata only if actual restoration necessary; no unconditional restage of untouched target."
+  },
+  "native_READ": {
+    "package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+    "manifest": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872",
+    "tree": "dbc88ed9231d1275da3ce218aa8919a247e41ce1f010ce765e7ac0960193f4ac",
+    "required_where": "Actual target RetainedIndexCutover.require_source calls installed verify_native_package; original fulltree READ only inside the controlled pilot. Staged source proof reads packaged resources only and does not run native fulltrust.",
+    "native_EXEC_authorized": false,
+    "authority": "NEW originalSch READ receipt after literal paired issued-target grant is read/hash verified; unissued now",
+    "owner_correction": "Bohr and Parent explicitly confirmed actual target086 manifest/tree/package; old7a spelling superseded, no mismatch remains."
+  },
+  "proposed_grants": {
+    "source": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Einstein684-old720-source-producer-package-issued-grant.json",
+    "target": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Einstein684-retained-index-target-reader-issued-grant.json",
+    "issued_sha256s": "UNBOUND until Bohr actual issue; literal substitutions below only at phase binding"
+  },
+  "owned_output": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01",
+  "fixture": "/home/ts/.cache/agent-scratch/einstein-retained-index-cross-version-20261005/installed01",
+  "operation_bound_seconds": 90,
+  "proof_command_template": [
+    "/usr/bin/python",
+    "-B",
+    "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-index-cross-version-20261005/paired-installed-proof.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-index-cross-version-20261005/PAIRED-540-334-INSTALLED-OPERANDS.json",
+    "@ACTUAL_PROPOSAL_SHA256@",
+    "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Einstein684-retained-index-target-reader-issued-grant.json",
+    "@ACTUAL_TARGET_GRANT_SHA256@",
+    "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Einstein684-old720-source-producer-package-issued-grant.json",
+    "@ACTUAL_SOURCE_GRANT_SHA256@"
+  ],
+  "proof_cwd": "/home/ts/wt/comms-field-codec-closure-20260928",
+  "proof_environment": {
+    "unset": [
+      "PYTHONPATH",
+      "PYTHONHOME"
+    ],
+    "set": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONNOUSERSITE": "1"
+    }
+  },
+  "proof_output": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/candidate-source-proof.json",
+  "control": {
+    "argv": [
+      "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+      "-B",
+      "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_index_installed_pilot.py"
+    ],
+    "cwd": "/home/ts/wt/comms-field-codec-closure-20260928",
+    "environment": {
+      "unset": [
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "AGENT_COMMS_ROOT",
+        "AGENT_COMMS_PRIVATE_NK_ROOT",
+        "AGENT_COMMS_PRIVATE_NK_ROOT_ID",
+        "AGENT_COMMS_PRIVATE_NK_PACKAGE"
+      ],
+      "set": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+        "AC_INDEX_ORIGINAL_PYTHON": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+        "AC_INDEX_FIXTURE_STAGE": "/home/ts/.cache/agent-scratch/einstein-retained-index-cross-version-20261005/installed01",
+        "AC_NATIVE_COPIED_PACKAGE": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d/node_modules/@earendil-works/pi-coding-agent",
+        "XDG_CONFIG_HOME": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/config",
+        "XDG_STATE_HOME": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/state",
+        "XDG_DATA_HOME": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-index-cross-version-20261005/paired-installed01/data"
+      }
+    },
+    "receipt": "/home/ts/.cache/agent-scratch/einstein-retained-index-cross-version-20261005/installed01/receipt.json",
+    "attempts": 1
+  },
+  "controller_command_template": [
+    "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+    "-B",
+    "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-index-cross-version-20261005/paired-installed-controller.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-index-cross-version-20261005/PAIRED-540-334-INSTALLED-OPERANDS.json",
+    "@ACTUAL_PROPOSAL_SHA256@",
+    "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Einstein684-retained-index-target-reader-issued-grant.json",
+    "@ACTUAL_TARGET_GRANT_SHA256@",
+    "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Einstein684-old720-source-producer-package-issued-grant.json",
+    "@ACTUAL_SOURCE_GRANT_SHA256@",
+    "@NEW_NATIVE_READ_RECEIPT_PATH@",
+    "@NEW_NATIVE_READ_RECEIPT_SHA256@"
+  ],
+  "controller_owner": "Original installed target BoundedRun.session/AttachedChild only; issued90s and exact source+target/output/interpreter checks retained. One child exchange, two joined byte drains; no source overlay.",
+  "phase_release_contract": {
+    "proof": "Both actual grants read/hash; source stage once completed. Both existing lifecycles proof_execution_authorized true and execution_authorized false/native_EXEC_authorized false. Source proof performs stdlib prefix reads only; no native READ grant needed for this phase. Native READ receipt bound before control.",
+    "control": "Actual paired proof SHA+exact controller/control/env+NEW matching086 READ receipt bound in both original lifecycles; source+target execution_authorized true/native_EXEC_authorized false. No additional approval.",
+    "end": "Join pilot/controller/original group/resources then source540 normal restore ONCE and unchanged334 fullfloor proof; explicit matchingREAD return + whole source/target handback to Bohr independent close."
+  },
+  "nested_children": "Original tools use synchronous subprocess.run for seed/declarations/writer/installer; nested individual birth IDs not retained. Outer original AttachedChild/controller identities and group retirement captured. No fabricated nested PID evidence.",
+  "operator": "Original Einstein sole source packagewriter/control/wholepaired restore and handback; Bohr sole issued/lifecycle/freshindependent closure, Sch sole native keeper READ owner",
+  "scope": "Newly authored private old seed exactly once -> genuine incompatible original writer certificate/intFD/root -> target inherited fstat/flock/root -> AssignedTranscriptSource incarnation read/original frozen sender+audience/events/bus+registry+guard invariant. No centralbatch/routing claim.",
+  "failure": "First FAIL/UNKNOWN stops; no repeat seed/control/old checkpoint rollback after index mutation. Preserve authoredroot/raw evidence and actual old declarations/source fields; restore packages only and join before returns.",
+  "prohibited": [
+    "native artifact execution",
+    "SDK/native build or copy",
+    "provider/model/input",
+    "actual saved/private/public source corpus reads",
+    "UNKNOWN replay",
+    "public aliases/root/clients/signals",
+    "new env",
+    "target stage/build",
+    "second old build",
+    "centralbatch or routing acceptance claim"
+  ]
+}
