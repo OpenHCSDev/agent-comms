@@ -87,6 +87,30 @@ must preserve source identity; including the answer in the key would create a
 competing identity. Parent makes no overlapping source edit, and no accepted
 App/provider replay or new holder purpose is inferred from this review.
 
+## Current changed-owner checkpoints
+
+Explorer successor449 exact8473d4be derives grouping and navigation from
+WorkingMemoryAnnotations.address through FieldCodec. The key includes length
+and excludes answer/section, preserving HumanLabel refinement identity. One
+authored mounted native Tree check passed1.44s: same-offset distinct-length
+ranges remain independently owned/revealed, section change retains the right
+reader, and unmount/remount restores selection. Parent independently matched
+all319 wheel assets to determining486fb Git and proof5570; new wheel1a8ad350
+is distinct from frozen accepted e414. No installed successor claim yet; its
+7f481 proposal requires fresh purpose after446 whole handback. Frozen627/434
+acceptance receipts remain unchanged.
+
+Bohr issued soleHeis446 CURRENT444 SERIAL3 purpose59c17e75, binding final
+fcea/3ab5 manifest and all12 control/helper hashes. NEW Sch086 READ-only is
+bound for source proof; execution remains held on actual945/full69/519 proof
+and a separate NEW execution renewal. The public334 decoder relationship is
+authorized only inside the third OriginalTypedCapture control after release.
+No job acceptance is claimed. Independently Heis owns TC1 presentation/watcher
+custody: remount currently creates a watcher before replacing it with a retained
+one, whose receiver rebind leaves the CoreEvent subscription at the old widget.
+OperationalSessionPresentation and DirectoryWatcher own the complete repair;
+446 frozen controls remain unchanged and no runtime cause is inferred.
+
 ## Historical integration evidence
 
 Parent retired its unused standalone channel_recovery_physical_journey wrapper.
