@@ -1498,7 +1498,8 @@ class RecordedMeasurementTests(unittest.TestCase):
             with journal.transaction() as db:
                 NativeForkCreation.update(db, where='session_file=?', parameters=(middle.session_file,),
                     prefix_digest=TextDigest.of('changed prefix'))
-            with self.assertRaisesRegex(NativePiUnavailable, 'original prefix changed'):
+            with patch.object(NativeEntry, 'open_evidence', side_effect=tracked), self.assertRaisesRegex(
+                    NativePiUnavailable, 'original prefix changed'):
                 probe.fork_ancestry(evidence, parent)
         # The original contextmanager's finally closes the extra descriptor on
         # both success and prefix refusal; no helper process/socket is involved.
