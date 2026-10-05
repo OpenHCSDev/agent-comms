@@ -2659,3 +2659,23 @@ subscription retirement, handlerless MainScreen rebind and project-tree refresh
 consumer. Heis remains first-paint450 integration owner and integrates the
 disjoint contribution normally. The source correction remains unqualified in
 an installed App; no watcher process or accepted journey was repeated.
+
+## Paired original request controls integrated
+
+Core672 frozenbcb6032c32dcf712cfc8d876f55d6954a03fe6c9 is normally merged as
+d2f0a122fc7d224628e3ac0ed1c772e259a010f4. Parent read the existing comparison,
+request/completion and paired-quality consumers and verified two determining
+source plus three raw receipt hashes. RecordedNativeProbes.context_alignment
+uses the original shared comparison algorithm for ordered whole system and tool
+values and measurement counter; the former tool-only inline algorithm is deleted.
+Missing captured instructions propagate unavailable pairing, while changed
+captured controls refuse. Distinct provenance/annotations do not replace the
+whole measured system value. Four authored checks passed in0.022s; the original
+wrong-selector negative ran no methods and remains recorded honestly.
+
+Production/native/tools and installed packages are unchanged. This source
+checkpoint is not a configured paired provider execution or complete intervention,
+HTTP, recall, capacity or study proof. The merged671 same-input evidence remains
+bound to its original577 helper versions and old recorded request; later helper
+source changes do not rewrite that accepted measurement. No provider, SDK,
+holder operation or accepted recorded read was repeated.
