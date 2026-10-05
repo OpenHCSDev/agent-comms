@@ -1,0 +1,38 @@
+{
+  "source": "ace7c5f5fe3f294d41bbc3530be3cb16866fcab3",
+  "parser": "Existing audit.findings.Package/FunctionFacts",
+  "tests_parsed": 373,
+  "omissions": [],
+  "callers": {
+    "tests/three_cut_retention_configured_journey.py::record": [],
+    "tests/three_cut_retention_configured_journey.py::condition_application": [
+      "apply_condition_input",
+      "observe_native_requests",
+      "retire_selected"
+    ],
+    "tests/three_cut_retention_configured_journey.py::apply_condition_input": [],
+    "tests/three_cut_retention_configured_journey.py::verify_condition_application": [
+      "apply_condition_input",
+      "configured_saved_agent",
+      "observe_native_requests"
+    ],
+    "tests/three_cut_retention_configured_journey.py::request_construction": [
+      "configured_saved_agent",
+      "observe_native_requests"
+    ],
+    "tests/three_cut_retention_configured_journey.py::run": [
+      "condition_application",
+      "configured_saved_agent",
+      "observe_native_requests",
+      "selected_native_fork"
+    ],
+    "tests/three_cut_retention_configured_journey.py::capture_source": [],
+    "tests/three_cut_retention_configured_journey.py::session_update": []
+  },
+  "selected_cleanup_finally": "await retire_selected()",
+  "selected_resource_calls": [
+    "async with agent.sessions.selected_native_fork(owner.name, original_owner, child) as (selected_owner, retire_selected):\n    probe, observed = await condition_application(arm_stage, package, agent, selected_owner.thread, child, condition, checkpoint, prompt_text=operands['probe_text'], receipt=arm_receipt, retire_selected=retire_selected)"
+  ],
+  "generic_current_backend_close_sites": 0,
+  "limits": "Source structure only; authored capability controls and corrected production custody are unqualified"
+}

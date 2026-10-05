@@ -32,15 +32,21 @@ preparation, prompt and original probe. The standalone functional command has
 one outer `configured_saved_agent` acquisition and uses that same body.
 
 Within a selected fork, condition bytes and the observer are ready before native
-preparation. After the prompt/idle assertions and capture, original
-`close_idle_backend` joins the child while its inspector can release Node
-completion. Observer/environment scopes close before selection restoration and
-parent preparation. An observer only attaches to its declared launch, preventing
+preparation. The selected resource yields `(selected, retire_selected)`. The paired body
+awaits that acquired retirement capability in `finally` inside the observer/RAM
+environment, including preparation errors, prompt errors, failed measurements
+and cancellation. The existing custody owner supplies binding checks and
+cancellation-safe joining; the caller does not select a current backend or join
+cleanup twice. Observer/environment scopes then close before parent restoration.
+The standalone observer instead encloses its original configured-agent resource,
+whose native shutdown completes before observer exit. Both resources use one
+`apply_condition_input` prepare/prompt/capture algorithm. An observer only attaches to its declared launch, preventing
 nested parent/arm scopes from attaching two inspectors to one child.
 
 The production resource comes from normally joined #676 `9636b7d9`; S4 edits are
-private fixtures only. Its owner-fence/retirement ordering review remains with
-Mendel. No caller guard or registry replacement has been added here.
+private fixtures only. Its corrected two-capability publication and pre-effect
+owner/custody retirement remain with Mendel; the joined older production source
+is not executable acceptance for the corrected consumer contract. No caller guard or registry replacement has been added here.
 
 ## Checks and limits
 
@@ -66,3 +72,17 @@ still required. Shared preparation is not independent arm cost. Capacity,
 HTTP/billing, action validity, the registered comparison and full S4 remain
 unfinished. USD75/30-pair execution remains unapproved. Original artifacts,
 STARTED/UNKNOWN and prior refusals remain untouched.
+
+## Cleanup correction checkpoint
+
+`ace7c5f5` removes the success-only generic retirement. The required capability
+is used in the paired `finally`, and the standalone owned resource closes while
+its observer is still alive. `application-cleanup-source-contract.json` records
+all private caller sites and the absence of generic backend-close calls.
+
+Four authored failure/cancellation controls are source-prepared. They execute
+the original private function declarations with controlled boundary calls; they
+do not load the complete ACP module or prove actual native custody. They have
+not run against this corrected capability contract. The earlier intermediate
+generic-finally control log (four PASS/0.18s) remains separately preserved and
+does not qualify this new contract. No new configured, SDK or provider run began.
