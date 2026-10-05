@@ -61,7 +61,7 @@ the generic connection message. Consequently a generic CLI failure is **not**
 proof that the origin guard was reached.
 
 For the reached-refusal control, use the selected committed package's
-`node_modules/openai/client.mjs` default OpenAI export through the existing
+`node_modules/openai/client.mjs` **named `OpenAI` export** through the existing
 authored Node helper/import fence/bootstrap launch. First use the real Pi HTTP
 dispatcher setup so its fetch replacement is exercised. Construct the client
 with the deliberately external baseURL, dummy apiKey, maxRetries: 0, and **no**
@@ -74,6 +74,20 @@ negative as the SDK refusal qualification. This adds no extension entry.
 Mendel owns the exact authored control and any dispatch witness. Future issued
 acceptance must bind its literal source/argv/output and prove the refused SDK
 request did not reach external dispatch. Sch has not executed this control.
+`configureHttpDispatcher(timeoutMs = DEFAULT_HTTP_IDLE_TIMEOUT_MS)` exports from
+`dist/core/http-dispatcher.js`; the default constant is `300_000`. Call it without
+arguments. It constructs a fresh EnvHttpProxyAgent and sets the global dispatcher
+on every call. Its first install condition is equality with the global fetch
+captured at module import; subsequent installs require equality with the
+recorded installedGlobalFetch. The bootstrap accessor returns a stable wrapped
+function until that assignment, so a repeated zero-argument call follows the
+supported `undici.install()` path again. This is source-derived, not a runtime
+receipt. Observe `undici:request:create` through diagnostics_channel without
+replacing fetch/dispatcher; a refused-origin request must produce zero events
+for that origin, while localhost positive requests demonstrate the observer
+actually sees dispatch. A localhost redirect GET endpoint can attest that
+redirect:error does not follow its Location. No runtime control ran here.
+
 The original four native/MCP cases remain the localhost positive acceptance.
 Also retain actual redirect refusal and dispatcher-reconfiguration evidence;
 source inspection alone is not those outcomes.
