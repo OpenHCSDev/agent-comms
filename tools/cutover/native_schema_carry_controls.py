@@ -112,6 +112,11 @@ def run_journal_inventory(base, source_python, inventory_path):
 
 def run(base, source_python, root):
     """Final installed operator control; caller provides an actual stopped copy."""
+    from agent_comms.coordination_database import CoordinationStore
+    from agent_comms.coordination_errors import SchemaVersionError
+    from agent_comms.coordination_tables.metadata import SchemaMeta
+    from agent_comms.typed_table import SQLiteUserVersion
+
     base.mkdir(mode=0o700, exist_ok=True)
     PrivateDirectoryRole.require(base.lstat())
     PrivateDirectoryRole.require(root.lstat())
@@ -122,8 +127,12 @@ def run(base, source_python, root):
     original = original_declaration(source_python)
     target = NativeSchemaDeclaration.observe()
     original.require_carry_target(target)
-    source_hashes = {path.name:digest(path) for path in RuntimeNativeFiles(root).paths
+    carried_paths = frozenset(RuntimeNativeFiles(root).paths)
+    source_hashes = {path.name:digest(path) for path in carried_paths
                       if path.exists()}
+    protected_files = {str(path.relative_to(root)):digest(path)
+                 for path in root.rglob('*')
+                 if path.is_file() and path not in carried_paths}
     journal_path = root/CompactionNativeStore.name
     before_journal = journal_observation(journal_path) if journal_path.exists() else {}
     if original.version != target.version and not before_journal.get('selected_summary_attempts'):
@@ -137,23 +146,17 @@ def run(base, source_python, root):
         raise AssertionError('Carry goal declaration is not derived from original source')
     refused = []
     if original.coordination_version != target.coordination_version:
-        from agent_comms.coordination_tables.metadata import SchemaMeta
-
         # An ordinary target reader must refuse the original release. The
         # only authorized transformation below is the stopped installation.
-        with closing(sqlite3.connect((root/'coordination.sqlite3').absolute().as_uri()+'?mode=ro', uri=True)) as db:
-            db.execute('PRAGMA query_only=ON')
-            db.execute('BEGIN')
+        with CoordinationStore.observing(root/'coordination.sqlite3', lock_timeout=5.0) as db:
+            original.require_coordination(db)
+            version, = SQLiteUserVersion.read(db.execute('PRAGMA user_version'))
             try:
-                original.require_coordination(db)
-                try:
-                    SchemaMeta.require_current(db)
-                except ValueError:
-                    refused.append('ordinary-reader-original-schema')
-                else:
-                    raise AssertionError('Ordinary reader accepted the old coordination declaration')
-            finally:
-                db.execute('ROLLBACK')
+                SchemaMeta.require_current(db, version.user_version)
+            except SchemaVersionError:
+                refused.append('ordinary-reader-original-schema')
+            else:
+                raise AssertionError('Ordinary reader accepted the old coordination declaration')
     # One-use custody refusals operate on ONLY this private copy, with exact
     # original bytes restored afterward. No original session or proof is edited.
     for case in ('existing-candidate','existing-attempt','companion'):
@@ -212,11 +215,10 @@ def run(base, source_python, root):
         if journal_path.exists():
             raise AssertionError('Carry created a journal absent from the original source')
         relation={'classification':'original-journal-absent', 'created':False}
-    from agent_comms.coordination_tables.metadata import SchemaMeta
-    from agent_comms.coordination_session import CoordinationSession
-    with CoordinationSession(root/'coordination.sqlite3').read() as db:
+    with CoordinationStore.observing(root/'coordination.sqlite3', lock_timeout=5.0) as db:
         plan.target.require_coordination(db)
-        SchemaMeta.require_current(db)
+        version, = SQLiteUserVersion.read(db.execute('PRAGMA user_version'))
+        SchemaMeta.require_current(db, version.user_version)
     from agent_comms.compaction_journal import CompactionJournal
     from agent_comms.compaction_records import JournalTable
     from agent_comms.typed_table import TypedTable
@@ -225,11 +227,16 @@ def run(base, source_python, root):
         with CompactionJournal(journal_path).transaction() as db:
             installed_rows = {table.declared_name: len(table.select(db))
                               for table in TypedTable.members_with(JournalTable)}
+    if protected_files != {str(path.relative_to(root)):digest(path)
+                     for path in root.rglob('*')
+                     if path.is_file() and path not in carried_paths}:
+        raise AssertionError('Carry changed original wire/configuration/input/auth/proof files')
     result={'classification':'private-stopped-copy-installed-operator-control',
             'original_release':list(original.release_versions),
             'target_release':list(plan.target.release_versions),
             'relation':relation, 'installed_typed_rows':installed_rows,
             'custody_refusals':refused, 'installation':receipt,
+            'protected_original_files':protected_files,
             'provider_calls':0, 'native_inputs':0, 'owner_signals':0,
             'public_cutover_qualified':False}
     write_original(base/'receipt.json',(json.dumps(result,indent=2)+'\n').encode())

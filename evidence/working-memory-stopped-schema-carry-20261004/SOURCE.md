@@ -61,3 +61,22 @@ existing outside-src operator-family files plus evidence.
 and the unchanged production/package roots. An absent original journal remains
 absent; the existing candidate-tamper control uses an actually present declared
 store, rather than requiring a made-up journal. No historical evidence is seeded.
+
+## Control API correction before execution
+
+Parent found two incorrect new `SchemaMeta.require_current(db)` calls and a
+`CoordinationSession.read()` yield incorrectly treated as a DB connection. Both
+now borrow the existing `CoordinationStore.observing` resource, decode the actual
+PRAGMA through `SQLiteUserVersion.read`, and pass its version to the original
+metadata owner. The old-source refusal catches exactly `SchemaVersionError`.
+No writable/initializing session or private chmod belongs to read acceptance.
+The existing `rows` helper converts original SQL rows to cell tuples once;
+otherwise the observing owner's SQLiteRow factory would compare unequal to
+authentic declaration tuples. No row factory override or alternate codec exists.
+The non-carried file hash snapshot and native membership partition use distinct
+names; the source read also removed accidental local shadowing of those facts.
+These defects were found and corrected at source, before any installed gate.
+Both call arities match the parsed existing declaration; no runtime success is
+claimed. `PROPOSED-OPERANDS.json` binds source540, target627/ab640 on334 after
+Heis443 handback, unchanged canonical source seed, fresh authored/stopped roots,
+exact original-control argv and evidence paths. Both actual purposes are pending.

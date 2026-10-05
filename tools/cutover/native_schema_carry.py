@@ -293,7 +293,7 @@ def objects(db):
 
 def rows(db, table, columns=None):
     selected = '*' if columns is None else ','.join(map(quoted, columns))
-    return sorted(db.execute(f'SELECT {selected} FROM {quoted(table)}').fetchall(), key=repr)
+    return sorted((tuple(row) for row in db.execute(f'SELECT {selected} FROM {quoted(table)}')), key=repr)
 
 
 def inventory(db):
