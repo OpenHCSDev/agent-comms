@@ -63,15 +63,14 @@ class GoalPrecondition:
             raise ValueError("The goal owner changed; refresh its state.")
         if self.expected_goal is not None and goal != self.expected_goal:
             raise ValueError("Goal changed during resume; refresh its state.")
-        if self.goal_id is not None and (goal is None or goal.id != self.goal_id):
-            raise ValueError("This goal was replaced or cleared; refresh its state.")
+        if self.goal_id is not None:
+            thread.require_goal(self.goal_id)
         if self.expected_state is not None and (
             goal is None or goal.state != self.expected_state
         ):
-            pause = goal.state.pause_source if goal is not None else None
             raise ValueError(
-                (pause.instruction() if pause else None)
-                or "This goal is no longer active; refresh its state."
+                goal.state.activity_refusal() if goal is not None
+                else "This goal is no longer active; refresh its state."
             )
 
 
@@ -91,9 +90,7 @@ class GoalActionContext:
         return self.actor is ModelInvocable
 
     def require_goal(self) -> Goal:
-        if self.thread.goal is None:
-            raise ValueError("No goal is set for this thread.")
-        return self.thread.goal
+        return self.thread.require_goal()
 
 
 @dataclass(frozen=True, kw_only=True)

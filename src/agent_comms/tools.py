@@ -519,8 +519,8 @@ class CommsResumeGoalTool(ToolRequest):
     def apply(self, comms: Comms) -> JsonObject:
         name = _executing_thread()
         goal_id = self.goal_id
-        current = comms.registry.require(name).goal
-        if current is None or current.id != goal_id:
+        current = comms.registry.require(name).goal_for(goal_id)
+        if current is None:
             raise ValueError("This goal cannot be resumed; refresh its state.")
         current.state.require_model_resume()
         progress = self.progress
@@ -552,9 +552,7 @@ class CommsEditGoalTool(ToolRequest):
     def apply(self, comms: Comms) -> JsonObject:
         name = _executing_thread()
         goal_id = self.goal_id
-        current = comms.registry.require(name).goal
-        if current is None or current.id != goal_id:
-            raise ValueError("This goal was replaced or cleared; refresh its state.")
+        current = comms.registry.require(name).require_goal(goal_id)
         goal = comms.goals.update_goal(
             name,
             EditGoalAction(
