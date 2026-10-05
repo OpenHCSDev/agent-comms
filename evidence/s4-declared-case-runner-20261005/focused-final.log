@@ -1,0 +1,9 @@
+test_construction_rounds_preserve_prefix_and_public_probe_boundary (test_recorded_retention_measurements.RecordedMeasurementTests.test_construction_rounds_preserve_prefix_and_public_probe_boundary) ... ok
+test_construction_plan_uses_original_oracle_and_separate_sampling_seed (test_recorded_retention_measurements.RecordedMeasurementTests.test_construction_plan_uses_original_oracle_and_separate_sampling_seed) ... ok
+test_selected_case_requires_native_source_operands_without_changing_preview (test_recorded_retention_measurements.RecordedMeasurementTests.test_selected_case_requires_native_source_operands_without_changing_preview) ... ok
+test_stimulus_delivery_requires_exact_source_and_original_earlier_branch (test_recorded_retention_measurements.RecordedMeasurementTests.test_stimulus_delivery_requires_exact_source_and_original_earlier_branch) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.049s
+
+OK
