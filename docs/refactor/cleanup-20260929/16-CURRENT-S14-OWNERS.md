@@ -36,11 +36,21 @@ Core while delivering Text71. Startup/frame/CPU, loaded scaling and continuous
 configured acceptance remain unfinished with originalHeis active.
 
 Receiving474 b687d6e3 selects public Core3931/3fe and nativeText71 while
-all319 product assets remain equal to merged460. No retained wheel matches the
-changed root pins. Parent authorized Heis one normal cached Toad wheel build;
-source/package proof and original receiving/cohort delivery remain next.
+all319 product assets remain equal to merged460. No retained wheel matched the
+changed root pins. The authorized single build passed0.611s at b687; Parent
+independently verified all319 Git/local/ZIP assets,324 RECORD rows, changed
+root inputs and all retained build files. New handoffc5af80 records Core3931
+provenance even though the wheel bytes equal historical2ece. Original old
+provenance remains immutable. Sch owns receiving commands; Bohr found no
+independent eligible installation while the typed check owns formerstyle22.
+Receiving preparation continues; installation follows its actual whole return.
 Continuous468 controls are normally adopted separately; configured execution,
 loaded scaling and startup/frame/CPU gains remain unfinished.
+Parent found the future continuous output would exceed the original Unix
+socket path limit before any run; Heis owns short operand correction. The
+current warm-tab admission still repeats PresentationBudget decisions and
+omits retained paint bytes. Heis owns the existing presentation/viewport
+correction on a separate source branch, preserving frozen474 receiving inputs.
 
 MCP472/682 preparation identified an inactive network preload. OriginalSch
 published685 canonical pre-SDK fetch-origin guard; Parent reviewed its transport
@@ -49,8 +59,9 @@ plus matching Core wheel through existing commitment owners. Shared7a stays
 immutable. No guard execution or all-process network containment is proved.
 Mendel's independent typed-only path has actual stage-only grant e7c2fcb4 on
 former style22, current465 floor1477; only ToAdb2e needs staging. FullTrust is
-false and no native artifact authority is involved. Exact proof and one mounted
-90-second release remain Bohr's subsequent steps; native four-case acceptance
+false and no native artifact authority is involved. The one ToAd stage passed0.408s and joined2075442. Exact pure proof
+helper4e7c/operandsc8a221 are sent for Bohr binding; the mounted90-second run
+remains held. No native artifact authority is involved. Native four-case acceptance
 waits the new committed guard and separately issued scope.
 
 S4 source683 is normally merged208b8f07 after review of complete arm acquisition,
@@ -62,8 +73,11 @@ installation. Bohr verified existing source540 and unchanged target334. Source
 restore uses the normal5f wheel and510-file snapshot; no whole-prefix TAR is
 required. Target consumes installed5f347 with all eight relevant files equal,
 so no target install/build is needed. Its actual native declaration is086,
-requiring fresh matching READ-only rather than7a. Einstein is completing the
-paired command/proof/cleanup tuple before Bohr issues execution; no run yet.
+requiring fresh matching READ-only rather than7a. Einstein published the complete paired command/proof/cleanup tuplea2f887
+at48ba1c98. Parent read the full tuple, all eight helpers and controller source
+and sent it to Bohr for fresh issue; no installed run yet. Source540 alone
+will stage, target334 remains unchanged, and target086 READ-only applies at
+the original source preflight. No native execution or central-batch claim.
 
 Core681 fork-source delivery is actually merged38a0533e at frozen3dc11331.
 Its nine authored source checks support recorded inheritance, not independent
