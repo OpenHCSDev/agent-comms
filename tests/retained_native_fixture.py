@@ -1253,6 +1253,31 @@ class RecordedNativeProbe:
         with self.original_readers((self,)) as sources:
             return self.read(sources[Path(self.session.session_file)], sources[self.checkpoint_source])
 
+    def fork_ancestry(self, evidence, parent):
+        """Corroborate recorded edges through existing bounded reader resources.
+
+        Child/checkpoint descriptors are borrowed. Other recorded children, if
+        any, are opened once and closed here; the unrecorded donor is not read.
+        No parent is inferred from file headers or a condition label.
+        """
+        journal = self.fork_journal if self.fork_journal is not None else (
+            self.checkpoint.journal if self.checkpoint is not None else None)
+        if journal is None:
+            return ()
+        ancestry = CompactionJournal.observe_readonly(journal, lambda db:
+            NativeForkCreation.recorded_ancestry(db, self.session.session_file), absent=())
+        with ExitStack() as resources:
+            sources = {evidence.source.path: evidence, parent.source.path: parent}
+            for creation in ancestry:
+                if creation.path not in sources:
+                    sources[creation.path] = resources.enter_context(NativeEntry.open_evidence(creation.path))
+                reader = sources[creation.path]
+                _, entries = reader.observe()
+                creation.require_original_prefix(reader, entries)
+            for creation, predecessor in zip(ancestry, ancestry[1:]):
+                creation.require_inherited_creation(predecessor, sources[predecessor.path])
+            return ancestry
+
     def construction(self, evidence, parent, branch, manifest, checkpoint, texts, serialized, answer, context, submitted):
         """Corroborate original SDK source references, not a condition label.
 
@@ -1262,15 +1287,10 @@ class RecordedNativeProbe:
         Entry membership is not a claim about transformed provider bytes or
         complete-history capacity. Those need their own original observations.
         """
-        journal = self.fork_journal if self.fork_journal is not None else (
-            self.checkpoint.journal if self.checkpoint is not None else None)
-        fork = None
-        if journal is not None:
-            fork = CompactionJournal.observe_readonly(journal, lambda db:
-                NativeForkCreation.one(db, session_file=self.session.session_file), absent=None)
-            if fork is not None:
-                fork.require_same_session(self.session)
-                fork.covered_prefix(evidence, evidence.entries)
+        ancestry = self.fork_ancestry(evidence, parent)
+        fork = ancestry[0] if ancestry else None
+        if fork is not None:
+            fork.require_same_session(self.session)
         models = tuple(entry for entry in branch if entry.model_choice is not None)
         thinking = tuple(entry for entry in branch if isinstance(entry, ThinkingLevelChangeEntry))
         coverage = {"evaluated": False, "reason": "Original matching SDK manifest unavailable"}
@@ -1313,6 +1333,7 @@ class RecordedNativeProbe:
                                                parent=parent,texts=texts)
         return {
             "fork": fork,
+            "fork_ancestry": ancestry,
             "journal_settings": {
                 "evaluated": bool(models and thinking),
                 "model": models[-1].model_choice if models else None,

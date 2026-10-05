@@ -410,6 +410,49 @@ class NativeForkCreation(NativeSessionIdentity, SessionJournalHistory, TypedTabl
             self.require_original_prefix(child, entries)
 
     @classmethod
+    def recorded_ancestry(cls, db, canonical: str) -> tuple[NativeForkCreation, ...]:
+        """Read actual SDK creations, newest first, without inferring a parent.
+
+        The last recorded edge's source is an observed anchor, not a claim that
+        all older history is recorded here. Readers must corroborate each
+        returned child prefix before using this lineage as source evidence.
+        No enrollment, input settlement or runtime selection follows.
+        """
+        ancestry, visited = [], set()
+        creation = cls.one(db, session_file=canonical)
+        while creation is not None:
+            if creation.session_file in visited:
+                raise CompactionJournalError("Recorded native fork ancestry is cyclic")
+            visited.add(creation.session_file)
+            ancestry.append(creation)
+            parent = cls.one(db, session_file=creation.source.session_file)
+            if parent is not None:
+                creation.source.require_same_session(parent)
+            creation = parent
+        return tuple(ancestry)
+
+    def require_inherited_creation(self, parent: NativeForkCreation, evidence) -> None:
+        """The recorded edge must cover its original acquired parent position."""
+        self.source.require_same_session(parent)
+        if (not self.source.covers(evidence, self.source_revision, parent.revision)
+                or self.source_revision.size < parent.revision.size):
+            raise CompactionJournalError("Recorded native fork ancestor position differs")
+
+    @staticmethod
+    def common_recorded_source(
+        left: tuple[NativeForkCreation, ...], right: tuple[NativeForkCreation, ...],
+    ) -> tuple[NativeForkCreation, NativeForkCreation] | None:
+        """Locate matching recorded positions in corroborated creation chains.
+
+        Return the original two edges, not a new identity/proof carrier. This
+        matches source ownership only; frozen inputs and request controls still
+        need their own evidence. Missing older edges cannot be reconstructed.
+        """
+        return next(((original, control) for original in left for control in right
+            if original.source.same_session(control.source)
+            and original.source_revision == control.source_revision), None)
+
+    @classmethod
     def recorded_prefix(cls, db, evidence, entries):
         return frozenset().union(*(creation.covered_prefix(evidence, entries)
             for creation in cls.for_session(db, str(evidence.source.path))))
