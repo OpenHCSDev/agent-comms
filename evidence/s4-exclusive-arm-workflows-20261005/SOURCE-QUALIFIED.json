@@ -1,0 +1,48 @@
+{
+  "source_revision": "cec052fdbb92a79197ba728648d61000ab5f6c3a",
+  "source_sha256": {
+    "tests/retained_native_fixture.py": "1d808e2fcf02c5a8aa3165c416f8ddeb3f8bd643fb34509473b8d3c7bbd6ebcc",
+    "tests/compaction_retention_fixture.py": "11e6ead8e9297e47d19890bbd8f07a4590f9fcbe10244a9a62c6f79255bf6ddb",
+    "tests/test_recorded_retention_measurements.py": "2bd4f11f231995d097f4cc32ce12dd7515688daadf7d4349f427c0442c660421"
+  },
+  "AST": {
+    "SOURCE-BEFORE.json": "2ddd418242a19d9d90ef34ae84c32cf75d2f7d3d8e98363fda066b0dec362343",
+    "SOURCE-AFTER.json": "9faa97ca8af86226440bf7d70f36a237d08859d5c70ea61df36609759a889f35"
+  },
+  "raw_keepers": {
+    ".artifacts/s4-exclusive-arm-workflows-20261005/cli-terminal.json": "140c9442c01ee4ec453e861ac704455809c67f18bfdeb8440a683559de8b5f45",
+    ".artifacts/s4-exclusive-arm-workflows-20261005/final-controls.log": "398f2bae1447fd6f1d41eb945ca7f0994fca680649cb4c4a9329996b5ec645f5",
+    ".artifacts/s4-exclusive-arm-workflows-20261005/missing-accounting.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".artifacts/s4-exclusive-arm-workflows-20261005/missing-accounting.stdout.json": "39249203972da8a63750ab4d29a8211bf9b36acc29ff46684ac4509741d67435"
+  },
+  "authored_cli_inputs": {
+    ".artifacts/s4-workflow-resource-margins-20261005/empty-original-pairs.json": "10a07102ce956818a7f6bf9f48b59dac8fd4ef54090542a61cfe8b1a406c1285",
+    ".artifacts/s4-workflow-resource-margins-20261005/authored-design.json": "6469b9c2c5de8ec476150a3e029967f8a2c8c9c0516d3b38eee1de2c2eb7a1a5"
+  },
+  "checks": {
+    "final_source_batch": "13 PASS / 0.048s; original summary/model-step coordinates; shared/reused completion ownership; all resource/margin/denominator callers and absent evidence",
+    "actual_CLI_exit": 0,
+    "missing_accounting": {
+      "evaluated": false,
+      "exclusive": null,
+      "expected_groups": 4,
+      "observed_records": 0,
+      "shared_sources": [],
+      "reason": "Original completion ownership unavailable",
+      "scope": "Acquired journal completion ownership; no independent sampling, unjournaled work, workflow duration or billed-spend proof"
+    },
+    "conditional_cost_margin": null,
+    "study_acceptance": false
+  },
+  "migration": {
+    "producer": "Existing RecordedNativeCheckpoint._report derives committed summary JournalProvenance from its corroborated native entry; RecordedNativeProbe.model_steps now requires original NativeSessionIdentity and derives each acquired assistant coordinate. All three direct model_steps callers and the original read caller migrated.",
+    "consumer": "ScoredScenario.recorded_resources retains source+usage pairs in every existing resource scope. One accounting_partition algorithm feeds paired_resources and paired_resource_batch; resource_margins borrows the batch decision.",
+    "removed": "Cost margin can no longer accept usage totals plus matched labels alone. Original acquired completion ownership is required; shared/missing ownership withholds decision, descriptive original values preserved."
+  },
+  "scope": {
+    "production_stack_tools_pins_delta": "",
+    "SDK_holder_native_provider_original_record_inputs": 0,
+    "accepted": "Authored private source/reader/CLI accounting only; no recorded-data reassessment or configured execution. All original reports/refusals/STARTED and clocks untouched.",
+    "remaining": "Current selected-fork runner shares source inputs and commits and has one shared whole-workflow clock; matching requires same immediate parent cut. Distinct complete arm executions and original matched ancestry/source relation need an existing-owner producer change before independent p95/cost workflows are runnable. No inference from old shared records. Registered interventions/capacity/billing/HTTP/study remain unqualified; 30pair/USD75 unapproved."
+  }
+}

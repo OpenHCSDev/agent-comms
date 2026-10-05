@@ -1,20 +1,38 @@
 # Original arm workflow accounting
 
-Source work in progress; no runtime, SDK, holder, provider, input or original-record operation.
+Source/authored-check checkpoint. No runtime, holder, SDK, native, provider,
+input or original recorded-data operation.
 
-The existing configured runner deliberately shares source inputs and committed cuts.
-SessionLifecycle.selected_native_fork restores the exact original owner/source after
-each arm. RecordedNativeProbes.alignment requires the same immediate SDK parent
-cut and revision. These are useful functional controls, not independent entire
-workflows. Their shared monotonic clock cannot be split into per-arm p95.
+RecordedNativeCheckpoint and RecordedNativeProbe now project each original
+summary/assistant completion's JournalProvenance alongside acquired usage.
+All model-step callers pass the original session. ScoredScenario keeps that
+ownership with every existing resource scope, and its one accounting_partition
+algorithm serves both pair and batch comparisons. Missing coordinates/rounds
+remain unavailable; shared or reused completions cannot earn conditional cost
+margin credit. Descriptive totals, zero values and observed subtotals remain.
+The prior totals-plus-matching acceptance path is replaced by this owner decision.
 
-RecordedNativeCheckpoint and RecordedNativeProbe will expose original completion
-coordinates with the usage they already acquire. ScoredScenario will derive shared
-and exclusive accounting from those coordinates for every scope and trajectory.
-Descriptive totals remain visible; cost-margin decisions cannot use shared or
-missing completion ownership. No copied source collector or receipt store.
+Thirteen affected authored/source checks passed in 0.048s. They exercise leaf
+coordinates, sharing across arms/trajectories, missing ownership, original usage
+null/zero fields and the complete affected scorer callers. The existing CLI with
+authored empty records exits zero while accounting and cost margin are unavailable
+and study_acceptance stays false. SOURCE-QUALIFIED.json binds three source hashes,
+two AST snapshots and all four raw keeper hashes. Runtime/stack/tools/pins are zero
+delta against merged #679. Existing AST reader: 324 production, 373 test, 54 tool
+modules; zero parse omissions. Lexical sites do not prove dynamic dispatch.
 
-Separate end-to-end arms need genuinely separate source/summary executions and
-an explicit matched-source design; current same-cut alignment cannot certify that
-experiment. No new configured execution or 30-pair/USD75 study is authorized here.
-All frozen reports, old clocks, raw refusals and uncertain inputs remain untouched.
+The configured runner still deliberately shares source inputs and committed cuts.
+SessionLifecycle.selected_native_fork retires/restores the exact same owner/source
+after each probe; swap locks are released before its prompt body. RecordedNativeProbes.alignment requires
+the same immediate SDK parent cut and revision. That common-source functional
+control is not two independent entire workflows; its clock cannot be divided.
+Neither the runner nor lifecycle has been changed or executed here.
+
+Next source gap: match genuinely separate trajectories through their original
+fork ancestry and frozen source inputs, then reuse the existing runner/cleanup
+owners for complete per-arm executions. No current --paired-construction tuple
+can qualify independent full workflows. Such new configured executions need
+separate actual purposes; no holder/native/provider purpose is requested here.
+Old shared records cannot supply those clocks or independently incurred costs.
+Full S4, interventions/capacity/HTTP/billing/study remain unfinished. The separate
+30-pair/USD75 study is unapproved. No frozen report/refusal/input was read or changed.
