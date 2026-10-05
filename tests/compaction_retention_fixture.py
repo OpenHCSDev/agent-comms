@@ -262,20 +262,24 @@ class RecordedNativeProbes:
             evidence = sources[Path(checkpoint.reference.session_file)]
             header, _ = evidence.observe()
             session = NativeSessionIdentity(header.id, str(evidence.source.path))
-            attempt, entry, covered, assembly = checkpoint.capture(session, evidence)
-            report = checkpoint._report(attempt, entry, covered, assembly)
+            captured = checkpoint.capture(session, evidence)
+            attempt, entry, _, _ = captured
+            report = checkpoint._report(*captured)
             if identity in stimuli:
                 stimuli[identity]['source_delivery'] = self.stimuli[identity].source_delivery(
                     expected[identity], stimuli[identity], evidence, entry.id, None)
             if previous is not None:
-                old, prior_attempt, prior_entry, prior_session = previous
+                prior_round, old, before, prior_session = previous
                 prior_session.require_same_session(session)
-                if prior_entry.id == entry.id or prior_entry not in evidence.branch(entry.id, evidence.entries):
-                    raise ValueError("Repeated measurements require distinct original ancestor cuts")
-                report["source_changes"] = attempt.request.retained.changed_from(prior_attempt.request.retained)
-                report["revision_mass"] = checkpoint.revision_from(old, prior_attempt, attempt)
+                comparison = checkpoint.compare_acquired(old, before, captured, evidence)
+                report["observed_interval"] = dict(comparison,
+                    from_round=prior_round, to_round=identity)
+                report["source_changes"] = comparison["source_changes"]
             reports[identity] = report
-            previous = checkpoint, attempt, entry, session
+            previous = identity, checkpoint, captured, session
+        for identity, measured in scenario.revision_intervals(reports).items():
+            if identity in reports:
+                reports[identity]["revision_mass"] = measured
         for identity, probe in self.rounds.items():
             observations[identity] = probe.read(sources[Path(probe.session.session_file)],
                                                 sources[probe.checkpoint_source])
@@ -612,8 +616,7 @@ class ScoredScenario(ScoreView):
                             "evaluated": False, "reason": "No original native probe supplied"
                         } for item in self.source.rounds
                     },
-                    revision_mass={identity: report["revision_mass"]
-                                   for identity, report in checkpoints.items()},
+                    revision_mass=self.source.revision_intervals(checkpoints),
                     answer_support={identity: original["answer_support"]
                                     for identity, original in evidence.items()},
                     recall_scope="Original recorded answers; tool-assisted answers are task quality, not unassisted recall. Authored answers are scorer controls"))
@@ -1108,6 +1111,33 @@ class RecallScenario:
 
     def public(self) -> dict:
         return {"scenario": self.identity, "rounds": [item.public() for item in self.rounds]}
+
+    def revision_intervals(self, checkpoints):
+        """Every frozen adjacent pair keeps its original denominator.
+
+        Original checkpoint comparisons may span missing rounds. Keep that
+        observed interval visible, but never use it as evidence for either
+        missing adjacent comparison or infer an unchanged intermediate cut.
+        """
+        intervals = {}
+        for before, after in zip(self.rounds, self.rounds[1:]):
+            missing = tuple(item.identity for item in (before, after)
+                            if item.identity not in checkpoints)
+            if missing:
+                measured = {"evaluated": False, "missing_checkpoints": missing,
+                    "reason": "Both original adjacent-round checkpoints are required"}
+            else:
+                observed = checkpoints[after.identity].get("observed_interval")
+                if observed is None:
+                    measured = {"evaluated": False,
+                        "reason": "Original adjacent checkpoint comparison unavailable"}
+                else:
+                    if (observed['from_round'], observed['to_round']) != (before.identity, after.identity):
+                        raise ValueError("Original checkpoint interval differs from the frozen adjacent rounds")
+                    measured = observed['revision_mass']
+            intervals[after.identity] = dict(measured,
+                from_round=before.identity, to_round=after.identity)
+        return intervals
 
     def construction_rounds(self):
         """Derive ordered source additions and public probes from one oracle.
