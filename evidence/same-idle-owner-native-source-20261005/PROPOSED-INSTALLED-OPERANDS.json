@@ -1,0 +1,162 @@
+{
+  "state": "SOURCE PROPOSAL ONLY; old afac purpose WITHDRAWN before any use. Fresh issued build/package/READ/EXEC and Bohr release required; no authority from this proposal.",
+  "reviewed_source_head": "c628a6b41baa612b1d0b52cc31d00a7d490d546a",
+  "determining_production": "a264da8f7251c72fae0ee0259c1d81de9ea5ed7e",
+  "base": "7b68d630caa654d3e9884f45cbd6493718752a0c",
+  "source_WT": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+  "prefix": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002",
+  "source_assets_expected": 355,
+  "production_modules": 324,
+  "control_sha256": {
+    "tests/test_same_owner_native_fork.py": "6d057c8c49c85506b5f8bba99c1486b0e81294e6fd61a93a63df77ec3a5bac05",
+    "tests/native_backend_fixture.py": "a4cb188d5b472f5445cc8ba653137075455907c8e06cf0e95eb01793c4ce7575",
+    "tests/test_backend_native_lifecycle.py": "0bd1745a76ccb7538227d0fe895f10dd03747dfeb24e7a3b55b3fbbd97adbe6b",
+    "tests/compaction_loopback.py": "064e3e6658841746a2a15e8d2c41cea78c283a931d7b92cf1953877ad88821ea",
+    "tests/delivery_owner_fixture.py": "b03ab1801372c8d45e6cdbf91ebd2e7013ffeec9485e392e45d0479606caae5f",
+    "tests/native_proof_cases.py": "df3ed60790e3533f4c498a953c95f4c275b37c1ab51a4d3c8a24cb603ac7da60",
+    "tests/conftest.py": "ced0353a6dcf25e847a2e023d705358841bc10f869a8d5f988f03f43b7f415a4"
+  },
+  "build_inputs_sha256": {
+    "pyproject.toml": "000139ce7da800c73574db2cd2e99af5afb63795f94f38d532e03af4b1423ad7",
+    "README.md": "b77c9e4f95fe3b1c0cbf84f70f429ff07673308099688796b24bda7e339f84a6",
+    "LICENSE": "1fe81c33f0cdfbcea8ce2fa4bf5cc98604be54a954ff7c59cea0ff02e3c15741",
+    ".pi/APPEND_SYSTEM.md": "fe4f4bcc2b11f340c64676e1761790a23fafff18fbeec5ea30b3dabd86dbaa31",
+    "stack/pi-native.sha256": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+    "stack/native-compaction-commit-child.mjs": "186abb2f107b40327ff6410749727e83c9dd9df1487ade76051565544ec0a2a8"
+  },
+  "build_argv": [
+    "/usr/bin/python",
+    "-m",
+    "build",
+    "--wheel",
+    "--no-isolation",
+    "--outdir",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005"
+  ],
+  "build_cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+  "build_environment": {
+    "PYTHONPATH": "/home/ts/.cache/uv/archive-v0/RgcgNn7xR1Zs9HSF",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "build_backend": "Original retained Hatchling1.28.0 path from prior build records; no install/environment/dependency resolution. Read/verify actual cached source after new build authority.",
+  "candidate_wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl",
+  "candidate_wheel_sha256": null,
+  "wheel_proof": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/wheel-source-proof.json",
+  "wheel_inventory": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/core-inventory.json",
+  "forced_resources": {
+    "mapping": {
+      ".pi/APPEND_SYSTEM.md": "agent_comms/_native/APPEND_SYSTEM.md",
+      "stack/pi-native.sha256": "agent_comms/_native/pi-native.sha256",
+      "stack/native-compaction-commit-child.mjs": "agent_comms/_native/native-compaction-commit-child.mjs"
+    },
+    "source_supported_native7a_only": true,
+    "no_native_artifact_build_copy_or_donor": true
+  },
+  "stage_argv": [
+    "uv",
+    "pip",
+    "install",
+    "--python",
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "--no-deps",
+    "--no-cache",
+    "--reinstall",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl"
+  ],
+  "candidate_sourceproof": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/candidate-source-proof.json",
+  "native_FullTrust_receipt": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/native-full-trust.json",
+  "native_batch": {
+    "argv": [
+      "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+      "-B",
+      "-c",
+      "import pathlib,sys,agent_comms; assert pathlib.Path(agent_comms.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()); sys.path.append('/usr/lib/python3.14/site-packages'); import pytest; raise SystemExit(pytest.main(['-o', 'addopts=', '-o', 'pythonpath=', '-p', 'no:cacheprovider', '--basetemp', '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/native01/authored', '--junitxml', '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/native01/results.xml', '-x', '-q', 'tests/test_same_owner_native_fork.py']))"
+    ],
+    "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+    "environment": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONPATH": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests",
+      "PYTHONHOME": null,
+      "AGENT_COMMS_ROOT": null,
+      "PI_COMPACTION_TEST_PACKAGE": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent"
+    },
+    "output": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/native01",
+    "expected_distinct_cases": 7,
+    "stop_first_failure": true,
+    "expected_actual_native_inputs": 1,
+    "expected_controlled_localhost_posts": 1,
+    "SDK_authored_private_seed_sources": 7,
+    "journaledSDKforks": 7,
+    "cases": [
+      "completion with original ACP prompt",
+      "cancel without input",
+      "revoked original owner without successor",
+      "stale entry after canonical owner fence/heartbeat/acquisition and actual successor preparation",
+      "exit after canonical owner fence/heartbeat/acquisition and actual successor preparation",
+      "stale entry after canonical thinking-level change and actual successor preparation",
+      "exit after canonical thinking-level change and actual successor preparation"
+    ],
+    "restoration_observation": "Completion/cancellation original AgentInfo emission observes turn+child locks held and schedules an actual native context read; join read after resource exit, restored parent identity and original retained child alive. No new prompt.",
+    "scope": "Original NativeBackendFixture.author_history/open_owner; canonical registry/ACP/OwnedTurn, real savedSDK forks/child custody. No fake histories, lease/input records, native child, mock response stream, generic registry replacement or copied helper."
+  },
+  "matching_native_reference": {
+    "package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent",
+    "manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+    "tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d"
+  },
+  "execution_owner": "Original BoundedRun.session/AttachedChild/ProcessIdentity + FieldCodec; reuse prior67502 runner algorithm, existing120s operation bound, descendants observed from exact acquired controller only. No process/fleet/RAM policy added.",
+  "runner_template": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/run-phase.py",
+    "sha256": "d48c94433088d1b0d7fda9e99583f0898315ebeb7e9be455a53b4e09ba145040",
+    "historical_only": "Hardcoded675 literal MUST NOT RUN. Bind new issued/lifecycle/native_batch into same algorithm after grant; one authored child command, raw stdout/stderr/XML/terminal/birth/groups/sockets."
+  },
+  "installed_proof_template": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/prove-installed.py",
+    "sha256": "f29c9d87b504cb4f0bbcb0ee741b84b19afd373b87bea28814d4ac18bce77bf1",
+    "historical_only": "Hardcoded675 literal MUST NOT RUN. Existing InstalledSourceProof/ArchivePackageDirectUrl mechanism + full Git/local/ZIP/installed355/noextras/10metadata/origins/94keepers. New Sch7a READ only FullTrust proof, no SDK before explicit EXEC + Bohr release."
+  },
+  "known_floor_reference": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Parent673-at-grant-floor-source-readback.json",
+    "sha256": "cdca5684eef868acbdf0b6c8f1bf7491252f21b129d392b03cb23f06ddcf16c5",
+    "logical_records": 510,
+    "Core_assets": 347,
+    "nonCore_keepers": 94,
+    "metadatafiles": 69,
+    "distributions": 10,
+    "qualification": "Historical actual floor/reference only; Bohr fresh specific readback/census and issued purpose establish present authority."
+  },
+  "restoration_wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+  "restoration_wheel_sha256": "5f1667ce64c58d67e153850be91dfb669ea9e347218f8d845937a1c12c778a9c",
+  "restore_argv": [
+    "uv",
+    "pip",
+    "install",
+    "--python",
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "--no-deps",
+    "--no-cache",
+    "--reinstall",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl"
+  ],
+  "whole_handback": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/whole-handback.json",
+  "required_cleanup": "Original fixture/SDK fork/controller/native births captured and joined, exact groups/sockets absent, explicit SchREAD/EXEC return; restore original5f347/all510 modes/links/truthful origin +94keepers+69metadata10/noextras; Bohr alone independently closes original lifecycle.",
+  "first_failure": "Stop and return after first failed/uncertain phase; preserve all new private source/journal/auth/history/InputDoc/NotSent/Started/UNKNOWN/proofs and raw negatives. No retry/replay/secondbatch.",
+  "preserved_old_scopes": "675 original negatives/accepted scopes and retired afac8c706 source purpose untouched. Existing public/frozen prefixes/native shared refs untouched.",
+  "no_operations_performed": [
+    "build",
+    "package access/import/install",
+    "native artifact READ/EXEC",
+    "tests",
+    "external/paid/public/provider inputs",
+    "native copy/build",
+    "new environment/worktree/worker"
+  ],
+  "phase_order": [
+    "Fresh named source-only standalone build authority -> one tiny wheel; prove Git/local/ZIP and forced resources/metadata/origin",
+    "Bohr source/wheel binding releases Core-only stage on existing540 -> exact installed355/keepers/full10 truthful origins",
+    "Fresh literal Sch7a READ -> original NativeFullTrust/final candidate proof (no native process)",
+    "Sch actual final proof read -> new exact EXEC; Bohr binds/releases single serial seven-case batch",
+    "First failure/uncertainty or terminal -> join original resources, preserve raw effects, restore and whole handback"
+  ],
+  "source_runtime_strength": "Parent read corrected owner/lifetime source; original Package324/373/54 omissions0, compile324+one control PASS. SDK cases unrun. No latency/defaultUI/live qualification."
+}

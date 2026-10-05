@@ -1,0 +1,35 @@
+{
+  "state": "FAIL original676 installed-proof phase",
+  "exit_code": 1,
+  "failed_statement": "assert not proof_path.exists()",
+  "failed_line": 132,
+  "cause": "Relative output literal retained original67502 path during absolute-path-only rebinding",
+  "proof_script": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/prove-installed.py",
+    "sha256": "794dc3c68e5152214ff81c140b82329838047bbe795dd3358645dd86391391bf"
+  },
+  "observed_controller": {
+    "pid": 3499357,
+    "start_time": 68265072
+  },
+  "controller_proc_present": false,
+  "FullTrust_READ_completed": true,
+  "candidate_sourceproof_created": false,
+  "native_EXEC_issued": false,
+  "native_SDK_processes_started": 0,
+  "native_inputs": 0,
+  "cases_run": 0,
+  "written_original675_paths": [
+    "installed-requirements.txt",
+    "native-full-trust.json",
+    "installed-inventory.json"
+  ],
+  "changed_original675_bytes": [
+    "native-full-trust.json",
+    "installed-inventory.json"
+  ],
+  "requirements_write_bytes_unchanged": true,
+  "recovery_receipt": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/original675-recovery.json",
+  "raw_traceback_capture_available": false,
+  "failure_observation": "Exit1 and AssertionError at final line132 observed from exec session26358; no raw stdout/stderr files were redirected by original invocation."
+}
