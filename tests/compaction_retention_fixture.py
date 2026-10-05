@@ -30,7 +30,7 @@ from agent_comms.native_tools import CodingTool
 from agent_comms.pi_payloads import ReportedModel
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
-from agent_comms.turn_context import FileProvenance, JournalProvenance, ToolCatalogSegment
+from agent_comms.turn_context import FileProvenance, JournalProvenance, SystemLayerSegment, ToolCatalogSegment
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 
 
@@ -321,26 +321,17 @@ class RecordedNativeProbes:
             if a["sdk_manifest"] is None or b["sdk_manifest"] is None:
                 pairs[identity] = {"evaluated": False, "reason": "Original request manifests unavailable"}
                 continue
-            if a["sdk_manifest"].counter != b["sdk_manifest"].counter:
-                raise ValueError("Matched probes use different native measurement counters")
-            catalogs = tuple(tuple(segment for segment in item["sdk_manifest"].segments
-                                   if segment.kind is ToolCatalogSegment)
-                             for item in (a, b))
-            if not all(catalogs):
-                pairs[identity] = {"evaluated": False, "reason": "Original tool catalogs unavailable"}
-                continue
-            if tuple((item.sha256, item.utf8_bytes) for item in catalogs[0]) != tuple(
-                    (item.sha256, item.utf8_bytes) for item in catalogs[1]):
-                raise ValueError("Matched probes have different native tool catalogs")
+            context = self.context_alignment(a["sdk_manifest"], b["sdk_manifest"])
             request = self.request_alignment(original, control)
             completion = self.completion_alignment(original, control)
             terminals = a["request_completion"], b["request_completion"]
-            unavailable = tuple(item["reason"] for item in (request, completion, *terminals)
+            unavailable = tuple(item["reason"] for item in (context, request, completion, *terminals)
                                 if not item["evaluated"])
             pairs[identity] = {
                 "evaluated": not unavailable,
-                "scope": "Common original SDK fork source, admitted request models joined to original SDK terminals, tool catalog and frozen probe; captured settings are independent, not complete intervention/construction proof",
+                "scope": "Common original SDK fork source, admitted request models joined to original SDK terminals, original system/tool bytes and frozen probe; captured settings are independent, not complete intervention/construction proof",
                 "captured_settings": configured,
+                "request_controls": context,
                 "request_selection": request,
                 "completion_selection": completion,
                 "input_requests": {"candidate": a["input_request_measurements"],
@@ -351,6 +342,31 @@ class RecordedNativeProbes:
                           "Original request and completion selections corroborate the source match",
             }
         return pairs
+
+    @classmethod
+    def context_alignment(cls, original, control):
+        """Pair immutable request controls, not current instruction sources.
+
+        The original measured segment owns its complete value's digest and
+        size. Comparing one ordered sequence per arm keeps multiplicity and
+        order; distinct provenance and history are expected across SDK forks.
+        Contributor annotations never replace their whole system value.
+        """
+        cls.same_observations("native measurement counter", tuple(
+            (manifest.counter,) for manifest in (original, control)))
+        controls = {}
+        for kind in (SystemLayerSegment, ToolCatalogSegment):
+            values = tuple(tuple((segment.sha256, segment.utf8_bytes)
+                                 for segment in manifest.segments if segment.kind is kind)
+                           for manifest in (original, control))
+            controls[FieldCodec.encode(kind)] = cls.same_observations(
+                f"request {kind.public_title()}", tuple((value,) if value else () for value in values))
+        available = all(value['evaluated'] for value in controls.values())
+        return {'evaluated': available, 'controls': controls,
+                'reason': 'Original measured system and tool values match' if available else
+                          'Original measured system or tool control unavailable',
+                'scope': 'Ordered original SDK system/tool byte digests and sizes; '
+                         'not current-file substitution, HTTP bytes or complete intervention proof'}
 
     @staticmethod
     def request_alignment(original, control):

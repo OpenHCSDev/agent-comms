@@ -1,0 +1,812 @@
+{
+  "revision": "09f339e73d044b217a1005e404bf569d81203bae",
+  "modules": 1009,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "evidence/canonical-owner-instructions-20261002/inspect_installed.py",
+      "line": 61,
+      "kind": "Name",
+      "name": "SystemLayerSegment"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 528,
+      "kind": "ClassDef",
+      "name": "SystemLayerSegment"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 651,
+      "kind": "ClassDef",
+      "name": "ToolCatalogSegment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 129,
+      "kind": "ClassDef",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 83,
+      "kind": "FunctionDef",
+      "name": "model_alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 298,
+      "kind": "FunctionDef",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 401,
+      "kind": "FunctionDef",
+      "name": "same_observations"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 845,
+      "kind": "FunctionDef",
+      "name": "paired_quality"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1238,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1212,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1227,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1238,
+      "kind": "Attribute",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1243,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1465,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1470,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 91,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 382,
+      "kind": "Attribute",
+      "name": "same_observations"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 384,
+      "kind": "Attribute",
+      "name": "same_observations"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 388,
+      "kind": "Attribute",
+      "name": "same_observations"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 390,
+      "kind": "Attribute",
+      "name": "same_observations"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 392,
+      "kind": "Attribute",
+      "name": "same_observations"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 426,
+      "kind": "Attribute",
+      "name": "same_observations"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 919,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1235,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1244,
+      "kind": "Attribute",
+      "name": "paired_quality"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1244,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1261,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1476,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 318,
+      "kind": "Attribute",
+      "name": "same_observations"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 382,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 384,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 388,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 390,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 392,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 426,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 923,
+      "kind": "Attribute",
+      "name": "model_alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 923,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 920,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1480,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1480,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 94,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 864,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 327,
+      "kind": "Name",
+      "name": "ToolCatalogSegment"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 857,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 213,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_compaction_retention_fixture.py",
+      "line": 220,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 24,
+      "kind": "Name",
+      "name": "SystemLayerSegment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 573,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 602,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1059,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 201,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 442,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 539,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 546,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 549,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 574,
+      "kind": "Attribute",
+      "name": "paired_quality"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 574,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 575,
+      "kind": "Attribute",
+      "name": "paired_quality"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 575,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 582,
+      "kind": "Attribute",
+      "name": "paired_quality"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 582,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1060,
+      "kind": "Attribute",
+      "name": "paired_quality"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1060,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1065,
+      "kind": "Attribute",
+      "name": "paired_quality"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1079,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1083,
+      "kind": "Attribute",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1086,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1117,
+      "kind": "Attribute",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1358,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1388,
+      "kind": "Name",
+      "name": "SystemLayerSegment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1515,
+      "kind": "Name",
+      "name": "SystemLayerSegment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2066,
+      "kind": "Name",
+      "name": "ToolCatalogSegment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 472,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 482,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 483,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 509,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 509,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 541,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 543,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 552,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 607,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 628,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 645,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 656,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 880,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1082,
+      "kind": "Attribute",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1083,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1114,
+      "kind": "Attribute",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1116,
+      "kind": "Attribute",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1130,
+      "kind": "Attribute",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1138,
+      "kind": "Attribute",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1165,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1170,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1208,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1345,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1352,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1353,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2049,
+      "kind": "Name",
+      "name": "SystemLayerSegment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 545,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 548,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 608,
+      "kind": "Attribute",
+      "name": "paired_quality"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 608,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 637,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 638,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 639,
+      "kind": "Name",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 658,
+      "kind": "Attribute",
+      "name": "model_alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 880,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 881,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1181,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1183,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1215,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1464,
+      "kind": "Name",
+      "name": "SystemLayerSegment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1465,
+      "kind": "Name",
+      "name": "ToolCatalogSegment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 512,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1099,
+      "kind": "Name",
+      "name": "ToolCatalogSegment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1133,
+      "kind": "Attribute",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1142,
+      "kind": "Attribute",
+      "name": "alignment"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1179,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1184,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1212,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1219,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 498,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 556,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 556,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/test_working_memory_read.py",
+      "line": 30,
+      "kind": "Name",
+      "name": "SystemLayerSegment"
+    },
+    {
+      "path": "tests/test_working_memory_read.py",
+      "line": 83,
+      "kind": "Name",
+      "name": "SystemLayerSegment"
+    },
+    {
+      "path": "tests/test_working_memory_read.py",
+      "line": 84,
+      "kind": "Name",
+      "name": "SystemLayerSegment"
+    },
+    {
+      "path": "tests/test_working_memory_read.py",
+      "line": 88,
+      "kind": "Name",
+      "name": "SystemLayerSegment"
+    },
+    {
+      "path": "tests/test_working_memory_read.py",
+      "line": 48,
+      "kind": "Name",
+      "name": "SystemLayerSegment"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 199,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 207,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 234,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 357,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 352,
+      "kind": "Name",
+      "name": "RecordedNativeProbes"
+    }
+  ],
+  "scope": "Existing NRA audit Package parser; lexical Python consumers including test/tool roots. JavaScript producer not changed. Dynamic dispatch not proven."
+}

@@ -1,0 +1,25 @@
+{
+  "source_head": "7ca761686210a4713c974882fe7fcfc7ed1f832b",
+  "source_sha256": {
+    "tests/compaction_retention_fixture.py": "12a717ed22d62af1be3bfdcc2fa4faf67ee102f3eafa9eac66de1e8f52d5b0c0",
+    "tests/test_recorded_retention_measurements.py": "dc327842b19b7d5df3e6db3d6425476d40b2d4bf441129c901119ff6abb55188"
+  },
+  "raw_keeper_sha256": {
+    "evidence/s4-paired-request-controls-20261005/before.json": "24d009db815fbc2c6b86500fdb2b0c0a76efb22939314cabd0912405d5bec044",
+    "evidence/s4-paired-request-controls-20261005/after.json": "eefeb22f040436e50651a86517c6794af7f3bc344b77057285860073516d5442",
+    "evidence/s4-paired-request-controls-20261005/focused-final.log": "5d2bbdc9facdb5604491589432f26b8b60337bc2222afd962a7b0570b022ae13"
+  },
+  "focused_controls": {
+    "passed": 4,
+    "elapsed_seconds": 0.022
+  },
+  "initial_selection_error": {
+    "exit_code": 1,
+    "reason": "Initial unittest selector used nonexistent RecordedRetentionMeasurements class; no test method executed. Corrected to existing RecordedMeasurementTests. Original tool output remains in thread, no fabricated raw log."
+  },
+  "provider_calls": 0,
+  "SDK_processes": 0,
+  "original_source_reads": 0,
+  "holder_operations": 0,
+  "scope": "Authored original-manifest control alignment and paired-score propagation; no configured paired provider, HTTP, capacity, intervention or study qualification."
+}
