@@ -6,6 +6,7 @@ The original goal is ACTIVE again and remains incomplete. CI is deferred as a me
 
 | Work | Actual state | Remaining delivery |
 | --- | --- | --- |
+| Current accepted build465 | Installed on PUBLICstyle22. Corrected directory permissions allowed the original publisher to finish once: exit0 in67.257s; original readback exit0 in1.532s verifies19 same incarnations/settings/root, all new owner processes alive and all five default links. Source953/full69 is the accepted Core676/Toad461+458+464+462/Text67 cohort. The original failed permission attempt is retained. | Mendel is authorized for one actual new-default saved/channel/tab-return ordinary UI check with original18 interaction checks and after-terminal images. Heis owns fast useful paint, mouse-wheel cadence and frame work separately; those performance obligations remain unfinished. No reset, carry, provider input or replay occurred in publication. |
 | Public installation | PUBLIC459 is now on485 after original fresh admission and one-use publication. Parent publisher3961485/birth68456789 exited0 in53.850s and joined; receipt0d03a723 records source10/target10 PreserveRuntimeInstallation/PreserveOwnerRuntime. Original readback74f03ce2 confirms19 same incarnations/settings, all new processes alive, same root and five485 default links. PUBLIC448 ordinary18-check acceptance remains historical. | The one ordinary channel-lifetime run completed capture in65.707s but failed overall: st and recorder exited1. Original offline journey review verifies all18 interaction checks; original AFTER images show painted body/chrome. Cleanup is joined/empty and the same backend owner remains alive. Terminal stderr reports a PTY input/output error; application-versus-terminal teardown cause is unproved. Heis owns workflow diagnosis. Original recorder owner Mendel now has exclusive cleared source ownership of quit/UI-child outcome/terminal receipt and cleanup; 462 fbecc now retains UI and st actual parent wait publications in both ordinary and profile modes; Parent source review confirms removal of the profile terminal-result bypass. Changed462 ff11 qualified02 OS three cases passed; ordinary installed UI and st both returned actual parent-wait exit0, cleanup empty and runtime unchanged. Parent inspected the two original after-terminal stills: history/editor/chrome are painted. Profile02 then failed: UI679102 parent-wait exit0 but st679077 exit1, no recorded signals, controller joined and cleanup empty. The terminal guardian discarded diagnostics through DEVNULL defaults; existing ProcessOwner.start_terminal now owns inherited streams. Separate changed profile03 passed actual UI/st parent-wait exit0,96 samples/zero sampling errors/export0,174-byte st diagnostics and14 identities retired; receipt0e93 and whole26fb preserved. Parent verified52 raw keepers and source equality, then guarded-merged frozen462cf930 as769e78a6. After-terminal profile pixels still show Loading history/Context unavailable, so this is recorder/quit/export custody acceptance, not completed body or speed. Original profile02 failure remains unproved and immutable. The original459 EIO remains unattributed; no public rollback is inferred. Smooth wheel motion, frame times, CPU, fast cold useful paint and full configured continuous operation remain unqualified. Formerstyle22 is not implicitly a private loan. |
 | Workspace integration457 | Joint457 merged as e32253a5 at qualified9f8e2b37; 456 is mergedcf0e and native67 mergedd733. Original first457 failure is preserved. Fresh remaining page/wheel, project retirement/remount and connected41MB readonly readiness Apps passed10.177/4.391/26.775s. Bohr independently closed4126: actual4851441/69origins/155/1883 restored,238-process census private references/gaps zero; Sch READ/EXEC returned. | Sch459 completed preparation under055d and returned all immediate claims. Parent verified all106 frozen bytes/modes/hashes, six joined preparation terminals and the exact953-source cohort; source/target declarations and checkpoint match, so PreserveRuntimeInstallation/PreserveOwnerRuntime applies. Exact459 source/evidence head d984 is now normally mergedbf937; Bohr independently closed055d atfb729/readbackf301 with243-process census private refs/gaps zero. Parent read NEW keeper authorityc1db and executed the original once publisher successfully; receipts/preimages now exist and this operation is consumed. No replay or oldfloor restoration. Superseded450 is closed after verifying no remaining production/test/tool/package-input delta; broader watcher/workflow obligations remain with Heis. No rebuild or accepted App repeat. Public448 stays unchanged until reviewed candidate and original guarded publication. |
 | C3 |675 merged7b68; five original canonical passes, corrected reply and two saved-SDK/TurnRunner settlement cases passed. Raw first failure is preserved; whole540 restoration and independent close complete. Joint457 includes the qualified Core wheel. | Qualified675 Core is included in PUBLIC459. Accepted controls need no repeat; no whole-workflow or speed claim. |
@@ -3201,3 +3202,26 @@ build through the original publisher, verify the actual restarted owners and
 run Mendel's prepared ordinary saved/channel/tab-return UI journey. Continue
 Heis's affected performance check separately; full continuous workflow and
 frame/speed targets remain unfinished. CI remains deferred.
+
+### Build465 installed; real UI check next, 2026-10-05
+
+Sch corrected only the receiving output directory mode from0755 to0700,
+leaving all111 frozen file hashes/bytes/modes unchanged. New explicit Parent
+authority860f allowed the corrected attempt; the earlier permission refusal
+and consumed authority remain unchanged. Parent publisher1047783/birth69910664
+exited0 in67.256956613s, joined and absent. Receipt6f7de9f1 and original
+identity closure6966cacc verify the complete19-owner preserved-incarnation,
+settings and root restart, all live new process identities, and five style22
+default links. Readback1051019/birth69917998 exited0 in1.531678453s and joined.
+Original root/e206 and native7a remain; schema10 stays schema10 through
+PreserveRuntimeInstallation/PreserveOwnerRuntime. No reset/carry or uncertain
+input replay was performed. No new private style22 loan or oldfloor restore.
+
+Mendel now owns one original newly-installed ordinary UI acceptance, including
+all18 saved/channel/tab-return/draft/Undo/End checks, actual UI/st exit results,
+joined cleanup and after-terminal image review. Its command was prepared before
+publication and has not been repeated. Heis's corrected successor can prepare
+on eligible334 independently, but its original source decoder must now use
+the actual public style22 interpreter and revalidate owner identity at use.
+Mouse-wheel/frame/cold-paint acceptance remains open, not a delivery gate for
+the accepted build. Full original objective remains incomplete.
