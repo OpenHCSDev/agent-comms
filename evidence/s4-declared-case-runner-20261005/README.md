@@ -36,3 +36,24 @@ package or environment was accessed. A design and runnable source do not approve
 the USD75/30-pair study. Configured paired execution, runtime constraint/action
 authority, capacity, HTTP/billing evidence and full S4 remain unqualified.
 Authored goal/constraint stories cannot substitute for actual runtime state.
+
+## Task-source relation still missing
+
+Only the execution restriction is an actual USER publication and constraint
+pin. `RecallRound.history` contains prose, not canonical case declarations;
+submitting it as native input establishes stimulus delivery, not task authority.
+The driver must not infer a correction/drop from wording such as “supersedes.”
+
+The existing `HumanConstraintPin` requires its certified original USER wording,
+author, recipient incarnation and scope. `CorrectionTaskChange` and
+`UserTaskDrop` require the original published reference. No current authored
+case supplies that chain. `RecordedNativeCheckpoint.authored_scope` and
+`revision_from` correctly require captured registry and certified wire sources.
+
+Each installed arm currently acquires a fresh private root. Its SDK fork and
+`fork_condition_source` corroborate inherited native entries and narrative;
+they do not transfer original wire task authority to that new owner. Pinning
+parent narrative or copying wire rows would not close this relation. Before
+prospective paired inputs, case publications and arm scopes must be bound
+through the existing task-source and owner mechanisms. Neither native stimulus
+delivery nor task-memory installation grants that missing relation.
