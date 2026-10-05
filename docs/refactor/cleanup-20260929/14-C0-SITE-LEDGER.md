@@ -1,5 +1,36 @@
 # C0 current site ledger
 
+## Current main source refresh — 2026-10-05
+
+Parent used the existing refactor-audit `Repository` and `Package` at actual
+Core09f339e73d044b217a1005e404bf569d81203bae and
+Toad75d249246612d7682fb0ead4a8e32fe5af9efba2. All324 Core and288 Toad
+production modules parsed with zero omissions. The17 original named owner
+declarations each remain in their defining module. FieldCodec, PendingRequests,
+ReadLedger, PiRpcChannel and ChildProcess still compose the original Sealed
+mechanism; the original mechanism guard also covers multiple inheritance and
+owned descendants. StringDispatch/TypeSwitch still use their shared collectors,
+with the original literal/class/nested-function specimens in the packaged guard.
+
+The original goal, relationship and owner-control consumers still delegate to
+GoalMentionBinding, RelationshipEdit and ThreadStatus capability. ImportAdapter
+still derives its registry from its subclass declarations. Current Conversation
+delegates stop completion and tool activity to the original StopReason and tool
+status owners; tool-header rendering uses declared MRO handlers. Project token,
+catalog command, Conversation/Question action and sidebar placement families
+remain defining owners rather than restored caller switches.
+
+The determining compact record is Parent's
+`.artifacts/closure-source-check-20261004/C0-current-source-20261005.json`.
+This is an original-ledger source refresh, not a new ratchet, scanner or proof
+of every dynamic alias/external subclass. No App, holder import, SDK, provider
+or repeated guard execution occurred. The dated rows below retain their original
+acceptance scopes; whole TC1/T9 resource, full continuous workflow and performance
+remain unfinished under their named owners. No whole round-two completion is
+claimed from these declarations or their old controls.
+
+## Earlier bounded ledger and acceptance
+
 Current bounded source review: Core cac7bdf3, Toad1cef2a46, with267/269
 normally integrated in final candidate7572b7b7. Initial7fcf826a/43949ee findings
 and intermediate421 judgments remain in Git. This is the original C0 decision
