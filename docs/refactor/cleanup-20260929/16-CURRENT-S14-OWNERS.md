@@ -2865,3 +2865,25 @@ READ1f53. Stage occurred once; canonical/native controls remain unrun at these
 receipts. Bohr owns canonical release after proof binding; native additionally
 requires canonical PASS and NEW matching7a execution authority. No old673 result
 or native086 lease qualifies those new settlement consumers.
+
+### Native fork source integration, 2026-10-05
+
+Parent guarded-merged Text63 exacte15f22fa as c96eca49 and Text64 exact5a2d9b94
+as fc17c5f6 after original native App/source review. These qualify library
+viewport/capture and callable-binding behavior, not installed Toad speed.
+Text65 exact230289 now targets main; its stacked integration ancestry produces
+a merge conflict. Original Kepler owns normal main join and full266/build-input
+byte equality to the qualified e253066f artifact before the final guarded merge.
+No new source controls or rebuild are required for an equal normal join.
+
+Parent independently hashed Text65 wheel e253066f (769125B) and inventory
+14c3bf25. The producer reused the project's declared cached Poetry2.2.1 backend,
+not Hatchling; it made no backend/environment/dependency changes. Frozen08e3/
+487 remain unchanged. Heis owns eventual joint installed loading/scrolling scope.
+
+C3 canonical675 first run is consumed5PASS/1FAIL4.279447s: authored line124 calls
+RegistryOwner.begin_turn, which has no such method. Reply workflow and both
+native cases were unreached. Mendel stops execution and restores original540;
+Bohr bound first-failure disposition e89771f2. Mendel owns the canonical control
+API correction, preserving terminal8144126a/XML and all five passing scopes;
+no production alias, native retry or inherited authority is planned.
