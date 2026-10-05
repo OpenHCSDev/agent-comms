@@ -3121,13 +3121,12 @@ BLOCKED/ACTIVE observations remain historical, with no goal-tool resume/replay.
   passed64.806s, readback1.050s; all19 owners alive with original thread births,
   settings/history/root and actual default links on target485. Native schema
   remains10 via Preserve; receipt0c603573 and one-use return55ff39ca retained.
-- [ ] Verify the fresh471 ordinary default UI attachment. OriginalMendel owns
-  stationary saved-body/Ready/actual exit verification with a copied UI state.
-  Observe01 visibly painted saved history/Ready but failed metadata export on the
-  retired viewport field; raw failure and whole77fa return are preserved. Reuse
-  Heis existing corrected helper for separate observe02, now launched once after
-  actual07 source-witness return and fresh admission; result pending. No18-check ordinary
-  journey, accepted466 control or speed claim is repeated.
+- [x] Verify the fresh471 ordinary default UI attachment. Separate observe02
+  passed24.764s with completed state export, readable saved history/Ready, actual
+  UI/st parent exits0 without signals, unchanged runtime/settings/saved source
+  and all21 observed identities retired. Parent matched all21 keeper hashes/bytes
+  and inspected the after image. Wholeeac1c110 returns client access; original
+  observe01FAIL/77fa remains preserved. No18-check journey or speed claim repeated.
 - [x] Focused recorder473 is merged61c053d8 after the actual successor07 run
   completed143.892s within150s, with real UI/st parent exits0 before retirement.
   Changed wait/quit consumers match the tested source; Parent inspected the
