@@ -109,3 +109,27 @@ Einstein remains sole package writer and overall handback owner; Mendel owns
 only carry on the new stopped copy. Carry does not wait or extend the historical
 GUI and does not acquire a native/provider/input/App permission. No donor/target
 import, package/store access or carry operation ran in this source update.
+
+## Carry-only purpose operands after historical05 return
+
+CARRY-ONLY-OPERANDS.json is the literal future binding for NONLIVEstyle22,
+replacing the historicalPUBLIC334 argv. It binds the reviewed3aac/0ed355 target,
+original88e8 three tool hashes, and the existing15-file stopped-original9/base
+and output paths. The manifest rechecks full modes, hashes and mtimes against
+the original authored tree; its original inode identities remain unchanged.
+Source declaration971104/seed2be7/source whole7f827 remain the original receipts.
+The old8f7c source grant is closed, not inherited.
+
+The effective target command is style22/bin/python -B followed by the existing
+native_schema_carry_controls.py entry and original --source-python540 and
+--stopped-original arguments. That original control alone invokes the unchanged
+sourcePython native_schema_carry.py --declaration child. Inherited
+PYTHONDONTWRITEBYTECODE=1/PYTHONPATH absent applies to both; no manual duplicate
+source probe or seed is proposed.
+
+Historical05 returned the actual1469/69/519 floor; closure is eligibility only.
+Bohr must issue both new source540 re-declarationREAD and targetstyle22
+READ/isolated carry scopes. Einstein alone stages Core355 and returns the whole
+floor; Mendel only executes the carry against its own new stopped copy. No
+interpreter was imported or used, no source/target package access occurred, and
+no App/native/provider/input/oldW6 corpus or new copy is authorized here.
