@@ -2887,3 +2887,22 @@ native cases were unreached. Mendel stops execution and restores original540;
 Bohr bound first-failure disposition e89771f2. Mendel owns the canonical control
 API correction, preserving terminal8144126a/XML and all five passing scopes;
 no production alias, native retry or inherited authority is planned.
+
+### Text65 merged; changed public observer attempt admitted, 2026-10-05
+
+Text65 normal main join2a1fcfb is guarded-merged06771827. Parent verified src,
+README, pyproject and LICENSE byte equality to qualified230289/e253. The native
+63/64/65 union is now merged; unchanged266 filewheel needs no rebuild. Kepler
+continues independent native frame acquisition source review; Heis integrates
+the actual main relation at the next joint loading/scrolling checkpoint. This
+still does not establish installed Toad speed or motion acceptance.
+
+Parent reviewed corrected recorder b3231719: original RuntimeSelection.receipt
+compares actual selected route with native launch; explicit verify_stage keeps
+supplied typed activation/package/native checks. Proposal8bfac8c1/recorder7ee8
+were personally hashed. One changed-observer public44802 still-image journey
+is authorized and admitted by the original fresh19-client guard; recorder1941212
+runs with nra1817557/birth65371423 unchanged. Actual terminal/cleanup/personal
+after-terminal images remain required; no results are inferred from admission.
+Original first preUI refusal9679fd28 and historical PREFIXactivation stay intact.
+No SDK/provider/newinput/movie/profile/package or second publication occurs.
