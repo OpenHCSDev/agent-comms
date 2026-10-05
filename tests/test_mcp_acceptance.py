@@ -19,20 +19,20 @@ import subprocess
 import sys
 import threading
 import time
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
+from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
 
-from agent_comms import backend
 from agent_comms.acp_extension import (
     McpClientReceiptUpdate,
-    TurnSettledUpdate,
-    TurnStartedUpdate,
+    TurnChangedUpdate,
     decode_updates,
 )
 from agent_comms.comms import wire
+from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime import RuntimeProxy
 from delivery_owner_fixture import canonical_agent
@@ -289,12 +289,16 @@ async def _observer(case, root):
     if not path:
         yield None
         return
-    spec = importlib.util.spec_from_file_location("mcp_toad_acceptance_adapter", path)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    async with module.open_observer(case, root) as observer:
-        yield observer
+    # The selected adapter owns its sibling test dependencies. Keep their
+    # resolution in the same lifetime as its external open_observer contract.
+    with pytest.MonkeyPatch.context() as imports:
+        imports.syspath_prepend(str(Path(path).resolve().parent))
+        spec = importlib.util.spec_from_file_location("mcp_toad_acceptance_adapter", path)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        async with module.open_observer(case, root) as observer:
+            yield observer
 
 
 @pytest.mark.parametrize("case", ["allow", "no_controller", "revoke_midturn", "disconnect"])
@@ -324,7 +328,9 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
         )
     )
     async with _observer(case, tmp_path) as observer:
-        with _mock_model(tmp_path, agent, receipt_seen, second_request, release_final) as (
+        with monkeypatch.context() as environment, _mock_model(
+            tmp_path, agent, receipt_seen, second_request, release_final
+        ) as (
             requests,
             errors,
             guard,
@@ -332,7 +338,12 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
             env.update(
                 OPENROUTER_API_KEY="offline-fixture-no-real-key", NODE_OPTIONS=f"--require={guard}"
             )
-            monkeypatch.setattr(backend.os, "environ", env)
+            if observer is not None:
+                # The mounted observer already selected its isolated UI paths.
+                for key in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"):
+                    if key in os.environ:
+                        env[key] = os.environ[key]
+            environment.setattr(os, "environ", env)
             args = [
                 "--offline",
                 "--no-extensions",
@@ -350,66 +361,72 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                 "-e",
                 str(Path(env["PI_COMPACTION_TEST_PACKAGE"]) / "agent-comms-extensions/pi-mcp-client"),
             ]
-            owner = canonical_agent(
-                wire(tmp_path / "wire"),
-                agent_bin=binary,
-                agent_args=args,
-                runtime_enabled=True,
-                auto_wake=False,
-            )
-
-            env.update(
-                AGENT_COMMS_ROOT=str(owner._comms.root),
-                AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=owner._private_nk_wire_root_id,
-                AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=env["PI_COMPACTION_TEST_PACKAGE"],
-                AGENT_COMMS_NATIVE_CONFIG_DIR=str(agent),
-            )
-
-            class Audit:
-                async def session_update(self, session_id, update):
-                    row = {
-                        "sessionId": session_id,
-                        "update": update.model_dump(by_alias=True, exclude_none=True),
-                    }
-                    updates.append(row)
-                    if any(
-                        isinstance(fact, McpClientReceiptUpdate)
-                        for fact in decode_updates(update.field_meta)
-                    ):
-                        receipt_seen.set()
-
-            class Attachment:
-                async def session_update(self, session_id, update):
-                    nonlocal attachment_turn
-                    if observer:
-                        await observer.session_update(session_id=session_id, update=update)
-                    for fact in decode_updates(update.get("_meta")):
-                        if isinstance(fact, TurnStartedUpdate):
-                            attachment_turn = fact.turn_id
-                        if (
-                            isinstance(fact, TurnSettledUpdate)
-                            and attachment_turn
-                            and attachment_turn == fact.turn_id
-                        ):
-                            attachment_settled.set()
-
-                async def request_permission(self, **kwargs):
-                    permissions.append(kwargs)
-                    entered.set()
-                    answer = (
-                        await observer.request_permission(**kwargs)
-                        if observer
-                        else {"outcome": {"outcome": "selected", "optionId": "allow-once"}}
-                    )
-                    await release.wait()
-                    return answer
-
-            owner.on_connect(Audit())  # Passive evidence sink, never a permission controller.
+            retirement = AsyncExitStack()
             try:
-                await owner.new_session(cwd=str(project), mcp_servers=[])
+                owner = canonical_agent(
+                    wire(tmp_path / "wire"),
+                    agent_bin=binary,
+                    agent_args=args,
+                    runtime_enabled=True,
+                    auto_wake=False,
+                )
+                retirement.push_async_callback(owner.shutdown)
+
+                env.update(
+                    AGENT_COMMS_ROOT=str(owner._comms.root),
+                    AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=owner._private_nk_wire_root_id,
+                    AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=env["PI_COMPACTION_TEST_PACKAGE"],
+                    AGENT_COMMS_NATIVE_CONFIG_DIR=str(agent),
+                )
+
+                class Audit:
+                    async def session_update(self, session_id, update):
+                        row = {
+                            "sessionId": session_id,
+                            "update": update.model_dump(mode="json", by_alias=True, exclude_none=True),
+                        }
+                        updates.append(row)
+                        if any(
+                            isinstance(fact, McpClientReceiptUpdate)
+                            for fact in decode_updates(update.field_meta)
+                        ):
+                            receipt_seen.set()
+
+                class Attachment:
+                    async def session_update(self, session_id, update):
+                        nonlocal attachment_turn
+                        if observer:
+                            await observer.session_update(session_id=session_id, update=update)
+                        for fact in decode_updates(update.get("_meta")):
+                            if isinstance(fact, TurnChangedUpdate):
+                                if fact.state.busy:
+                                    if attachment_turn is None:
+                                        attachment_turn = fact.state
+                                    else:
+                                        assert fact.state.matches(attachment_turn.managed_id)
+                                elif attachment_turn is not None:
+                                    assert fact.state.matches(attachment_turn.managed_id)
+                                    attachment_settled.set()
+
+                    async def request_permission(self, **kwargs):
+                        permissions.append(kwargs)
+                        entered.set()
+                        answer = (
+                            await observer.request_permission(**kwargs)
+                            if observer
+                            else {"outcome": {"outcome": "selected", "optionId": "allow-once"}}
+                        )
+                        await release.wait()
+                        return answer
+
+                owner.on_connect(Audit())  # Passive evidence sink, never a permission controller.
+                session = await owner.new_session(cwd=str(project), mcp_servers=[])
+                session_id = session.session_id
                 attached = canonical_agent(owner._comms, auto_wake=False)
+                retirement.push_async_callback(attached.shutdown)
                 attached.on_connect(Attachment())
-                proxy = RuntimeProxy(attached, "project", owner._runtime.path)
+                proxy = RuntimeProxy(attached, session_id, owner._runtime.path)
+                retirement.push_async_callback(proxy.close)
                 await proxy.subscribe()
                 assert not attachment_settled.is_set()  # Initial idle replay is not this turn.
                 if case == "no_controller":
@@ -417,7 +434,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                     try:
                         task = asyncio.create_task(
                             owner.prompt(
-                                "project", [{"type": "text", "text": "Run fixture echo once."}]
+                                session_id, [{"type": "text", "text": "Run fixture echo once."}]
                             )
                         )
                     finally:
@@ -429,7 +446,9 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                         )
                     )
                     await asyncio.wait_for(entered.wait(), TIMEOUT)
-                    assert owner.turns.turn_state("project").busy
+                    assert (await Coordination.run_worker(partial(
+                        owner.turns.turn_state, session_id
+                    ))).busy
                     if case == "revoke_midturn":
                         await asyncio.to_thread(
                             _deny_via_simulated_user_pty,
@@ -439,7 +458,9 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                             env,
                             tmp_path / "pty-deny.log",
                         )
-                        assert owner.turns.turn_state("project").busy  # Genuine mid-turn denial.
+                        assert (await Coordination.run_worker(partial(
+                            owner.turns.turn_state, session_id
+                        ))).busy  # Genuine mid-turn denial.
                     elif case == "disconnect":
                         if observer:
                             # Receipt of the RPC is not proof that the user saw
@@ -451,7 +472,10 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                     release.set()
                     if case == "revoke_midturn":
                         assert await asyncio.to_thread(second_request.wait, 12)
-                        assert owner.turns.turn_state("project").busy
+                        current = await Coordination.run_worker(partial(
+                            owner.turns.turn_state, session_id
+                        ))
+                        assert current.busy
                         # The final model response is still held at localhost:
                         # connection retirement cannot be Pi turn shutdown.
                         for pid in map(int, starts.read_text().splitlines()):
@@ -460,7 +484,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                         (tmp_path / "midturn-retired.json").write_text(
                             json.dumps(
                                 {
-                                    "turnId": owner.turns.turn_state("project").managed_id,
+                                    "turnId": current.managed_id,
                                     "finalModelResponseHeld": True,
                                     "mcpPidsAbsent": True,
                                 }
@@ -480,19 +504,24 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                 assert calls.exists() == (case == "allow")
                 if calls.exists():
                     assert calls.read_text().splitlines() == ["ACCEPTANCE_ECHO"]
-                active, receipts = None, []
+                active, receipts, settlements = None, [], []
                 for row in updates:
-                    assert row["sessionId"] == "project"
+                    assert row["sessionId"] == session_id
                     for fact in decode_updates(row["update"].get("_meta")):
-                        if isinstance(fact, TurnStartedUpdate):
-                            active = fact.turn_id
+                        if isinstance(fact, TurnChangedUpdate):
+                            if fact.state.busy:
+                                if active is None:
+                                    active = fact.state
+                                else:
+                                    assert fact.state.matches(active.managed_id)
+                            elif active is not None:
+                                assert fact.state.matches(active.managed_id)
+                                settlements.append(fact.state)
+                                active = None
                         if isinstance(fact, McpClientReceiptUpdate):
-                            assert active and fact.turn_id == active
+                            assert active is not None and active.matches(fact.turn_id)
                             receipts.append(fact.receipt)
-                        if isinstance(fact, TurnSettledUpdate):
-                            assert fact.turn_id == active
-                            active = None
-                assert active is None and len(receipts) == 1, updates
+                assert active is None and len(settlements) == len(receipts) == 1, updates
                 assert [FieldCodec.encode(server) for server in receipts[0].servers] == [
                     {
                         "id": "fixture",
@@ -529,14 +558,16 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                 release.set()
                 release_final.set()
                 receipt_seen.set()
-                if task and not task.done():
-                    task.cancel()
-                    await asyncio.gather(task, return_exceptions=True)
-                if proxy:
-                    await proxy.close()
-                await owner.shutdown()
-                (tmp_path / "acp-updates.json").write_text(json.dumps(updates, indent=2))
-                if starts.exists():
-                    for pid in map(int, starts.read_text().splitlines()):
-                        with pytest.raises(ProcessLookupError):
-                            os.kill(pid, 0)
+                try:
+                    if task and not task.done():
+                        task.cancel()
+                        await asyncio.gather(task, return_exceptions=True)
+                finally:
+                    try:
+                        await retirement.aclose()
+                    finally:
+                        (tmp_path / "acp-updates.json").write_text(json.dumps(updates, indent=2))
+                        if starts.exists():
+                            for pid in map(int, starts.read_text().splitlines()):
+                                with pytest.raises(ProcessLookupError):
+                                    os.kill(pid, 0)
