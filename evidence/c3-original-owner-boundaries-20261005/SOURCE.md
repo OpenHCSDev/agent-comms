@@ -83,6 +83,20 @@ Existing input-review/nominal fixtures which merely call `wire(...)` do not
 by themselves establish a private-bus initial marker. The accepted
 `goal_owner_fixture.canonical_goal_wire` is the original producer for a
 future canonical goal control. Do not invent a marker or alter readers to
-qualify these selectors. The real ACP settlement cases in `test_acp.py`
-remain stronger, separate native/provider boundaries and cannot be replaced
-by a direct `Goal` construction or a fabricated terminal event.
+qualify these selectors. Legacy settlement cases in `test_acp.py` use the
+real CommsAgent/OwnedTurn/SQLite path but replace the backend stream and
+yield authored `Done` events. They are controlled producer-event cases,
+not native-terminal or provider acceptance. The changed native controls in
+`test_goal_selection_native.py` use the unchanged original saved SDK fixture,
+`open_owner`, real TurnRunner and localhost HTTP. No terminal event is
+manufactured and no backend stream is replaced.
+
+The new controls are prepared, not run. `test_goal_selection_owner.py` uses
+`canonical_goal_wire` for replaced/cleared selection, later-revision failure
+projection, exact CAS, owner-pause refusal, model edit/resume and certified
+reply consumption. Its leases are real registry begin/finish operations,
+not native input proof. The separate two-case SDK control allows the actual
+provider request to advance the same goal or replace it through canonical
+commands; settlement must preserve the changed record and never apply the
+old permit to a replacement. SDK-authored seed rows are distinct from the
+one actual localhost native input per case.
