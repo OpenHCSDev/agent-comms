@@ -1,4 +1,7 @@
-# W6 stopped declaration carry — source checkpoint
+# W6 stopped declaration carry
+
+Current installed acceptance is recorded in `installed-carry/READY.md` and
+`installed-carry/KEEPERS.json`. The source-only stages below are historical.
 
 Base: actual main `a38c06de24315fa868de45786e01fefadb0aaef1`.
 Reviewed target producer: Core627 `b7e688292074a854870d7ca78397111c1dae1c7b`.

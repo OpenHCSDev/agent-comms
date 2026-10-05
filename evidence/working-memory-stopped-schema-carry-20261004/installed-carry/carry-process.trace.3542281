@@ -1,0 +1,6 @@
+execve("/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python", ["/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python", "-B", "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry_controls.py", "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004", "--source-python", "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python", "--stopped-original", "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/stopped-original9"], 0x7ffc4da414c0 /* 114 vars */) = 0
+vfork()                                 = 3542634
+--- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3542634, si_uid=1000, si_status=0, si_utime=100 /* 1.00 s */, si_stime=9 /* 0.09 s */} ---
+wait4(3542634, [{WIFEXITED(s) && WEXITSTATUS(s) == 0}], WNOHANG, NULL) = 3542634
+exit_group(0)                           = ?
++++ exited with 0 +++

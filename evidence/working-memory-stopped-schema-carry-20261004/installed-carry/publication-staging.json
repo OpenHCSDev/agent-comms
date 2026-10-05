@@ -1,0 +1,28 @@
+[
+  {
+    "path": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/stopped-original9/.coordination.sqlite3.carry-zxivruoj/coordination.sqlite3",
+    "sha256": "0eafe73518b987e8b20e1fa86c109141b85101ac506adbd72d22b6733295adcf",
+    "revision": {
+      "identity": {
+        "device": 2084,
+        "inode": 2661631
+      },
+      "size": 434176,
+      "mtime_ns": 1791164643530974760,
+      "ctime_ns": 1791164643883365096
+    }
+  },
+  {
+    "path": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/stopped-original9/.native_prompt_bindings.sqlite3.carry-8y39az4j/native_prompt_bindings.sqlite3",
+    "sha256": "f2f41017e6a5a08cb28f54459497611aa4954df344e68412e47cb96603ba6c60",
+    "revision": {
+      "identity": {
+        "device": 2084,
+        "inode": 2661633
+      },
+      "size": 12288,
+      "mtime_ns": 1791160638138417378,
+      "ctime_ns": 1791164643890046149
+    }
+  }
+]

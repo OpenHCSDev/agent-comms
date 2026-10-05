@@ -1,0 +1,36 @@
+{
+  "compactkeepers": {
+    "evidence/working-memory-stopped-schema-carry-20261004/installed-carry/reviewed-carry.json": "a972478beb69a212796bf88f7e5e029925088394d96310d5b47d61d80589e255",
+    "evidence/working-memory-stopped-schema-carry-20261004/installed-carry/publication-staging.json": "270f1265a4bdefb3acaed9a37bce54b568061fc02e2c192ecc50c586a458d108",
+    "evidence/working-memory-stopped-schema-carry-20261004/installed-carry/carry-recorder-prelaunch01-negative.json": "7afc515631ad7ffc381d058e22e4362a4efccb130192dda7909df623820044af",
+    "evidence/working-memory-stopped-schema-carry-20261004/installed-carry/receipt.json": "48236fe4fbb5d604662afa153bdb208a0e054e6db79e7f6b7a2b06ab964dfb65",
+    "evidence/working-memory-stopped-schema-carry-20261004/installed-carry/READY.md": "0138503fef3b3ff6912c06b88de999a3ee46e80b2c835f35704d164e98cd856d",
+    "evidence/working-memory-stopped-schema-carry-20261004/installed-carry/target-control.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "evidence/working-memory-stopped-schema-carry-20261004/installed-carry/carry-process.trace.3542281": "c5678c01ad1c4f021b9735d6ab368b9915c7e7250853cb2de9118e8e2e472964",
+    "evidence/working-memory-stopped-schema-carry-20261004/installed-carry/installed.json": "40558efe189f48c90300511c0eb1f225cf1dd9504e285cf3e8388b0505433678",
+    "evidence/working-memory-stopped-schema-carry-20261004/installed-carry/reviewed-stores.json": "4b052c2b1ef129852beb65841fe40c4dc91f836978e92b8e7c8f0c1696e15abe",
+    "evidence/working-memory-stopped-schema-carry-20261004/installed-carry/target-control.stdout.json": "48236fe4fbb5d604662afa153bdb208a0e054e6db79e7f6b7a2b06ab964dfb65",
+    "evidence/working-memory-stopped-schema-carry-20261004/installed-carry/carry-process.trace.3542634": "0c3741c4d54e5a0805b5e22824c316d79f459d3c007c9041f8b87f06426685bc",
+    "evidence/working-memory-stopped-schema-carry-20261004/installed-carry/candidate-source-proof.json": "ad826643682378d1326c3eeac243440a07424b65fed195c2625180598c84b01d",
+    "evidence/working-memory-stopped-schema-carry-20261004/installed-carry/capture.py": "bf5ed76956cccf45ac649f0530284d92130ce4055304c47dbdc26f0a67917227",
+    "evidence/working-memory-stopped-schema-carry-20261004/installed-carry/thin540-Mendel663-carry-only-source-redeclaration-READ-issued-grant.json": "d7f12b1c1f092c6123abaf2880ef87c37e1f863f705e26c3000c2574ac53415c",
+    "evidence/working-memory-stopped-schema-carry-20261004/installed-carry/carry-terminal.json": "7b2c37a5b7713292b4b470b677b98a2b735ac268800b62b1ad781dcf15d0edd2",
+    "evidence/working-memory-stopped-schema-carry-20261004/installed-carry/carry-whole-read-handback.json": "75483dca014c186bee8cd3f1c500e9105977bab4e8ae408d8fb2b12da545e285",
+    "evidence/working-memory-stopped-schema-carry-20261004/installed-carry/style22-Einstein-Mendel663-Core-only-stopped-carry-issued-grant.json": "ab31680dffc051b2eafb251ae3f5d5cf1183716d53199a1f670a65d00c757b86"
+  },
+  "raw_base": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004",
+  "raw_snapshot_hashes": {
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/carry-prefix-before.json": "4c8ac103d2113d3fd94a5d11df51cad26a71d7e74cd90f7a7263f39e3ca6bd9f",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/carry-prefix-after.json": "4c8ac103d2113d3fd94a5d11df51cad26a71d7e74cd90f7a7263f39e3ca6bd9f"
+  },
+  "tools_source": "88e8d2f9983df69de876401abf0d3ec506235985",
+  "tools": {
+    "tools/cutover/native_schema_carry.py": "08d5b673910f96634ad017eb7e8224cb440e5b5cfea7c07d597b3ddf0f209c2b",
+    "tools/cutover/native_schema_carry_controls.py": "450678fe8a510273f89aad9c9bcc260eab52d1f25be58f24b3056821df930420",
+    "tools/cutover/runtime_installation.py": "77841672b6d9d99e3cb4c724706ffdad7eefd604aab583743f2e4b341156224c"
+  },
+  "source_product_vs_actual_main": "ZERO src/stack/.pi/pyproject; normal665/666/664 main join, tools unchanged from installed88e8",
+  "joined_main": "69346035167d7fc604bafbec0a29872c4c93aab3",
+  "whole_source_and_target_READ_returned": true,
+  "Einstein_floor_restore_and_Bohr_independent_lifecycle_closure": "separate result pending; not inferred here"
+}
