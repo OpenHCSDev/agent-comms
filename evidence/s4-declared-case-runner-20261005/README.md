@@ -112,7 +112,7 @@ and Sch's artifact return. Those completed purposes grant no new access here.
 Normal main integration changed no production or private test bytes and does
 not imply installation or S4 paired-workflow acceptance.
 
-## Next affected-consumer functional journey
+## Functional01 proposal and terminal
 
 `PROPOSED-FUNCTIONAL-OPERANDS.json` publishes the exact one-cut driver command,
 retained 355-asset `3fe14077` wheel relation, native `7a2e4aab` identity, source
@@ -135,9 +135,47 @@ operand and derives its walltime from that phase's issued
 process tracking and cleanup bytes match original #676. The proposed 600 seconds
 is a whole-purpose walltime, not a provider timeout or resource cap. Existing
 Package/FunctionFacts parsed 324 production, 373 test and 54 tool modules without
-omissions, plus both original qualification scripts. Controller source compiled;
-no controller, SDK or provider executed.
+omissions, plus both original qualification scripts. At the original proposal
+checkpoint this was source preparation only.
 
-Fresh Bohr package/execution purpose and matching Sch native READ/EXEC authority
-are still required. Closed purposes are not reused. No current package, native
-artifact, saved source or public runtime has been borrowed for this preparation.
+Functional01 subsequently ran at `10bd21f2` under issued purpose `30f8b908`.
+Installed source and native FullTrust passed. The configured Sol/HIGH source
+input completed with four model steps and three successful tools:
+`comms_set_goal`, `comms_goal`, and `comms_send`. Its private goal became BLOCKED
+and private wire question `7a32ea65803a` was committed at sequence 5. The unchanged
+reader correctly marked `unassisted_recall=false`, and the runner stopped in
+77.408s before the manual summary or either arm. Input `aee33220` remains STARTED.
+This is a tool-use refusal, not a finding that the answer recalled a fact wrongly.
+
+The actual sent input and all four captured SDK requests lack the evaluation
+restriction wording. The runner had published it as a USER pin while the plan
+sent bare synthetic history. Original awareness contributes source pointers;
+publishing the restriction did not place its body in that direct request.
+
+All 56 observed process births and the outer controller/runner joined; groups
+and sockets were empty. Original saved source and input proof are unchanged.
+The original 510-record holder floor, 347 ZIP assets, 94 keepers, 69 metadata
+files, ten distributions and archive origin were restored exactly. Native
+postrun FullTrust passed; Sch returned both artifact authorities and Bohr
+independently closed the whole purpose. `functional01-terminal.json` binds the
+original failure and handback. No completed summary or arm is claimed.
+
+## Source-input correction
+
+`RecallRound` now owns the evaluation instruction and constructs source history
+as explicitly labeled JSON data. Source and probe operands carry that instruction
+directly; the existing USER publication derives the same wording. The plan and
+recorded-source reader use that constructor, and the runner's copied restriction
+and bare-history assembly are deleted. Original oracle history and source
+coordinates remain unchanged. The no-tools metric and original refusal remain
+unchanged.
+
+Five existing source/plan/reader/publication controls passed in 0.538s using the
+system Python 3.14 interpreter. The prior development Python 3.11 attempt failed
+at import because its environment lacks `metaclass_registry`; that negative log
+is retained. Neither control batch used a holder, SDK, native process or provider.
+This corrected request construction has not executed on a configured model.
+The original functional design/plan/source contract remain frozen as consumed
+operands. They do not authorize or describe execution of the corrected constructor.
+The summary, both installed arms and full S4 remain unfinished; the paid study
+remains unapproved, and the closed purpose grants no further execution.

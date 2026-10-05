@@ -272,9 +272,7 @@ async def run(stage, package, original_python, *, design: PairedRecallDesign,
             # The source is frozen study data, not an instruction to modify the
             # inherited project. Publish through the existing USER pin owner.
             restriction = service.messaging.send_user_message(owner.name,
-                'This private retention evaluation supplies synthetic case data. '
-                'Do not use tools, modify files or resume inherited work. '
-                'Acknowledge source inputs; answer only the public recall questions.',
+                scenario.rounds[0].evaluation_instructions(),
                 worktree=owner.worktree)
             service.messaging.pin_user_constraint(owner.name, restriction.reference,
                                                  worktree=owner.worktree)

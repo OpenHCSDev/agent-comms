@@ -293,11 +293,16 @@ class RecordedMeasurementTests(unittest.TestCase):
             with self.subTest(scenario=scenario.identity):
                 history = ()
                 for round_, operands in zip(scenario.rounds, scenario.construction_rounds()):
+                    previous = history
                     history += operands['history_additions']
                     self.assertEqual(history, round_.history)
                     self.assertEqual(operands['round'], round_.identity)
-                    self.assertEqual(operands['source_text'], '\n'.join(operands['history_additions']))
+                    self.assertEqual(operands['source_text'], round_.source_text(previous))
+                    self.assertIn(round_.evaluation_instructions(), operands['source_text'])
+                    self.assertEqual(json.loads(operands['source_text'].split('\n', 1)[1]),
+                        {'round': round_.identity, 'history': list(operands['history_additions'])})
                     self.assertEqual(operands['probe_text'], round_.probe_text())
+                    self.assertIn(round_.evaluation_instructions(), operands['probe_text'])
                     self.assertEqual(json.loads(operands['probe_text'].split('\n', 1)[1]),
                         {'round': round_.identity, 'questions': [q.public() for q in round_.questions]})
                 with self.assertRaisesRegex(ValueError, 'preceding frozen history prefix'):
