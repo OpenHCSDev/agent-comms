@@ -1,0 +1,112 @@
+{
+  "actual_provider_functional_answer": true,
+  "new_original_input": "119d18523df3babc6f7018e67193a15d",
+  "native_terminal_entry": "80b6b63e",
+  "request_id": "157f037d-fbd7-495f-83dc-ceb727ad8770",
+  "strict_SDK_to_wire_projection": true,
+  "strict_SDK_serialized_segments": true,
+  "full_condition_reader_complete": false,
+  "raw_exit_code": 1,
+  "controller_elapsed_seconds": 46.25672438996844,
+  "configured_resource_elapsed_seconds": 37.23104689596221,
+  "raw_refusal": "Recorded probe must immediately follow its original checkpoint",
+  "cause": "Original completed cut3 contains four original message entries after its committed compaction. New probe is on the same inherited checkpoint branch, but the reader still requires direct parent equality.",
+  "source_relation": {
+    "original_input_id": "119d18523df3babc6f7018e67193a15d",
+    "request_id": "157f037d-fbd7-495f-83dc-ceb727ad8770",
+    "checkpoint_entry_id": "f1d4d7c6",
+    "input_entry_id": "6bae8677",
+    "input_parent_id": "10afd6a5",
+    "checkpoint_is_ancestor": true,
+    "intervening_entries": [
+      {
+        "id": "49fdbde2",
+        "type": "MessageEntry",
+        "parent_id": "f1d4d7c6"
+      },
+      {
+        "id": "2bc404ed",
+        "type": "MessageEntry",
+        "parent_id": "49fdbde2"
+      },
+      {
+        "id": "f8778a72",
+        "type": "MessageEntry",
+        "parent_id": "2bc404ed"
+      },
+      {
+        "id": "10afd6a5",
+        "type": "MessageEntry",
+        "parent_id": "f8778a72"
+      }
+    ],
+    "native_terminal_id": "80b6b63e",
+    "native_terminal_public_text": "ORIGINAL_INSTALLED_S4_APPLICATION_CONFIGURED02_VERIFIED",
+    "strict_SDK_event_to_wire_projection": true,
+    "strict_SDK_serialized_segments": {
+      "evaluated": true,
+      "stage": "recorded SDK provider input",
+      "artifact": {
+        "kind": "file",
+        "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02/application/sdk-contexts/segments-38ab2c556cb90bf5e6e81e8d3460a050ed17b28708f32163baf23bb94f60a42e.json",
+        "sha256": "1ed784036341a92cc9246c46a7209b12b4dbbeb094237e56b2471dba79a568c0"
+      },
+      "context_digest": "38ab2c556cb90bf5e6e81e8d3460a050ed17b28708f32163baf23bb94f60a42e",
+      "segments": 6,
+      "utf8_bytes": 185673,
+      "provider_messages_sha256": "962c157270c1ed9b0a6bf7bc47d9ea101c2a3b1698f802e62ca7176d7089dee0",
+      "final_transport_evaluated": false,
+      "scope": "Original captured serializations match every SDK measured segment; not HTTP bytes, provider token counts or intervention proof"
+    },
+    "raw_controller_exit": 1,
+    "raw_reader_refusal": "Recorded probe must immediately follow its original checkpoint",
+    "scope": "Existing original readers before failing aggregate predecessor check; no overall construction success or study claim"
+  },
+  "preservation": {
+    "installed_assets": 347,
+    "installed_assets_equal": true,
+    "original_environment_keepers": 94,
+    "original_keepers_equal": true,
+    "metadata_files": 69,
+    "metadata_equal": true,
+    "distributions": {
+      "pydantic_core": "2.46.5",
+      "typing-inspection": "0.4.4",
+      "metaclass-registry": "0.2.1",
+      "annotated-types": "0.8.0",
+      "typing_extensions": "4.15.0",
+      "pydantic": "2.13.5",
+      "packaging": "26.2",
+      "agent-comms": "0.1.0",
+      "nominal-refactor-audit": "0.1.0",
+      "agent-client-protocol": "0.12.1"
+    },
+    "truthful_origin": {
+      "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+      "archive_info": {}
+    },
+    "native086_full_trust": true,
+    "original_source_unchanged": true,
+    "native_children_closed": true
+  },
+  "controller_pid": 2601548,
+  "controller_birth": 63514902,
+  "controller_joined": true,
+  "controller_proc_absent": true,
+  "observer_ready": 2,
+  "observer_runtime_complete": 2,
+  "observer_failures": [],
+  "exact_native_observer_births": "Not retained by original fixture; original ParentedProcess ExitStack and CommsAgent joins completed. Fresh whole-holder process census remains Bohr-owned.",
+  "keepers": {
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02.log": "b488b4ec1f2c2dede2348beb501968d41f8a179161056904efca810dac6ed406",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02/application/receipt.json": "e4bb08715d2776a5251915f41c754c7433ccb29f9f8288413ca91df4431cca1d",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02/application/recorded-probe.private.json": "0c519d7a2bb05a49201c30ad6cb0ca1634d61fa2297b090bf2f5cf2866411e47",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02/application/condition-observation.jsonl": "b00d20e9ad4f9e60b5728278c0577e26609bbdcedfba0275014ebf424cfb9611",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02-terminal-facts.json": "3adc4c6be563e886e18d831c6d41b766b06c91482ddd820a0ebc0204208e9f1e",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02-holder-postrun.json": "6a094a6311358e0acd998ec784440a87200c36bea66c8e83b02d1abc3ddfdf66",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-configured-source-declaration/configured02-controller-identities.json": "0da3c219876f3c892ce088ce210d0bb28bc73d473e74b3bcc12b24c81606a756"
+  },
+  "no_resend": true,
+  "study": false,
+  "handback": "All owned execution complete; explicitly return sole configured02 THIN540 execution/import and Sch086 read/execution. Keeper remains immutable; no next purpose inferred."
+}

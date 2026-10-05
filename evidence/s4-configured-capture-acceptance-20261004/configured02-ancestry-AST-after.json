@@ -1,0 +1,36 @@
+{
+  "parsed_modules": 997,
+  "parse_omissions": [
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "error": "invalid syntax (tracked_turn.py, line 54)"
+    }
+  ],
+  "sites": [
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 297,
+      "kind": "declaration",
+      "name": "capture_for_probe"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1335,
+      "kind": "caller",
+      "expression": "self.checkpoint.capture_for_probe(self.session, evidence, self.fork_journal, source, user)"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 105,
+      "kind": "caller",
+      "expression": "self.checkpoint.capture_for_probe(self.identity, evidence, None, evidence, originals[key])"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 101,
+      "kind": "caller",
+      "expression": "self.checkpoint.capture_for_probe(self.identity, evidence, None, evidence, originals[key])"
+    }
+  ],
+  "limit": "Existing NRA parser; lexical sites, not dynamic dispatch proof. One Python3.12 generic declaration omitted by Python3.11 and checked separately with host3.14 AST. Product/native source unchanged."
+}
