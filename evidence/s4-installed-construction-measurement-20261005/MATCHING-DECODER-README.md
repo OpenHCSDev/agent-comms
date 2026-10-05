@@ -1,27 +1,32 @@
 # Same recorded-input decoder cohort
 
-The single original recorded01 reader exited 1 after 1.383s, before producing
-measurement JSON. Its strict Core656 decoder refused `source_spans` in the
-retained SystemLayerSegment. Original #674 records were produced with the
-original676 Core355 wheel; their assembly spans are genuine data. No field was
-removed and no decoder or reader guard was weakened.
+Scoped Ready: the original #674 paired inputs now decode and score through their
+original producer Core676 wheel. The single released READ03 reader exited 0 in
+9.455s. Both task-memory and bounded constructors and their entire request-bound
+prefixes were measured and preserved; the one original question is correct in
+each arm. No new SDK stream, provider call or input was made.
 
-The existing SystemLayerSegment owns these spans; ContributionCoordinates
-checks their original ordered byte coverage. SegmentManifest owns the matching
-projection. Original676 Git and all 355 retained normal-wheel assets match;
-the original recorded producer source proof names this same wheel/declaration.
-This does not claim original676 equals later current main.
+The original Core656 reader refused genuine `SystemLayerSegment.source_spans`.
+The matching producer declaration and all 355 original Git/wheel/installed assets
+agree. `InstalledSource.require_package` and `ReviewedArtifact` own this proof;
+`SystemLayerSegment` owns ordered assembly spans and `SegmentManifest` projects
+them. The strict codec and original payload were unchanged. Core676 is not
+claimed byte-equal to later main.
 
-`RECORDED01-REFUSAL.json` preserves the failed read and whole return. Bohr
-independently closed that purpose after all original133 records, original510
-floor/347Core/94keepers/69metadata/10dists/raworigins remained exact. The old
-construction-false report and STARTED/UNKNOWN dispositions are unchanged.
+Recorded02 stopped at the proof caller's wrong `cwd` operand before its reader.
+The fresh READ03 proposal uses the declared proof phase's `cwd`. Original grants,
+proposals and both failed receipts are retained. READ03 stage/proof ran once,
+then Bohr bound the actual proof before releasing the one same-record reader.
 
-`PROPOSED-MATCHING-DECODER-READ.json` declares one fresh Core-only stage of the
-existing 3fe wheel, source/origin proof through the existing InstalledSource
-and ReviewedArtifact owners plus original676 asset proof, the exact original
-paired-input scorer argv, and mandatory original5f restoration. Proof reads
-no native artifact and invokes no SDK/provider. Only the new recorded02 output
-is written. No build, environment, dependency change, overlay, native loan or
-new input is involved. Actual stage/read remains unqualified pending fresh
-literal purpose; old b7ac authority is consumed and closed.
+`RECORDED03-QUALIFIED.json` binds the actual proof, terminal, measurement and whole
+handback. Original5f restoration exited 0: all 510 byte/mode/link records, 347 ZIP
+assets, 94 other keepers, 69 metadata files, 10 distributions and raw origins
+match. Original133 records, old reports/refusals, inputs and source files match.
+Six observed process identities are absent and their groups are empty. The whole
+claim is returned; Bohr independently closes its lifecycle.
+
+SDK entry selection and full-history admission/capacity remain unavailable for
+these two constructors. One cut and one question per arm are descriptive evidence;
+HTTP bytes, matched interventions, registered margins and full S4 study acceptance
+are not claimed. The old construction-false measurement and STARTED/UNKNOWN
+records remain immutable. No provider study is authorized by this checkpoint.
