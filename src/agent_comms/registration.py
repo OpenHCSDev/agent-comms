@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from pathlib import Path
@@ -62,9 +62,9 @@ class Registration:
             self._commit_registration(edit, change)
             return replace(original, thread=change.installed_thread)
 
-    @contextmanager
-    def selected_native_fork(self, original: RegistryOwner, creation: NativeForkCreation) -> Iterator[RegistryOwner]:
-        """Select and restore SDK history under the same original idle owner.
+    def selected_native_fork(self, original: RegistryOwner, creation: NativeForkCreation, *,
+                             retain: Callable[[RegistryOwner], None]) -> RegistryOwner:
+        """Publish SDK history after enrolling its exact original cleanup.
 
         The runtime caller retires its child before entering/exiting this
         resource. No writer, wire or registry lock survives either publication.
@@ -74,14 +74,21 @@ class Registration:
         creation.source.require_session(original.thread.require_saved_session())
         with self._idle_fork_edit(creation) as edit:
             change = edit.document.prepare_idle_native_source(original, creation.session_file)
-            self._commit_registration(edit, change)
             selected = replace(original, thread=change.installed_thread)
-        try:
-            yield selected
-        finally:
-            with self._idle_fork_edit(creation) as edit:
-                change = edit.document.prepare_idle_native_source(selected, creation.source.session_file)
-                self._commit_registration(edit, change)
+            retain(selected)
+            self._commit_registration(edit, change)
+        return selected
+
+    def restore_native_fork(self, selected: RegistryOwner, creation: NativeForkCreation) -> RegistryOwner:
+        """Restore only after the runtime joined this selection's owned child.
+
+        No deferred generator exit can publish after native retirement refused.
+        The acquired document still owns every source/admission/scope check.
+        """
+        with self._idle_fork_edit(creation) as edit:
+            change = edit.document.prepare_idle_native_source(selected, creation.source.session_file)
+            self._commit_registration(edit, change)
+            return replace(selected, thread=change.installed_thread)
 
     @contextmanager
     def _idle_fork_edit(self, creation: NativeForkCreation) -> Iterator[RegistryEdit]:

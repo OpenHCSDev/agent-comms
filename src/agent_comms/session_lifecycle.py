@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
-from contextlib import ExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -37,6 +37,7 @@ from .errors import RelationViolationError
 from .config_options import ConfigOptions
 from .native_arguments import NativeArguments
 from .native_input_owner import RegistryOwner
+from .native_session_prepare import NativeSessionPreparation
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
 from .thread_identity import ThreadIncarnation
@@ -190,37 +191,58 @@ class SessionLifecycle:
         Turn/child locks are held only around each swap, never across the
         constructor/observer/prompt that acquires those same resources.
         """
-        selection = ExitStack()
-        try:
+        async with AsyncExitStack() as resources:
             async with self._attachment_lock:
                 self.require_original_local_binding(session_id, original)
                 async with self.effects.turns.idle_backend(session_id) as persistent:
                     if persistent is None:
                         raise RelationViolationError("Native fork selection requires an idle turn")
-                    await persistent.close()
+                    def capture_binding():
+                        snapshot = self.comms.registry.snapshot()
+                        current = original.require_idle_source_snapshot(snapshot)
+                        return snapshot.owner_binding(current.name)
+
+                    binding = await Coordination.run_worker(capture_binding)
+                    arguments = NativeArguments.parse(self.effects.turns.native_arguments(original.thread))
+                    worktree = Path(original.thread.worktree)
+                    await join_retirement(asyncio.create_task(
+                        persistent.close_owned(creation.source, binding, arguments, worktree)))
+
+                    def retain(selected):
+                        resources.push_async_callback(lambda: join_retirement(asyncio.create_task(
+                            self._restore_native_fork(session_id, original, selected, creation, binding, arguments, worktree)
+                        )))
+
                     selected = await Coordination.run_worker(partial(
-                        selection.enter_context,
-                        self.comms.registry.selected_native_fork(original, creation),
+                        self.comms.registry.selected_native_fork, original, creation, retain=retain,
                     ))
-            yield selected
-        finally:
-            await join_retirement(asyncio.create_task(self._restore_native_fork(session_id, original, selection)))
+            def retire_selected():
+                return join_retirement(asyncio.create_task(
+                    self._retire_native_fork(session_id, creation, binding, arguments, worktree)))
+
+            yield selected, retire_selected
 
     def require_original_local_binding(self, session_id: str, original: RegistryOwner) -> None:
         if self.require(session_id) != original.thread.name or session_id in self.proxies:
             raise RelationViolationError("Native fork requires the original loaded local owner")
 
-    async def _restore_native_fork(self, session_id: str, original: RegistryOwner, selection: ExitStack) -> None:
+    async def _retire_native_fork(self, session_id, creation, binding, arguments, worktree) -> None:
+        async with self.effects.turns.idle_backend(session_id) as persistent:
+            if persistent is None:
+                raise RelationViolationError("Native fork retirement requires its original turn to finish")
+            await persistent.close_owned(creation, binding, arguments, worktree)
+
+    async def _restore_native_fork(self, session_id, original, selected, creation, binding, arguments, worktree) -> None:
         async with self._attachment_lock:
-            self.require_original_local_binding(session_id, original)
             async with self.effects.turns.idle_backend(session_id) as persistent:
                 if persistent is None:
                     raise RelationViolationError("Native fork restoration requires the original turn to finish")
-                await persistent.close()
-                await Coordination.run_worker(selection.close)
-            current = await Coordination.run_worker(lambda:
-                original.require_idle_source_snapshot(self.comms.registry.snapshot()))
-            await self.effects.turns.prepare_selected_session(session_id, current)
+                await persistent.close_owned(creation, binding, arguments, worktree)
+                self.require_original_local_binding(session_id, original)
+                restored = await Coordination.run_worker(partial(
+                    self.comms.registry.restore_native_fork, selected, creation))
+                await self.effects.turns.prepare_selected_session(
+                    session_id, restored.thread, open_native=NativeSessionPreparation.open_acquired)
 
     async def new_session(
         self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any

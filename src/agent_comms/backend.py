@@ -126,7 +126,14 @@ class PersistentPiSession:
         return True
 
     async def close(self) -> None:
-        self.custody = self.custody.retire()
+        await self._finish_retirement(self.custody.retire())
+
+    async def close_owned(self, identity: NativeSessionIdentity, binding, arguments, worktree: Path) -> None:
+        """Refuse unrelated custody before initiating the original stop task."""
+        await self._finish_retirement(self.custody.retire_owned(identity, binding, arguments, worktree))
+
+    async def _finish_retirement(self, retiring: NativeCustody) -> None:
+        self.custody = retiring
         try:
             self.custody = await self.custody.closed()
         except NativeCleanupFailed as error:
