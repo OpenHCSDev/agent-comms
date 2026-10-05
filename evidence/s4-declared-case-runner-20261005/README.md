@@ -111,3 +111,33 @@ The merged `WHOLE-CLOSURE.json` subsequently records Bohr's independent close
 and Sch's artifact return. Those completed purposes grant no new access here.
 Normal main integration changed no production or private test bytes and does
 not imply installation or S4 paired-workflow acceptance.
+
+## Next affected-consumer functional journey
+
+`PROPOSED-FUNCTIONAL-OPERANDS.json` publishes the exact one-cut driver command,
+retained 355-asset `3fe14077` wheel relation, native `7a2e4aab` identity, source
+hashes, outputs and restoration/handback requirements. No new build is needed.
+The original first-round history and root Question are used; `RecallRound`
+explicitly publishes position 2 as a real USER constraint. One seeded trajectory
+selects bounded then task-memory on the same owner through the qualified #676
+resource. Three fresh prompt inputs and one manual summary are planned. Other
+trajectories do not execute; this is functional acceptance, not the paid study.
+
+The genuine original capture supplies model/auth/settings and actual thinking
+at use, including OFF. Old Sol/HIGH observations are not current evidence.
+Reported PiUsage/SummaryUsage remain distinct from billed cost; missing counters
+stay unavailable and shared source/summary work is not charged as independent
+arm preparation.
+
+The granted original controller now requires its phase as the third invocation
+operand and derives its walltime from that phase's issued
+`operation_bound_seconds`. These are exactly three substitutions; all remaining
+process tracking and cleanup bytes match original #676. The proposed 600 seconds
+is a whole-purpose walltime, not a provider timeout or resource cap. Existing
+Package/FunctionFacts parsed 324 production, 373 test and 54 tool modules without
+omissions, plus both original qualification scripts. Controller source compiled;
+no controller, SDK or provider executed.
+
+Fresh Bohr package/execution purpose and matching Sch native READ/EXEC authority
+are still required. Closed purposes are not reused. No current package, native
+artifact, saved source or public runtime has been borrowed for this preparation.
