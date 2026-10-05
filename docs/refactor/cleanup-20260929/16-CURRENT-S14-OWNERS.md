@@ -7,6 +7,7 @@ The original goal is ACTIVE again and remains incomplete. CI is deferred as a me
 | Work | Actual state | Remaining delivery |
 | --- | --- | --- |
 | Current accepted build465 | Installed on PUBLICstyle22. Corrected directory permissions allowed the original publisher to finish once: exit0 in67.257s; original readback exit0 in1.532s verifies19 same incarnations/settings/root, all new owner processes alive and all five default links. Source953/full69 is the accepted Core676/Toad461+458+464+462/Text67 cohort. The original failed permission attempt is retained. | The single corrected-environment ordinary UI run passed all18 original checks. Recorder/App/st exit0, joined cleanup empty, backend/runtime unchanged; Parent personally inspected five original after-terminal images showing readable saved/channel history, tab return, draft and Undo. Heis owns fast useful paint, mouse-wheel cadence and frame work separately; those performance obligations remain unfinished. No reset, carry, provider input or replay occurred in publication. |
+| Remaining TC1 workspace source | Einstein traced a concrete inactive-tab trimming copy: it reads the viewport private warm set and repeats the budget calculation while omitting retained paint bytes. Old activation/terminal-status copies are already absent from current main. | Heis retains warm-resource/admission integration. Einstein has the agreed narrow DocumentViewport worker/running lifecycle seam across request/reconcile/suspend/resume/close, on separate source; frozen460 stays unchanged. Complete those owner/consumer migrations and affected acceptance, without repeating accepted454/461/458 controls or creating a new delivery hold. |
 | Previous PUBLIC459 verification | PUBLIC459 was on485 after original fresh admission and one-use publication. Parent publisher3961485/birth68456789 exited0 in53.850s and joined; receipt0d03a723 records source10/target10 PreserveRuntimeInstallation/PreserveOwnerRuntime. Original readback74f03ce2 confirms19 same incarnations/settings, all new processes alive, same root and five485 default links. PUBLIC448 ordinary18-check acceptance remains historical. | The one ordinary channel-lifetime run completed capture in65.707s but failed overall: st and recorder exited1. Original offline journey review verifies all18 interaction checks; original AFTER images show painted body/chrome. Cleanup is joined/empty and the same backend owner remains alive. Terminal stderr reports a PTY input/output error; application-versus-terminal teardown cause is unproved. Heis owns workflow diagnosis. Original recorder owner Mendel now has exclusive cleared source ownership of quit/UI-child outcome/terminal receipt and cleanup; 462 fbecc now retains UI and st actual parent wait publications in both ordinary and profile modes; Parent source review confirms removal of the profile terminal-result bypass. Changed462 ff11 qualified02 OS three cases passed; ordinary installed UI and st both returned actual parent-wait exit0, cleanup empty and runtime unchanged. Parent inspected the two original after-terminal stills: history/editor/chrome are painted. Profile02 then failed: UI679102 parent-wait exit0 but st679077 exit1, no recorded signals, controller joined and cleanup empty. The terminal guardian discarded diagnostics through DEVNULL defaults; existing ProcessOwner.start_terminal now owns inherited streams. Separate changed profile03 passed actual UI/st parent-wait exit0,96 samples/zero sampling errors/export0,174-byte st diagnostics and14 identities retired; receipt0e93 and whole26fb preserved. Parent verified52 raw keepers and source equality, then guarded-merged frozen462cf930 as769e78a6. After-terminal profile pixels still show Loading history/Context unavailable, so this is recorder/quit/export custody acceptance, not completed body or speed. Original profile02 failure remains unproved and immutable. The original459 EIO remains unattributed; no public rollback is inferred. Smooth wheel motion, frame times, CPU, fast cold useful paint and full configured continuous operation remain unqualified. Formerstyle22 is not implicitly a private loan. |
 | Workspace integration457 | Joint457 merged as e32253a5 at qualified9f8e2b37; 456 is mergedcf0e and native67 mergedd733. Original first457 failure is preserved. Fresh remaining page/wheel, project retirement/remount and connected41MB readonly readiness Apps passed10.177/4.391/26.775s. Bohr independently closed4126: actual4851441/69origins/155/1883 restored,238-process census private references/gaps zero; Sch READ/EXEC returned. | Sch459 completed preparation under055d and returned all immediate claims. Parent verified all106 frozen bytes/modes/hashes, six joined preparation terminals and the exact953-source cohort; source/target declarations and checkpoint match, so PreserveRuntimeInstallation/PreserveOwnerRuntime applies. Exact459 source/evidence head d984 is now normally mergedbf937; Bohr independently closed055d atfb729/readbackf301 with243-process census private refs/gaps zero. Parent read NEW keeper authorityc1db and executed the original once publisher successfully; receipts/preimages now exist and this operation is consumed. No replay or oldfloor restoration. Superseded450 is closed after verifying no remaining production/test/tool/package-input delta; broader watcher/workflow obligations remain with Heis. No rebuild or accepted App repeat. Public448 stays unchanged until reviewed candidate and original guarded publication. |
 | C3 |675 merged7b68; five original canonical passes, corrected reply and two saved-SDK/TurnRunner settlement cases passed. Raw first failure is preserved; whole540 restoration and independent close complete. Joint457 includes the qualified Core wheel. | Qualified675 Core is included in PUBLIC459. Accepted controls need no repeat; no whole-workflow or speed claim. |
@@ -3241,7 +3242,10 @@ ready returned/End body. Controller1065108/birth69949409 exited0 in89.072467s;
 the recorder capture duration was66.161444s. Original UI1065176 and st1065162
 returned actual parent-wait exit0 without retirement signals. Joined cleanup
 has no remaining owned processes/errors, runtime is unchanged and the original
-NRA1050155/birth69914777 remains alive. Receipt11f2ba46 is unchanged.
+NRA1050155/birth69914777 remains alive. Receipt11f2ba46 is unchanged. Mendel
+whole-client returna5ae363e binds159 original raw keepers; Parent independently
+matched all159 hashes. All58 recorded identities and original groups/display
+lock/socket are gone, with source UI database unchanged and copied state only.
 
 Parent personally viewed the original warm-ready/channel-return/native-return/
 draft/Undo PNGs AFTER terminal: readable body/chrome/channel rows, draft visible
@@ -3251,3 +3255,34 @@ installed ordinary workflow. It does not prove fast cold loading, smooth wheel
 frame cadence, CPU improvement or the full configured continuous provider path.
 Those remaining acceptance obligations stay with Heis; Einstein is reconciling
 genuine remaining TC1 source sites against current main before any new edits.
+
+
+### Performance startup cause and remaining viewport work, 2026-10-05
+
+The460 successor02 run exited1 in42.154510s before useful-paint or scrolling
+measurement. Parent inspected the original terminal movie after terminal:
+frame60 shows run_observed_app.install_observer failing at
+sidebar_validation_driver.py231 because SessionView.layout_navigation no
+longer exists. This is a demonstrated obsolete observer hook, not evidence of
+a product/native fault or a speed result. Heis owns migration of the complete
+observer hook family to the current owner. Original movie and traceback remain
+immutable; Parent offline contact sheet is in the named
+agent-scratch/parent-heis460-startup-offline-review-20261005 directory.
+
+Separately, final retention assumed SDK journals were beneath native-forks/
+sessions, while the genuine SDK returned journals directly beneath native-forks.
+Both actual journals were preserved with hashes/modes/inodes/mtimes. Heis owns
+that source-path retention correction. Wholehandbackba15 and Bohr independent
+lifecycle74d7/readbackb058 verify restored CURRENT4471468/69 original origins/
+428+1883/PREFIXactivation, no extras, no active private borrowers or gaps.
+Sch closed returned7a READ/EXEC40ac. No remaining run or retry is authorized.
+
+Einstein's Draft466 exact4f0ea5ef removes the duplicate DocumentViewport._running
+state and makes request/reconciliation depend on the existing native Worker.
+All16 related control reads in11 modules migrated;288 production/398 tests and
+249 pinned native modules have zero parse omissions. Parent reviewed the exact
+three-method production diff: admission uses the existing handle and finalization
+clears only get_current_worker identity. Suspend already revokes/cancels/joins
+that handle. Mounted cancellation-before-entry/resume/coalescing/close acceptance
+is still needed; no installed or performance readiness claimed. Heis remains
+whole workflow integrator and owns the separate retained-paint budget omission.
