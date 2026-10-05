@@ -43,10 +43,13 @@ whose native shutdown completes before observer exit. Both resources use one
 `apply_condition_input` prepare/prompt/capture algorithm. An observer only attaches to its declared launch, preventing
 nested parent/arm scopes from attaching two inspectors to one child.
 
-The production resource comes from normally joined #676 `9636b7d9`; S4 edits are
-private fixtures only. Its corrected two-capability publication and pre-effect
-owner/custody retirement remain with Mendel; the joined older production source
-is not executable acceptance for the corrected consumer contract. No caller guard or registry replacement has been added here.
+The production resource comes from normally joined #676 `c628a6b4`
+(production `a264da8f`); S4 edits are private fixtures only. The corrected
+two-capability publication, pre-effect custody checks and acquired parent
+preparation remain Mendel's implementation. The normal merge preserves all
+`src`, `stack` and `tools` bytes from that checkpoint and both corrected private
+consumer files from `46419575`. No caller guard or registry replacement has been
+added here. Matching source contracts do not qualify native execution.
 
 ## Checks and limits
 
