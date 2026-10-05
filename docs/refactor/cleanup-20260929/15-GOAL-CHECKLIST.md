@@ -3124,9 +3124,9 @@ BLOCKED/ACTIVE observations remain historical, with no goal-tool resume/replay.
 - [ ] Complete the original continuous saved/channel/DM/fork/notification/reply/
   handling/queue/status journey. Draft468 is adopted on a separate Heis source
   integration; no current affected configured acceptance is inferred.
-- [ ] Complete the original and round-two deletion/resource scope. Mendel has
-  traced T4 production ownership as implemented and is reconciling stale control
-  consumers with Heis before edits. Heis retains TC1/budget/workflow integration.
+- [ ] Complete the original and round-two deletion/resource scope. Mendel's bounded T4 production ownership
+  receipt469 is merged289f1c6c; stale control consumers are being reconciled with
+  Heis before edits. Heis retains TC1/budget/workflow integration.
 - [ ] Full S4 remains unfinished. Source679/680 is merged and recorded678 reads
   are independently closed; clocks/accounting and genuine original SDK source
   selection/capacity/matched workflows retain their evidence gaps. Arendt's
