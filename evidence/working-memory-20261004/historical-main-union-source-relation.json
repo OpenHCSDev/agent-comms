@@ -1,0 +1,29 @@
+{
+  "Core_main": "69346035",
+  "Core_determining": "3aacd708fb9c699cc80c6b864e0ae8cf9ccff7f8",
+  "Core_wheel": "0ed358e9a1d845f3fdceca138d0f2fa02824ac61161b3d8ba9a5e32b1cc3b6e3",
+  "Core_inventory": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-historical-main3aac-source/source-proof.json",
+  "Core_inventory_sha256": "8d0205a430a006157f7616d7c88da838ee7f663256a49aa14e49eb71effd83e7",
+  "Core_assets": 355,
+  "Core_changed_assets": [
+    "src/agent_comms/native_admission_epoch.py",
+    "src/agent_comms/tracked_turn.py",
+    "src/agent_comms/transcript_outcomes.py"
+  ],
+  "Toad_main": "3dc801984",
+  "Toad_determining": "76ec05358b0ef790d10746e49ee0f09c036e2baa",
+  "Toad_wheel": "e414911627406bee6654171ee5796779a476358279770f1193d930131b0b6a4e",
+  "Toad_inventory": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-historical-main76ec-source/source-proof.json",
+  "Toad_inventory_sha256": "32467d21cc876a3a021f5f9da168fe07837fea04655f6bc90093d85b974b78b3",
+  "Toad_assets": 319,
+  "Toad_changed_assets": [
+    "src/toad/transcript_preparation.py"
+  ],
+  "control_sha256": "0daa1ededef5c6b6fa01b901a68845b78acbbe74fb74a28a4d775356158140c8",
+  "original_GUI_tuple": "a59/ab640+f071/178b remains accepted original; new source is not byteequal and has no new installed result",
+  "W1_native": "fcbd3producers/7a manifest unchanged; no SDK/nativebuild/copy/execution",
+  "schema10_source_declarations": "unchanged across3compatibilityfiles",
+  "no_installed_package_or_purpose": true,
+  "new_proposal": "/home/ts/wt/toad-regression-widget-cost-20261001/evidence/working-memory-view-20261004/historical-current-main-successor-operands.json",
+  "new_proposal_sha256": "94be0b0061f9b038ec444ff6b19829397c6ce49bd3cb5a68e1771390345e1470"
+}
