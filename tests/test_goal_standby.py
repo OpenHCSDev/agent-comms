@@ -22,6 +22,7 @@ from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
+from goal_owner_fixture import canonical_goal_wire
 
 
 @pytest.mark.parametrize("changed", ["admission", "pid", "process_birth", "rename"])
@@ -29,7 +30,7 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     tmp_path, monkeypatch, changed
 ):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = wire(tmp_path / "wire")
+    comms = canonical_goal_wire(tmp_path / "wire")
     agent = canonical_agent(comms, agent_bin="pi")
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "parent"))
@@ -63,7 +64,7 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
 
 
 def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_path):
-    comms = wire(tmp_path)
+    comms = canonical_goal_wire(tmp_path)
     comms.registry.declare(Thread("parent", frozenset(), str(tmp_path)))
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Goal with @mention"))
     with pytest.raises(ValueError, match="wait_for"):
@@ -76,7 +77,7 @@ def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_pa
 
 
 def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path):
-    comms = wire(tmp_path)
+    comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob"):
         comms.registry.declare(
             Thread(
@@ -109,7 +110,7 @@ def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path)
 
 
 def test_standby_allows_independent_alternative_to_wait_cycle(tmp_path):
-    comms = wire(tmp_path)
+    comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob", "carol"):
         comms.registry.declare(
             Thread(
@@ -137,7 +138,7 @@ def test_standby_allows_independent_alternative_to_wait_cycle(tmp_path):
 
 
 def test_idle_active_goal_does_not_make_wait_cycle_runnable(tmp_path):
-    comms = wire(tmp_path)
+    comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob", "carol"):
         comms.registry.declare(
             Thread(
@@ -168,7 +169,7 @@ def test_idle_active_goal_does_not_make_wait_cycle_runnable(tmp_path):
 
 
 def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
-    comms = wire(tmp_path)
+    comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob"):
         comms.registry.declare(
             Thread(
@@ -214,7 +215,7 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
 
 @pytest.mark.parametrize("pending_reply", [False, True])
 def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending_reply):
-    comms = wire(tmp_path)
+    comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob"):
         comms.registry.declare(
             Thread(
@@ -267,7 +268,7 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
 
 @pytest.mark.parametrize("bound_old_turn", [False, True])
 def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_turn):
-    comms = wire(tmp_path)
+    comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob"):
         comms.registry.declare(
             Thread(
@@ -312,7 +313,7 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
 
 
 def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeypatch):
-    comms = wire(tmp_path)
+    comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob"):
         comms.registry.declare(
             Thread(
@@ -362,7 +363,7 @@ def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeyp
 
 @pytest.mark.parametrize("acknowledged", [False, True])
 def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, acknowledged):
-    comms = wire(tmp_path)
+    comms = canonical_goal_wire(tmp_path)
     for name in ("parent", "child"):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Delegate work"))
