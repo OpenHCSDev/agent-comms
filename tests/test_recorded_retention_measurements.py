@@ -350,6 +350,68 @@ class RecordedMeasurementTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'declared new history'):
             design.construction_plan(17, trajectory=1)
 
+    def test_authored_case_events_use_real_user_lineage_and_admitted_decision(self):
+        # Detect prose-only authorization, fake previous refs, pin-body wording,
+        # lost drops and choices published outside their original lease.
+        from goal_owner_fixture import canonical_goal_wire
+
+        service = canonical_goal_wire(self.root / 'authored-case-wire')
+        owner = service.registry.declare(Thread('case-owner', frozenset({'case'}), str(service.root)))
+        question = Question('root', 'What root is permitted?', '/private-b', 'original USER')
+        history = ('Use /private-a; never overwrite unresolved inputs.',
+                   'Correct the original root to /private-b; preserve unresolved inputs.',
+                   'Drop that original export-root restriction; do not change input dispositions.',
+                   'Choose inspect-original; keep verify-scope as a valid rejected alternative.')
+        scenario = RecallScenario('authored-user-task-events', tuple(
+            RecallRound(f'r{index}', history[:index], (question,)) for index in (1, 2, 3)))
+        first, second, third = scenario.rounds
+        pin = first.publish_constraint(service, owner.name, 0)
+        captured = first.observe_task_events(service, owner.name, ((0, pin),))
+        self.assertEqual(captured['events'][0]['publication'], pin.reference)
+        self.assertEqual(captured['events'][0]['wording'], WireProvenance(pin.task.subject))
+        self.assertEqual(captured['lineages'], ((pin, pin),))
+        self.assertNotEqual(pin.body, history[0])
+        corrected = second.publish_constraint(service, owner.name, 1,
+            change=CorrectionTaskChange(pin.reference))
+        captured = second.observe_task_events(service, owner.name, ((0, pin), (1, corrected)))
+        self.assertEqual(captured['lineages'], ((pin, corrected),))
+        self.assertNotEqual(corrected.task.subject, pin.task.subject)
+        dropped = third.publish_user_change(service, owner.name, 2,
+            change=UserTaskDrop(CorrectionTaskChange(pin.reference)))
+        captured = third.observe_task_events(service, owner.name,
+            ((0, pin), (1, corrected), (2, dropped)))
+        self.assertEqual(captured['lineages'], ((pin, dropped),))
+        self.assertEqual(dropped.task.selected_sources(dropped), ())
+        with self.assertRaisesRegex(ValueError, 'wording differs'):
+            third.observe_task_events(service, owner.name, ((1, pin),))
+        with self.assertRaisesRegex(ValueError, 'certified original'):
+            third.observe_task_events(service, owner.name, ((0, replace(pin, body='invented')),))
+        peer = service.registry.declare(Thread('case-peer', frozenset(), str(service.root)))
+        with self.assertRaisesRegex(ValueError, 'certified original'):
+            third.observe_task_events(service, peer.name, ((0, pin),))
+        for position in (-1, len(first.history)):
+            before = (service.root / 'bus.jsonl').read_bytes()
+            with self.assertRaisesRegex(ValueError, 'outside the frozen'):
+                first.publish_constraint(service, owner.name, position)
+            self.assertEqual((service.root / 'bus.jsonl').read_bytes(), before)
+
+        decision_round = RecallRound('explicit-decision', history, (question,))
+        before = (service.root / 'bus.jsonl').read_bytes()
+        with self.assertRaises(RelationViolationError):
+            decision_round.publish_decision(service, owner.name, peer.name, 3,
+                chosen='inspect-original', rejected=('verify-scope',))
+        self.assertEqual((service.root / 'bus.jsonl').read_bytes(), before)
+        author = admit(service, 'decision-author')
+        try:
+            decision = decision_round.publish_decision(service, author.name, peer.name, 3,
+                chosen='inspect-original', rejected=('verify-scope',))
+            observed = decision_round.observe_task_events(service, author.name, ((3, decision),))
+            self.assertEqual(observed['events'][0]['task'], decision.task)
+            self.assertEqual(decision.task.source_turn_id.value, author.turn_lease.turn_id)
+            self.assertEqual(decision.task.rejected, ('verify-scope',))
+        finally:
+            service.registry.release_turn(author.turn_lease)
+
     def test_stimulus_delivery_requires_exact_source_and_original_earlier_branch(self):
         # Detect edits, later source and sibling ancestry being credited as
         # delivered construction; native input/terminal corroboration is read's

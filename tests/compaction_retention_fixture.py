@@ -29,6 +29,10 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_tools import CodingTool
 from agent_comms.pi_payloads import ReportedModel
 from agent_comms.message_reference import MessageReference
+from agent_comms.task_sources import (
+    CurrentTaskScopeSelection, Decision, OriginalTaskChange, TaskChange,
+    TaskScopeSelection, UserTaskSupersession,
+)
 from agent_comms.turn_context import FileProvenance, JournalProvenance, SystemLayerSegment, ToolCatalogSegment
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 
@@ -1114,6 +1118,80 @@ class RecallRound:
         if self.history[:len(previous)] != previous:
             raise ValueError("Construction requires the exact preceding frozen history prefix")
         return self.history[len(previous):]
+
+    def source_wording(self, position: int) -> str:
+        """Select an explicitly authored source, never classify narrative text."""
+        if not 0 <= position < len(self.history):
+            raise ValueError("Authored task source is outside the frozen case history")
+        return self.history[position]
+
+    def publish_constraint(self, service, recipient, position, *,
+                           scope: TaskScopeSelection = CurrentTaskScopeSelection(),
+                           change: TaskChange = OriginalTaskChange()):
+        """Publish exact case wording and pin its real committed reference.
+
+        The caller explicitly chooses this action. Source publication, human
+        identity, recipient/scope and correction admission stay with Messaging
+        and the existing task declarations. No narrative supplies those facts.
+        """
+        wording = self.source_wording(position)
+        owner = service.registry.require(recipient)
+        subject = service.messaging.send_user_message(owner.name, wording, worktree=owner.worktree)
+        return service.messaging.pin_user_constraint(owner.name, subject.reference,
+            worktree=owner.worktree, scope=scope, change=change)
+
+    def publish_user_change(self, service, recipient, position, *, change: UserTaskSupersession):
+        """Use an explicit UserTaskSupersession/UserTaskDrop with its real source.
+
+        These existing members own different selection behavior. This source
+        consumer neither switches on their names nor invents a previous ref.
+        """
+        wording = self.source_wording(position)
+        owner = service.registry.require(recipient)
+        return service.messaging.send_user_message(owner.name, wording,
+            worktree=owner.worktree, task=change)
+
+    def publish_decision(self, service, author, target, position, *, chosen, rejected,
+                         scope: TaskScopeSelection = CurrentTaskScopeSelection(),
+                         change: TaskChange = OriginalTaskChange()):
+        """An explicit authored choice still requires a real admitted author.
+
+        Chosen/rejected operands are supplied by the case author, not extracted
+        from prose or a candidate answer. This is not provider-authorship proof.
+        """
+        wording = self.source_wording(position)
+        owner = service.registry.require(author)
+        declaration = Decision.from_admission(owner, scope, change,
+            chosen=chosen, rejected=rejected)
+        return service.messaging.send_message(owner.name, target, wording, task=declaration)
+
+    def observe_task_events(self, service, recipient, events):
+        """Read explicit case coordinates against one certified original cut.
+
+        Original task declarations resolve wording and current lineage. This
+        is an authored publication observation, not native stimulus delivery,
+        submitted request presence or permission for an action.
+        """
+        with service.bus.log.retained_sources(recipient, service.registry) as (
+                owner, snapshot, facts, _inputs, _export):
+            originals = {message.reference: message for fact in facts.facts
+                         for message in fact.authored_sources()}
+            observed = []
+            for position, published in events:
+                if originals.get(published.reference) != published:
+                    raise ValueError("Case event differs from its certified original publication")
+                original = facts.original_text_source(published)
+                if published.task.original_wording(original) != self.source_wording(position):
+                    raise ValueError("Case event wording differs from its explicitly authored source")
+                observed.append({"position": position, "publication": published.reference,
+                    "wording": published.task.original_wording_context_source(original),
+                    "task": published.task})
+            return {"events": tuple(observed),
+                "lineages": facts.current_authored_lineages(owner, snapshot),
+                "source_digest": facts.source_digest,
+                "owner": owner.incarnation,
+                "scope": "Certified authored task publications and original current lineage; "
+                         "not native delivery, fork authority transfer, provider authorship or action validity"}
 
     def score_native(self, probe: RecordedNativeProbe):
         return self.score_recorded(probe.observe())
