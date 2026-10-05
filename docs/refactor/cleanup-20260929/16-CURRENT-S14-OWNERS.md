@@ -3286,3 +3286,24 @@ clears only get_current_worker identity. Suspend already revokes/cancels/joins
 that handle. Mounted cancellation-before-entry/resume/coalescing/close acceptance
 is still needed; no installed or performance readiness claimed. Heis remains
 whole workflow integrator and owns the separate retained-paint budget omission.
+
+
+### Original backlog ancestry rechecked against actual main, 2026-10-05
+
+Parent queried actual GitHub main: Cored9f7d445 and Toadcac7268, then refreshed
+Core origin/main before comparing ancestry. Original Core262787abad4,
+27058d67fb6 and272fdf3c917 are all ancestors. Toad120/121a05ba90a,
+1239f93c02d,12476df1b7b,110ad28ce52 and50c3f7b632 are all ancestors of
+actual Toad main. GitHub confirms superseded Core271 and Toad122/116/53 remain
+CLOSED. This establishes their integration state, not whole current runtime
+acceptance; their original deletion/source and installed scope receipts remain
+historical evidence. No competing implementation or re-open is required.
+
+Mendel now owns the independent remaining continuous-workflow control source
+family: original channel/DM notifications in already-open/hidden/reopened views,
+outbound reply/handling, queue/status and fork-before-answer. He must first
+trace current canonical owners and existing controls and coordinate shared-file
+seams directly with Heis before writes. The accepted ordinary18 checks are not
+repeated. No public input, runtime access or new provider/native call is implied.
+Heis remains sole whole-workflow integrator. This work does not hold the changed
+useful-paint/scrolling qualification behind a separate feature or CI requirement.
