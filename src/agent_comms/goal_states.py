@@ -63,7 +63,14 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     def require_active(self) -> None:
         from .errors import RelationViolationError
 
-        raise RelationViolationError("The executing goal is not active")
+        raise RelationViolationError(self.activity_refusal())
+
+    def activity_refusal(self) -> str:
+        pause = self.pause_source
+        return (
+            (pause.instruction() if pause else None)
+            or "This goal is no longer active; refresh its state."
+        )
 
     def failure_projection(self, reason: str) -> tuple[str, str]:
         raise FailureNotObserved("owner_or_goal_changed")

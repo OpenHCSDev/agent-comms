@@ -1,0 +1,228 @@
+{
+  "revision": "edc947b3df7e4d5c26fc3398383a1bb15f787ea8",
+  "source_base": "a7cc1da6cb5442e666c0a61012e6ef7de5eb865d",
+  "original_package_parsed": 324,
+  "parse_omissions": [],
+  "migrated_sites": [
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "function": "check",
+      "line": 57,
+      "calls": [
+        {
+          "line": 67,
+          "call": "thread.require_goal(self.goal_id)"
+        },
+        {
+          "line": 72,
+          "call": "goal.state.activity_refusal()"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "function": "require_goal",
+      "line": 92,
+      "calls": [
+        {
+          "line": 93,
+          "call": "self.thread.require_goal()"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "function": "change",
+      "line": 170,
+      "calls": [
+        {
+          "line": 171,
+          "call": "ctx.require_goal()"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "function": "before_transition",
+      "line": 203,
+      "calls": [
+        {
+          "line": 204,
+          "call": "ctx.require_goal()"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "function": "next_state",
+      "line": 363,
+      "calls": [
+        {
+          "line": 364,
+          "call": "ctx.require_goal()"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "function": "change",
+      "line": 432,
+      "calls": [
+        {
+          "line": 433,
+          "call": "ctx.require_goal()"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/goal_actions.py",
+      "function": "change",
+      "line": 476,
+      "calls": [
+        {
+          "line": 477,
+          "call": "ctx.require_goal()"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "function": "_goal_input_review",
+      "line": 93,
+      "calls": [
+        {
+          "line": 98,
+          "call": "thread.require_active_goal(goal_id)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "function": "consume_reply_wait",
+      "line": 322,
+      "calls": [
+        {
+          "line": 331,
+          "call": "current.continuation_goal(owner.thread)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "function": "block_goal_after_failed_turn",
+      "line": 359,
+      "calls": [
+        {
+          "line": 370,
+          "call": "thread.goal_for(started_goal.id)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/goal_states.py",
+      "function": "require_active",
+      "line": 63,
+      "calls": [
+        {
+          "line": 66,
+          "call": "self.activity_refusal()"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "function": "require_goal",
+      "line": 277,
+      "calls": [
+        {
+          "line": 282,
+          "call": "self.goal_for(goal_id)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "function": "require_active_goal",
+      "line": 287,
+      "calls": [
+        {
+          "line": 288,
+          "call": "self.require_goal(goal_id)"
+        },
+        {
+          "line": 289,
+          "call": "goal.state.require_active()"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "function": "apply",
+      "line": 519,
+      "calls": [
+        {
+          "line": 522,
+          "call": "comms.registry.require(name).goal_for(goal_id)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "function": "apply",
+      "line": 552,
+      "calls": [
+        {
+          "line": 555,
+          "call": "comms.registry.require(name).require_goal(goal_id)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "function": "current_active_goal",
+      "line": 180,
+      "calls": [
+        {
+          "line": 184,
+          "call": "owner.continuation_goal(self.owner)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "function": "settle_original",
+      "line": 197,
+      "calls": [
+        {
+          "line": 203,
+          "call": "self.comms.registry.require(self.thread_name).goal_for(self.owner.goal.id)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "function": "finish",
+      "line": 233,
+      "calls": [
+        {
+          "line": 237,
+          "call": "self.comms.registry.require(self.thread_name).goal_for(goal_id)"
+        }
+      ]
+    }
+  ],
+  "remaining_relations": {
+    "Thread.continuation_goal": "Original worktree + captured/current active goal ID relation, already owned by Thread.",
+    "GoalPrecondition.check": "Whole record/state/process CAS, retained. ID selection derives Thread.",
+    "Goals.block_unverified_goal_completion": "Exact whole goal completion CAS + worktree, retained.",
+    "TurnGoalPermission": "Captured original or accepted input authorization, distinct from current registry selection.",
+    "GoalChangedUpdate": "Serialized goal/execution identity consistency at the external boundary."
+  },
+  "not_run": [
+    "tests",
+    "installed imports",
+    "native",
+    "provider",
+    "public operator"
+  ]
+}

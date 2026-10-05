@@ -1,0 +1,23 @@
+{
+  "issued": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel675-goal-selection-canonical-native-package-execution-issued-grant.json",
+  "issued_sha256": "f0e2cf98608c6a7eea7fec81cc8a0c1a22ba95e14144448813db8f5b9ae484a2",
+  "controller": {
+    "pid": 1831481,
+    "start_time": 65386306
+  },
+  "argv": [
+    "uv",
+    "pip",
+    "install",
+    "--python",
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "--no-deps",
+    "--no-cache",
+    "--reinstall",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-goal-selection675-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl"
+  ],
+  "returncode": 0,
+  "elapsed_seconds": 0.1287876860005781,
+  "stage_count": 1,
+  "execution_authorized": false
+}

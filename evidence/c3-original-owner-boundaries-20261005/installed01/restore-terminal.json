@@ -1,0 +1,29 @@
+{
+  "controller": {
+    "pid": 1927590,
+    "start_time": 65443466
+  },
+  "installer": {
+    "pid": 1927683,
+    "start_time": 65443554
+  },
+  "argv": [
+    "uv",
+    "pip",
+    "install",
+    "--python",
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "--no-deps",
+    "--no-cache",
+    "--reinstall",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl"
+  ],
+  "outcome": {
+    "kind": "exited",
+    "code": 0
+  },
+  "elapsed_seconds": 0.18785691692028195,
+  "installer_alive": false,
+  "groups": [],
+  "reason": "675 canonical first failure; no native attempt permitted"
+}

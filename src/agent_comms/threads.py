@@ -269,12 +269,23 @@ class Thread(ThreadProvenance):
             return None
         return goal if goal.id == captured.id else None
 
-    def require_active_goal(self, goal_id: str) -> Goal:
+    def goal_for(self, goal_id: str) -> Goal | None:
+        """Select the current record of this goal, including later state/revisions."""
         goal = self.goal
+        return goal if goal is not None and goal.id == goal_id else None
+
+    def require_goal(self, goal_id: str | None = None) -> Goal:
+        if goal_id is None:
+            if self.goal is None:
+                raise ValueError("No goal is set for this thread.")
+            return self.goal
+        goal = self.goal_for(goal_id)
         if goal is None:
-            raise RelationViolationError("The executing goal is absent")
-        if goal.id != goal_id:
-            raise RelationViolationError("The executing goal was replaced")
+            raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
+        return goal
+
+    def require_active_goal(self, goal_id: str) -> Goal:
+        goal = self.require_goal(goal_id)
         goal.state.require_active()
         return goal
 

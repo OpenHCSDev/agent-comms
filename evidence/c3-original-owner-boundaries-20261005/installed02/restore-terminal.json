@@ -1,0 +1,30 @@
+{
+  "issued_sha256": "64ff90758d6266ad1cbdfe6f2a21c8f281194f60f7dabb41c240ff404daa75bd",
+  "controller": {
+    "pid": 2044323,
+    "start_time": 65578368
+  },
+  "installer": {
+    "pid": 2044333,
+    "start_time": 65578452
+  },
+  "argv": [
+    "uv",
+    "pip",
+    "install",
+    "--python",
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "--no-deps",
+    "--no-cache",
+    "--reinstall",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl"
+  ],
+  "outcome": {
+    "kind": "exited",
+    "code": 0
+  },
+  "elapsed_seconds": 0.17870815901551396,
+  "installer_alive": false,
+  "groups": [],
+  "reason": "67502 final authorized canonical+native phases terminal PASS; restore original floor"
+}

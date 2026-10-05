@@ -1,0 +1,1 @@
+A postterminal keeper-summary attempt incorrectly read native .input-proof SQLite as UTF-8 JSONL; UnicodeDecodeError byte0x95 position98. It made no file writes to source/proof/session, no input/SDK/provider operation and does not alter the actual2PASS XML. The existing NativeContextJournal.open_evidence/select reader is used for the actual retained proof below.

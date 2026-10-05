@@ -1,0 +1,1830 @@
+{
+  "revision": "d2f0a122fc7d224628e3ac0ed1c772e259a010f4",
+  "collector": "original audit.findings.Package.load / existing parsed AST",
+  "collector_source_sha256": "03167cc195252bf11295602257d96cfec87b4ddd200a03d2c80afeadd764c231",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 324,
+      "omissions": [],
+      "sites": [
+        {
+          "path": "src/agent_comms/goal_actions.py",
+          "function": "change",
+          "line": 173,
+          "calls": [
+            {
+              "line": 174,
+              "call": "ctx.require_goal()"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/goal_actions.py",
+          "function": "before_transition",
+          "line": 206,
+          "calls": [
+            {
+              "line": 207,
+              "call": "ctx.require_goal()"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/goal_actions.py",
+          "function": "next_state",
+          "line": 366,
+          "calls": [
+            {
+              "line": 367,
+              "call": "ctx.require_goal()"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/goal_actions.py",
+          "function": "change",
+          "line": 435,
+          "calls": [
+            {
+              "line": 436,
+              "call": "ctx.require_goal()"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/goal_actions.py",
+          "function": "change",
+          "line": 479,
+          "calls": [
+            {
+              "line": 480,
+              "call": "ctx.require_goal()"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/goal_scheduler.py",
+          "function": "set_goal",
+          "line": 165,
+          "calls": [
+            {
+              "line": 172,
+              "call": "GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()))"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/goal_scheduler.py",
+          "function": "edit_goal",
+          "line": 180,
+          "calls": [
+            {
+              "line": 193,
+              "call": "GoalPrecondition(goal_id=goal_id, expected_goal=goal, expected_owner=ProcessIdentity.capture(os.getpid()))"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/goal_scheduler.py",
+          "function": "update_goal",
+          "line": 205,
+          "calls": [
+            {
+              "line": 218,
+              "call": "GoalPrecondition(goal_id=goal_id, expected_goal=goal, expected_owner=ProcessIdentity.capture(os.getpid()))"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/goal_scheduler.py",
+          "function": "retry_goal",
+          "line": 235,
+          "calls": [
+            {
+              "line": 245,
+              "call": "GoalPrecondition(goal_id=goal_id, expected_goal=goal, expected_owner=ProcessIdentity.capture(os.getpid()))"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/input_origin.py",
+          "function": "capture",
+          "line": 96,
+          "calls": [
+            {
+              "line": 102,
+              "call": "snapshot.require_active(admission.incarnation.name)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/input_origin.py",
+          "function": "require_ingress",
+          "line": 111,
+          "calls": [
+            {
+              "line": 121,
+              "call": "snapshot.require_active(admission.incarnation.name)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/native_input_owner.py",
+          "function": "capture_local",
+          "line": 47,
+          "calls": [
+            {
+              "line": 49,
+              "call": "snapshot.require_active(name)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/native_input_owner.py",
+          "function": "_snapshot_owner",
+          "line": 120,
+          "calls": [
+            {
+              "line": 125,
+              "call": "snapshot.require_active(self.thread.name)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/native_input_owner.py",
+          "function": "require_ready",
+          "line": 158,
+          "calls": [
+            {
+              "line": 162,
+              "call": "snapshot.require_active(name)"
+            },
+            {
+              "line": 164,
+              "call": "current.require_active_goal(goal_id)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "function": "capture",
+          "line": 42,
+          "calls": [
+            {
+              "line": 43,
+              "call": "snapshot.require_active(name)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "function": "require_current",
+          "line": 54,
+          "calls": [
+            {
+              "line": 61,
+              "call": "snapshot.require_active(self.name)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "function": "threads",
+          "line": 39,
+          "calls": [
+            {
+              "line": 44,
+              "call": "snapshot.require_active(name)"
+            },
+            {
+              "line": 44,
+              "call": "snapshot.require_active(name)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/owner_restart.py",
+          "function": "restart",
+          "line": 227,
+          "calls": [
+            {
+              "line": 240,
+              "call": "snapshot.statuses[thread.name].require_active()"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/queued_input.py",
+          "function": "require_handoff",
+          "line": 229,
+          "calls": [
+            {
+              "line": 236,
+              "call": "snapshot.require_active(name)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/registry_document.py",
+          "function": "require_active",
+          "line": 53,
+          "calls": [
+            {
+              "line": 56,
+              "call": "self.status(thread.name).require_active()"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/registry_document.py",
+          "function": "fence_idle_owner",
+          "line": 238,
+          "calls": [
+            {
+              "line": 245,
+              "call": "snapshot.require_active(expected.name)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/registry_document.py",
+          "function": "require_owner_process",
+          "line": 453,
+          "calls": [
+            {
+              "line": 457,
+              "call": "self.require_active(owner.incarnation.name)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/runtime.py",
+          "function": "_connect_current",
+          "line": 327,
+          "calls": [
+            {
+              "line": 332,
+              "call": "snapshot.require_active(self.session_id)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/runtime_requests.py",
+          "function": "require_original",
+          "line": 117,
+          "calls": [
+            {
+              "line": 121,
+              "call": "snapshot.require_active(self.binding.owner.incarnation.name)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/session_load.py",
+          "function": "resolve",
+          "line": 64,
+          "calls": [
+            {
+              "line": 71,
+              "call": "snapshot.require_active(thread.name)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/task_sources.py",
+          "function": "require_context",
+          "line": 56,
+          "calls": [
+            {
+              "line": 57,
+              "call": "owner.require_active_goal(self.goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/thread_execution.py",
+          "function": "owner_binding",
+          "line": 80,
+          "calls": [
+            {
+              "line": 84,
+              "call": "snapshot.require_active(thread.name)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/threads.py",
+          "function": "require_active_goal",
+          "line": 272,
+          "calls": [
+            {
+              "line": 278,
+              "call": "goal.state.require_active()"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "function": "apply",
+          "line": 484,
+          "calls": [
+            {
+              "line": 499,
+              "call": "GoalPrecondition(goal_id=self.goal_id, expected_state=ActiveGoal())"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "function": "apply",
+          "line": 519,
+          "calls": [
+            {
+              "line": 530,
+              "call": "GoalPrecondition(expected_goal=current, goal_id=goal_id)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/tools.py",
+          "function": "apply",
+          "line": 552,
+          "calls": [
+            {
+              "line": 561,
+              "call": "GoalPrecondition(expected_goal=current, goal_id=goal_id)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/turn_goal_account.py",
+          "function": "block",
+          "line": 78,
+          "calls": [
+            {
+              "line": 82,
+              "call": "GoalPrecondition(goal_id=self.goal.id, expected_goal=self.goal)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/turn_goal_account.py",
+          "function": "current_active_goal",
+          "line": 180,
+          "calls": [
+            {
+              "line": 184,
+              "call": "owner.continuation_goal(self.owner)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/turn_runner.py",
+          "function": "cancel",
+          "line": 345,
+          "calls": [
+            {
+              "line": 354,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "root": "tests",
+      "parsed": 369,
+      "omissions": [],
+      "sites": [
+        {
+          "path": "tests/compaction_source_successor_installed_journey.py",
+          "function": "ordinary_source",
+          "line": 53,
+          "calls": [
+            {
+              "line": 56,
+              "call": "snapshot.require_active('openhcs-architecture-memory')"
+            }
+          ]
+        },
+        {
+          "path": "tests/real_native_compaction_installed_pilot.py",
+          "function": "main",
+          "line": 59,
+          "calls": [
+            {
+              "line": 68,
+              "call": "source_snapshot.require_active('nra-architecture')"
+            }
+          ]
+        },
+        {
+          "path": "tests/reply_relevance_installed_journey.py",
+          "function": "run",
+          "line": 29,
+          "calls": [
+            {
+              "line": 45,
+              "call": "snapshot.require_active('openhcs-helper')"
+            }
+          ]
+        },
+        {
+          "path": "tests/retained_native_fixture.py",
+          "function": "authored_scope",
+          "line": 368,
+          "calls": [
+            {
+              "line": 377,
+              "call": "snapshot.require_active(attempt.request.source.incarnation.name)"
+            }
+          ]
+        },
+        {
+          "path": "tests/selected_summary_recovery_installed_journey.py",
+          "function": "run",
+          "line": 40,
+          "calls": [
+            {
+              "line": 55,
+              "call": "snapshot.require_active('openhcs-architecture-memory')"
+            },
+            {
+              "line": 111,
+              "call": "private_snapshot.require_active('recovery523')"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_acp.py",
+          "function": "test_missing_terminal_blocks_only_still_active_goal",
+          "line": 579,
+          "calls": [
+            {
+              "line": 594,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_acp.py",
+          "function": "test_goal_auto_transition_cannot_overwrite_concurrent_progress",
+          "line": 729,
+          "calls": [
+            {
+              "line": 759,
+              "call": "GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_acp.py",
+          "function": "test_failed_goal_turn_does_not_revive_superseded_goal",
+          "line": 790,
+          "calls": [
+            {
+              "line": 822,
+              "call": "GoalPrecondition(goal_id=original.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_acp.py",
+          "function": "test_failed_goal_turn_retains_verified_progress_without_auto_retry",
+          "line": 848,
+          "calls": [
+            {
+              "line": 866,
+              "call": "GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_acp.py",
+          "function": "test_successful_goal_update_during_turn_is_not_auto_paused",
+          "line": 884,
+          "calls": [
+            {
+              "line": 903,
+              "call": "GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_acp.py",
+          "function": "test_goal_completion_and_provider_usage_settle_one_attempt",
+          "line": 918,
+          "calls": [
+            {
+              "line": 943,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_acp.py",
+          "function": "test_failed_final_after_goal_completion_does_not_leave_false_completed_status",
+          "line": 1020,
+          "calls": [
+            {
+              "line": 1044,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_acp.py",
+          "function": "test_blocked_goal_retry_is_explicit_and_restores_owner_grant",
+          "line": 1093,
+          "calls": [
+            {
+              "line": 1117,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 1123,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_acp.py",
+          "function": "test_retry_recovers_ready_ledger_left_by_crash_before_registry_update",
+          "line": 1143,
+          "calls": [
+            {
+              "line": 1161,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_acp.py",
+          "function": "test_goal_metadata_updates_once_per_change",
+          "line": 1857,
+          "calls": [
+            {
+              "line": 1895,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 1906,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_acp.py",
+          "function": "events",
+          "line": 588,
+          "calls": [
+            {
+              "line": 594,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_acp.py",
+          "function": "independently_advance",
+          "line": 753,
+          "calls": [
+            {
+              "line": 759,
+              "call": "GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_acp.py",
+          "function": "interpose",
+          "line": 813,
+          "calls": [
+            {
+              "line": 822,
+              "call": "GoalPrecondition(goal_id=original.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_acp.py",
+          "function": "events",
+          "line": 862,
+          "calls": [
+            {
+              "line": 866,
+              "call": "GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_acp.py",
+          "function": "events",
+          "line": 898,
+          "calls": [
+            {
+              "line": 903,
+              "call": "GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_acp.py",
+          "function": "events",
+          "line": 939,
+          "calls": [
+            {
+              "line": 943,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_acp.py",
+          "function": "events",
+          "line": 1041,
+          "calls": [
+            {
+              "line": 1044,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_backend_failure_owner_pause.py",
+          "function": "test_failed_attempt_preserves_explicit_owner_pause",
+          "line": 25,
+          "calls": [
+            {
+              "line": 50,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_backend_failure_owner_pause.py",
+          "function": "test_nonowner_or_stale_pause_does_not_bypass_failure_block",
+          "line": 110,
+          "calls": [
+            {
+              "line": 134,
+              "call": "GoalPrecondition(goal_id=initial.id)"
+            },
+            {
+              "line": 116,
+              "call": "GoalPrecondition(goal_id=initial.id)"
+            },
+            {
+              "line": 121,
+              "call": "GoalPrecondition(goal_id=initial.id)"
+            },
+            {
+              "line": 129,
+              "call": "GoalPrecondition(goal_id=initial.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_backend_failure_owner_pause.py",
+          "function": "owner_pause",
+          "line": 45,
+          "calls": [
+            {
+              "line": 50,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_block_reason.py",
+          "function": "test_missing_or_blank_block_reason_rejects_without_side_effects",
+          "line": 35,
+          "calls": [
+            {
+              "line": 56,
+              "call": "GoalPrecondition(goal_id=original.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_block_reason.py",
+          "function": "test_owner_resume_refusal_persists_bounded_reason_and_prior_progress",
+          "line": 141,
+          "calls": [
+            {
+              "line": 169,
+              "call": "GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()), goal_id=original.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_failure_native.py",
+          "function": "test_saved_native_acp_failed_goal_remains_passive",
+          "line": 211,
+          "calls": [
+            {
+              "line": 259,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_failure_native.py",
+          "function": "wait",
+          "line": 253,
+          "calls": [
+            {
+              "line": 259,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_history.py",
+          "function": "test_goal_history_records_transitions_replacement_clear_and_rename",
+          "line": 39,
+          "calls": [
+            {
+              "line": 43,
+              "call": "GoalPrecondition(goal_id=first.id)"
+            },
+            {
+              "line": 52,
+              "call": "GoalPrecondition(goal_id=first.id)"
+            },
+            {
+              "line": 55,
+              "call": "GoalPrecondition(goal_id=second.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_history.py",
+          "function": "test_existing_goal_seeds_only_current_observed_baseline",
+          "line": 82,
+          "calls": [
+            {
+              "line": 96,
+              "call": "GoalPrecondition(goal_id=current.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_history.py",
+          "function": "test_crash_before_registry_write_does_not_expose_history_intent",
+          "line": 103,
+          "calls": [
+            {
+              "line": 117,
+              "call": "GoalPrecondition(goal_id=current.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_history.py",
+          "function": "test_crash_after_registry_write_reconciles_pending_history",
+          "line": 127,
+          "calls": [
+            {
+              "line": 149,
+              "call": "GoalPrecondition(goal_id=current.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_input_review.py",
+          "function": "test_inspected_canonical_dependencies_allow_standby_without_replay",
+          "line": 22,
+          "calls": [
+            {
+              "line": 108,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 110,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 117,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_input_review.py",
+          "function": "test_standby_excludes_retained_rebound_history_but_retains_rename",
+          "line": 125,
+          "calls": [
+            {
+              "line": 150,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_mentions.py",
+          "function": "test_bound_renames_follow_only_the_same_incarnation_and_name_reuse_is_stale",
+          "line": 138,
+          "calls": [
+            {
+              "line": 159,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_mentions.py",
+          "function": "test_goal_status_edits_and_explicit_contacts_are_independent",
+          "line": 179,
+          "calls": [
+            {
+              "line": 191,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 197,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 201,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 210,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 215,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 218,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 221,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_nominal.py",
+          "function": "test_experiment_b_new_model_action_uses_real_tool_and_event",
+          "line": 65,
+          "calls": [
+            {
+              "line": 72,
+              "call": "ctx.require_goal()"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_nominal.py",
+          "function": "test_cas_rejects_aba_and_unknown_payload_without_effects",
+          "line": 151,
+          "calls": [
+            {
+              "line": 160,
+              "call": "GoalPrecondition(expected_goal=goal)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_nominal.py",
+          "function": "next_state",
+          "line": 71,
+          "calls": [
+            {
+              "line": 72,
+              "call": "ctx.require_goal()"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_owner_pause.py",
+          "function": "test_owner_pause_survives_reopen_and_explains_stale_model_report",
+          "line": 18,
+          "calls": [
+            {
+              "line": 24,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 47,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_owner_pause.py",
+          "function": "test_model_cannot_pause",
+          "line": 52,
+          "calls": [
+            {
+              "line": 61,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "function": "test_same_id_resume_from_paused",
+          "line": 33,
+          "calls": [
+            {
+              "line": 37,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "function": "test_replacing_or_clearing_goal_cannot_reset_turn_report_guard",
+          "line": 80,
+          "calls": [
+            {
+              "line": 108,
+              "call": "GoalPrecondition(goal_id=replacement['id'])"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "function": "test_clearing_goal_releases_its_reserved_attempt",
+          "line": 125,
+          "calls": [
+            {
+              "line": 133,
+              "call": "GoalPrecondition(goal_id=goal['id'])"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "function": "test_model_tool_cannot_resume_blocked_uncertain_goal",
+          "line": 140,
+          "calls": [
+            {
+              "line": 144,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "function": "test_resume_refuses_completed_or_replaced_goal",
+          "line": 151,
+          "calls": [
+            {
+              "line": 154,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "function": "test_completed_goal_cannot_be_reactivated_by_ui_registry_action",
+          "line": 164,
+          "calls": [
+            {
+              "line": 167,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            },
+            {
+              "line": 171,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "function": "test_terminal_goal_cannot_reactivate_through_pause",
+          "line": 177,
+          "calls": [
+            {
+              "line": 192,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            },
+            {
+              "line": 196,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            },
+            {
+              "line": 202,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "function": "test_resume_does_not_claim_success_after_concurrent_goal_change",
+          "line": 211,
+          "calls": [
+            {
+              "line": 214,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            },
+            {
+              "line": 222,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "function": "test_resume_losing_cas_never_reports_another_activations_success",
+          "line": 239,
+          "calls": [
+            {
+              "line": 242,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            },
+            {
+              "line": 254,
+              "call": "GoalPrecondition(goal_id=replacement.id)"
+            },
+            {
+              "line": 261,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "function": "test_resume_rejects_same_value_aba_across_registry_reopen",
+          "line": 282,
+          "calls": [
+            {
+              "line": 285,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            },
+            {
+              "line": 299,
+              "call": "GoalPrecondition(goal_id=saved.id)"
+            },
+            {
+              "line": 303,
+              "call": "GoalPrecondition(goal_id=saved.id)"
+            },
+            {
+              "line": 328,
+              "call": "GoalPrecondition(expected_goal=saved, goal_id=saved.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "function": "test_same_value_goal_transition_bumps_durable_revision",
+          "line": 343,
+          "calls": [
+            {
+              "line": 348,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            },
+            {
+              "line": 352,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "function": "test_automatic_failure_block_advances_goal_revision",
+          "line": 358,
+          "calls": [
+            {
+              "line": 365,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "function": "test_automatic_failure_block_preserves_existing_goal_progress",
+          "line": 381,
+          "calls": [
+            {
+              "line": 386,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "function": "test_exhausted_goal_revision_refuses_transition_without_write",
+          "line": 403,
+          "calls": [
+            {
+              "line": 416,
+              "call": "GoalPrecondition(goal_id='goal-id')"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "function": "race",
+          "line": 218,
+          "calls": [
+            {
+              "line": 222,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "function": "race",
+          "line": 247,
+          "calls": [
+            {
+              "line": 254,
+              "call": "GoalPrecondition(goal_id=replacement.id)"
+            },
+            {
+              "line": 261,
+              "call": "GoalPrecondition(goal_id=started['id'])"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "function": "race",
+          "line": 292,
+          "calls": [
+            {
+              "line": 299,
+              "call": "GoalPrecondition(goal_id=saved.id)"
+            },
+            {
+              "line": 303,
+              "call": "GoalPrecondition(goal_id=saved.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby.py",
+          "function": "test_edit_preserves_owner_pause_and_standby_requires_declared_targets",
+          "line": 65,
+          "calls": [
+            {
+              "line": 71,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby.py",
+          "function": "test_standby_rejects_closed_wait_cycle_while_both_turns_are_active",
+          "line": 78,
+          "calls": [
+            {
+              "line": 95,
+              "call": "GoalPrecondition(goal_id=alice.id)"
+            },
+            {
+              "line": 103,
+              "call": "GoalPrecondition(goal_id=bob.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby.py",
+          "function": "test_standby_allows_independent_alternative_to_wait_cycle",
+          "line": 111,
+          "calls": [
+            {
+              "line": 129,
+              "call": "GoalPrecondition(goal_id=alice.id)"
+            },
+            {
+              "line": 132,
+              "call": "GoalPrecondition(goal_id=bob.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby.py",
+          "function": "test_idle_active_goal_does_not_make_wait_cycle_runnable",
+          "line": 139,
+          "calls": [
+            {
+              "line": 159,
+              "call": "GoalPrecondition(goal_id=alice.id)"
+            },
+            {
+              "line": 163,
+              "call": "GoalPrecondition(goal_id=bob.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby.py",
+          "function": "test_dead_active_turn_does_not_make_wait_cycle_runnable",
+          "line": 170,
+          "calls": [
+            {
+              "line": 207,
+              "call": "GoalPrecondition(goal_id=alice.id)"
+            },
+            {
+              "line": 211,
+              "call": "GoalPrecondition(goal_id=bob.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby.py",
+          "function": "test_liveness_check_releases_preexisting_closed_wait_group",
+          "line": 216,
+          "calls": [
+            {
+              "line": 232,
+              "call": "GoalPrecondition(goal_id=alice.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby.py",
+          "function": "test_new_live_dependency_turn_keeps_old_wait_group_open",
+          "line": 269,
+          "calls": [
+            {
+              "line": 285,
+              "call": "GoalPrecondition(goal_id=alice.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby.py",
+          "function": "test_recheck_crash_before_wait_clear_keeps_goal_in_standby",
+          "line": 314,
+          "calls": [
+            {
+              "line": 330,
+              "call": "GoalPrecondition(goal_id=alice.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby.py",
+          "function": "test_standby_refuses_canonical_reply_that_arrived_before_wait",
+          "line": 364,
+          "calls": [
+            {
+              "line": 375,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby_liveness.py",
+          "function": "_waiting",
+          "line": 92,
+          "calls": [
+            {
+              "line": 105,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby_liveness.py",
+          "function": "test_idle_target_refusal_is_side_effect_free",
+          "line": 110,
+          "calls": [
+            {
+              "line": 124,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby_liveness.py",
+          "function": "test_owner_pause_still_prevents_quiet_dependency_release",
+          "line": 283,
+          "calls": [
+            {
+              "line": 286,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby_liveness.py",
+          "function": "test_terminal_hook_rechecks_goal_and_owner_identity",
+          "line": 325,
+          "calls": [
+            {
+              "line": 330,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby_liveness.py",
+          "function": "test_stopped_dependency_cannot_be_declared_live",
+          "line": 340,
+          "calls": [
+            {
+              "line": 352,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby_liveness.py",
+          "function": "test_acp_optional_reply_read_failure_after_settled_does_not_fail_done",
+          "line": 438,
+          "calls": [
+            {
+              "line": 452,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby_liveness.py",
+          "function": "test_quiet_dependency_finish_schedules_the_still_active_goal",
+          "line": 478,
+          "calls": [
+            {
+              "line": 503,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby_liveness.py",
+          "function": "test_acp_delayed_old_callback_after_new_finish_before_reply",
+          "line": 517,
+          "calls": [
+            {
+              "line": 531,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby_liveness.py",
+          "function": "test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model",
+          "line": 565,
+          "calls": [
+            {
+              "line": 581,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby_liveness.py",
+          "function": "capture_emit",
+          "line": 448,
+          "calls": [
+            {
+              "line": 452,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby_liveness.py",
+          "function": "delayed_emit",
+          "line": 527,
+          "calls": [
+            {
+              "line": 531,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_standby_liveness.py",
+          "function": "observe",
+          "line": 576,
+          "calls": [
+            {
+              "line": 581,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_ui_creation.py",
+          "function": "test_explicit_retry_cannot_invent_missing_launch_authority",
+          "line": 61,
+          "calls": [
+            {
+              "line": 68,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_wait_certified_reply.py",
+          "function": "test_original_reply_is_not_reassigned_to_same_name_replacement",
+          "line": 26,
+          "calls": [
+            {
+              "line": 33,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_wait_certified_reply.py",
+          "function": "test_original_recipient_and_direct_reply_semantics_cannot_be_replaced",
+          "line": 60,
+          "calls": [
+            {
+              "line": 68,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goal_wait_certified_reply.py",
+          "function": "test_native",
+          "line": 96,
+          "calls": [
+            {
+              "line": 121,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_goals.py",
+          "function": "test_goal_survives_rename_and_reregistration",
+          "line": 24,
+          "calls": [
+            {
+              "line": 45,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_l0_goal_input_closure.py",
+          "function": "test_retry_requires_existing_private_generation_and_never_adopts",
+          "line": 83,
+          "calls": [
+            {
+              "line": 92,
+              "call": "GoalPrecondition(goal_id=goal.id, expected_owner=ProcessIdentity.capture(os.getpid()))"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_l0_goal_input_closure.py",
+          "function": "test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack",
+          "line": 116,
+          "calls": [
+            {
+              "line": 130,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_native_context_inspection.py",
+          "function": "test_context_manifest_native_acp_and_cli_continuous",
+          "line": 37,
+          "calls": [
+            {
+              "line": 143,
+              "call": "GoalPrecondition(expected_owner=thread.require_process())"
+            },
+            {
+              "line": 146,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 297,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 299,
+              "call": "GoalPrecondition(expected_owner=thread.require_process())"
+            },
+            {
+              "line": 302,
+              "call": "GoalPrecondition(goal_id=replacement.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_owner_process.py",
+          "function": "test_real_batch_retains_each_launch_and_busy_refuses_every_stop",
+          "line": 169,
+          "calls": [
+            {
+              "line": 276,
+              "call": "before.require_active('batch-renamed')"
+            },
+            {
+              "line": 455,
+              "call": "before.require_active(name)"
+            },
+            {
+              "line": 477,
+              "call": "before.require_active(name)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_runtime_goal_retry_running.py",
+          "function": "exercise_retry",
+          "line": 41,
+          "calls": [
+            {
+              "line": 68,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 104,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_runtime_goal_retry_running.py",
+          "function": "test_busy_retry_keeps_unresolved_attempt_and_owner_fences",
+          "line": 201,
+          "calls": [
+            {
+              "line": 219,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_runtime_goal_retry_running.py",
+          "function": "events",
+          "line": 83,
+          "calls": [
+            {
+              "line": 104,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_runtime_goal_snapshot.py",
+          "function": "test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling",
+          "line": 50,
+          "calls": [
+            {
+              "line": 60,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 74,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_runtime_goal_snapshot.py",
+          "function": "test_goal_update_cannot_bypass_blocked_retry_or_replace_owner",
+          "line": 126,
+          "calls": [
+            {
+              "line": 132,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_runtime_goal_snapshot.py",
+          "function": "test_goal_update_rechecks_snapshot_inside_write_lock",
+          "line": 159,
+          "calls": [
+            {
+              "line": 168,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_runtime_goal_snapshot.py",
+          "function": "edit_before_cas",
+          "line": 165,
+          "calls": [
+            {
+              "line": 168,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_s1_event_behavior.py",
+          "function": "waiting_owner",
+          "line": 140,
+          "calls": [
+            {
+              "line": 154,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_s1_event_behavior.py",
+          "function": "test_manual_bridge_real_native_terminal_releases_dependency",
+          "line": 336,
+          "calls": [
+            {
+              "line": 384,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_s1_event_behavior.py",
+          "function": "test_relay_entrypoint_terminal_publication_releases_real_wait",
+          "line": 446,
+          "calls": [
+            {
+              "line": 479,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_s1_event_behavior.py",
+          "function": "observe",
+          "line": 369,
+          "calls": [
+            {
+              "line": 384,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_s1_event_behavior.py",
+          "function": "observed",
+          "line": 464,
+          "calls": [
+            {
+              "line": 479,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_selected_owner_followup.py",
+          "function": "test_selected_turn_accepts_and_starts_fresh_input_once",
+          "line": 34,
+          "calls": [
+            {
+              "line": 52,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_selected_owner_followup.py",
+          "function": "test_selected_handoff_rechecks_authority_at_native_write",
+          "line": 194,
+          "calls": [
+            {
+              "line": 215,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 224,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 230,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_selected_owner_followup.py",
+          "function": "test_actual_native_selected_and_followup_use_one_live_input_lifetime",
+          "line": 297,
+          "calls": [
+            {
+              "line": 385,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_selected_owner_followup.py",
+          "function": "mutate",
+          "line": 220,
+          "calls": [
+            {
+              "line": 224,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            },
+            {
+              "line": 230,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/test_stack_retry_running.py",
+          "function": "test_native_retry_waits_for_current_response_without_replaying_unknown",
+          "line": 19,
+          "calls": [
+            {
+              "line": 36,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/three_cut_retention_configured_journey.py",
+          "function": "run",
+          "line": 240,
+          "calls": [
+            {
+              "line": 305,
+              "call": "snapshot.require_active(attempt.request.source.incarnation.name)"
+            }
+          ]
+        },
+        {
+          "path": "tests/turn_context_installed_journey.py",
+          "function": "configured_terminal",
+          "line": 14,
+          "calls": [
+            {
+              "line": 50,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/turn_context_installed_journey.py",
+          "function": "complete_goal_controls",
+          "line": 352,
+          "calls": [
+            {
+              "line": 387,
+              "call": "GoalPrecondition(goal_id=source.goal.id)"
+            },
+            {
+              "line": 404,
+              "call": "GoalPrecondition(goal_id=replacement.id)"
+            }
+          ]
+        },
+        {
+          "path": "tests/turn_context_installed_journey.py",
+          "function": "wait_on_original",
+          "line": 46,
+          "calls": [
+            {
+              "line": 50,
+              "call": "GoalPrecondition(goal_id=goal.id)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "root": "tools",
+      "parsed": 54,
+      "omissions": [],
+      "sites": [
+        {
+          "path": "tools/cutover/native_schema_carry.py",
+          "function": "carry_goal",
+          "line": 346,
+          "calls": [
+            {
+              "line": 378,
+              "call": "target.require_goal(db)"
+            }
+          ]
+        },
+        {
+          "path": "tools/cutover/native_schema_carry.py",
+          "function": "synchronize_goal",
+          "line": 110,
+          "calls": [
+            {
+              "line": 149,
+              "call": "self.require_goal(db)"
+            },
+            {
+              "line": 118,
+              "call": "self.require_goal(db)"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "limits": [
+    "Attribute calls are lexical sites, not proved dynamic receivers; related receivers were read semantically.",
+    "AST is source evidence only. No behavioral or installed qualification."
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "owner": "RegistryOwner.turn_lease -> Thread.require_turn_lease; AgentActivity.begin_turn returns RegistryOwner, finish_turn consumes TurnLeaseFence",
+  "original_source": "12f0c8e4e7070a25f6777d00ebd5ab1bf796073d",
+  "parse_roots": {
+    "src/agent_comms": {
+      "modules": 324,
+      "omissions": []
+    },
+    "tests": {
+      "modules": 372,
+      "omissions": []
+    }
+  },
+  "all_original_require_turn_lease_calls": [
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 44,
+      "call": "self.thread.require_turn_lease()"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 119,
+      "call": "owner.require_turn_lease()"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 176,
+      "call": "self.owner.thread.require_turn_lease()"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 81,
+      "call": "self.owner.thread.require_turn_lease()"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 92,
+      "call": "self.owner.thread.require_turn_lease()"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 100,
+      "call": "self.owner.thread.require_turn_lease()"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 41,
+      "call": "owner.require_turn_lease()"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 371,
+      "call": "owner.require_turn_lease()"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 402,
+      "call": "owner.require_turn_lease()"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 180,
+      "call": "owner._comms.registry.require(session).require_turn_lease()"
+    },
+    {
+      "path": "tests/test_goal_selection_owner.py",
+      "line": 124,
+      "call": "comms.agents.begin_turn('peer', 'original-peer-work').require_turn_lease()"
+    },
+    {
+      "path": "tests/test_goal_selection_owner.py",
+      "line": 133,
+      "call": "comms.agents.begin_turn('worker', 'original-reply-consumer').require_turn_lease()"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 58,
+      "call": "comms.registry.require(session).require_turn_lease()"
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "line": 80,
+      "call": "comms.registry.require(session).require_turn_lease()"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 55,
+      "call": "owner._comms.registry.require(second).require_turn_lease()"
+    }
+  ],
+  "invalid_return_owner_calls": [
+    {
+      "path": "tests/test_goal_selection_owner.py",
+      "line": 124,
+      "call": "comms.agents.begin_turn('peer', 'original-peer-work').require_turn_lease()"
+    },
+    {
+      "path": "tests/test_goal_selection_owner.py",
+      "line": 133,
+      "call": "comms.agents.begin_turn('worker', 'original-reply-consumer').require_turn_lease()"
+    }
+  ],
+  "changed_function": [
+    "test_certified_reply_consumes_only_original_wait"
+  ],
+  "after_control_sha256": "4cc89468a3bbce9d2dee4eac9543402bf0eb91ff63b71afb1e0bd02c6da7f038",
+  "production_delta": 0,
+  "other_five_case_AST_equal": true,
+  "message_reference": "Message.reference is original MessageReference value; consume_reply_wait checks original RegistryOwner and exact certified delivery/wait; no alternate reader or source repair",
+  "cleanup": "Original finish_turn exact returned leases remains in finally; negative old peer lease preserved without administrative record edits",
+  "acceptance": "Changed reply control not run; prior5PASS retained; native2 unrun; next fresh holder/artifact purpose required"
+}

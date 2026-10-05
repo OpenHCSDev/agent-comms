@@ -1,0 +1,33 @@
+{
+  "phase": "canonical",
+  "issued_sha256": "f0e2cf98608c6a7eea7fec81cc8a0c1a22ba95e14144448813db8f5b9ae484a2",
+  "lifecycle_sha256_at_launch": "0afad21205172d9da6d6b38b4fd6e6a49a90882db9dbdd65f6c6b90cc383efb7",
+  "argv": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "-B",
+    "-c",
+    "import pathlib,sys,agent_comms; assert pathlib.Path(agent_comms.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()); sys.path.append('/usr/lib/python3.14/site-packages'); import pytest; raise SystemExit(pytest.main(['-o', 'addopts=', '-o', 'pythonpath=', '-p', 'no:cacheprovider', '--basetemp', '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/canonical01/authored', '--junitxml', '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/canonical01/results.xml', '-q', 'tests/test_goal_selection_owner.py']))"
+  ],
+  "outcome": {
+    "kind": "exited",
+    "code": 1
+  },
+  "elapsed_seconds": 4.27944745903369,
+  "error": null,
+  "controller": {
+    "pid": 1923482,
+    "start_time": 65438043
+  },
+  "observed_children": [
+    {
+      "pid": 1923482,
+      "start_time": 65438043
+    }
+  ],
+  "alive": [],
+  "groups": {
+    "1923482": []
+  },
+  "sockets": [],
+  "observation_limit": "Short-lived descendants may exit between read-only /proc observations; original fixture/process custody joins its actual children."
+}

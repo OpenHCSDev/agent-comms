@@ -1,0 +1,103 @@
+{
+  "state": "PASS installed byte/origin and native READ trust; canonical/native execution not started",
+  "prefix": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002",
+  "sources": [
+    {
+      "module": "agent_comms",
+      "head": "48fe470fa3b83e9f54d95d9b27d70acfaa1cf0ef",
+      "location": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms",
+      "files": 355,
+      "python_files": 324,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-goal-selection675-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl",
+        "archive_info": {}
+      },
+      "inventory_sha256": "294ae9dd1b2f3df339be0f71864119931e145d0e503d9cb3bed11401f6417e0f"
+    }
+  ],
+  "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent",
+  "native_cli": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+  "native_manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+  "native_tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d",
+  "native_full_trust": true,
+  "sdk": "0.12.1",
+  "package_count": 10,
+  "packages": [
+    [
+      "agent-client-protocol",
+      "0.12.1"
+    ],
+    [
+      "agent-comms",
+      "0.1.0"
+    ],
+    [
+      "annotated-types",
+      "0.8.0"
+    ],
+    [
+      "metaclass-registry",
+      "0.2.1"
+    ],
+    [
+      "nominal-refactor-audit",
+      "0.1.0"
+    ],
+    [
+      "packaging",
+      "26.2"
+    ],
+    [
+      "pydantic",
+      "2.13.5"
+    ],
+    [
+      "pydantic-core",
+      "2.46.5"
+    ],
+    [
+      "typing-extensions",
+      "4.15.0"
+    ],
+    [
+      "typing-inspection",
+      "0.4.4"
+    ]
+  ],
+  "requirements_sha256": "ebb69c9961fe940cb589ba0f25d937430012e8fb81405919ec95b0678ec04632",
+  "protected_old_prefix_files": 154,
+  "protected_old_prefix_files_unchanged": true,
+  "public_install_changed": false,
+  "new_native_build": false,
+  "source_overlay": false,
+  "dependency_bypass": false,
+  "journey_owners": [],
+  "journey_assessment": "One corrected canonical reply and two original serial saved-SDK localhost settlement cases remain unrun; five prior PASS scopes retained without repetition. No public/UI/performance claim.",
+  "archive_artifacts": [
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-goal-selection675-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl",
+      "sha256": "a685578e439aa2f7010219aa6032ae7e7307a68393e6d6adbb084563f39f43c5"
+    }
+  ],
+  "qualification_evidence": {
+    "issued_grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel675-corrected-reply02-canonical-native-package-execution-issued-grant.json",
+    "issued_sha256": "64ff90758d6266ad1cbdfe6f2a21c8f281194f60f7dabb41c240ff404daa75bd",
+    "inventory": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/installed-inventory.json",
+    "inventory_sha256": "294ae9dd1b2f3df339be0f71864119931e145d0e503d9cb3bed11401f6417e0f",
+    "native_full_trust_receipt": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/native-full-trust.json",
+    "native_full_trust_receipt_sha256": "09c3dc93c1cfc867a02c7e0da3ada61961b50440e1f4e9950213292c230301eb",
+    "source_head": "48fe470fa3b83e9f54d95d9b27d70acfaa1cf0ef",
+    "wheel_build_source": "46124bbdc9dcec39e944eb64067d9c85f3508c0e",
+    "installed_assets": 355,
+    "original_nonCore_keepers": 94,
+    "metadata_files": 69,
+    "other9_origins_unchanged": true,
+    "controller": {
+      "pid": 1983700,
+      "start_time": 65509778
+    },
+    "canonical_execution_started": false,
+    "native_execution_started": false
+  }
+}

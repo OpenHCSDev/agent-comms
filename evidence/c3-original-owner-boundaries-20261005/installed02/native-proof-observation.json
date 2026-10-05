@@ -1,0 +1,36 @@
+[
+  {
+    "session": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/native02/authored/saved-native-owner0/sessions/enrolled-edaef87309a74815aeead1b953145489.jsonl",
+    "source_owner": "NativeContextJournal.open_evidence/select via unchanged native_proof_cases.read_proof_rows",
+    "rows": [
+      {
+        "kind": "native_context_journal",
+        "inputId": "b42c4b1bdf7881d3b32493c95c8652e8",
+        "sessionId": "edaef87309a74815aeead1b953145489",
+        "sessionEntryId": "d5416e7b",
+        "requestGeneration": 1,
+        "llmContextDigest": "597083db1e18476af6482bb8aedfae948a6d1485df1e8598f06684d50c890f61",
+        "schema": 1,
+        "type": "context_committed"
+      }
+    ],
+    "row_count": 1
+  },
+  {
+    "session": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/native02/authored/saved-native-owner1/sessions/enrolled-613fe293803148e2a727061620d99949.jsonl",
+    "source_owner": "NativeContextJournal.open_evidence/select via unchanged native_proof_cases.read_proof_rows",
+    "rows": [
+      {
+        "kind": "native_context_journal",
+        "inputId": "967ef38d8ed5390a43c87ff3959eed22",
+        "sessionId": "613fe293803148e2a727061620d99949",
+        "sessionEntryId": "553ecb66",
+        "requestGeneration": 1,
+        "llmContextDigest": "680345aa44c0c25881b3e06903527310ceb29a29108648eab8c6ccbb4f354417",
+        "schema": 1,
+        "type": "context_committed"
+      }
+    ],
+    "row_count": 1
+  }
+]
