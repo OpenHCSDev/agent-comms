@@ -100,6 +100,19 @@ CPU attribution. NativeSessionSurface.widget already derives from the selected
 presentation and must not acquire a second stored widget. Parent has not edited
 the production files or the active control worktree.
 
+### Independent remaining surface owner, 2026-10-05
+
+Einstein now contributes the original project_tree_intent/workspace_chrome
+family, coordinating disjoint writes directly with Heisenberg before editing.
+The source pass covers ProjectPanel/SessionThreadPanels, native DirectoryTree
+selection/loading/scroll/close and shared sidebar/navigation consumers. Native
+optional API values remain boundary facts; a syntax count alone does not justify
+a change. Any concrete ownership or lifecycle repair must use the existing
+owner and migrate its consumers. Heisenberg remains whole TC1 integration owner.
+Frozen Explorer953/107 and453 source/package controls remain unchanged. This
+assignment grants no installed package, native keeper or runtime access, and
+does not qualify the full resource/continuous journey.
+
 ## Dispatch
 
 > **`toad-tc1`:** Complete TC1 per `docs/refactor/cleanup/TC1-workspace-state.md`, starting with `session_presentation.py` and `transcript_publication.py`, after T9 in each.
