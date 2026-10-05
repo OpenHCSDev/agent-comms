@@ -3334,6 +3334,40 @@ provider call or automatic retry is authorized by the failure.
 
 678 matching-decoder package stage passed, but its proof command failed before the recorded reader: the caller selected `grant["cwd"]` while the issued command declares the working directory inside the proof phase. The package was restored and whole claim returned. Parent verified all13 raw keeper hashes/lengths and all four recorded controllers absent. This is a preparation operand error; it proves no reader or product failure. The correction belongs to Arendt's proof caller, with Bohr handling the consumed purpose closure and fresh successor. No replay under the consumed purpose.
 
-Agent thread inspection currently fails at the local MCP endpoint, and send_input reports the existing Heis ID unavailable. Filesystem receipts remain available; Parent has not restarted or duplicated either owner's run.
+The old MCP endpoint failed after the CLI restart. Parent restored coordination through the original app-server Unix socket and resumed the existing saved worker threads. No replacement agent, interrupted input replay or public runtime restart was used. The recovery receipt is retained in .release-private/codex-agent-connection-recovery-20261005.json.
 
 Arendt has now published678 correction2d69c971f. Parent compared the complete proof command: its only body change selects the existing proof-phase cwd. Compile succeeds, and all three newline literals decode to byte10. Effective READ03 proposal fe02445b is ready for the already-authorized successor after independent consumed-purpose closure; no product patch, rebuild or additional Parent review is needed. Current GitHub confirms460/466/468/446 and678 remain drafts with affected acceptance unfinished; CI is not holding a ready implementation.
+
+
+### Performance preparation and independent checks, 2026-10-05
+
+460 successor03 stage and installed proof passed. Its sole App command then
+failed at the fixture's first environment assertion, before source capture, SDK
+fork or UI creation: the issued read-only note differed from the unchanged
+required admission string. This provides no loading, wheel or frame result.
+Owner wholehandback06ab5c01 and Parent-verified census85054d9e preserve the failure;
+both original controller identities are absent. Bohr independently CLOSED5171
+(lifecycle dc457148, floor readback5347a39a): original CURRENT4471468/69 raw
+origins/428+1883 restored, no new loan or retry.
+
+Heis published successor04 at0eff5ba7, proposal225593ac. Only the admission
+environment string and fresh owned outputs change; the existing read-only mode,
+actual source identity/config at use and zero-input callbacks remain unchanged.
+Parent matched all20 helper hashes. No source guard, product, model or wheel
+changes are needed. Bohr handles a fresh exact purpose after floor/reference
+clearance and Sch handles new matching artifact authority; the consumed5171
+operation remains immutable.
+
+678 READ03 stage and corrected installed proof passed under its new purpose.
+Parent matched proof8aea4829: the matching original355 decoder is installed.
+The recorded reader remains held until Bohr binds that actual proof; no native,
+provider or new input is involved. Its original5f floor must be restored after
+the recorded reader terminates.
+
+466 remains a separate single mounted worker-lifetime check. Bohr verified
+former485 as NONLIVE with actual459 floor1467/69 and266 protected records.
+Einstein's exact485 proposalcebc2aa3 names only the frozen Toad b2e wheel stage
+against matching retained Core/Text, subject to fresh issued restoration and
+reference operands. Its App is still unrun. It neither borrows PUBLICstyle22
+nor changes the frozen460 performance cohort. CI and separate performance
+acceptance do not hold this affected check.
