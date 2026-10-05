@@ -41,9 +41,11 @@ changed root pins. The authorized single build passed0.611s at b687; Parent
 independently verified all319 Git/local/ZIP assets,324 RECORD rows, changed
 root inputs and all retained build files. New handoffc5af80 records Core3931
 provenance even though the wheel bytes equal historical2ece. Original old
-provenance remains immutable. Sch owns receiving commands; Bohr found no
-independent eligible installation while the typed check owns formerstyle22.
-Receiving preparation continues; installation follows its actual whole return.
+provenance remains immutable. Sch owns receiving commands. The typed attempt has now returned formerstyle22
+and Bohr independently closed its purpose29026 after exact current465 floor
+restoration. This is a possible receiving holder; a fresh final command plan,
+actual floor/origins/reference checks and specific grant remain necessary.
+Receiving preparation advances independently of performance and native guard work.
 Continuous468 controls are normally adopted separately; configured execution,
 loaded scaling and startup/frame/CPU gains remain unfinished.
 Parent found the future continuous output would exceed the original Unix
@@ -53,16 +55,21 @@ omits retained paint bytes. Heis owns the existing presentation/viewport
 correction on a separate source branch, preserving frozen474 receiving inputs.
 
 MCP472/682 preparation identified an inactive network preload. OriginalSch
-published685 canonical pre-SDK fetch-origin guard; Parent reviewed its transport
-replacement and refusal path and authorized one necessary fresh native assembly
-plus matching Core wheel through existing commitment owners. Shared7a stays
-immutable. No guard execution or all-process network containment is proved.
-Mendel's independent typed-only path has actual stage-only grant e7c2fcb4 on
-former style22, current465 floor1477; only ToAdb2e needs staging. FullTrust is
-false and no native artifact authority is involved. The one ToAd stage passed0.408s and joined2075442. Exact pure proof
-helper4e7c/operandsc8a221 are sent for Bohr binding; the mounted90-second run
-remains held. No native artifact authority is involved. Native four-case acceptance
-waits the new committed guard and separately issued scope.
+published685 canonical pre-SDK fetch-origin guard; one necessary native assembly
+passed12.986s and one matching Core wheel passed0.542s. Parent verified the
+artifact handoff179fd and normal683 joined relationb1d97: all18 referenced
+hashes/sizes match, the independent arm runner is retained, and the existing
+wheel5d661 is reused without another build. Shared7a remains immutable. Guarded
+installed execution and all-process network containment are not proved.
+Mendel's independent typed-only stage and pure installed proof passed; the
+proof completed2.155s. The launch-admission code then failed before Popen by
+treating mapping keys as records. No wrapper/control/App child started: mounted
+behavior remains UNRUN. Mendel restored original ToAd once in0.168s, returned
+whole71a78 with30 receipts, and Bohr independently closed29026 with exact
+1477-file/current465 floor and69 raw origins. NativeFullTrust, artifact READ/EXEC
+and public source authority remained false. His admission correction is source
+only and does not authorize a retry. Native four-case acceptance needs the new
+committed guard and its separately issued installed scope.
 
 S4 source683 is normally merged208b8f07 after review of complete arm acquisition,
 inputs/cuts/probes and cleanup clocks. Four authored orchestration controls and
@@ -73,11 +80,17 @@ installation. Bohr verified existing source540 and unchanged target334. Source
 restore uses the normal5f wheel and510-file snapshot; no whole-prefix TAR is
 required. Target consumes installed5f347 with all eight relevant files equal,
 so no target install/build is needed. Its actual native declaration is086,
-requiring fresh matching READ-only rather than7a. Einstein published the complete paired command/proof/cleanup tuplea2f887
-at48ba1c98. Parent read the full tuple, all eight helpers and controller source
-and sent it to Bohr for fresh issue; no installed run yet. Source540 alone
-will stage, target334 remains unchanged, and target086 READ-only applies at
-the original source preflight. No native execution or central-batch claim.
+requiring fresh matching READ-only rather than7a. Einstein published the complete paired command/proof/cleanup tuplea2f887.
+The one genuine old720-to-current index qualifier passed9.264s (outer10.891s):
+wrong-schema refusal, original integer OFD custody, inherited descriptor/root,
+sender incarnation, frozen audience and sent event checks passed. Original bus,
+registry and guard bytes stayed unchanged. Parent verified wholea4eab and all28
+returned receipt hashes/sizes. Source540 was restored once with5f in0.142s;
+target334 had no stage or restore and its floor stayed exact. Matching086 READ
+was explicitly returned; Bohr's independent paired lifecycle closure remains
+pending on the last checked records. Core684 frozen7ab72 is normally merged.
+This is a newly built genuine old-source producer, not historical installation
+equivalence; central-batch and routing acceptance remain unqualified.
 
 Core681 fork-source delivery is actually merged38a0533e at frozen3dc11331.
 Its nine authored source checks support recorded inheritance, not independent
