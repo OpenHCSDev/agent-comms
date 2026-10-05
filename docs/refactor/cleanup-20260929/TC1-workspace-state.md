@@ -65,6 +65,29 @@ Original installed A/B/A, editor/undo and shell detach qualifications remain at
 their respective scopes. The original whole TC1 threshold and full continuous
 workspace journey remain unproven.
 
+## Remaining installed acceptance, 2026-10-05
+
+Parent compared the original110/116 scope with the current446 source controls.
+The original investigation and closed predecessor are not another implementation
+task. Heisenberg remains the integration owner for the existing workspace,
+presentation and reader families.
+
+| Requirement | Current evidence and remaining check |
+| --- | --- |
+| Operational source return | PUBLIC447's one ordinary journey passed18 checks, including channel/native admission, A-B-A return, editor/draft/Undo and returned body readiness. Queue, permissions, reply and notification through a continuous configured journey remain separate acceptance. |
+| Warm prepared and rendered history | Current446 ReaderCheckpoint captures original pages, prepared fragments, committed fragment views, Markdown render caches, reader and editor before departure. Its three consumers check identities and zero raw reads. These changed controls are source-only until an affected installed purpose runs them. |
+| Bounded inactive presentation at4/16/32/64 | The existing native cohort keeps two actual loaded sources and fills remaining tabs with blank sessions. It can qualify that mixed cohort and live owner/queue retention. It cannot qualify four through64 loaded histories merely from the tab count. Preserve both loaded and blank obligations without inventing64 concurrent native turns. |
+| Reader position and cropped answer paint | The saved and configured readonly consumers retain a non-tail position and inspect the actual rendered message body, not just editor or syntax-cache identity. Configured readonly warm return still needs its own installed acceptance. |
+| Resource measurements | The native consumer clears and deletes strong checkpoint witnesses before new input and resource counting; saved consumers dispose their witnesses before parked-source disposal. Measure the real application after those observer lifetimes end. Source inspection alone does not establish retained object or RSS bounds. |
+| Spikes and continuous motion | Older recorded gaps and native rendering attribution remain unresolved. PUBLIC447 still images do not prove held scrolling, reversal, growing End, cold width or latency at the cohort sizes. Keep the existing physical/profiling owner and original recordings; do not repeat the ordinary default journey to obtain these different measurements. |
+
+The configured readonly callback uses the existing original-turn resource
+fixture and an isolated saved-session fork. It is distinct from authored
+localhost native controls and from a configured provider reply. Prepare exact
+commands, source/control operands and actual holder disposition for the affected
+installed batch before requesting its purpose. No package access, new provider
+input, App run, artifact renewal or acceptance follows from this reconciliation.
+
 ## Dispatch
 
 > **`toad-tc1`:** Complete TC1 per `docs/refactor/cleanup/TC1-workspace-state.md`, starting with `session_presentation.py` and `transcript_publication.py`, after T9 in each.
