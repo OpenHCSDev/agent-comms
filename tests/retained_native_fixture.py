@@ -208,7 +208,8 @@ class RecordedNativeCheckpoint:
             "retained_facts": FieldCodec.encode(attempt.request.retained),
             "selected_model": FieldCodec.encode(attempt.request.selected),
             "settings": FieldCodec.encode(attempt.request.settings),
-            "summary_usage": self.summary_usage(entry),
+            "summary_usage": dict(self.summary_usage(entry),
+                source=JournalProvenance(self.reference.session_file, (entry.require_entry_id(),))),
             "scoped_facts": self.scoped_facts(attempt),
             "summary_narrative": assembly.observe() if assembly is not None else {
                 "evaluated": False, "reason": "Original pre-pack summary assembly not captured"},
@@ -1332,7 +1333,7 @@ class RecordedNativeProbe:
         }
 
     @staticmethod
-    def model_steps(branch):
+    def model_steps(session: NativeSessionIdentity, branch):
         """Export every original assistant completion, including tool steps.
 
         PiUsage owns the external optional counters. Keep their original nulls
@@ -1342,6 +1343,7 @@ class RecordedNativeProbe:
         """
         return tuple({
             "entry_id": entry.id,
+            "source": JournalProvenance(session.session_file, (entry.require_entry_id(),)),
             "timestamp": entry.timestamp,
             "usage": {
                 "evaluated": entry.message.usage is not None,
@@ -1444,7 +1446,7 @@ class RecordedNativeProbe:
             "submitted_source": submitted,
             "answer": FieldCodec.encode(answer),
             "answer_text": answer.message.authoritative_text,
-            "model_steps": self.model_steps(branch),
+            "model_steps": self.model_steps(self.session, branch),
             "tool_steps": tools,
             "construction": self.construction(evidence, source, source_branch, manifest, checkpoint, texts, serialized, answer, context, submitted_input),
             "scoped_facts": scoped,
