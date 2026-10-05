@@ -3119,9 +3119,11 @@ BLOCKED/ACTIVE observations remain historical, with no goal-tool resume/replay.
   source/wheel/receiving proposal separately; this grants no current access.
 - [ ] Heis460 final06 includes accepted466 in one normal union wheel and fixes
   right-sidebar disclosure plus all related worker observers. The unchanged
-  full150s cold/wheel/width/reversal/End/B-A run is now live with exact controller
-  and child birth identities verified. No result yet. Fast useful paint, frame
-  cadence, CPU and actual loaded scaling remain unfinished.
+  full150s cold/wheel/width/reversal/End/B-A run reached all motion/tab phases
+  but timed out150.143s. Ctrl+Q did not retire the App; original parent recorded
+  forced cleanup. Controller/child are absent; Heis owns cleanup/floor return
+  and shutdown diagnosis. Fast useful paint, frame cadence, CPU and actual
+  loaded scaling remain unfinished.
 - [ ] Complete the original continuous saved/channel/DM/fork/notification/reply/
   handling/queue/status journey. Draft468 is adopted on a separate Heis source
   integration; no current affected configured acceptance is inferred.

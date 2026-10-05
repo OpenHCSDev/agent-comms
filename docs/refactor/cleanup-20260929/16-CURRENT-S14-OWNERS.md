@@ -18,9 +18,14 @@ controls and all three wheel hashes. Bohr issued fresh06 at8bda24bc against fina
 passed in0.236s; NEW native READ05965 and exclusive proof-helperfd749 are bound.
 The one proof passed6.758s with all953 assets/full69 and protected originals
 verified. NEW native EXEC7724 is bound by lifecyclebee4. Heis launched the one
-full150s job; Parent verified controller1682527/b71101208 and child1682564/
-b71101314 alive with exact birth identities. No result or fast wheel/frame/CPU/
-whole-journey acceptance is available yet. Keep the same handle; no second launch.
+full150s job. Its original terminal timed out150.143s/returncode-15; Parent
+verified controller1682527/b71101208 and child1682564/b71101314 absent. Saved
+recorder data reached width, wheel, reversal, End and B/A return; Parent inspected
+the original reversal and A-return images after terminal. The driver finished
+109.717s after capture launch, but Ctrl+Q did not retire the App and the original
+parent recorded signal retirement, so completed=false. This is reached interaction
+evidence, not a successful full run or smooth/FPS/CPU acceptance. Heis owns
+original cleanup/restoration and offline shutdown diagnosis; no second launch.
 
 466 SessionView03 passed the actual mounted check in6.138s: cancellation before
 entry, same-source resume, three coalesced requests and joined close/App and
