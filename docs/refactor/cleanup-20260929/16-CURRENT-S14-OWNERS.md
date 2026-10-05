@@ -3326,3 +3326,12 @@ keepers. Parent matched allfive hashes/lengths and observed both controller
 220UID private references/gaps zero. Arendt owns a new concrete Core-only
 retained3fe stage/read proposal after this closed scope; no new build, SDK input,
 provider call or automatic retry is authorized by the failure.
+
+
+## 2026-10-05 current successor evidence
+
+460 successor03 has a fresh issued package-stage purpose (5171d355), using the unchanged retained wheels and the corrected observer/journal helper roster. Its lifecycle still holds proof and App execution for the matching artifact authority and actual installed proof. No new loading or wheel performance result exists.
+
+678 matching-decoder package stage passed, but its proof command failed before the recorded reader: the caller selected `grant["cwd"]` while the issued command declares the working directory inside the proof phase. The package was restored and whole claim returned. Parent verified all13 raw keeper hashes/lengths and all four recorded controllers absent. This is a preparation operand error; it proves no reader or product failure. The correction belongs to Arendt's proof caller, with Bohr handling the consumed purpose closure and fresh successor. No replay under the consumed purpose.
+
+Agent thread inspection currently fails at the local MCP endpoint, and send_input reports the existing Heis ID unavailable. Filesystem receipts remain available; Parent has not restarted or duplicated either owner's run.
