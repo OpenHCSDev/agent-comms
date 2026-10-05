@@ -1,0 +1,134 @@
+{
+  "state": "FAILED proof phase; original evidence recovered; original floor restored; whole owner claim RETURNED",
+  "issued_grant_sha256": "412e9ce310f3dd80cc1ecec04e5cbde7ec8c1399b0fd8f7807a889b18733ec1c",
+  "source_head": "eb8edcdae050485683fdaa2cc3f49f396f943724",
+  "wheel_sha256": "3fe14077293b691000394831ed7458ecae92afd9b667af4501be2945ab86051d",
+  "original675_all26_evidence_hashes_exact": true,
+  "original_floor": {
+    "state": "PASS",
+    "floor_authority": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Parent673-at-grant-floor-source-readback.json",
+    "floor_records": 510,
+    "Core_assets": 347,
+    "nonCore_keepers": 94,
+    "metadata_files": 69,
+    "distributions": {
+      "pydantic_core": "2.46.5",
+      "typing-inspection": "0.4.4",
+      "metaclass-registry": "0.2.1",
+      "annotated-types": "0.8.0",
+      "typing_extensions": "4.15.0",
+      "pydantic": "2.13.5",
+      "packaging": "26.2",
+      "agent-comms": "0.1.0",
+      "nominal-refactor-audit": "0.1.0",
+      "agent-client-protocol": "0.12.1"
+    },
+    "direct_url": {
+      "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+      "archive_info": {}
+    },
+    "byte_mode_link_failures": [],
+    "ZIP_installed_failures": [],
+    "extra_assets": [],
+    "missing_assets": [],
+    "proof_controller_proc_present": false,
+    "restore_controller_proc_present": false,
+    "restore_child_proc_present": false,
+    "native_processes_started": 0,
+    "SDK_inputs": 0,
+    "native_groups": [],
+    "sockets": []
+  },
+  "READ_grant_sha256": "3363d7d90558340beea5b022aa774d401198ddd83bdb982235402b045e38ed1c",
+  "native_READ_return": "EXPLICIT HAND BACK; first failed phase; keeper remains held",
+  "native_EXEC_issued": false,
+  "seven_native_cases_unrun": true,
+  "public_provider_inputs": 0,
+  "replay": 0,
+  "private_source_auth_history_InputDoc_UNKNOWN_preserved": true,
+  "groups": [],
+  "sockets": [],
+  "evidence": {
+    "failed-proof-phase.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/failed-proof-phase.json",
+      "sha256": "5392dd5e86dbf4244c96b2ec12b6cff7bb6db2a25b04011562d0873c99fe607a",
+      "bytes": 1460
+    },
+    "original675-recovery.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/original675-recovery.json",
+      "sha256": "40676ef1630882bc8bdc0a1ac64613b27f3f282ba691debf84c0e887cfbdd9b3",
+      "bytes": 1233
+    },
+    "prove-installed.py": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/prove-installed.py",
+      "sha256": "794dc3c68e5152214ff81c140b82329838047bbe795dd3358645dd86391391bf",
+      "bytes": 9006
+    },
+    "rebound-source.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/rebound-source.json",
+      "sha256": "e646231774b46c935454d37066e4e37ee129ebe177e8ee730d8dd41aae90cf21",
+      "bytes": 1277
+    },
+    "restore-terminal.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/restore-terminal.json",
+      "sha256": "45695dae4e71ce07e4ee897ce88ef488ee67dacee358e979a1e12c4bd661d6e2",
+      "bytes": 720
+    },
+    "restore.stderr.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/restore.stderr.log",
+      "sha256": "ff3a84bc7936936235c751612a91c8a0f249e9778883e3d6277927234f13f4e4",
+      "bytes": 927
+    },
+    "restore.stdout.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/restore.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "restored-floor-proof.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/restored-floor-proof.json",
+      "sha256": "14e921f51c195f31c77bd10373b351c20cb25e7e7831fa73b156af979857fe35",
+      "bytes": 1135
+    },
+    "run-phase.py": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/run-phase.py",
+      "sha256": "14f34de422b758f172496487bc2e9b21b0d5b8c6e74236d223612892a60852c6",
+      "bytes": 5367
+    },
+    "stage-receipt.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/stage-receipt.json",
+      "sha256": "38be75e717955697a59a00a9b670cdae482de491ab9313314e182a47a609ea6f",
+      "bytes": 996
+    },
+    "stage.stderr.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/stage.stderr.log",
+      "sha256": "0c246ea45cd3a3cb3c11fe72e97a7e394a7ba8e7c59735e7941f572850e974d2",
+      "bytes": 930
+    },
+    "stage.stdout.log": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/stage.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "wrong-output-negative/installed-inventory.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/wrong-output-negative/installed-inventory.json",
+      "sha256": "ebf17deee98766a697a4b64a9e9b04bc4941f0edd7f62af38903f643d40e148c",
+      "bytes": 267949
+    },
+    "wrong-output-negative/installed-requirements.txt": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/wrong-output-negative/installed-requirements.txt",
+      "sha256": "ebb69c9961fe940cb589ba0f25d937430012e8fb81405919ec95b0678ec04632",
+      "bytes": 234
+    },
+    "wrong-output-negative/native-full-trust.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/wrong-output-negative/native-full-trust.json",
+      "sha256": "724ba789110f30995a50a04c1cd2f2b80bccc9a528ea73f03a2988c393239a0e",
+      "bytes": 798
+    },
+    "wrong-output-negative/preservation.json": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/wrong-output-negative/preservation.json",
+      "sha256": "10e9990078897b01a5681f30717a9321930cd8201efa7cf7bebfbc999f7804d5",
+      "bytes": 1491
+    }
+  },
+  "lifecycle_owner": "Bohr; separate independent closure pending"
+}

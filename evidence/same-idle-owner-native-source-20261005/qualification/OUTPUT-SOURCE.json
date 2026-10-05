@@ -1,0 +1,93 @@
+{
+  "state": "SOURCE ONLY; not imported/executed",
+  "before_failed_output": "hardcoded relative67502 output independently of actual issued676 output",
+  "after_owner": "original issued grant source_WT/owned_output/candidate_sourceproof/native_FullTrust_receipt and native_batch.output",
+  "scripts": {
+    "prove-installed.py": {
+      "sha256": "fda79ee25378c16199c5678bbd19ada30912b49b001eb106dabf0dc787b15b9c",
+      "writes": [
+        {
+          "line": 110,
+          "expression": "requirements_path.open('x')"
+        },
+        {
+          "line": 121,
+          "expression": "trust_path.open('x')"
+        },
+        {
+          "line": 123,
+          "expression": "inventory_path.open('x')"
+        },
+        {
+          "line": 145,
+          "expression": "proof_path.open('x')"
+        }
+      ],
+      "destinations": [
+        {
+          "line": 15,
+          "expression": "issued = Path(sys.argv[1])"
+        },
+        {
+          "line": 17,
+          "expression": "read_grant = Path(sys.argv[3])"
+        },
+        {
+          "line": 25,
+          "expression": "output = Path(grant['owned_output'])"
+        },
+        {
+          "line": 26,
+          "expression": "proof_path = Path(grant['candidate_sourceproof'])"
+        },
+        {
+          "line": 27,
+          "expression": "trust_path = Path(grant['native_FullTrust_receipt'])"
+        },
+        {
+          "line": 28,
+          "expression": "inventory_path = output / 'installed-inventory.json'"
+        },
+        {
+          "line": 29,
+          "expression": "requirements_path = output / 'installed-requirements.txt'"
+        }
+      ]
+    },
+    "run-phase.py": {
+      "sha256": "d1d2313e72d32c1502ece911a69c5fa999ec6b32b5c9a2c4bb9cd28ceea0cc94",
+      "writes": [
+        {
+          "line": 32,
+          "expression": "output.mkdir(parents=True)"
+        },
+        {
+          "line": 89,
+          "expression": "(output / 'stdout.log').write_bytes(stdout)"
+        },
+        {
+          "line": 90,
+          "expression": "(output / 'stderr.log').write_bytes(stderr)"
+        },
+        {
+          "line": 102,
+          "expression": "(output / 'terminal.json').write_text(json.dumps(terminal, indent=2) + '\\n')"
+        },
+        {
+          "line": 53,
+          "expression": "(output / 'live-handle.json').write_text(json.dumps({'controller': FieldCodec.encode(child.identity), 'phase': phase, 'lifecycle_sha256': sha(lifecycle_bytes), 'argv': specification['argv'], 'output': str(output), 'started_monotonic': started}, indent=2) + '\\n')"
+        }
+      ],
+      "destinations": [
+        {
+          "line": 12,
+          "expression": "issued = Path(sys.argv[1])"
+        },
+        {
+          "line": 30,
+          "expression": "output = Path(specification['output'])"
+        }
+      ]
+    }
+  }
+}

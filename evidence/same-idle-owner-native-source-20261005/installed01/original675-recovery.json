@@ -1,0 +1,20 @@
+{
+  "state": "EXACT ORIGINAL675 RECOVERY",
+  "recovery": [
+    {
+      "recovered_path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/native-full-trust.json",
+      "authority": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/c3-original-owner-boundaries-20261005/installed02/native-full-trust.json",
+      "sha256": "09c3dc93c1cfc867a02c7e0da3ada61961b50440e1f4e9950213292c230301eb"
+    },
+    {
+      "recovered_path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/installed-inventory.json",
+      "authority": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed/installed-inventory.json",
+      "sha256": "294ae9dd1b2f3df339be0f71864119931e145d0e503d9cb3bed11401f6417e0f"
+    }
+  ],
+  "all_original_evidence": 26,
+  "failures": [],
+  "requirements_bytes_unchanged": true,
+  "original_whole_handback_sha256": "00db81677ce60059b701fc1b9e4e9a125ee53cafbbfbfa32a2c334db180ee442",
+  "negative_preserved": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/wrong-output-negative"
+}

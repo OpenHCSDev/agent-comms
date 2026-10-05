@@ -1,0 +1,23 @@
+{
+  "controller": {
+    "pid": 4112515,
+    "start_time": 68513245
+  },
+  "runner": {
+    "pid": 4112553,
+    "start_time": 68513253
+  },
+  "argv": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "-B",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/same-idle-owner-native-source-20261005/qualification/run-phase.py",
+    "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel676-proof-output-corrected-successor-issued-grant.json",
+    "8072f2dc2da3d859cf9268743fb3034e050ba43fb50ee3b0094286e130df977c"
+  ],
+  "lifecycle_sha256": "84675d71b2376f3931929340825bcefc45440552890de310cce7dfd9bc0908b7",
+  "output": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed02/native01",
+  "state": "PASS",
+  "exit_code": 0,
+  "elapsed_seconds": 66.55946405394934,
+  "runner_proc_present": false
+}
