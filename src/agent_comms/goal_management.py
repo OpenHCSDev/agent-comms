@@ -95,14 +95,7 @@ class Goals:
     ) -> GoalInputReview:
         from .input_disposition import InputDispositions
 
-        goal = thread.goal
-        if goal is None or goal.id != goal_id:
-            raise ValueError("This goal was replaced or cleared; refresh its state.")
-        if not goal.state.active:
-            raise ValueError(
-                (pause.instruction() if (pause := goal.state.pause_source) else None)
-                or "This goal is no longer active; refresh its state."
-            )
+        goal = thread.require_active_goal(goal_id)
         if not wait_for:
             raise ValueError("Standby requires explicit wait_for thread names.")
         resolved = tuple(self.registry.require(target.removeprefix("@")) for target in wait_for)
@@ -337,8 +330,8 @@ class Goals:
         with _store_lock(self._wire_lock_path):
             owner.require_registry(self.registry)
             current = self.registry.require(owner.thread.name)
-            goal, captured = current.active_goal, owner.thread.active_goal
-            if goal is None or captured is None or goal.id != captured.id:
+            goal = current.continuation_goal(owner.thread)
+            if goal is None:
                 return False
             wait = self.waits.for_goal(goal, self.waits.read())
             if wait is None or wait.owner_created_at != current.created_at:
@@ -376,13 +369,9 @@ class Goals:
         """Make an unresolved same-ID attempt visible without losing newer progress."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
-            current = thread.goal
-            if (
-                thread.worktree != expected_worktree
-                or current is None
-                or current.id != started_goal.id
-            ):
-                return current
+            current = thread.goal_for(started_goal.id)
+            if thread.worktree != expected_worktree or current is None:
+                return thread.goal
             blocked = current.after_failed_turn(diagnostic)
             if blocked is current:
                 return current
