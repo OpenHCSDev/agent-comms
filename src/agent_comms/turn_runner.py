@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shlex
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -254,19 +254,13 @@ class TurnRunner:
                 f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'} "
                 f"sent_seq={sent_seq}"
             )
-            if images:
+            if images or agent_task:
                 await InitialInput.run(self.inputs,
                     session_id,
                     thread_name,
                     agent_task or "",
                     images=images,
                     display_text=display_text,
-                    input_id=input_id,
-                    origin=origin,
-                )
-            elif agent_task:
-                await InitialInput.run(self.inputs,
-                    session_id, thread_name, agent_task, display_text=display_text,
                     input_id=input_id,
                     origin=origin,
                 )
@@ -489,10 +483,29 @@ class TurnRunner:
         return self.inputs.backend_inboxes.get(session_id) if state.accepts_followup else None
 
     async def close_idle_backend(self, session_id: str) -> None:
-        if not await Coordination.run_worker(partial(self.session_busy, session_id)) and (
-            persistent := self.persistent_backends.get(session_id)
-        ):
-            await persistent.close_idle()
+        async with self.idle_backend(session_id) as persistent:
+            if persistent is not None:
+                await persistent.close()
+
+    @asynccontextmanager
+    async def idle_backend(self, session_id: str):
+        """Hold this session's turn and child acquisition until an idle effect ends.
+
+        Configuration retirement remains conditional on an idle owner. Source
+        selection uses this same resource and refuses a busy owner. Neither
+        consumer can close a child after a new turn acquired it.
+        """
+        lock = self.turn_locks.setdefault(session_id, asyncio.Lock())
+        if lock.locked():
+            yield None
+            return
+        async with lock:
+            if await Coordination.run_worker(partial(self.session_busy, session_id)):
+                yield None
+                return
+            persistent = self.persistent_backends.setdefault(session_id, backend.PersistentPiSession())
+            async with persistent.lock:
+                yield persistent
 
     async def run_selected(self, session_id: str, execution: SelectedExecution):
         """Selected work and fresh ACP input share this session's one turn lifetime.

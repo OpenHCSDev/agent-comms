@@ -1,0 +1,28 @@
+{
+  "base": "61ccae6d3550a909e0ccccdfcb82c3d9a82b0a05",
+  "runtime": "3.14.7 (main, Aug 10 2026, 07:46:56) [GCC 16.1.1 20260728]",
+  "original_Package_production_parsed": 324,
+  "omissions": [],
+  "source_compilation": {
+    "production": 324,
+    "new_control": 1,
+    "PASS": true
+  },
+  "changed_production": [
+    "src/agent_comms/compaction_records.py",
+    "src/agent_comms/native_input_owner.py",
+    "src/agent_comms/registration.py",
+    "src/agent_comms/registry_document.py",
+    "src/agent_comms/session_lifecycle.py",
+    "src/agent_comms/turn_runner.py"
+  ],
+  "original_input_constructor_calls": [
+    "InitialInput.run(self.inputs, session_id, thread_name, agent_task or '', images=images, display_text=display_text, input_id=input_id, origin=origin)",
+    "InitialInput.run(self.inputs, session_id, thread_name, agent_task, display_text=display_text, input_id=input_id, origin=origin)"
+  ],
+  "current_input_constructor_calls": [
+    "InitialInput.run(self.inputs, session_id, thread_name, agent_task or '', images=images, display_text=display_text, input_id=input_id, origin=origin)"
+  ],
+  "imports_runtime_tests_SDK_provider_package_operations": 0,
+  "limitations": "Compilation and source read only; authored real saved-SDK cancellation/owner-loss/one localhost input controls are unrun. All original675 purposes closed."
+}
