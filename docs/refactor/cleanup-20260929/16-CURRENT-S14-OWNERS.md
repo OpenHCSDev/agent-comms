@@ -57,6 +57,18 @@ child2213485 absent. The receipt proves953 installed assets, all69 packages,
 preserved originals and READ-only native FullTrust. Bohr released the four original
 preparation commands under lifecycle818e78 after independent installed-byte
 readback. Canonical/cohort execution remains pending; public publication is future.
+The four preparation commands passed0.321/0.052/2.690/0.024s and their actual
+parents are absent. Parent independently matched all112 frozen member hashes,
+bytes and modes. Source/target declarations and checkpoint match, selecting
+PreserveRuntimeInstallation and PreserveOwnerRuntime. Final census classification
+and whole handback are still being finished after a bookkeeping root-key error;
+no preparation replay or new publication occurred. Parent's reported once-readback
+path mismatch was WRONG and is withdrawn: parsed actual11b65 command points to
+the existing output-root helperfe0b; canonical directory is only its import path.
+Sch path review1f683 and Parent's new AST read confirm no command correction is
+needed. Original freeze/commands remain unchanged. Parent prepared source-only
+operation receipts under .release-private/receiving475-public-20261005 using the
+original publication capture body and admission owner; neither has executed.
 Receiving preparation advances independently of performance and native guard work.
 Continuous468 controls are now normally landed through474; configured execution,
 loaded scaling and startup/frame/CPU gains remain unfinished. Sch published
@@ -78,7 +90,16 @@ return and real presentation eviction/editor-reader return, reporting each
 entered and verified branch. This is source-only, not installed acceptance.
 Heis owns the remaining configured and genuine loaded source work; Parent has
 authorized one necessary normal Toad build after stable production source,
-with no runtime purpose inferred. Frozen474 receiving inputs remain unchanged.
+with no runtime purpose inferred. Frozen474 receiving inputs remain unchanged. Heis published476 checkpoint
+46256a3e and consumed the one authorized normal cached build0.670s at frozen2ae78.
+New warm wheel61bf6379 differs from4742ece. Parent independently checked all319
+Git/local/ZIP assets,324 RECORD digest/size rows, exact file membership and root
+build inputs: no failures. Mounted acceptance remains UNRUN; no prefix/native
+purpose follows from the build. The lost446 canonical-wire triage consumer was
+restored byte-equal747138; original readonly control and676 SDK fork ownership
+remain intact. Full446 is not yet superseded, and configured/fully-loaded source
+adaptation continues with Heis.
+
 
 MCP472/682 preparation identified an inactive network preload. OriginalSch
 published685 canonical pre-SDK fetch-origin guard; one necessary native assembly
@@ -107,8 +128,13 @@ assessment distinguishes1468 captured members/945 original package assets/full69
 from style22's1477 floor and additionally preserves five original environment
 nodes outside the historical archive. The selected three candidate wheels,
 original four-wheel restore and child-join commands are now bound in the source
-proposal. Parent relayed it to originalBohr successfully. Fresh issue, installed
-proof, matching4b READ/EXEC and actual four-case acceptance are still future.
+proposal. Parent relayed it to originalBohr successfully. Mendel published append-only corrected lifecycle-READ operands33f5aa/source
+3bef6c92: the installed proof consumes the later matching READ from the existing
+lifecycle, avoiding immutable-holder/receipt cyclic hashing, and verifies its
+holder/package/manifest/tree before FullTrust. Original133e/b0dd are preserved;
+two wheel sizes and prefix-specific first pytest suffixes are now truthful.
+Fresh issue, installed proof, matching4b READ/EXEC and actual four-case acceptance
+are still future.
 
 S4 source683 is normally merged208b8f07 after review of complete arm acquisition,
 inputs/cuts/probes and cleanup clocks. Four authored orchestration controls and
