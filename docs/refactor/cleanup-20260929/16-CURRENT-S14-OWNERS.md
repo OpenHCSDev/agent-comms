@@ -45,11 +45,15 @@ MCP472/682 preparation identified an inactive network preload: native bootstrap
 strips NODE_OPTIONS, and immutable7a has no approved origin guard. OriginalSch
 owns the minimal pre-SDK bootstrap source seam; no artifact edit, build or native
 run is authorized by that source task. Mendel owns qualifier setup and independent
-typed mounted preparation. S4 source683 now separates complete arm acquisition,
-inputs/cuts/probes and cleanup clocks; its source controls do not prove configured
-SDK execution. OriginalEinstein published684 source correction for genuine old
-integer-FD writer custody and incarnation-only target acquisition; old/current
-prefixes and execution remain unbound.
+typed mounted preparation. S4 source683 is normally merged208b8f07 after review of complete arm acquisition,
+inputs/cuts/probes and cleanup clocks. Four authored orchestration controls and
+all ten source/raw hashes match; actual configured SDK execution and the paid
+study remain unqualified/unapproved. OriginalEinstein published684 source
+correction for genuine old integer-FD writer custody and incarnation-only target
+acquisition. Parent authorized one normal exact-Git720 source wheel build using
+the verified cached Hatchling backend. This will be a newly built old producer,
+not historical installation proof. Bohr is identifying two existing nonlive
+holders; no stage or old/current qualification run is authorized yet.
 
 Core681 fork-source delivery is actually merged38a0533e at frozen3dc11331.
 Its nine authored source checks support recorded inheritance, not independent

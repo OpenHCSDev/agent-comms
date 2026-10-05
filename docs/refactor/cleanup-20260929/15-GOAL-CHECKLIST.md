@@ -3134,6 +3134,14 @@ BLOCKED/ACTIVE observations remain historical, with no goal-tool resume/replay.
 - [x] Merge working460 at5fc73b1b after actual07 full motion functional PASS,
   graceful UI/st parent exits and independent original-floor closure. Retract the
   mistaken blank-body image reading; original saved text/draft/Ready is visible.
+- [x] Merge S4 separate-arm source683 at208b8f07: shared source/cut execution
+  and copied pair timing are deleted. Authored orchestration/cleanup controls
+  passed; actual configured independent-arm and resource/study acceptance remain
+  unfinished and no paid study or provider run follows from this merge.
+- [ ] Complete genuine old720 writer -> current retained-index qualification.
+  Source684 now uses original integer descriptor and ThreadIncarnation without
+  old-registry decoding. One exact-Git old producer build is authorized; two
+  eligible existing holders and actual installed acceptance still need binding.
 - [ ] Deliver merged460 native71/PathContent into the actual public installation
   through the existing receiver, preserving accepted current Core676 features
   and truthful source/pin/wheel relations. PUBLIC471 remains Text67 today.
