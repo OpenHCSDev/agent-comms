@@ -135,6 +135,12 @@ whole TC1 integration owner; no Editor/Explorer acceptance is repeated for this
 separate affected family. Original453 first failure and frozen Explorer953/107
 remain unchanged; no source count threshold or full resource closure is claimed.
 
+## Current installed project acceptance and independent pending-input source, 2026-10-05
+
+The historical prepared454 control above is now installed-qualified through original457 job2: terminal922fdb69 records exit0 in4.390803s, actual prefix imports, retired controller2728448/birth67867594 and empty cleanup. It exercised the native initial-root highlight, capture/removal/cancelled restore, and same-intent remount with the exact file and saved viewport. Joint457 merged and PUBLIC459 now includes this qualified source. No project control repeat or whole-TC1 threshold is inferred.
+
+Parent re-read the current presentation family: OperationalSessionPresentation.acquire now owns native mounting, pre-binding and editor/reader restoration; the old213 acquisition-copy lead is no longer the current implementation. A separate remaining value relationship is MainScreen._initial_prompt passed by _make_conversation, Conversation._initial_prompt consumed and cleared at readiness, and SessionViewState capturing/overriding the pending value on eviction. The snapshot override preserves the accepted remount path; no observed replay is claimed. Einstein is assigned the complete creation/consumption/mount-failure/eviction/close source pass, coordinating exact shared-file seams directly with Heisenberg before writes. Heisenberg retains whole-TC1 integration and the independent configured-journey controls. Existing renderer operator acceptance may proceed when its fresh purpose releases. No new input policy, package access, provider input or runtime permission follows from this source assignment.
+
 ## Dispatch
 
 > **`toad-tc1`:** Complete TC1 per `docs/refactor/cleanup/TC1-workspace-state.md`, starting with `session_presentation.py` and `transcript_publication.py`, after T9 in each.
