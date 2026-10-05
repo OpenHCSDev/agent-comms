@@ -38,6 +38,21 @@ and accounting remain unfinished; this source work grants no SDK/provider run
 or paid study. OriginalMendel separately owns the related Core MCP qualifier
 consumer migration; its native acceptance remains unrun.
 
+Latest motion result: the sole successor07 run completed exit0 in143.892s
+inside its existing150-second limit; original fixture/capture receipts record
+complete, zero inputs, joined children and empty cleanup. Ctrl+Q exited the
+actual UI and st before retirement, both original parent waits returned0 without
+signals. Parent inspected width, reversal, A-return and Undo images after terminal:
+body and retained draft are visible and Undo clears the draft. These receipts
+qualify the recorder wait change, not FPS/CPU or the whole continuous workflow.
+Focused473 is now normally merged61c053d8 after exact source/owner comparison.
+Heis restored the original four wheels once and returned wholee41bddf1; Bohr
+independent closure is pending. PUBLIC471 source witness returned826ff4c5, so
+Mendel observe02 has launched once after fresh original admission using the
+unchanged corrected helpers. Its result is still pending. Old failures remain
+held. Parent delegated the old/new writer source follow-through to original
+Einstein; no old package build or execution is authorized by that source task.
+
 Latest installed verification: 460 successor05 reached saved-body/draft paint
 and failed its width action because the right SessionThreadSidebar was still
 collapsed. Its floor and claims are independently closed at8aea263f/readbackf876;

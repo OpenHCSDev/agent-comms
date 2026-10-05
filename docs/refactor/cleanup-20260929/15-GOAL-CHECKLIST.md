@@ -3125,15 +3125,22 @@ BLOCKED/ACTIVE observations remain historical, with no goal-tool resume/replay.
   stationary saved-body/Ready/actual exit verification with a copied UI state.
   Observe01 visibly painted saved history/Ready but failed metadata export on the
   retired viewport field; raw failure and whole77fa return are preserved. Reuse
-  Heis existing corrected helper for separate observe02; no18-check ordinary
+  Heis existing corrected helper for separate observe02, now launched once after
+  actual07 source-witness return and fresh admission; result pending. No18-check ordinary
   journey, accepted466 control or speed claim is repeated.
+- [x] Focused recorder473 is merged61c053d8 after the actual successor07 run
+  completed143.892s within150s, with real UI/st parent exits0 before retirement.
+  Changed wait/quit consumers match the tested source; Parent inspected the
+  original width/reversal/A-return/Undo images. No FPS/CPU claim follows.
 - [ ] Heis460 final06 includes accepted466 in one normal union wheel and fixes
   right-sidebar disclosure plus all related worker observers. The unchanged
   full150s cold/wheel/width/reversal/End/B-A run reached all motion/tab phases
   but timed out150.143s. Ctrl+Q did not retire the App; original parent recorded
   forced cleanup. Whole floor and claims independently closed315bc508/readback
   ce1b143f, originals held. Heis owns App shutdown; Mendel traces the disjoint
-  recorder wait/result family. Fast useful paint, frame cadence, CPU and actual
+  recorder wait/result family. The subsequent07 run passed with graceful exits,
+  complete fixture/cleanup receipts and whole floor return; its prior06 failure
+  stays preserved. Fast useful paint, frame cadence, CPU and actual
   loaded scaling remain unfinished.
 - [ ] Complete the original continuous saved/channel/DM/fork/notification/reply/
   handling/queue/status journey. Draft468 is adopted on a separate Heis source
