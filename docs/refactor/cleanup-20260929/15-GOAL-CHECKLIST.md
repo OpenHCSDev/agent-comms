@@ -3,10 +3,12 @@
 The authoritative current installation, active owners, actual verification and remaining defects are recorded once in [16-CURRENT-S14-OWNERS.md](16-CURRENT-S14-OWNERS.md), under its newest dated heading. The full original goal remains active. The dated entries below are historical evidence, not the current live state.
 
 Use the newest current-owner section linked above for installation and acceptance.
-The historical436 and440 entries below must not override current public444 or
-its completed ordinary display verification. Remaining requirements are full performance/workflow,
-W6 authentic Explorer/USER refresh, historical reads and stopped schema carry,
-W7/W8, full S4, and the original cutover writer cross-version restart scope.
+The historical436,440 and444 entries below must not override the current
+publication recorded in16. Authentic AnnotationNode/GUI USER/effective-label
+refresh has passed, and the same-input configured construction reader has
+passed; their original negative receipts remain preserved. Remaining requirements
+are full performance/workflow, historical Explorer read/search/export and stopped
+schema carry, W7/W8, full S4, and the original cutover writer cross-version restart scope.
 The writer current-schema private boundary has passed; that narrower result
 does not establish its cross-version restart. Their current owners, actual evidence and next
 actions are recorded there; source closure and live acceptance remain distinct.
