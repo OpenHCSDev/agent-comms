@@ -1,0 +1,134 @@
+{
+  "state": "PASS at authored genuine9 stopped-copy carry scope; Mendel source and target READ claims returned NOW; Einstein whole package restoration pending",
+  "scope": "actual installed source9 declaration child ONCE, schema10 declaration, stopped custody/refusals/installation/preimages, unchanged original authored15; no public/old corpus/restart/native/UI claim",
+  "elapsed_seconds": 4.738188295043074,
+  "controller": {
+    "pid": 3542281,
+    "birth_ticks": 64027895,
+    "ppid": 3542275,
+    "pgid": 3542275,
+    "state": "R",
+    "cmdline": [
+      "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python",
+      "-B",
+      "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry_controls.py",
+      "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004",
+      "--source-python",
+      "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+      "--stopped-original",
+      "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/stopped-original9"
+    ],
+    "proc_absent": true,
+    "process_exit_trace": "execve(\"/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python\", [\"/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python\", \"-B\", \"/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry_controls.py\", \"/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004\", \"--source-python\", \"/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python\", \"--stopped-original\", \"/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/stopped-original9\"], 0x7ffc4da414c0 /* 114 vars */) = 0\nvfork()                                 = 3542634\n--- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3542634, si_uid=1000, si_status=0, si_utime=100 /* 1.00 s */, si_stime=9 /* 0.09 s */} ---\nwait4(3542634, [{WIFEXITED(s) && WEXITSTATUS(s) == 0}], WNOHANG, NULL) = 3542634\nexit_group(0)                           = ?\n+++ exited with 0 +++\n"
+  },
+  "source_child": {
+    "pid": 3542634,
+    "birth_ticks": 64028035,
+    "ppid": 3542281,
+    "pgid": 3542275,
+    "state": "R",
+    "cmdline": [
+      "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+      "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry.py",
+      "--declaration"
+    ],
+    "proc_absent": true,
+    "process_exit_trace": "execve(\"/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python\", [\"/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python\", \"/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry.py\", \"--declaration\"], 0x7ffe79b19930 /* 114 vars */) = 0\nexit_group(0)                           = ?\n+++ exited with 0 +++\n"
+  },
+  "observed_auxiliary_processes": [
+    {
+      "pid": 3542275,
+      "birth_ticks": 64027894,
+      "ppid": 3542199,
+      "pgid": 3542275,
+      "state": "S",
+      "cmdline": [
+        "/usr/bin/strace",
+        "-ff",
+        "-s",
+        "4096",
+        "-e",
+        "trace=process",
+        "-o",
+        "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/carry-process.trace",
+        "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python",
+        "-B",
+        "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry_controls.py",
+        "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004",
+        "--source-python",
+        "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+        "--stopped-original",
+        "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/stopped-original9"
+      ],
+      "proc_absent": true
+    },
+    {
+      "pid": 3542280,
+      "birth_ticks": 64027895,
+      "ppid": 3542275,
+      "pgid": 3542275,
+      "state": "t",
+      "cmdline": [],
+      "proc_absent": true
+    }
+  ],
+  "group": 3542275,
+  "groups_remaining": [],
+  "sockets": [],
+  "original_release": [
+    9,
+    3,
+    3,
+    6
+  ],
+  "target_release": [
+    10,
+    3,
+    3,
+    6
+  ],
+  "custody_refusals": [
+    "ordinary-reader-original-schema",
+    "existing-candidate",
+    "existing-attempt",
+    "companion",
+    "candidate-change"
+  ],
+  "journal": {
+    "classification": "original-journal-absent",
+    "created": false
+  },
+  "created_empty_tables": [
+    "annotation_requests",
+    "span_annotations"
+  ],
+  "authored_original15_modes_hashes_mtimes_inodes_unchanged": true,
+  "source_selected450_unique_files_unchanged": true,
+  "source_scope": "347Core/94originalkeeper/69metadata logical sets overlap; 450 unique members snapshotted",
+  "target_selected1372_unique_files_unchanged": true,
+  "target_scope": "953 installed module assets plus metadata; whole1469/69/519 restoration belongs Einstein and independent readback Bohr",
+  "source_READ_claim_returned": true,
+  "target_READ_carry_claim_returned": true,
+  "package_writer": "Einstein; sole holder restore/whole return",
+  "shared_lifecycle_writer": "Bohr ONLY",
+  "native_App_provider_input_newseed_copy_public_replay": 0,
+  "issued_target_sha256": "ab31680dffc051b2eafb251ae3f5d5cf1183716d53199a1f670a65d00c757b86",
+  "issued_source_sha256": "d7f12b1c1f092c6123abaf2880ef87c37e1f863f705e26c3000c2574ac53415c",
+  "candidate_source_proof_sha256": "ad826643682378d1326c3eeac243440a07424b65fed195c2625180598c84b01d",
+  "prelaunch_negative": "Recorder metadata mapping shape error before ANY original control/source child launch; separately preserved. Exactly one control executed.",
+  "rawkeepers": {
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/receipt.json": "48236fe4fbb5d604662afa153bdb208a0e054e6db79e7f6b7a2b06ab964dfb65",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/carry-terminal.json": "7b2c37a5b7713292b4b470b677b98a2b735ac268800b62b1ad781dcf15d0edd2",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/target-control.stdout.json": "48236fe4fbb5d604662afa153bdb208a0e054e6db79e7f6b7a2b06ab964dfb65",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/target-control.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/carry-prefix-before.json": "4c8ac103d2113d3fd94a5d11df51cad26a71d7e74cd90f7a7263f39e3ca6bd9f",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/carry-prefix-after.json": "4c8ac103d2113d3fd94a5d11df51cad26a71d7e74cd90f7a7263f39e3ca6bd9f",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/carry-recorder-prelaunch01-negative.json": "7afc515631ad7ffc381d058e22e4362a4efccb130192dda7909df623820044af",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/carry-process.trace.3542281": "c5678c01ad1c4f021b9735d6ab368b9915c7e7250853cb2de9118e8e2e472964",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/carry-process.trace.3542634": "0c3741c4d54e5a0805b5e22824c316d79f459d3c007c9041f8b87f06426685bc",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/original-preimages/reviewed-carry.json": "a972478beb69a212796bf88f7e5e029925088394d96310d5b47d61d80589e255",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/original-preimages/publication-staging.json": "270f1265a4bdefb3acaed9a37bce54b568061fc02e2c192ecc50c586a458d108",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/original-preimages/installed.json": "40558efe189f48c90300511c0eb1f225cf1dd9504e285cf3e8388b0505433678",
+    "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/original-preimages/reviewed-stores.json": "4b052c2b1ef129852beb65841fe40c4dc91f836978e92b8e7c8f0c1696e15abe"
+  }
+}

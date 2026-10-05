@@ -1,0 +1,393 @@
+{
+  "state": "Core-only installed source proof PASS; stopped carry held until Bohr binds this proof; no native/runtime activation",
+  "prefix": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002",
+  "sources": [
+    {
+      "module": "agent_comms",
+      "head": "3aacd708fb9c699cc80c6b864e0ae8cf9ccff7f8",
+      "location": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/agent_comms",
+      "files": 355,
+      "python_files": 324,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "file:///home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-historical-main3aac-source/agent_comms-0.1.0-py3-none-any.whl",
+        "archive_info": {}
+      },
+      "inventory_sha256": "8d0205a430a006157f7616d7c88da838ee7f663256a49aa14e49eb71effd83e7"
+    },
+    {
+      "module": "toad",
+      "head": "51e55c63577714ab25cb334797626b32eeabbc76",
+      "location": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/toad",
+      "files": 319,
+      "python_files": 288,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "file:///home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/transcript442-checkpoint-source-lifetime-20261004/toad-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+        "archive_info": {}
+      },
+      "inventory_sha256": "3fb5356a622ad3a6cbfc9d284143550f04bb5bb3f0562b0a99ffcf75173b2338"
+    },
+    {
+      "module": "textual",
+      "head": "180cbd9471bd6674647590108ca2fe5a627eb24f",
+      "location": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual",
+      "files": 266,
+      "python_files": 249,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "file:///home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native59-filewheel-20261004/textual-8.2.8-py3-none-any.whl",
+        "archive_info": {}
+      },
+      "inventory_sha256": "deb6201c25ca3f9d0dc333e65157c13cc97139569e88d513802beaba2c9559be"
+    },
+    {
+      "module": "textual_diff_view",
+      "head": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+      "location": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/textual_diff_view",
+      "files": 3,
+      "python_files": 2,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "https://github.com/OpenHCSDev/textual-diff-view.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+          "requested_revision": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9"
+        }
+      },
+      "inventory_sha256": "ec4c5f0a4025898ce5d6dd8233c3c7786f860bced717e16d59516d40b8269396"
+    },
+    {
+      "module": "refactor_audit",
+      "head": "9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10",
+      "location": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/lib/python3.14/site-packages/refactor_audit",
+      "files": 10,
+      "python_files": 10,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "file:///home/ts/wt/nra-skill-publish-20261002/.artifacts/family-flattened-collector-20261004/wheels/nominal_refactor_audit-0.1.0-py3-none-any.whl",
+        "archive_info": {}
+      },
+      "inventory_sha256": "b5831ab38127f3351c738fc05e287b8766e0adbd7aa796e5ddc15936adf7bc50"
+    }
+  ],
+  "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent",
+  "native_cli": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+  "native_manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+  "native_tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d",
+  "native_full_trust": false,
+  "sdk": "0.12.1",
+  "package_count": 69,
+  "packages": [
+    [
+      "Jinja2",
+      "3.1.6"
+    ],
+    [
+      "MarkupSafe",
+      "3.0.3"
+    ],
+    [
+      "Pygments",
+      "2.21.0"
+    ],
+    [
+      "agent-client-protocol",
+      "0.12.1"
+    ],
+    [
+      "agent-comms",
+      "0.1.0"
+    ],
+    [
+      "aiohappyeyeballs",
+      "2.7.1"
+    ],
+    [
+      "aiohttp",
+      "3.14.3"
+    ],
+    [
+      "aiohttp-jinja2",
+      "1.6"
+    ],
+    [
+      "aiosignal",
+      "1.4.0"
+    ],
+    [
+      "aiosqlite",
+      "0.22.1"
+    ],
+    [
+      "annotated-types",
+      "0.8.0"
+    ],
+    [
+      "anyio",
+      "4.14.2"
+    ],
+    [
+      "attrs",
+      "26.1.0"
+    ],
+    [
+      "bashlex",
+      "0.18"
+    ],
+    [
+      "batrachian-toad",
+      "0.6.20"
+    ],
+    [
+      "certifi",
+      "2026.7.22"
+    ],
+    [
+      "click",
+      "8.4.0"
+    ],
+    [
+      "format-currency",
+      "0.0.10"
+    ],
+    [
+      "frozenlist",
+      "1.8.0"
+    ],
+    [
+      "h11",
+      "0.16.0"
+    ],
+    [
+      "httpcore",
+      "1.0.9"
+    ],
+    [
+      "httpx",
+      "0.28.1"
+    ],
+    [
+      "idna",
+      "3.20"
+    ],
+    [
+      "jeepney",
+      "0.9.0"
+    ],
+    [
+      "linkify-it-py",
+      "2.2.0"
+    ],
+    [
+      "loguru",
+      "0.6.0"
+    ],
+    [
+      "markdown-it-py",
+      "4.2.0"
+    ],
+    [
+      "mdit-py-plugins",
+      "0.6.1"
+    ],
+    [
+      "mdurl",
+      "0.1.2"
+    ],
+    [
+      "metaclass-registry",
+      "0.2.1"
+    ],
+    [
+      "multidict",
+      "6.9.1"
+    ],
+    [
+      "nominal-refactor-audit",
+      "0.1.0"
+    ],
+    [
+      "notify_py",
+      "0.3.43"
+    ],
+    [
+      "packaging",
+      "26.2"
+    ],
+    [
+      "pathspec",
+      "1.1.1"
+    ],
+    [
+      "platformdirs",
+      "4.9.6"
+    ],
+    [
+      "propcache",
+      "0.5.4"
+    ],
+    [
+      "psutil",
+      "7.2.2"
+    ],
+    [
+      "pydantic",
+      "2.13.5"
+    ],
+    [
+      "pydantic_core",
+      "2.46.5"
+    ],
+    [
+      "pyperclip",
+      "1.11.0"
+    ],
+    [
+      "rich",
+      "15.0.0"
+    ],
+    [
+      "setproctitle",
+      "1.3.7"
+    ],
+    [
+      "textual",
+      "8.2.8"
+    ],
+    [
+      "textual-diff-view",
+      "0.1.5"
+    ],
+    [
+      "textual-serve",
+      "1.1.3"
+    ],
+    [
+      "textual-speedups",
+      "0.2.1"
+    ],
+    [
+      "tree-sitter",
+      "0.26.0"
+    ],
+    [
+      "tree-sitter-bash",
+      "0.25.1"
+    ],
+    [
+      "tree-sitter-css",
+      "0.25.0"
+    ],
+    [
+      "tree-sitter-go",
+      "0.25.0"
+    ],
+    [
+      "tree-sitter-html",
+      "0.23.2"
+    ],
+    [
+      "tree-sitter-java",
+      "0.23.5"
+    ],
+    [
+      "tree-sitter-javascript",
+      "0.25.0"
+    ],
+    [
+      "tree-sitter-json",
+      "0.24.8"
+    ],
+    [
+      "tree-sitter-markdown",
+      "0.5.1"
+    ],
+    [
+      "tree-sitter-python",
+      "0.25.0"
+    ],
+    [
+      "tree-sitter-regex",
+      "0.25.0"
+    ],
+    [
+      "tree-sitter-rust",
+      "0.24.2"
+    ],
+    [
+      "tree-sitter-sql",
+      "0.3.11"
+    ],
+    [
+      "tree-sitter-toml",
+      "0.7.0"
+    ],
+    [
+      "tree-sitter-xml",
+      "0.7.0"
+    ],
+    [
+      "tree-sitter-yaml",
+      "0.7.2"
+    ],
+    [
+      "typeguard",
+      "4.5.2"
+    ],
+    [
+      "typing-inspection",
+      "0.4.4"
+    ],
+    [
+      "typing_extensions",
+      "4.15.0"
+    ],
+    [
+      "watchdog",
+      "6.0.0"
+    ],
+    [
+      "xdg-base-dirs",
+      "6.0.3"
+    ],
+    [
+      "yarl",
+      "1.25.1"
+    ]
+  ],
+  "requirements_sha256": "487cf154ed763652c30a6b365e95a1d7add3f9d1c44d8c3bc550da986dc6f78c",
+  "protected_old_prefix_files": 519,
+  "protected_old_prefix_files_unchanged": true,
+  "public_install_changed": false,
+  "new_native_build": false,
+  "source_overlay": false,
+  "dependency_bypass": false,
+  "journey_owners": [
+    "Original Einstein package writer; original Mendel663 stopped carry operator"
+  ],
+  "journey_assessment": "Core355 + unchanged actualCURRENT444 Toadec36/Text73d/NRA8d/Diff598 assets=953/full69 truthful origins; 519 original files unchanged. Packaged7a resource recorded only, no NativeFullTrust/App/native/SDK/provider/input job. Ordinary target declaration/carry remains unexecuted until explicit lifecycle release.",
+  "archive_artifacts": [
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+      "sha256": "5f1667ce64c58d67e153850be91dfb669ea9e347218f8d845937a1c12c778a9c"
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/transcript442-checkpoint-source-lifetime-20261004/toad-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "sha256": "ec36aaa4546d7c8a00bbb0775eba2aa00b7e2634217a1e9fbdf75a2b18512676"
+    },
+    {
+      "path": "/home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native59-filewheel-20261004/textual-8.2.8-py3-none-any.whl",
+      "sha256": "73d4ca971dd2891c2a2266a0c5c8629e3e0ff55e802456ae60d0fedfe72fdbaa"
+    },
+    {
+      "path": "/home/ts/wt/nra-skill-publish-20261002/.artifacts/family-flattened-collector-20261004/wheels/nominal_refactor_audit-0.1.0-py3-none-any.whl",
+      "sha256": "8d489731728ebf9f7e0f90ef2b14e7e3b5d2f90ed82bd8b1482d735f82869886"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-historical-main3aac-source/agent_comms-0.1.0-py3-none-any.whl",
+      "sha256": "0ed358e9a1d845f3fdceca138d0f2fa02824ac61161b3d8ba9a5e32b1cc3b6e3"
+    }
+  ]
+}

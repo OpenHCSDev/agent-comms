@@ -1,0 +1,1438 @@
+{
+  "revision": "88e8d2f9983df69de876401abf0d3ec506235985",
+  "collector": "original audit.findings.Package / FunctionFacts",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 316,
+      "unparsed": [],
+      "consumers": [
+        {
+          "function": "src/agent_comms/acp_failure.py::from_detail",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/acp_failure.py::declared_input",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/assignment_states.py::binding_expression",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/bus_page_index.py::__init__",
+          "calls": [
+            "members_with",
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "src/agent_comms/bus_route_counts.py::__enter__",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/bus_route_counts.py::sync",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/cli.py::build_parser",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/cli_commands.py::choices",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/cli_commands.py::target_catalog",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/cohort_schema.py::_schema",
+          "calls": [
+            "members_with",
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "src/agent_comms/cohort_schema.py::_install_optional_awareness_schema",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/cohort_schema.py::install_private_cohort_schema",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/compaction_journal.py::retained_history",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/compaction_journal.py::__init__",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/compaction_records.py::exists",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/compaction_states.py::sql_names",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/config_options.py::discover",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/config_options.py::options",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/config_options.py::signature",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/coordinated_runtime_schema.py::_schema",
+          "calls": [
+            "members_with",
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "src/agent_comms/coordination_cohort.py::sealed_cohort_assignments",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/coordination_database.py::_initialize_schema",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/coordination_response.py::_response_schema",
+          "calls": [
+            "members_with",
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "src/agent_comms/coordination_response.py::_assert_response_schema",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/coordination_schema.py::_sql_members",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/coordination_schema.py::_schema_context",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/coordination_schema.py::coordinator_schema",
+          "calls": [
+            "members_with",
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "src/agent_comms/coordination_schema.py::schema_objects",
+          "calls": [
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "src/agent_comms/coordinator.py::install_private_runtime",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/debt_ratchet.py::compare",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/declared_family.py::names",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/field_codec.py::from_wire",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/field_codec.py::_family_schema",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/fresh_private_session.py::require_valid",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/fresh_private_session.py::require_valid",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/fresh_private_session.py::require_runtime",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/goal_actions.py::model_choices",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/goal_attempts.py::record_verified_progress",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/goal_attempts.py::record_verified_completion",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/goal_attempts.py::record_provider_usage",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/goal_attempts.py::initialize",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/goal_attempts.py::claim_launch",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/goal_attempts.py::write",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/goal_attempts.py::write",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/goal_attempts.py::write",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/goal_attempts.py::write",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/goal_failure_observation.py::declared_schema",
+          "calls": [
+            "members_with",
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "src/agent_comms/goal_history.py::_initialize",
+          "calls": [
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "src/agent_comms/goal_states.py::successors",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/import_records.py::for_path",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/importing.py::read",
+          "calls": [
+            "rebuild"
+          ]
+        },
+        {
+          "function": "src/agent_comms/lifecycle.py::transition_table",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/native_arguments.py::parse",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/native_input_record.py::sql_constraint",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/native_pi.py::native_contract",
+          "calls": [
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "src/agent_comms/native_pi.py::open_evidence",
+          "calls": [
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "src/agent_comms/native_runtime_input.py::source_membership_sql",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/owner_compaction_commit.py::compact_selected",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/owner_compaction_commit.py::require_source_current",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/owner_compaction_commit.py::settle_selected_refusal",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/owner_compaction_commit.py::commit",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/owner_compaction_commit.py::admit_selected_decline",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/owner_compaction_commit.py::admit_selected_original",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/owner_compaction_commit.py::summarize",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/owner_restart.py::require_selection",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/owner_restart.py::_launch",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/pi_events.py::wire_case",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/pi_vocabulary.py::selected_names",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/private_bus_checkpoint.py::_saved",
+          "calls": [
+            "members_with",
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "src/agent_comms/private_bus_checkpoint.py::install_private_bus_checkpoint",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/private_bus_checkpoint.py::_recover_pending_unlocked",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/private_bus_checkpoint.py::capture_sources",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/private_bus_checkpoint.py::references",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/private_bus_checkpoint.py::delivery",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/private_bus_checkpoint.py::addressed_page",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/private_bus_checkpoint.py::conversation_sources",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/private_bus_checkpoint.py::indexed_context_manifests",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/private_bus_checkpoint.py::keyed_receipt",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/private_bus_checkpoint.py::read_witness",
+          "calls": [
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "src/agent_comms/private_path.py::violation",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/private_sidecar.py::_schema",
+          "calls": [
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "src/agent_comms/recovery_projection.py::project",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/registration.py::guard_owner_compaction",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/reservation_rules.py::require_valid",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/restart_queue.py::step",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/selected_actions.py::apply",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/selected_summary_admission.py::_from_returned_ack",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/selected_triage.py::output_values",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/selected_triage.py::continue_turn",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/selected_triage.py::schema",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/selected_triage.py::sql_constraint",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/selected_turn.py::engage",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/selected_turn.py::run",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/selected_write_authority.py::select",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/task_sources.py::require_human_context",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/task_sources.py::select",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/task_sources.py::require_emission",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/task_sources.py::require_wording_publication",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/tools.py::tool_catalog",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/tools.py::context_tool_catalog",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/transcript_routes.py::_declared_schema",
+          "calls": [
+            "members_with",
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "src/agent_comms/transcript_routes.py::_ensure_database",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/turn_output.py::settle",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/turn_phase.py::on",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/typed_table.py::for_type",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/typed_table.py::ddl",
+          "calls": [
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "src/agent_comms/view_unread.py::_database",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/wake_candidate_index.py::_schema",
+          "calls": [
+            "members_with",
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "src/agent_comms/wake_policy.py::mode",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/wake_policy.py::verdict_expression",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "src/agent_comms/wire_log.py::_certified_source",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/wire_log.py::conversation_sources",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/wire_log.py::delivery_cohorts_unlocked",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/wire_log.py::_keyed_receipt_unlocked",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/wire_metadata.py::verify_checkpoint",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "src/agent_comms/wire_metadata.py::context_manifests",
+          "calls": [
+            "require_current"
+          ]
+        }
+      ]
+    },
+    {
+      "root": "tools/cutover",
+      "parsed": 52,
+      "unparsed": [],
+      "consumers": [
+        {
+          "function": "tools/cutover/checkpoint_schema.py::declared_schema_digest",
+          "calls": [
+            "members_with",
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "tools/cutover/launch_thread_retirement.py::main",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tools/cutover/native_schema_carry.py::carry_goal",
+          "calls": [
+            "members_with",
+            "rebuild"
+          ]
+        },
+        {
+          "function": "tools/cutover/native_schema_carry.py::carry_coordination",
+          "calls": [
+            "members_with",
+            "rebuild",
+            "require_carry_target",
+            "require_coordination"
+          ]
+        },
+        {
+          "function": "tools/cutover/native_schema_carry.py::carry_compaction",
+          "calls": [
+            "rebuild",
+            "require_carry_target"
+          ]
+        },
+        {
+          "function": "tools/cutover/native_schema_carry.py::observe",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tools/cutover/native_schema_carry.py::observe_goal",
+          "calls": [
+            "members_with",
+            "schema_objects"
+          ]
+        },
+        {
+          "function": "tools/cutover/native_schema_carry.py::capture_requests",
+          "calls": [
+            "require_carry_target"
+          ]
+        },
+        {
+          "function": "tools/cutover/native_schema_carry.py::carry_journal_members",
+          "calls": [
+            "members_with",
+            "rebuild",
+            "require_carry_target"
+          ]
+        },
+        {
+          "function": "tools/cutover/native_schema_carry.py::paths",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tools/cutover/native_schema_carry.py::carry",
+          "calls": [
+            "carry_coordination"
+          ]
+        },
+        {
+          "function": "tools/cutover/native_schema_carry.py::prepare",
+          "calls": [
+            "members_with",
+            "require_carry_target"
+          ]
+        },
+        {
+          "function": "tools/cutover/native_schema_carry.py::require_candidate",
+          "calls": [
+            "require_carry_target"
+          ]
+        },
+        {
+          "function": "tools/cutover/native_schema_carry_controls.py::run_journal_inventory",
+          "calls": [
+            "require_carry_target"
+          ]
+        },
+        {
+          "function": "tools/cutover/native_schema_carry_controls.py::run",
+          "calls": [
+            "CarryNativeRuntimeInstallation",
+            "members_with",
+            "require_carry_target",
+            "require_coordination",
+            "require_current"
+          ]
+        },
+        {
+          "function": "tools/cutover/original_owner_capture.py::read",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tools/cutover/original_owner_capture.py::require_current",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tools/cutover/original_owner_capture_installed_pilot.py::main",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tools/cutover/publish_openhcs_recovery.py::require_selection",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tools/cutover/publish_retained_summary.py::require_selection",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tools/cutover/read_original_owner.py::main",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tools/cutover/read_original_task_preimage.py::capture_original",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tools/cutover/retained_task_writer.py::main",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tools/cutover/routing_carry.py::tables",
+          "calls": [
+            "members_with"
+          ]
+        }
+      ]
+    },
+    {
+      "root": "tests",
+      "parsed": 368,
+      "unparsed": [],
+      "consumers": [
+        {
+          "function": "tests/guards/test_coordination_ownership.py::test_coordinator_row_family_stays_within_original_s7_module_and_method_limits",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/guards/test_pi_vocabulary_ownership.py::test_summary_members_own_the_response_contract",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/guards/test_sealed_mechanisms.py::test_all_mechanisms_reject_external_adapters_and_keep_owned_implementations",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/round2/test_typed_table.py::test_declared_table_family",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/session_coverage_configured_journey.py::qualify",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tests/session_coverage_configured_journey.py::capture_source",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tests/summary_prefix_configured_installed_journey.py::main",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tests/summary_prefix_configured_installed_journey.py::capture_source",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tests/test_acp_extension.py::test_declared_family_roundtrip_and_strict_boundary",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_acp_extension.py::test_request_family_strict_boundary",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_acp_failure.py::test_disposition_derives_from_shared_input_owner",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_declared_family.py::test_golden_names_decode_capability_and_slots_identity",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_export_families.py::test_family_names_and_boundary_decoding",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_goal_block_reason.py::test_missing_or_blank_block_reason_rejects_without_side_effects",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_goal_block_reason.py::test_block_reason_round_trips_goal_execution_history_and_tool",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_goal_history.py::test_goal_history_records_transitions_replacement_clear_and_rename",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_goal_input_review.py::test_inspected_canonical_dependencies_allow_standby_without_replay",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_goal_nominal.py::test_experiment_b_new_model_action_uses_real_tool_and_event",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_goal_owner_pause.py::test_owner_pause_survives_reopen_and_explains_stale_model_report",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_goals.py::test_goal_survives_rename_and_reregistration",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_goals.py::test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_goals.py::test_agent_can_set_its_own_persistent_goal",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_native_admission_rules.py::test_durable_private_admission_names_each_changed_authority",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_native_admission_rules.py::inspect_before_native",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_native_arguments.py::test_option_declaration_extends_consumption_rendering_and_mode_validation",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_native_file_artifact.py::test_original_file_operation_survives_later_file_change_and_branch_cut",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tests/test_native_fork_first_input.py::test_underbudget_physical_native_owner_answers_without_compaction",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_native_tool_declarations.py::test_new_tool_declaration_drives_presentation_without_coding_permission",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_pi_rpc_nominal.py::test_new_excursion_declares_both_transitions_without_dispatch_edits",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_pi_rpc_nominal.py::test_external_formats_are_derived_and_pin_wire_spellings",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_private_idle_drain.py::test_certified_observation_waits_and_joins_its_owned_worker",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tests/test_private_idle_drain.py::consume",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tests/test_private_idle_drain.py::refuse",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tests/test_reservation_rules.py::test_rule_family_names_actual_refusals_and_discovers_new_policy",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_restart_queue_structure.py::test_each_restart_refusal_declares_its_unsignalled_queue_disposition",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_s1_event_behavior.py::test_current_stream_effects_then_terminal_release",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_s3_legality_behavior.py::members",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_stack_goal_pause.py::test_mounted_owner_pause_preserves_success_and_explains_late_report",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_task_decisions.py::test_original_goal_input_and_user_sources_share_compaction_fence",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tests/test_task_decisions.py::test_cross_audience_corrections_capture_only_eligible_owned_lineage",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tests/test_thread_status.py::test_saved_presence_roundtrip_and_wire_views_preserve_data",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/test_thread_status.py::test_roster_and_controls_keep_archived_threads_dormant",
+          "calls": [
+            "members_with"
+          ]
+        },
+        {
+          "function": "tests/three_cut_retention_configured_journey.py::condition_application",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tests/three_cut_retention_configured_journey.py::request_construction",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tests/three_cut_retention_configured_journey.py::run",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tests/three_cut_retention_configured_journey.py::capture_source",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tests/three_cut_retention_configured_journey.py::capture_source",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tests/three_cut_retention_configured_journey.py::capture_source",
+          "calls": [
+            "require_current"
+          ]
+        },
+        {
+          "function": "tests/turn_context_installed_journey.py::run_configured",
+          "calls": [
+            "require_current"
+          ]
+        }
+      ]
+    }
+  ],
+  "dynamic_limit": "Attribute calls and metaclass dispatch read semantically, not dynamically resolved by AST.",
+  "changed_owner_methods": [
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 398,
+      "end": 474,
+      "name": "carry_coordination",
+      "arguments": "db, original, target",
+      "calls": [
+        "ValueError",
+        "any",
+        "execute",
+        "executemany",
+        "fetchall",
+        "get",
+        "inventory",
+        "items",
+        "keys",
+        "len",
+        "list",
+        "members_with",
+        "objects",
+        "rebuild",
+        "require_carry_target",
+        "require_coordination",
+        "row_digest",
+        "rows",
+        "select",
+        "sorted",
+        "zip"
+      ]
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 156,
+      "end": 187,
+      "name": "require_carry_target",
+      "arguments": "self, target",
+      "calls": [
+        "ValueError",
+        "dict",
+        "items"
+      ]
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 739,
+      "end": 749,
+      "name": "install",
+      "arguments": "self, destination",
+      "calls": [
+        "ExitStack",
+        "RuntimeNativeFiles",
+        "ValueError",
+        "acquire",
+        "any",
+        "enter_context",
+        "install_prepared",
+        "require_candidate",
+        "set"
+      ]
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 752,
+      "end": 758,
+      "name": "install_prepared",
+      "arguments": "root, candidate, stores, acquired, destination, review, classification='runtime/declaration-original-source-carry'",
+      "calls": [
+        "ExitStack",
+        "publish_prepared",
+        "publisher"
+      ]
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 113,
+      "end": 236,
+      "name": "run",
+      "arguments": "base, source_python, root",
+      "calls": [
+        "AssertionError",
+        "CarryNativeRuntimeInstallation",
+        "CompactionJournal",
+        "CoordinationSession",
+        "RuntimeCompactionFiles",
+        "RuntimeNativeFiles",
+        "ValueError",
+        "absolute",
+        "acquire",
+        "any",
+        "append",
+        "as_uri",
+        "closing",
+        "connect",
+        "decode",
+        "digest",
+        "dumps",
+        "encode",
+        "execute",
+        "exists",
+        "frozenset",
+        "get",
+        "install",
+        "is_relative_to",
+        "is_symlink",
+        "items",
+        "journal_observation",
+        "len",
+        "list",
+        "loads",
+        "lstat",
+        "members_with",
+        "mkdir",
+        "next",
+        "observe",
+        "original_declaration",
+        "original_goal",
+        "read",
+        "read_bytes",
+        "read_text",
+        "replace",
+        "require",
+        "require_candidate",
+        "require_carry_target",
+        "require_coordination",
+        "require_current",
+        "require_journal_preserved",
+        "resolve",
+        "select",
+        "transaction",
+        "unchanged_protected",
+        "unlink",
+        "write_bytes",
+        "write_original"
+      ]
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 31,
+      "end": 31,
+      "name": "install",
+      "arguments": "self, acquired: AcquiredRuntimeFiles, destination: Path",
+      "calls": []
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 41,
+      "end": 44,
+      "name": "install",
+      "arguments": "self, acquired, destination",
+      "calls": []
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 53,
+      "end": 54,
+      "name": "install",
+      "arguments": "self, acquired, destination",
+      "calls": []
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 72,
+      "end": 82,
+      "name": "install",
+      "arguments": "self, acquired, destination",
+      "calls": []
+    }
+  ],
+  "control_correction_at": "88e8d2f9983df69de876401abf0d3ec506235985",
+  "corrected_tool_root": {
+    "root": "tools/cutover",
+    "parsed": 52,
+    "unparsed": [],
+    "consumers": [
+      {
+        "function": "tools/cutover/native_schema_carry.py::carry_goal",
+        "calls": [
+          "rebuild"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry.py::carry_coordination",
+        "calls": [
+          "rebuild",
+          "require_carry_target",
+          "require_coordination"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry.py::carry_compaction",
+        "calls": [
+          "rebuild",
+          "require_carry_target"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry.py::capture_requests",
+        "calls": [
+          "require_carry_target"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry.py::carry_journal_members",
+        "calls": [
+          "rebuild",
+          "require_carry_target"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry.py::carry",
+        "calls": [
+          "carry_coordination"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry.py::prepare",
+        "calls": [
+          "require_carry_target"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry.py::require_candidate",
+        "calls": [
+          "require_carry_target"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry_controls.py::run_journal_inventory",
+        "calls": [
+          "require_carry_target"
+        ]
+      },
+      {
+        "function": "tools/cutover/native_schema_carry_controls.py::run",
+        "calls": [
+          "install",
+          "observing",
+          "read",
+          "require_carry_target",
+          "require_coordination",
+          "require_current"
+        ]
+      },
+      {
+        "function": "tools/cutover/runtime_installation.py::install",
+        "calls": [
+          "install",
+          "prepare"
+        ]
+      }
+    ]
+  }
+}

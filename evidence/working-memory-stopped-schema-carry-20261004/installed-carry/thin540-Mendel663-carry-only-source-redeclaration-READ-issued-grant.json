@@ -1,0 +1,81 @@
+{
+  "issued_at": 1791164215.6826518,
+  "Parent_explicit_authorization": "Final exact b9d25/d019 Core-only staged stoppedcarry, separate source declaration READ; no further Parent/docs/Debt/quiet gate",
+  "Core_proposal": "/home/ts/wt/comms-field-codec-closure-20260928/evidence/working-memory-20261004/stopped-carry-core-only-next-operands.json",
+  "Core_proposal_sha256": "b9d25f621510bd2364bdbff53bb1d6eadcad36a898d9517f4135f17bfd5b1fa0",
+  "Mendel_proposal": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/working-memory-stopped-schema-carry-20261004/CARRY-ONLY-OPERANDS.json",
+  "Mendel_proposal_sha256": "d01951bb395119b0efecb9b784c931d6f6a97d8bc649e96f48f05a791f06bca5",
+  "tools_source": "88e8d2f9983df69de876401abf0d3ec506235985",
+  "tool_hashes": {
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry.py": "08d5b673910f96634ad017eb7e8224cb440e5b5cfea7c07d597b3ddf0f209c2b",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry_controls.py": "450678fe8a510273f89aad9c9bcc260eab52d1f25be58f24b3056821df930420",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/runtime_installation.py": "77841672b6d9d99e3cb4c724706ffdad7eefd604aab583743f2e4b341156224c"
+  },
+  "original_recipe_sha256": "b3afc8496e4dc016179f56ebfd177c338cbd6c7e112a74e697352f4f60c8cf04",
+  "original_source_donor_handback": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004/source-donor-whole-handback.json",
+  "original_source_donor_handback_sha256": "7f827a066132799f487345cbe54644c6aca1a03af3ad88149665e4f21b17a0b8",
+  "specific_floor_operands_readback": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/Mendel663-carry-only-current-main-specific-floors-operands-readback.json",
+  "specific_floor_operands_readback_sha256": "3ec221d53208d93b9019a6131fba692acc67e2a11f8d20e02c72aa0f7d05a6c1",
+  "fresh_at_grant_borrowers": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/Mendel663-carry-only-current-main-at-grant-borrowers.json",
+  "fresh_at_grant_borrowers_sha256": "3308e93d437d51d6ecef3c81c886bb8ac47780e2636de478311cc92f64068046",
+  "all_uid_processes": 239,
+  "actual_refs": 0,
+  "permission_gaps": 0,
+  "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+  "environment": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "ABSENT"
+  },
+  "issued_bytes_immutable": true,
+  "shared_lifecycle_writer": "Bohr only",
+  "public_CURRENT334447_protected": true,
+  "new_archive_build_env_native_App_provider_input_fork_movie_seed_replay_authorized": false,
+  "no_nextloan_or_retry_inferred": true,
+  "resource_warning": {
+    "HOME_free_GiB": 6.0,
+    "root_free_GiB": 6.1,
+    "RAM_available_GiB": 8.1,
+    "swap_used_GiB": 17.8,
+    "critical_warning": true,
+    "scope": "one small retained Core-only wheel stage, serial declarations/SQLite carry; no build/App/native/provider/fleet/newenv"
+  },
+  "state": "NEW soleMendel663 THIN540 immutable import/source-declaration READ purpose; only original target control child ONCE",
+  "recipient": "01a0eed6-20e1-7b80-988b-cc860742a21d",
+  "prefix": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002",
+  "source_python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+  "authorized_child_argv": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry.py",
+    "--declaration"
+  ],
+  "child_entry": "Exactly original_declaration(source_python) in the ONE exact target native_schema_carry_controls.run, captured stdout/stderr/check=True/timeout30; no manual duplicate declaration/seed",
+  "source_child_limit": 1,
+  "source_tuple_expected": [
+    9,
+    3,
+    3,
+    6
+  ],
+  "source_reference": "Original unchanged6565f347 assets/94 original keepers/69 metadatafiles/10 distributions/truthful filewheel origin; no source package/runtime data writes",
+  "source_baseline": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel661-current-floor-source-readback.json",
+  "source_baseline_sha256": "9fada6a0c37736919790e60e1700be02606361738ad38c2f59c248a98a18140c",
+  "source_direct_url": {
+    "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "source_installed_assets": 347,
+  "noncore_original_keepers": 94,
+  "metadata_files": 69,
+  "normal_distributions": 10,
+  "source_authorized_now": true,
+  "read_execution_entry_condition": "Mendel must read this literal issued grant and matching target grant; source child consumed only after target installed proof bound/target carry released, never standalone donor probe",
+  "package_install_build_restore_dependency_env_source_overlay_authorized": false,
+  "native_artifact_READ_execution_authorized": false,
+  "authored_producer_seed_copy_authorized": false,
+  "source_original_auth_history_UNKNOWN_unchanged": true,
+  "owner_output": "/home/ts/.cache/agent-scratch/mendel-working-memory-carry663-authored01-20261004",
+  "source_child_required_receipt": "Exact argv, installed source declaration/stdout, child PID/birth/exit/groups joined in carry owner receipts; source wholefloor unchanged347/94/69metadata/10/origin and explicit return",
+  "separate_target_issued_grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/style22-Einstein-Mendel663-Core-only-stopped-carry-issued-grant.json",
+  "separate_target_lifecycle": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/style22-Einstein-Mendel663-Core-only-stopped-carry-lifecycle.json",
+  "lifecycle": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel663-carry-only-source-redeclaration-READ-lifecycle.json"
+}
