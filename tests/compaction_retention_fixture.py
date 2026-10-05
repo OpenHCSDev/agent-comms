@@ -259,7 +259,8 @@ class RecordedNativeProbes:
         if {row.native_id for row in document.rows.values() if row.has_started} != {
                 probe.input_id for probe in self.inputs} or len(document.rows) != len(self.rounds) + len(self.stimuli):
             raise ValueError("Continuation cannot include an unrecorded or uncertain input")
-        with NativeEntry.open_evidence(Path(path)) as evidence:
+        with RecordedNativeProbe.original_readers(self.inputs, selected.values()) as sources:
+            evidence = sources[Path(path)]
             _, entries = evidence.observe()
             terminals = []
             for cut in selected.values():
@@ -267,7 +268,7 @@ class RecordedNativeProbes:
                 terminals.append(entry)
             for probe in self.inputs:
                 session.require_same_session(probe.session)
-                probe.read(evidence, evidence)
+                probe.read(evidence, evidence, sources)
                 if probe.sdk_context is None or probe.submitted_inputs is None:
                     raise ValueError("Continuation requires the original SDK request capture")
                 from agent_comms.input_disposition import InputDocument
@@ -328,7 +329,7 @@ class RecordedNativeProbes:
         expected = {item['round']: item['source_text'] for item in
                     scenario.construction_rounds()} if self.stimuli else {}
         stimuli = {identity: probe.read(sources[Path(probe.session.session_file)],
-                                        sources[probe.checkpoint_source])
+                                        sources[probe.checkpoint_source], sources)
                    for identity, probe in self.stimuli.items()}
         previous = None
         for identity, checkpoint in cuts:
@@ -340,7 +341,7 @@ class RecordedNativeProbes:
             report = checkpoint._report(*captured)
             if identity in stimuli:
                 stimuli[identity]['source_delivery'] = self.stimuli[identity].source_delivery(
-                    expected[identity], stimuli[identity], evidence, entry.id, None)
+                    expected[identity], stimuli[identity], evidence, entry.id, journal=checkpoint.journal, sources=sources)
             if previous is not None:
                 prior_round, old, before, prior_session = previous
                 prior_session.require_same_session(session)
@@ -355,12 +356,12 @@ class RecordedNativeProbes:
                 reports[identity]["revision_mass"] = measured
         for identity, probe in self.rounds.items():
             observations[identity] = probe.read(sources[Path(probe.session.session_file)],
-                                                sources[probe.checkpoint_source])
+                                                sources[probe.checkpoint_source], sources)
             if identity in stimuli and identity not in selected:
                 observed = observations[identity]
                 stimuli[identity]['source_delivery'] = self.stimuli[identity].source_delivery(
                     expected[identity], stimuli[identity], sources[Path(probe.session.session_file)],
-                    observed['native_input'].session_entry_id, observed['construction']['fork'])
+                    observed['native_input'].session_entry_id, journal=probe.original_journal, sources=sources)
         for identity, observed in stimuli.items():
             if 'source_delivery' not in observed:
                 observed['source_delivery'] = {'evaluated': False,

@@ -439,6 +439,25 @@ class NativeForkCreation(NativeSessionIdentity, SessionJournalHistory, TypedTabl
             raise CompactionJournalError("Recorded native fork ancestor position differs")
 
     @staticmethod
+    def inherits_recorded_entries(ancestry, original: NativeSessionIdentity, identities, sources) -> bool:
+        """Corroborate original member inheritance through every returned edge.
+
+        Missing the original anchor is unavailable. An observed edge that does
+        not carry the original members contradicts inheritance and refuses.
+        Prefix and acquired position validation stay with their existing owners.
+        """
+        selected = next((index for index, creation in enumerate(ancestry)
+                         if creation.source.same_session(original)), None)
+        if selected is None:
+            return False
+        for creation in ancestry[:selected + 1]:
+            evidence = sources[creation.path]
+            _, entries = evidence.observe()
+            if not identities <= creation.covered_prefix(evidence, entries):
+                raise CompactionJournalError("Original stimulus is outside a recorded SDK inherited prefix")
+        return True
+
+    @staticmethod
     def common_recorded_source(
         left: tuple[NativeForkCreation, ...], right: tuple[NativeForkCreation, ...],
     ) -> tuple[NativeForkCreation, NativeForkCreation] | None:

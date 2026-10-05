@@ -869,7 +869,7 @@ class RecordedNativeProbe:
                                  "source": FieldCodec.encode(row.context_provenance()),
                                  "turn_id": row.turn_id}, row
 
-    def source_delivery(self, expected, original, evidence, boundary_entry, fork):
+    def source_delivery(self, expected, original, evidence, boundary_entry, *, journal, sources):
         """Bind authored source to an original input before a cut/probe.
 
         Branch membership comes from the acquired native reader. A different
@@ -884,11 +884,9 @@ class RecordedNativeProbe:
         source = original['native_input']
         identities = {source.session_entry_id, self.answer_entry_id}
         if not self.session.same_session(selected):
-            if fork is None:
-                raise ValueError('Original stimulus lacks matching SDK ancestry')
-            fork.source.require_same_session(self.session)
-            if not identities <= fork.covered_prefix(evidence, entries):
-                raise ValueError('Original stimulus is outside the SDK inherited prefix')
+            ancestry = self.fork_ancestry(journal, evidence, sources)
+            if not NativeForkCreation.inherits_recorded_entries(ancestry, self.session, identities, sources):
+                return {'evaluated': False, 'reason': 'Original stimulus lacks corroborated recorded SDK ancestry'}
         before = {entry.require_entry_id() for entry in evidence.branch(boundary_entry, entries)[:-1]}
         if not identities <= before:
             raise ValueError('Original stimulus does not precede its selected boundary')
@@ -1234,51 +1232,57 @@ class RecordedNativeProbe:
         return Path(self.checkpoint.reference.session_file if self.checkpoint is not None
                     else self.session.session_file)
 
+    @property
+    def original_journal(self):
+        """The original fork/cut record role, never an inferred journal."""
+        return self.fork_journal if self.fork_journal is not None else (
+            self.checkpoint.journal if self.checkpoint is not None else None)
+
     @classmethod
     @contextmanager
     def original_readers(cls, probes, checkpoints=()):
-        """Acquire each declared original once for this bounded measurement.
+        """Acquire declared originals and recorded children once per measurement.
 
-        Child and parent must coexist for SDK inheritance corroboration. These
-        are only acquired descriptors/decoded bytes; every observation still
-        checks its original prefix and every fork still needs its creation.
+        Returned SDK rows add only recorded children; an unrecorded donor is
+        never inferred/opened. Delivery and construction borrow the same readers.
+        Every observation still checks bytes; these resources grant no proof.
         """
+        probes, checkpoints = tuple(probes), tuple(checkpoints)
         paths = dict.fromkeys(chain.from_iterable(
             (Path(probe.session.session_file), probe.checkpoint_source) for probe in probes))
         paths.update(dict.fromkeys(Path(cut.reference.session_file) for cut in checkpoints))
+        targets = ((probe.session.session_file, probe.original_journal) for probe in probes)
+        cuts = ((cut.reference.session_file, cut.journal) for cut in checkpoints)
+        for canonical, journal in chain(targets, cuts):
+            if journal is not None:
+                ancestry = CompactionJournal.observe_readonly(journal, lambda db:
+                    NativeForkCreation.recorded_ancestry(db, canonical), absent=())
+                paths.update(dict.fromkeys(creation.path for creation in ancestry))
         with ExitStack() as resources:
             yield {path: resources.enter_context(NativeEntry.open_evidence(path)) for path in paths}
 
     def observe(self):
         with self.original_readers((self,)) as sources:
-            return self.read(sources[Path(self.session.session_file)], sources[self.checkpoint_source])
+            return self.read(sources[Path(self.session.session_file)], sources[self.checkpoint_source], sources)
 
-    def fork_ancestry(self, evidence, parent):
-        """Corroborate recorded edges through existing bounded reader resources.
-
-        Child/checkpoint descriptors are borrowed. Other recorded children, if
-        any, are opened once and closed here; the unrecorded donor is not read.
-        No parent is inferred from file headers or a condition label.
-        """
-        journal = self.fork_journal if self.fork_journal is not None else (
-            self.checkpoint.journal if self.checkpoint is not None else None)
+    @staticmethod
+    def fork_ancestry(journal, evidence, sources):
+        """Corroborate actual returned edges with already acquired readers."""
         if journal is None:
             return ()
         ancestry = CompactionJournal.observe_readonly(journal, lambda db:
-            NativeForkCreation.recorded_ancestry(db, self.session.session_file), absent=())
-        with ExitStack() as resources:
-            sources = {evidence.source.path: evidence, parent.source.path: parent}
-            for creation in ancestry:
-                if creation.path not in sources:
-                    sources[creation.path] = resources.enter_context(NativeEntry.open_evidence(creation.path))
-                reader = sources[creation.path]
-                _, entries = reader.observe()
-                creation.require_original_prefix(reader, entries)
-            for creation, predecessor in zip(ancestry, ancestry[1:]):
-                creation.require_inherited_creation(predecessor, sources[predecessor.path])
-            return ancestry
+            NativeForkCreation.recorded_ancestry(db, str(evidence.source.path)), absent=())
+        for creation in ancestry:
+            if creation.path not in sources:
+                return ()
+            reader = sources[creation.path]
+            _, entries = reader.observe()
+            creation.require_original_prefix(reader, entries)
+        for creation, predecessor in zip(ancestry, ancestry[1:]):
+            creation.require_inherited_creation(predecessor, sources[predecessor.path])
+        return ancestry
 
-    def construction(self, evidence, parent, branch, manifest, checkpoint, texts, serialized, answer, context, submitted):
+    def construction(self, evidence, parent, branch, manifest, checkpoint, texts, serialized, answer, context, submitted, sources):
         """Corroborate original SDK source references, not a condition label.
 
         The successful input-to-answer branch owns the available source. A
@@ -1287,7 +1291,7 @@ class RecordedNativeProbe:
         Entry membership is not a claim about transformed provider bytes or
         complete-history capacity. Those need their own original observations.
         """
-        ancestry = self.fork_ancestry(evidence, parent)
+        ancestry = self.fork_ancestry(self.original_journal, evidence, sources)
         fork = ancestry[0] if ancestry else None
         if fork is not None:
             fork.require_same_session(self.session)
@@ -1414,7 +1418,7 @@ class RecordedNativeProbe:
                                 "artifacts": message.completed_artifacts()})
         return tuple(measured)
 
-    def read(self, evidence: NativeEvidenceRead, source: NativeEvidenceRead):
+    def read(self, evidence: NativeEvidenceRead, source: NativeEvidenceRead, sources):
         """Borrow the run owner's original source for every measurement."""
         evidence.require_path(Path(self.session.session_file))
         data = self.read_sdk_context()
@@ -1469,7 +1473,7 @@ class RecordedNativeProbe:
             "answer_text": answer.message.authoritative_text,
             "model_steps": self.model_steps(self.session, branch),
             "tool_steps": tools,
-            "construction": self.construction(evidence, source, source_branch, manifest, checkpoint, texts, serialized, answer, context, submitted_input),
+            "construction": self.construction(evidence, source, source_branch, manifest, checkpoint, texts, serialized, answer, context, submitted_input, sources),
             "scoped_facts": scoped,
             "answer_support": {
                 "tool_calls": len(tools), "tools": tuple(step["call"].name for step in tools),
