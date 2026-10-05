@@ -1,0 +1,34 @@
+{
+  "implementation_revision": "295447cf0f041d9ee37c1a4015ce9053899c979b",
+  "source_only": true,
+  "authored_controls": "4 passed, 13 deselected in 0.30s",
+  "original_record_reads": 0,
+  "SDK_native_provider_input_operations": 0,
+  "holder_package_environment_build_operations": 0,
+  "study_authorized": false,
+  "unchanged_application_function_AST": {
+    "record": true,
+    "condition_application": true,
+    "apply_condition_input": true,
+    "verify_condition_application": true,
+    "request_construction": true
+  },
+  "sha256": {
+    "tests/three_cut_retention_configured_journey.py": "73fbc03eeddf6b999cd3d6f3edee9c69fa31dc58b2d2b94d5b27e94632a400a0",
+    "tests/test_native_inspector_lifetime.py": "6f31ce81da317f2d9733763befacf4662425d43babb641342901dadd9339e6d8",
+    "evidence/s4-independent-arm-workflows-20261005/authored-ast-locations-refusal.log": "12fb0ce878e7516ad1dc04ca7118c07528b9ffb14e5345a6a2751be8715d792b",
+    "evidence/s4-independent-arm-workflows-20261005/authored-boundary-operands-refusal.log": "ebca5012c2205a2fccd60b64ffde547a8ae07ac916aaba6cff9408741779ffcb",
+    "evidence/s4-independent-arm-workflows-20261005/authored-capture-boundary-refusal.log": "d838c35a2d56ac3836a359ec228acddf3687a18d3508b6bc60c3046b81cfbb18",
+    "evidence/s4-independent-arm-workflows-20261005/authored-controls-final.log": "891421d564c577994eef0088c4620d2e716ba77360a6985d93df3f650cce0f21",
+    "evidence/s4-independent-arm-workflows-20261005/host-acp-import-refusal.log": "f3cc619b533105cfea7d98b8a04eed8df736133886e5579140272d377adffa32",
+    "evidence/s4-independent-arm-workflows-20261005/host-pytest-arguments-refusal.log": "5caeb3a7f556ae66fa1ed4dc55751da886d38412e0d9d22d1adbab229156cffa",
+    "evidence/s4-independent-arm-workflows-20261005/SOURCE-BEFORE.json": "a6c08aa53a9e450786e37e758f6f21d9bdcb46412405642186786da3f6341232",
+    "evidence/s4-independent-arm-workflows-20261005/SOURCE-AFTER.json": "0bd5950255bb9f9ac2779c0c84a5824800050c355150ce752b0beb36a7484b37"
+  },
+  "accepted_scope": "Authored runner orchestration and cleanup clock plumbing; complete producer source migration.",
+  "remaining": [
+    "Genuine independent configured source/summary/arm executions and original completion/source/fork corroboration.",
+    "Full model capacity/transport/intervention and registered resource/p95/quality study acceptance; USD75/30pairs unapproved.",
+    "Additional summary/retry work outside retained selected records remains unavailable; the source batch does not broaden SDK-normalized accounting into full billing."
+  ]
+}
