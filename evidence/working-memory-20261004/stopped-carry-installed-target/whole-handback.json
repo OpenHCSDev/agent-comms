@@ -1,0 +1,82 @@
+{
+  "state": "Einstein WHOLE actual formerpublic CURRENT444 floor restored; sole package/import/read claim RETURNED now; Bohr independent source/target lifecycle closure pending",
+  "target_issued_grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/style22-Einstein-Mendel663-Core-only-stopped-carry-issued-grant.json",
+  "target_issued_sha256": "ab31680dffc051b2eafb251ae3f5d5cf1183716d53199a1f670a65d00c757b86",
+  "source_issued_grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel663-carry-only-source-redeclaration-READ-issued-grant.json",
+  "source_issued_sha256": "d7f12b1c1f092c6123abaf2880ef87c37e1f863f705e26c3000c2574ac53415c",
+  "Mendel_carry_owner_return_sha256": "75483dca014c186bee8cd3f1c500e9105977bab4e8ae408d8fb2b12da545e285",
+  "scope": {
+    "state": "ONE installed genuine9->10 authored stopped-copy carry PASS",
+    "elapsed_seconds": 4.738188295043074,
+    "original_release": [
+      9,
+      3,
+      3,
+      6
+    ],
+    "target_release": [
+      10,
+      3,
+      3,
+      6
+    ],
+    "five_custody_refusals": [
+      "ordinary-reader-original-schema",
+      "existing-candidate",
+      "existing-attempt",
+      "companion",
+      "candidate-change"
+    ],
+    "journal_absence_preserved": {
+      "classification": "original-journal-absent",
+      "created": false
+    },
+    "created_empty_tables": [
+      "annotation_requests",
+      "span_annotations"
+    ],
+    "original_authored15_unchanged": true,
+    "original_rows_preimages_wire_config_proof_preserved": true,
+    "App_native_provider_input_seed_copy_public_replay": 0,
+    "physical_UI_W7_W8_or_public_carry_claim": false
+  },
+  "actual_floor": {
+    "members": 1469,
+    "packages": 69,
+    "protected_originals": 519,
+    "byte_mode_readlink_failures": [],
+    "extra_package_assets": [],
+    "remaining_private_runtime_sockets": []
+  },
+  "controller": {
+    "pid": 3542281,
+    "birth_ticks": 64027895,
+    "proc_absent": true,
+    "exit": 0
+  },
+  "source_child": {
+    "pid": 3542634,
+    "birth_ticks": 64028035,
+    "proc_absent": true,
+    "exit": 0
+  },
+  "owned_group_members": [],
+  "source_and_target_READ_returned_by_Mendel": true,
+  "Einstein_package_import_read_returned": true,
+  "native_artifact_claim": "NONE; no native READ/FullTrust/execution job or writes in this purpose, keeper held",
+  "new_purpose_inferred": false,
+  "public_CURRENT334447_untouched": true,
+  "receipts": {
+    "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-stopped-carry-target01/candidate-source-proof.json": "ad826643682378d1326c3eeac243440a07424b65fed195c2625180598c84b01d",
+    "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-stopped-carry-target01/grant-read.json": "50b9457b738902b6ee6e4f01df48fd12f8c0a7a69cad5ed666327d8009b325d8",
+    "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-stopped-carry-target01/baseline-packages.json": "24b6682dd106750f69ac2d548edc9c0aba2876a9b6fdf4eb326a95dd96f46bd7",
+    "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-stopped-carry-target01/candidate-packages.json": "4cfe928bb27559006351bfb8dc9a6126f749d9fdc90d80ddb837493f689aa965",
+    "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-stopped-carry-target01/restored-packages.json": "24b6682dd106750f69ac2d548edc9c0aba2876a9b6fdf4eb326a95dd96f46bd7",
+    "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-stopped-carry-target01/stage-command.json": "28085856819038e021eb7402aea19f041be54e9b49f1411592403263fab9d8b8",
+    "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-stopped-carry-target01/stage.log": "b3dbc69c3ed4179e3a557e98424c6ec4164651dc6a623b9a09e3a0653c0bf65e",
+    "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-stopped-carry-target01/carry-owner-return.json": "75483dca014c186bee8cd3f1c500e9105977bab4e8ae408d8fb2b12da545e285",
+    "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-stopped-carry-target01/restore-command.json": "721f9243fd39264da076e03b5ef3082fa3d7804c66c3ff7816c552c0f09d9097",
+    "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-stopped-carry-target01/restore.log": "5fb6943240e0bc151318222e638ea2385cc4f7ed27f686a0319824c8bc4ed498",
+    "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-stopped-carry-target01/restore-receipt.json": "4179eaf284dd3c5b56c51e43ae19220ceb1ca23af85bb27b0d79424346617dd6"
+  }
+}

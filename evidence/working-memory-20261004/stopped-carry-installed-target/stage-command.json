@@ -1,0 +1,11 @@
+[
+  "uv",
+  "pip",
+  "install",
+  "--python",
+  "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python",
+  "--no-deps",
+  "--no-cache",
+  "--reinstall",
+  "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-historical-main3aac-source/agent_comms-0.1.0-py3-none-any.whl"
+]
