@@ -31,8 +31,11 @@ unique paths before/after. Target953 module assets plus metadata were checked
 as1372 unique paths. Original authored15 hashes, full modes, mtimes and inodes
 were unchanged. These local sets do not claim Einstein's independent full
 1469/69/519 floor restoration. Mendel returned both source and target READ
-claims in carry-whole-read-handback.json; Einstein owns whole restoration and
-Bohr owns independent floor/census verification and shared lifecycle closure.
+claims in carry-whole-read-handback.json. Einstein's subsequent whole handback
+825884 and all11 referenced receipt hashes were read and verified:1469 floor
+members,69 distribution versions/origins and519 protected files restored, no
+extra assets or sockets. Bohr's independent census and shared lifecycle closure
+remain a separate receipt; no source or target READ loan remains with Mendel.
 
 The recorder's first metadata-dictionary iteration failed before launching any
 original control or source child. That negative is retained separately; only
