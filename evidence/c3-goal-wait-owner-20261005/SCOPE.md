@@ -34,3 +34,5 @@ was not altered in response to those authored expectation failures.
 This is source qualification only. Existing installed ACP terminal/recovery
 checks still need a fresh matching installed-source purpose; no live-readiness,
 performance or complete six-file C3 claim is made.
+
+After migration:324 production,370 test,54 tool modules parse with no omissions; source-after.json records one GoalWait declaration and four migrated calls, with zero outside wait-revision comparisons. An initial source selector assertion counted unrelated current_for owners; it was corrected to the actual GoalWait declaration and source-read receivers, without changing production or repeating tests.
