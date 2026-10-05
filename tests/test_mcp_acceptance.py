@@ -264,16 +264,8 @@ def _mock_model(root, agent, receipt_seen, second_request, release_final):
     (agent / "models.json").write_text(
         json.dumps({"providers": {"openrouter": {"baseUrl": origin + "/v1"}}})
     )
-    guard = root / "local-only.cjs"
-    guard.write_text(
-        "const original=globalThis.fetch;globalThis.fetch=(url,...rest)=>{"
-        "const link=url instanceof Request?url.url:String(url);"
-        f"if(new URL(link).origin!=={json.dumps(origin)}) "
-        "throw new Error('BLOCKED_NONLOCAL_NETWORK');"
-        "return original(url,...rest);};"
-    )
     try:
-        yield requests, errors, guard
+        yield requests, errors, origin
     finally:
         receipt_seen.set()
         release_final.set()
@@ -336,10 +328,11 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
         ) as (
             requests,
             errors,
-            guard,
+            origin,
         ):
             env.update(
-                OPENROUTER_API_KEY="offline-fixture-no-real-key", NODE_OPTIONS=f"--require={guard}"
+                OPENROUTER_API_KEY="offline-fixture-no-real-key",
+                AGENT_COMMS_NATIVE_ORIGIN=origin,
             )
             if observer is not None:
                 # The mounted observer already selected its isolated UI paths.
