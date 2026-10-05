@@ -70,9 +70,10 @@ selected PreserveRuntimeInstallation and PreserveOwnerRuntime. Parent verified
 all107 frozen file hashes, lengths and modes plus whole3a6b references. Final471
 cd84e3ba is normally merged4d123a59. The positive candidate remains frozen for
 Parent; receipt/preimages are absent and the commands have not executed. Sch
-returned package/import/preparation and native/source READ claims. Bohr is
-finishing the independent existing5c99 candidate/census closure. Fresh matching
-keeper authority and original live client admission remain required before the
+returned package/import/preparation and native/source READ claims. Bohr independently closed existing5c99 at a758055f/readbackd005bc05: all107
+frozen members,953 assets/full69 and protected records match; fresh212-process
+census found no private borrowers or permission gaps. Fresh matching keeper
+authority and original live client admission remain required before the
 one publication; no stage, build or accepted worker check is repeated.
 The selected Core3931/Toad289f cohort is deliberate and does not claim latest
 MAIN681/470 source equality. This separate delivery does not hold Heis's scrolling work.

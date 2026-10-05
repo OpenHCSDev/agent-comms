@@ -3140,9 +3140,14 @@ BLOCKED/ACTIVE observations remain historical, with no goal-tool resume/replay.
 - [ ] Complete the original retained writer cross-version restart. The current-
   private661 inherited-FD/index and refusal check is accepted and closed; it
   does not prove a cross-version restart. Parent owns the remaining authentic
-  old/new artifact relation; Bohr is looking only in existing retained manifests
-  after confirming the exact720 donor interpreter is absent. No fabricated old
-  schema, new environment or consumed operation is used, and471 proceeds separately.
+  old/new artifact relation. Bohr completed the bounded lookup across75 existing
+  archive/preimage/cleanup records (receipt66ffea67): no genuine old720 package
+  body/sourceproof was identified. The original donor was retired; only its
+  activation/config metadata remains. Its historical receipt records a schema-
+  unavailable refusal, not an incompatible-schema restart. Parent must establish
+  an authentic old producer before that acceptance can be attempted; metadata
+  cannot substitute for it. No fabricated schema, new environment or consumed
+  operation is used, and471 proceeds separately.
 - [ ] Full S4 remains unfinished. Source679/680 is merged and recorded678 reads
   are independently closed; clocks/accounting and genuine original SDK source
   selection/capacity/matched workflows retain their evidence gaps. Arendt's
