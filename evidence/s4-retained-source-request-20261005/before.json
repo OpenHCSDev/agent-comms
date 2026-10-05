@@ -1,0 +1,367 @@
+{
+  "modules": 748,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 590,
+      "kind": "FunctionDef",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 630,
+      "kind": "FunctionDef",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1218,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1228,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1229,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 605,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 456,
+      "kind": "FunctionDef",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 931,
+      "kind": "FunctionDef",
+      "name": "request_manifest"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1008,
+      "kind": "FunctionDef",
+      "name": "serialized_construction"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1026,
+      "kind": "FunctionDef",
+      "name": "prompt_presence"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1380,
+      "kind": "Attribute",
+      "name": "request_manifest"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1381,
+      "kind": "Attribute",
+      "name": "serialized_construction"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 212,
+      "kind": "Attribute",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 1431,
+      "kind": "Attribute",
+      "name": "prompt_presence"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1388,
+      "kind": "Attribute",
+      "name": "request_manifest"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1389,
+      "kind": "Attribute",
+      "name": "serialized_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1390,
+      "kind": "Attribute",
+      "name": "prompt_presence"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1400,
+      "kind": "Attribute",
+      "name": "serialized_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1940,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1951,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2014,
+      "kind": "Attribute",
+      "name": "serialized_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2140,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1275,
+      "kind": "Attribute",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1314,
+      "kind": "Attribute",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1403,
+      "kind": "Attribute",
+      "name": "prompt_presence"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1406,
+      "kind": "Attribute",
+      "name": "serialized_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1409,
+      "kind": "Attribute",
+      "name": "serialized_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1411,
+      "kind": "Attribute",
+      "name": "request_manifest"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1438,
+      "kind": "Attribute",
+      "name": "serialized_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1457,
+      "kind": "Attribute",
+      "name": "serialized_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1495,
+      "kind": "Attribute",
+      "name": "request_manifest"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1498,
+      "kind": "Attribute",
+      "name": "request_manifest"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1508,
+      "kind": "Attribute",
+      "name": "request_manifest"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1510,
+      "kind": "Attribute",
+      "name": "request_manifest"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1515,
+      "kind": "Attribute",
+      "name": "request_manifest"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1963,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1969,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2031,
+      "kind": "Attribute",
+      "name": "serialized_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2117,
+      "kind": "Attribute",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2126,
+      "kind": "Attribute",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2130,
+      "kind": "Attribute",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2133,
+      "kind": "Attribute",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 221,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1397,
+      "kind": "Attribute",
+      "name": "prompt_presence"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1398,
+      "kind": "Attribute",
+      "name": "prompt_presence"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1505,
+      "kind": "Attribute",
+      "name": "request_manifest"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1889,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1892,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1990,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1867,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1878,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1979,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1985,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1988,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1989,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 2131,
+      "kind": "Attribute",
+      "name": "scoped_facts"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1871,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1897,
+      "kind": "Attribute",
+      "name": "public_native"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1924,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 1885,
+      "kind": "Attribute",
+      "name": "condition_construction"
+    }
+  ],
+  "scope": "Python lexical sites via existing NRA parser, not dynamic dispatch or native JavaScript proof"
+}
