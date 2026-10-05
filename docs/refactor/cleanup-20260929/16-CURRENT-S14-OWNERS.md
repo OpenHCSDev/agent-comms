@@ -125,6 +125,10 @@ not configured comparative acceptance. Required exact Debt job111577763639
 remains queued with no assigned runner at this read; no duplicate workflow or
 provider/input is requested. Recorded configured-input664 acceptance remains
 separate and merged; HTTP/capacity/recall/study/fullS4 remain unfinished.
+Parent subsequently merged exact667886c normally as
+0a600a2b0287c5fbfef907e6e623652c587f66df under the current CI-deferred
+goal; GitHub MERGED readback matched the frozen head. No configured input or
+measurement was repeated, and this source merge adds no broader acceptance.
 
 ## Functional source merges completed
 
