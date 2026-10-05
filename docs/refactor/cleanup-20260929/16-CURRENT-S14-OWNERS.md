@@ -49,7 +49,8 @@ Receiving preparation advances independently of performance and native guard wor
 Continuous468 controls are normally adopted separately; configured execution,
 loaded scaling and startup/frame/CPU gains remain unfinished.
 Parent found the future continuous output would exceed the original Unix
-socket path limit before any run; Heis owns short operand correction. The
+socket path limit before any run; Heis published the short operand correction
+in8373e796 without product/helper/build changes. The
 current warm-tab admission still repeats PresentationBudget decisions and
 omits retained paint bytes. Heis owns the existing presentation/viewport
 correction on a separate source branch, preserving frozen474 receiving inputs.
@@ -87,8 +88,9 @@ sender incarnation, frozen audience and sent event checks passed. Original bus,
 registry and guard bytes stayed unchanged. Parent verified wholea4eab and all28
 returned receipt hashes/sizes. Source540 was restored once with5f in0.142s;
 target334 had no stage or restore and its floor stayed exact. Matching086 READ
-was explicitly returned; Bohr's independent paired lifecycle closure remains
-pending on the last checked records. Core684 frozen7ab72 is normally merged.
+was explicitly returned and closed1c20b. Bohr independently closed both paired
+purposescf1f/7329 with fresh floor2248 and243-process census341b: no private
+references or permission gaps. Core684 frozen7ab72 is normally mergedd41d725f.
 This is a newly built genuine old-source producer, not historical installation
 equivalence; central-batch and routing acceptance remain unqualified.
 
