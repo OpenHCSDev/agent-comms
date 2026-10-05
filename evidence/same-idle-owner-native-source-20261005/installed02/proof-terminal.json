@@ -1,0 +1,26 @@
+{
+  "state": "PASS",
+  "exit_code": 0,
+  "elapsed_seconds": 2.149433800019324,
+  "argv": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "-B",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/same-idle-owner-native-source-20261005/qualification/prove-installed.py",
+    "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel676-proof-output-corrected-successor-issued-grant.json",
+    "8072f2dc2da3d859cf9268743fb3034e050ba43fb50ee3b0094286e130df977c",
+    "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/native-keeper676-proof-output-corrected-successor-READ-issued-20261005.json",
+    "67221da3c9efedaf1f1c214b97f67009d44cde3882749bb8b6fdc96031dc3603",
+    "d38ca0aa5da8df50afc95f1f85473d01dfa80831f71a804fd51905c7416293b2"
+  ],
+  "controller": {
+    "pid": 3996688,
+    "start_time": 68476005
+  },
+  "child": {
+    "pid": 3996702,
+    "start_time": 68476012
+  },
+  "child_proc_present": false,
+  "lifecycle_sha256": "4b1ad94ae24fa70793aa5ee1283e34223c0d409cc1ec27fbd727e6a8bb98b4be",
+  "native_execution_started": false
+}

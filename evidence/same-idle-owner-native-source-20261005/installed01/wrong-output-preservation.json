@@ -1,0 +1,26 @@
+{
+  "files": [
+    {
+      "original_path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/installed-requirements.txt",
+      "preserved_path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/wrong-output-negative/installed-requirements.txt",
+      "sha256": "ebb69c9961fe940cb589ba0f25d937430012e8fb81405919ec95b0678ec04632"
+    },
+    {
+      "original_path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/native-full-trust.json",
+      "preserved_path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/wrong-output-negative/native-full-trust.json",
+      "sha256": "724ba789110f30995a50a04c1cd2f2b80bccc9a528ea73f03a2988c393239a0e"
+    },
+    {
+      "original_path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/installed-inventory.json",
+      "preserved_path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/wrong-output-negative/installed-inventory.json",
+      "sha256": "ebf17deee98766a697a4b64a9e9b04bc4941f0edd7f62af38903f643d40e148c"
+    }
+  ],
+  "controller": {
+    "pid": 3499357,
+    "start_time": 68265072
+  },
+  "controller_proc_present": false,
+  "native_processes_started": 0,
+  "inputs": 0
+}

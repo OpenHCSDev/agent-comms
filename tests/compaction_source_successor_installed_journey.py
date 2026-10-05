@@ -18,6 +18,7 @@ import sys
 import subprocess
 import time
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 if TYPE_CHECKING:
     from publish_retained_summary import InstalledSource, ReviewedArtifact
@@ -139,31 +140,33 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
                                         thread.name, thread.name, committed=True)
     environment.update(owner.native_environment(service.root, service.registry.snapshot(), owner.worktree))
     observe_launch(environment)
-    os.environ.clear(); os.environ.update(environment)
-    agent = CommsAgent(service, agent_bin=str(binary), agent_args=list(launch.arguments or ()),
-        runtime_enabled=True, auto_wake=False, private_nk_native_package=package,
-        private_nk_wire_root_id=root_id)
-    agent.on_connect(receiver)
-    try:
-        await agent.sessions.bind_owned(owner, owner.name)
-        receipt.update(model=original.model, thinking=ThinkingLevel.optional_name(original.thinking_level),
-            source_bytes=source_file.stat().st_size, original_sha256=original_hash,
-            fork_bytes=Path(fork.session_file).stat().st_size)
-        yield agent, owner, fork
-    except BaseException as error:
-        receipt['error']={'type':type(error).__name__,'detail':str(error)}
-        raise
-    finally:
-        children = [backend.custody.child.proc for backend in agent.turns.persistent_backends.values() if backend.available]
-        await agent.shutdown()
-        receipt.update(elapsed_seconds=time.monotonic()-started,
-            original_source_unchanged=all(digest(path)==expected for path,expected in originals.items()),
-            native_children_closed=all(child.returncode is not None for child in children))
-        result = stage/('receipt.json' if continuation is None else
-                       f'continuation-{len(continuation.rounds)}-receipt.json')
-        result.write_text(json.dumps(receipt,indent=2)+'\n')
-        result.chmod(0o600)
-        print(json.dumps(receipt),flush=True)
+    # Borrow the configured process environment for this resource only.
+    # A nested arm returns the parent root/identity after joined shutdown.
+    with patch.dict(os.environ, environment, clear=True):
+        agent = CommsAgent(service, agent_bin=str(binary), agent_args=list(launch.arguments or ()),
+            runtime_enabled=True, auto_wake=False, private_nk_native_package=package,
+            private_nk_wire_root_id=root_id)
+        agent.on_connect(receiver)
+        try:
+            await agent.sessions.bind_owned(owner, owner.name)
+            receipt.update(model=original.model, thinking=ThinkingLevel.optional_name(original.thinking_level),
+                source_bytes=source_file.stat().st_size, original_sha256=original_hash,
+                fork_bytes=Path(fork.session_file).stat().st_size)
+            yield agent, owner, fork
+        except BaseException as error:
+            receipt['error']={'type':type(error).__name__,'detail':str(error)}
+            raise
+        finally:
+            children = [backend.custody.child.proc for backend in agent.turns.persistent_backends.values() if backend.available]
+            await agent.shutdown()
+            receipt.update(elapsed_seconds=time.monotonic()-started,
+                original_source_unchanged=all(digest(path)==expected for path,expected in originals.items()),
+                native_children_closed=all(child.returncode is not None for child in children))
+            result = stage/('receipt.json' if continuation is None else
+                           f'continuation-{len(continuation.rounds)}-receipt.json')
+            result.write_text(json.dumps(receipt,indent=2)+'\n')
+            result.chmod(0o600)
+            print(json.dumps(receipt),flush=True)
 
 
 async def run(stage, package, source_file, *, capture_source=ordinary_source,

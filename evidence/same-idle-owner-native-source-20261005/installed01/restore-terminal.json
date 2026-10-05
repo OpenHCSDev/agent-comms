@@ -1,0 +1,26 @@
+{
+  "state": "RESTORED",
+  "argv": [
+    "uv",
+    "pip",
+    "install",
+    "--python",
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "--no-deps",
+    "--no-cache",
+    "--reinstall",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 0.1824254950042814,
+  "controller": {
+    "pid": 3575710,
+    "start_time": 68305595
+  },
+  "child": {
+    "pid": 3575720,
+    "start_time": 68305604
+  },
+  "child_proc_present": false,
+  "issued_sha256": "412e9ce310f3dd80cc1ecec04e5cbde7ec8c1399b0fd8f7807a889b18733ec1c"
+}

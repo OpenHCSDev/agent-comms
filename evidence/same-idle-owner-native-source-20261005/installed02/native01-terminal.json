@@ -1,0 +1,283 @@
+{
+  "phase": "native_batch",
+  "issued_sha256": "8072f2dc2da3d859cf9268743fb3034e050ba43fb50ee3b0094286e130df977c",
+  "lifecycle_sha256_at_launch": "84675d71b2376f3931929340825bcefc45440552890de310cce7dfd9bc0908b7",
+  "argv": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "-B",
+    "-c",
+    "import pathlib,sys,agent_comms; assert pathlib.Path(agent_comms.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()); sys.path.append('/usr/lib/python3.14/site-packages'); import pytest; raise SystemExit(pytest.main(['-o', 'addopts=', '-o', 'pythonpath=', '-p', 'no:cacheprovider', '--basetemp', '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed02/native01/authored', '--junitxml', '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed02/native01/results.xml', '-x', '-q', 'tests/test_same_owner_native_fork.py']))"
+  ],
+  "outcome": {
+    "kind": "exited",
+    "code": 0
+  },
+  "elapsed_seconds": 65.38440060301218,
+  "error": null,
+  "controller": {
+    "pid": 4112670,
+    "start_time": 68513353
+  },
+  "observed_children": [
+    {
+      "pid": 4112670,
+      "start_time": 68513353
+    },
+    {
+      "pid": 4112688,
+      "start_time": 68513663
+    },
+    {
+      "pid": 4112705,
+      "start_time": 68513821
+    },
+    {
+      "pid": 4112732,
+      "start_time": 68513880
+    },
+    {
+      "pid": 4112784,
+      "start_time": 68514025
+    },
+    {
+      "pid": 4113029,
+      "start_time": 68514177
+    },
+    {
+      "pid": 4113240,
+      "start_time": 68514236
+    },
+    {
+      "pid": 4113524,
+      "start_time": 68514520
+    },
+    {
+      "pid": 4113616,
+      "start_time": 68514573
+    },
+    {
+      "pid": 4113777,
+      "start_time": 68514742
+    },
+    {
+      "pid": 4113877,
+      "start_time": 68514868
+    },
+    {
+      "pid": 4113904,
+      "start_time": 68514929
+    },
+    {
+      "pid": 4114186,
+      "start_time": 68515062
+    },
+    {
+      "pid": 4114575,
+      "start_time": 68515216
+    },
+    {
+      "pid": 4114817,
+      "start_time": 68515275
+    },
+    {
+      "pid": 4115250,
+      "start_time": 68515491
+    },
+    {
+      "pid": 4115271,
+      "start_time": 68515544
+    },
+    {
+      "pid": 4115675,
+      "start_time": 68515700
+    },
+    {
+      "pid": 4115831,
+      "start_time": 68515818
+    },
+    {
+      "pid": 4116007,
+      "start_time": 68515872
+    },
+    {
+      "pid": 4116139,
+      "start_time": 68516000
+    },
+    {
+      "pid": 4116508,
+      "start_time": 68516145
+    },
+    {
+      "pid": 4116702,
+      "start_time": 68516206
+    },
+    {
+      "pid": 4117139,
+      "start_time": 68516364
+    },
+    {
+      "pid": 4117295,
+      "start_time": 68516480
+    },
+    {
+      "pid": 4117520,
+      "start_time": 68516544
+    },
+    {
+      "pid": 4117935,
+      "start_time": 68516675
+    },
+    {
+      "pid": 4118519,
+      "start_time": 68516822
+    },
+    {
+      "pid": 4118783,
+      "start_time": 68516881
+    },
+    {
+      "pid": 4119344,
+      "start_time": 68517042
+    },
+    {
+      "pid": 4119775,
+      "start_time": 68517167
+    },
+    {
+      "pid": 4120196,
+      "start_time": 68517222
+    },
+    {
+      "pid": 4120492,
+      "start_time": 68517344
+    },
+    {
+      "pid": 4121245,
+      "start_time": 68517505
+    },
+    {
+      "pid": 4121628,
+      "start_time": 68517561
+    },
+    {
+      "pid": 4122659,
+      "start_time": 68517777
+    },
+    {
+      "pid": 4122999,
+      "start_time": 68517846
+    },
+    {
+      "pid": 4123278,
+      "start_time": 68517999
+    },
+    {
+      "pid": 4123411,
+      "start_time": 68518119
+    },
+    {
+      "pid": 4123611,
+      "start_time": 68518175
+    },
+    {
+      "pid": 4124122,
+      "start_time": 68518310
+    },
+    {
+      "pid": 4124431,
+      "start_time": 68518461
+    },
+    {
+      "pid": 4124544,
+      "start_time": 68518520
+    },
+    {
+      "pid": 4124996,
+      "start_time": 68518677
+    },
+    {
+      "pid": 4125273,
+      "start_time": 68518801
+    },
+    {
+      "pid": 4125308,
+      "start_time": 68518855
+    },
+    {
+      "pid": 4126054,
+      "start_time": 68518977
+    },
+    {
+      "pid": 4126980,
+      "start_time": 68519150
+    },
+    {
+      "pid": 4127128,
+      "start_time": 68519220
+    },
+    {
+      "pid": 4128444,
+      "start_time": 68519461
+    },
+    {
+      "pid": 4129043,
+      "start_time": 68519528
+    }
+  ],
+  "alive": [],
+  "groups": {
+    "4112670": [],
+    "4112688": [],
+    "4112705": [],
+    "4112732": [],
+    "4112784": [],
+    "4113029": [],
+    "4113240": [],
+    "4113524": [],
+    "4113616": [],
+    "4113777": [],
+    "4113877": [],
+    "4113904": [],
+    "4114186": [],
+    "4114575": [],
+    "4114817": [],
+    "4115250": [],
+    "4115271": [],
+    "4115675": [],
+    "4115831": [],
+    "4116007": [],
+    "4116139": [],
+    "4116508": [],
+    "4116702": [],
+    "4117139": [],
+    "4117295": [],
+    "4117520": [],
+    "4117935": [],
+    "4118519": [],
+    "4118783": [],
+    "4119344": [],
+    "4119775": [],
+    "4120196": [],
+    "4120492": [],
+    "4121245": [],
+    "4121628": [],
+    "4122659": [],
+    "4122999": [],
+    "4123278": [],
+    "4123411": [],
+    "4123611": [],
+    "4124122": [],
+    "4124431": [],
+    "4124544": [],
+    "4124996": [],
+    "4125273": [],
+    "4125308": [],
+    "4126054": [],
+    "4126980": [],
+    "4127128": [],
+    "4128444": [],
+    "4129043": []
+  },
+  "sockets": [],
+  "observation_limit": "Short-lived descendants may exit between read-only /proc observations; original fixture/process custody joins its actual children."
+}

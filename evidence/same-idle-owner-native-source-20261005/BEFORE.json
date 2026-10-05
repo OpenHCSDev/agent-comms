@@ -1,0 +1,2377 @@
+{
+  "source": "7b68d630caa654d3e9884f45cbd6493718752a0c",
+  "collector": "original audit.findings.Package.load + original ParsedModule.tree",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 324,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 372,
+      "omissions": []
+    },
+    {
+      "root": "tools",
+      "parsed": 54,
+      "omissions": []
+    }
+  ],
+  "declarations": [
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 87,
+      "name": "PersistentPiSession",
+      "bases": [],
+      "methods": [
+        "__init__",
+        "available",
+        "open",
+        "retain",
+        "close",
+        "close_idle",
+        "require_reopen",
+        "external_write"
+      ]
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 358,
+      "name": "NativeForkCreation",
+      "bases": [
+        "NativeSessionIdentity",
+        "SessionJournalHistory",
+        "TypedTable"
+      ],
+      "methods": [
+        "__post_init__",
+        "covered_prefix",
+        "require_original_prefix",
+        "recorded_prefix"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 87,
+      "name": "NativeCustody",
+      "bases": [
+        "ABC"
+      ],
+      "methods": [
+        "available",
+        "managed_launch",
+        "reuse",
+        "idle",
+        "inspect",
+        "expected",
+        "retire",
+        "closed",
+        "reopen"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 193,
+      "name": "BorrowedNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "methods": [
+        "inspect",
+        "retire",
+        "reopen"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 220,
+      "name": "RetainedNative",
+      "bases": [
+        "NativeCustody"
+      ],
+      "methods": [
+        "current",
+        "idle",
+        "selected",
+        "reload",
+        "inspect",
+        "inspect_acquired",
+        "reuse",
+        "managed_launch",
+        "retire",
+        "reopen"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 36,
+      "name": "RegistryOwner",
+      "bases": [],
+      "methods": [
+        "turn_lease",
+        "capture_local",
+        "require_exact",
+        "require_claim",
+        "require_active_turn",
+        "capture",
+        "_require_current",
+        "require_snapshot",
+        "_snapshot_owner",
+        "require_source_snapshot",
+        "require_registry"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 27,
+      "name": "NativeSessionPreparation",
+      "bases": [
+        "backend.TurnSession"
+      ],
+      "methods": [
+        "input_ready",
+        "finish_result",
+        "open"
+      ]
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 52,
+      "name": "OwnedTurn",
+      "bases": [],
+      "methods": [
+        "thread",
+        "turn_lease",
+        "attach_native_session",
+        "__init__",
+        "admit",
+        "begin",
+        "prepare_prompt",
+        "reserve_input",
+        "open_stream",
+        "finish_goals",
+        "close_changed_project",
+        "continue_changed_project",
+        "prepare_native",
+        "stream",
+        "acquire",
+        "run",
+        "settle_unbound",
+        "run_native"
+      ]
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 30,
+      "name": "Registration",
+      "bases": [],
+      "methods": [
+        "__init__",
+        "register",
+        "attach_native_session",
+        "declare",
+        "_declare_unlocked",
+        "_claim_unlocked",
+        "_declare_in",
+        "_commit_registration",
+        "restore_stopped",
+        "rename",
+        "fence_idle_owners",
+        "unregister",
+        "archive",
+        "begin_delete",
+        "archive_originals",
+        "delete_originals",
+        "remove",
+        "heartbeat",
+        "release_turn",
+        "transition_turn",
+        "observe_native_phase",
+        "live_owner_with_generation",
+        "live_owner_with_admission",
+        "lease_live_turn_with_admission",
+        "lease_live_turn_with_generation",
+        "guard_owner_compaction",
+        "_assert_maintenance_open_unlocked",
+        "lease_local_turn",
+        "canonical_name",
+        "aliases_for",
+        "goal_history",
+        "name_reserved",
+        "last_seen",
+        "require",
+        "status",
+        "all_threads",
+        "snapshot",
+        "active_threads",
+        "peers",
+        "__contains__"
+      ]
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 66,
+      "name": "RegistryDocument",
+      "bases": [
+        "RegistryPresence"
+      ],
+      "methods": [
+        "copy",
+        "snapshot",
+        "from_wire",
+        "claim_name",
+        "prepare_declaration",
+        "prepare_registration",
+        "restore_stopped",
+        "rename",
+        "fence_idle_owner",
+        "unregister",
+        "archive",
+        "require_originals",
+        "archive_originals",
+        "delete_originals",
+        "begin_delete",
+        "remove",
+        "heartbeat",
+        "lease_turn",
+        "release_turn",
+        "_turn_effects",
+        "transition_turn",
+        "observe_native_phase",
+        "prepare_native_source"
+      ]
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 45,
+      "name": "SessionLifecycle",
+      "bases": [],
+      "methods": [
+        "__init__",
+        "initialize",
+        "thread_name_for",
+        "require",
+        "require_owned_session",
+        "reject_foreign_mcp",
+        "declare_thread",
+        "validated_thread",
+        "bind_owned",
+        "new_session",
+        "load_session",
+        "attach_owner",
+        "sync_identity",
+        "observe_native_configuration",
+        "configuration_updates",
+        "metadata",
+        "retire_proxy",
+        "close_proxies",
+        "release_registered_owner",
+        "release_owned"
+      ]
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 88,
+      "name": "ThreadManagement",
+      "bases": [],
+      "methods": [
+        "__init__",
+        "import_thread",
+        "restore_stopped",
+        "claim_thread",
+        "rename_self",
+        "set_project_self",
+        "set_project",
+        "rename_managed_thread",
+        "_rename_thread",
+        "_rename_thread_unlocked",
+        "heartbeat",
+        "set_thread_model",
+        "set_thread_thinking_level",
+        "initialize_native_configuration",
+        "resolve_thread_model",
+        "attach_session",
+        "archive",
+        "_archive_unlocked",
+        "_delete_unlocked",
+        "fork",
+        "_fork_unlocked",
+        "adopt_current"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 95,
+      "name": "TurnRunner",
+      "bases": [],
+      "methods": [
+        "__init__",
+        "bind",
+        "session_busy",
+        "turn_state",
+        "owns_turn",
+        "transition_turn",
+        "observe_compaction",
+        "native_arguments",
+        "prepare_selected_session",
+        "observe_selected_preparation",
+        "inspect_context",
+        "inspect_context_segment",
+        "inspect_native_request",
+        "prompt_owned",
+        "collect_replies",
+        "peer_progress",
+        "cancel",
+        "extension_ui_permission",
+        "acquire_turn",
+        "finish_turn",
+        "settle_turn",
+        "current_turn_update",
+        "replay_turn_state",
+        "active_backend_inbox",
+        "close_idle_backend",
+        "run_selected",
+        "run_agent_turn",
+        "close"
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 60,
+      "call": "comms.registry.live_owner_with_admission(owner_name)"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 883,
+      "call": "ctx.threads.attach_session(ctx.registry.require(self.name), self.session_file, pid=self.pid)"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 165,
+      "call": "comms.registry.live_owner_with_admission(name)"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 379,
+      "call": "self.require_original_prefix(evidence, entries)"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 280,
+      "call": "self.effects.turns.close_idle_backend(session_id)"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 73,
+      "call": "self.comms.registry.live_owner_with_admission(thread_name)"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 80,
+      "call": "runner.prepare_selected_session(session_id, thread)"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 310,
+      "call": "super().managed_launch(command, arguments, worktree=worktree, environment=environment, session_file=session_file)"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 357,
+      "call": "NativeForkCreation.recorded_prefix(db, self, entries)"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 145,
+      "call": "registry.live_owner_with_admission(self.thread.name)"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 77,
+      "call": "bus._registry.live_owner_with_admission(owner_name)"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 107,
+      "call": "RegistryOwner.capture_local(self.runner.comms.registry.snapshot(), self.thread_name)"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 384,
+      "call": "self.runner.prepare_selected_session(self.session_id, self.thread)"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 182,
+      "call": "persistent.external_write(prepared.witness)"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 208,
+      "call": "turns.run_agent_turn(session_id, canonical, self.prompt, images=self.images, original_keys=(self.key,), initial_display_text=self.text if self.echo else None, original_owner_input=True, original_goal_id=self.context.active_goal_id, accepted_input_id=self.accepted_id)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 56,
+      "call": "edit.document.prepare_native_source(original, session_file)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 220,
+      "call": "RegistryOwner.capture_local(snapshot, name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 226,
+      "call": "RegistryOwner.capture_local(document.snapshot(), name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 237,
+      "call": "RegistryOwner.capture_local(edit.document.snapshot(), expected.name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 258,
+      "call": "RegistryOwner.capture_local(snapshot, expected.name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 288,
+      "call": "RegistryOwner.capture_local(snapshot, expected.name)"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 303,
+      "call": "RegistryOwner.capture_local(edit.document.snapshot(), name)"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 405,
+      "call": "original.require_source_snapshot(snapshot)"
+    },
+    {
+      "path": "src/agent_comms/schedule_rules.py",
+      "line": 71,
+      "call": "inputs.effects.turns.run_agent_turn(session_id, inputs.sessions.require(session_id), '\\n\\n'.join((turn.prompt for turn in pending)), reply_targets=tuple(dict.fromkeys((target for turn in pending if (target := derive_exact_reply_target(turn.origin))))), origins=tuple((origin for turn in pending for origin in turn.origins)), autonomous_goal=len(pending) == 1 and pending[0].autonomous_goal, dependency_wait_id=pending[0].goal_wait_id)"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 160,
+      "call": "comms.registry.live_owner_with_admission(name)"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 65,
+      "call": "persistent.require_reopen(source)"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 183,
+      "call": "persistent.require_reopen(witness)"
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "line": 199,
+      "call": "self.comms.registry.live_owner_with_admission(owner_name)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 182,
+      "call": "self.bind_owned(thread, thread.name)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 208,
+      "call": "self.bind_owned(thread, session_id)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 252,
+      "call": "self.effects.turns.close_idle_backend(session_id)"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 546,
+      "call": "fork_native_session(parent.session_file, parent.worktree, pi_bin, private_inputs=CompactionJournal(self.root / 'compaction-commits.sqlite3').private_inputs)"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 216,
+      "call": "RegistryOwner.capture_local(initial, incarnation.name)"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 235,
+      "call": "RegistryOwner.capture_local(snapshot, incarnation.name)"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 221,
+      "call": "self.turn.attach_native_session(session_file)"
+    },
+    {
+      "path": "src/agent_comms/worker.py",
+      "line": 69,
+      "call": "agent.turns.run_agent_turn(name, name, row.source_text, original_keys=(key,), original_owner_input=True)"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 148,
+      "call": "agent.sessions.bind_owned(owner, owner.name)"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 138,
+      "call": "self.persistent.require_reopen(identity)"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 75,
+      "call": "comms.threads.attach_session(owned, str(session))"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 78,
+      "call": "agent.sessions.bind_owned(thread, thread.name)"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 86,
+      "call": "agent.turns.prepare_selected_session(session_id, original)"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 97,
+      "call": "owner.turns.prepare_selected_session(receiver.name, receiver)"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 288,
+      "call": "agent._comms.threads.attach_session('proj', str(path))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 372,
+      "call": "first._comms.threads.attach_session('proj', str(session_file), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 507,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'name this session')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 532,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'rename yourself')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 567,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'work')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 601,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'work')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 649,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'A')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 652,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'B')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 656,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'C')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 684,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'work')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 719,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'Continue working toward the active goal.')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 776,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'work')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 830,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'work')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 875,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'work')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 913,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'Work toward the active goal')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1003,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'Set a goal')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1082,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'Set a goal')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1309,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'first')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1680,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'do the work', origins=(origin,))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1717,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'answer', reply_targets=(reply_target,), origins=(origin,))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1753,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'answer', reply_targets=(human.name,), origins=(origin,))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1819,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'answer', reply_targets=(human.name, '#team'), origins=(origin,))"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1265,
+      "call": "agent.turns.run_agent_turn(name, name, 'continue', autonomous_goal=True)"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1285,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'continue')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1312,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'second')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1346,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'continue')"
+    },
+    {
+      "path": "tests/test_acp.py",
+      "line": 1790,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'answer', reply_targets=('#team',), origins=(origin,))"
+    },
+    {
+      "path": "tests/test_acp_compaction_activity.py",
+      "line": 51,
+      "call": "agent.turns.run_agent_turn('project', 'project', 'Read these files')"
+    },
+    {
+      "path": "tests/test_acp_compaction_activity.py",
+      "line": 71,
+      "call": "agent.turns.run_agent_turn('project', 'project', 'Read files')"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 48,
+      "call": "comms.threads.attach_session('project', str(session))"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 142,
+      "call": "agent.turns.run_agent_turn('project', 'project', 'Set a goal for model', initial_display_text='Set a goal as typed')"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 211,
+      "call": "agent.turns.run_agent_turn('project', 'project', 'Continue working toward the active goal.', autonomous_goal=True)"
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 266,
+      "call": "agent.turns.run_agent_turn('project', 'project', 'Original owner input')"
+    },
+    {
+      "path": "tests/test_acp_goal_original_input.py",
+      "line": 40,
+      "call": "comms.threads.attach_session('project', str(session))"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 250,
+      "call": "owner.sessions.bind_owned(thread, session)"
+    },
+    {
+      "path": "tests/test_acp_queue_contract.py",
+      "line": 44,
+      "call": "comms.registry.live_owner_with_admission('beta')"
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "line": 160,
+      "call": "owner.turns.run_agent_turn(session.session_id, owner.sessions.bindings[session.session_id], 'task')"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 71,
+      "call": "comms.registry.attach_native_session(original, str(tmp_path / 'wrong.jsonl'))"
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "line": 82,
+      "call": "agent.turns.run_agent_turn('project', 'project', 'Continue', autonomous_goal=True)"
+    },
+    {
+      "path": "tests/test_backend_native_custody.py",
+      "line": 27,
+      "call": "owner.persistent.external_write(retained.identity)"
+    },
+    {
+      "path": "tests/test_claim_admission_verifier.py",
+      "line": 85,
+      "call": "comms.registry.live_owner_with_admission('Alice')"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 66,
+      "call": "comms.threads.attach_session('project', str(session), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 98,
+      "call": "comms.threads.attach_session('project', str(first), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 137,
+      "call": "comms.threads.attach_session('project', str(session), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 187,
+      "call": "comms.threads.attach_session('project', str(session), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 228,
+      "call": "comms.threads.attach_session('project', str(session), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 268,
+      "call": "comms.threads.attach_session('project', str(session), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 321,
+      "call": "comms.threads.attach_session('project', str(first), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 441,
+      "call": "comms.threads.attach_session('project', str(session), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 110,
+      "call": "comms.threads.attach_session('project', str(second), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 368,
+      "call": "comms.threads.attach_session('project', str(first), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 351,
+      "call": "comms.threads.attach_session('project', str(second), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 124,
+      "call": "comms.threads.attach_session('project', str(second), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 365,
+      "call": "comms.threads.attach_session('project', str(second), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "line": 60,
+      "call": "comms.threads.attach_session('project', str(session), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_coordination_response.py",
+      "line": 147,
+      "call": "comms.registry.live_owner_with_admission('owner')"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 103,
+      "call": "comms.threads.attach_session(sid, str(native.session))"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 232,
+      "call": "comms.threads.attach_session(sid, str(native.session))"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 270,
+      "call": "agent.turns.run_agent_turn(sid, sid, 'One new failed goal input', autonomous_goal=True)"
+    },
+    {
+      "path": "tests/test_goal_selection_native.py",
+      "line": 48,
+      "call": "agent.turns.run_agent_turn(session, session, 'One distinct original goal input', autonomous_goal=True)"
+    },
+    {
+      "path": "tests/test_goal_selection_owner.py",
+      "line": 134,
+      "call": "RegistryOwner.capture_local(comms.registry.snapshot(), 'worker')"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 62,
+      "call": "comms.threads.attach_session(child, str(native.session))"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 543,
+      "call": "agent.turns.run_agent_turn(child, child, 'Finish work')"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 470,
+      "call": "agent.turns.run_agent_turn(child, child, 'Finish work')"
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "line": 592,
+      "call": "agent.turns.run_agent_turn(child, child, 'Finish work', reply_targets=('owner',) if reply else ())"
+    },
+    {
+      "path": "tests/test_headless_diagnostics.py",
+      "line": 88,
+      "call": "owner.turns.run_agent_turn(session, session, 'Private input', origins=(incoming,), reply_targets=('#comms',))"
+    },
+    {
+      "path": "tests/test_input_routing_repair.py",
+      "line": 40,
+      "call": "comms.threads.attach_session('worker', str(path))"
+    },
+    {
+      "path": "tests/test_native_admission_rules.py",
+      "line": 59,
+      "call": "comms.registry.live_owner_with_admission(owner.name)"
+    },
+    {
+      "path": "tests/test_native_arguments.py",
+      "line": 138,
+      "call": "owner._comms.threads.attach_session(sid, str(native.session))"
+    },
+    {
+      "path": "tests/test_native_arguments.py",
+      "line": 145,
+      "call": "owner.turns.prepare_selected_session(sid, thread)"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 148,
+      "call": "owner.turns.prepare_selected_session(thread.name, thread)"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 101,
+      "call": "owner.turns.prepare_selected_session(thread.name, thread)"
+    },
+    {
+      "path": "tests/test_native_routed_progress.py",
+      "line": 141,
+      "call": "agent.turns.run_agent_turn('worker', 'worker', 'Please help', origins=(origin,), reply_targets=('#team',))"
+    },
+    {
+      "path": "tests/test_operations.py",
+      "line": 235,
+      "call": "wired.threads.attach_session('fixer', str(session_file), pid=123)"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 84,
+      "call": "comms.registry.live_owner_with_admission(name)"
+    },
+    {
+      "path": "tests/test_ordinary_admission_rules.py",
+      "line": 102,
+      "call": "agent.turns.run_agent_turn('project', 'project', 'Ordinary owner input')"
+    },
+    {
+      "path": "tests/test_outbound_native_journey.py",
+      "line": 86,
+      "call": "comms.threads.attach_session(sender, str(native.session))"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 903,
+      "call": "comms.threads.attach_session('project', str(session), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 989,
+      "call": "prepare_native_source(Path(PACKAGE), str(session), settings=PiCompactionSettings(16384, 1), context_window=128000)"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 1002,
+      "call": "prepare_native_source(Path(PACKAGE), str(alias), settings=PiCompactionSettings(16384, 1), context_window=128000)"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 93,
+      "call": "prepare_native_source(package, str(session), settings=PiCompactionSettings(16384, 1), context_window=128000)"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 105,
+      "call": "prepare_native_source(package, str(session), settings=PiCompactionSettings(16384, 20000), context_window=128000)"
+    },
+    {
+      "path": "tests/test_project.py",
+      "line": 61,
+      "call": "comms.threads.attach_session('worker', str(old / 'session.jsonl'))"
+    },
+    {
+      "path": "tests/test_registration_authority.py",
+      "line": 28,
+      "call": "registry.live_owner_with_admission('owner')"
+    },
+    {
+      "path": "tests/test_registration_authority.py",
+      "line": 51,
+      "call": "registry.live_owner_with_admission('owner')"
+    },
+    {
+      "path": "tests/test_registration_process_identity.py",
+      "line": 24,
+      "call": "comms.threads.attach_session(owner.name, str(session))"
+    },
+    {
+      "path": "tests/test_registration_process_identity.py",
+      "line": 27,
+      "call": "comms.threads.attach_session(owner.name, str(session), pid=0)"
+    },
+    {
+      "path": "tests/test_registration_process_identity.py",
+      "line": 29,
+      "call": "comms.threads.attach_session(owner.name, str(session), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_reply_routing.py",
+      "line": 27,
+      "call": "comms.threads.attach_session('worker', str(session))"
+    },
+    {
+      "path": "tests/test_reply_routing.py",
+      "line": 122,
+      "call": "agent.turns.run_agent_turn('worker', 'worker', 'incoming broadcast')"
+    },
+    {
+      "path": "tests/test_reply_routing.py",
+      "line": 71,
+      "call": "agent.turns.run_agent_turn('worker', 'worker', message.body, reply_targets=(message.target,), origins=(message,))"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 160,
+      "call": "agent.sessions.bind_owned(comms.registry.require('retained'), 'retained')"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 203,
+      "call": "agent.turns.prepare_selected_session('retained', comms.registry.require('retained'))"
+    },
+    {
+      "path": "tests/test_runtime.py",
+      "line": 490,
+      "call": "comms.threads.attach_session(response.session_id, str(transcript))"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 37,
+      "call": "agent._comms.threads.attach_session(name, str(native.session))"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 41,
+      "call": "agent.turns.prepare_selected_session(name, thread)"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 44,
+      "call": "agent.turns.prepare_selected_session(name, thread)"
+    },
+    {
+      "path": "tests/test_runtime_owned_session_admission.py",
+      "line": 59,
+      "call": "owner.sessions.bind_owned(retired, 'retired-acp-session')"
+    },
+    {
+      "path": "tests/test_runtime_owned_session_admission.py",
+      "line": 69,
+      "call": "owner.sessions.bind_owned(thread, 'original-acp-session')"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 296,
+      "call": "comms.threads.attach_session(name, str(native.session))"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 365,
+      "call": "comms.threads.attach_session(name, str(native.session))"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 537,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'Continue', original_keys=(original_key,), original_owner_input=True, original_goal_id='goal-acp')"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 701,
+      "call": "agent.turns.run_agent_turn('proj', 'proj', 'Continue again', original_keys=('acp:next',), original_owner_input=True, original_goal_id='goal-next')"
+    },
+    {
+      "path": "tests/test_stack_goal_continuation.py",
+      "line": 238,
+      "call": "comms.threads.attach_session('project', str(session))"
+    },
+    {
+      "path": "tests/test_stack_native_compaction.py",
+      "line": 389,
+      "call": "comms.threads.attach_session('project', str(session))"
+    },
+    {
+      "path": "tests/test_stack_persistent_compaction.py",
+      "line": 247,
+      "call": "comms.threads.attach_session('worker', str(session))"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 45,
+      "call": "comms.registry.live_owner_with_admission(name)"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 351,
+      "call": "comms.registry.live_owner_with_admission('alpha')"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 591,
+      "call": "comms.registry.live_owner_with_admission(owner.name)"
+    },
+    {
+      "path": "tests/test_transcript_input_display.py",
+      "line": 55,
+      "call": "comms.threads.attach_session(comms.registry.require('worker'), str(session))"
+    },
+    {
+      "path": "tests/test_transcript_input_routing.py",
+      "line": 47,
+      "call": "comms.threads.attach_session('worker', str(path))"
+    },
+    {
+      "path": "tests/test_transcript_input_routing.py",
+      "line": 78,
+      "call": "comms.threads.attach_session('worker', str(path))"
+    },
+    {
+      "path": "tests/test_transcript_legacy_integration.py",
+      "line": 95,
+      "call": "viewer.threads.attach_session('owner', str(source_session))"
+    },
+    {
+      "path": "tests/test_transcript_legacy_integration.py",
+      "line": 125,
+      "call": "comms.threads.attach_session('owner', str(imported))"
+    },
+    {
+      "path": "tests/test_transcript_pages.py",
+      "line": 112,
+      "call": "comms.threads.attach_session('child', str(child_path))"
+    },
+    {
+      "path": "tests/test_transcript_pages.py",
+      "line": 132,
+      "call": "comms.threads.attach_session('child', str(own_path))"
+    },
+    {
+      "path": "tests/test_transcript_read_identity.py",
+      "line": 61,
+      "call": "comms.threads.attach_session('child', str(child))"
+    },
+    {
+      "path": "tools/cutover/seed_original_task_carry.py",
+      "line": 22,
+      "call": "service.registry.live_owner_with_admission(alpha.name)"
+    },
+    {
+      "path": "tools/cutover/seed_retained_routing_fixture.py",
+      "line": 44,
+      "call": "service.threads.attach_session('alpha', str(path))"
+    }
+  ],
+  "source_writes": [
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 407,
+      "call": "replace(current, session_file=session_file)"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 130,
+      "call": "Thread(name, tags, str(project), session_file=str(session_path), title=snapshot.title or name, model=model)"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 548,
+      "call": "Thread(name=spec.name, tags=parent.tags if spec.tags is None else spec.tags, worktree=parent.worktree, parent=spec.parent, task=spec.task, session_file=session.session_file, process_identity=None, model=parent.model, thinking_level=parent.thinking_level)"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 486,
+      "call": "replace(current, process_identity=current.process_identity if pid is None else ProcessIdentity.capture(pid) if pid > 0 else None, session_file=str(Path(session_file).expanduser().resolve()))"
+    },
+    {
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "line": 125,
+      "call": "Thread('error-native', frozenset(), str(project), session_file=str(fresh.path), model='error-local/error-fixture', thinking_level='off')"
+    },
+    {
+      "path": "tests/c4_coordination_installed_ui.py",
+      "line": 46,
+      "call": "Thread(name, frozenset({'team'}), str(root), session_file=str(source))"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 121,
+      "call": "Thread(name, frozenset({'source529'}), original.worktree, parent=original.name, process_identity=identity, session_file=fork.session_file if name == 'source529' else None, model=original.model, thinking_level=original.thinking_level)"
+    },
+    {
+      "path": "tests/native_context_budget_installed_journey.py",
+      "line": 141,
+      "call": "Thread('budget-native', frozenset(), str(project), session_file=str(retained), model='openrouter/z-ai/glm-5.3-flash', thinking_level='low')"
+    },
+    {
+      "path": "tests/native_context_reader_journey.py",
+      "line": 55,
+      "call": "Thread('context-source', frozenset(), str(fixture.project), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(fixture.session), model='response-local/fixture')"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 150,
+      "call": "replace(owner, session_file=str(saved))"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 109,
+      "call": "Thread(mode, frozenset({'compaction-acceptance'}), str(project), session_file=identity.session_file, model=source.model, thinking_level=source.thinking_level, task='Bounded acceptance only. Do not resume inherited work, goals or tools. Answer only the explicitly requested acceptance token.')"
+    },
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 83,
+      "call": "Thread('reply505', source.tags, source.worktree, parent=source.name, task=source.task, session_file=fork.session_file, model=source.model, thinking_level=source.thinking_level, execution=source.execution)"
+    },
+    {
+      "path": "tests/retained_context_native_journey.py",
+      "line": 92,
+      "call": "Thread('authored-context-fresh', frozenset(), str(fresh_project), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(fresh_session), model='response-local/fixture', thinking_level='off')"
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "line": 84,
+      "call": "Thread('direct-human', frozenset(), str(fixture.project), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(fixture.session), model='response-local/fixture', thinking_level='off')"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 106,
+      "call": "Thread('recovery523', original.tags, original.worktree, parent=original.name, session_file=fork.session_file, model=original.model, thinking_level=original.thinking_level, process_identity=ProcessIdentity.capture(os.getpid()))"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 145,
+      "call": "Thread(name, source.tags, source.worktree, parent=source.name, task=source.task, session_file=fork.session_file, model=source.model, thinking_level=source.thinking_level, execution=source.execution)"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 1065,
+      "call": "replace(owner, session_file=str(saved))"
+    },
+    {
+      "path": "tests/test_channels.py",
+      "line": 239,
+      "call": "Thread('parent', frozenset(), str(tmp_path), session_file=str(parent_session))"
+    },
+    {
+      "path": "tests/test_compaction_boundaries.py",
+      "line": 169,
+      "call": "replace(intent.witness, session_file=str(file.with_name('another.jsonl')))"
+    },
+    {
+      "path": "tests/test_compaction_outcome_transcript.py",
+      "line": 57,
+      "call": "Thread('worker', frozenset(), str(tmp_path), session_file=str(native))"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 396,
+      "call": "Thread('project', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(first))"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 67,
+      "call": "replace(comms.registry.require('Alice'), session_file=str(tmp_path / 'session.jsonl'))"
+    },
+    {
+      "path": "tests/test_context_source_inspection.py",
+      "line": 78,
+      "call": "replace(owner, session_file=str(tmp_path / 'foreign'))"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1224,
+      "call": "replace(current, session_file=str(root / 'metadata.jsonl'))"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1245,
+      "call": "replace(current, session_file=str(root / 'metadata.jsonl'))"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 257,
+      "call": "replace(owner, session_file=str(tmp_path / 'session.jsonl'))"
+    },
+    {
+      "path": "tests/test_end_to_end.py",
+      "line": 86,
+      "call": "Thread(name=parent.name, tags=parent.tags, worktree=parent.worktree, parent=parent.parent, task=parent.task, process_identity=parent.process_identity, session_file=str(session))"
+    },
+    {
+      "path": "tests/test_importing.py",
+      "line": 64,
+      "call": "replace(original_owner, session_file=str(tmp_path / 'other.jsonl'))"
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "line": 79,
+      "call": "replace(comms.registry.require('proj'), session_file=file, model=info.model, process_identity=ProcessIdentity.capture(os.getpid()))"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 124,
+      "call": "replace(thread, session_file=str(saved), model='response-local/fixture', thinking_level='off')"
+    },
+    {
+      "path": "tests/test_native_admission_rules.py",
+      "line": 87,
+      "call": "replace(current, session_file=str(tmp_path / 'changed.jsonl'))"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 627,
+      "call": "Thread('owner', frozenset(), str(native.project), process_identity=ProcessIdentity.capture(os.getpid()), session_file=created.session_file, model='response-local/fixture', goal=Goal('Keep original source and inputs', 'known-commit-control'))"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 91,
+      "call": "Thread('context-source', frozenset({'team'}), str(project), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(fixture.session), model='response-local/fixture', thinking_level='off')"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 113,
+      "call": "Thread('context-receiver', frozenset({'team'}), str(project), process_identity=ProcessIdentity.capture(os.getpid()), session_file=c_identity.session_file, model='response-local/fixture', thinking_level='off')"
+    },
+    {
+      "path": "tests/test_native_context_reference.py",
+      "line": 67,
+      "call": "replace(reservation(), sent_owner_admission_generation=RecordedNativeAdmission(2), session_id='original-session', session_file='/original/session.jsonl', session_entry_id='original-entry', request_generation=1, llm_context_digest='f' * 64)"
+    },
+    {
+      "path": "tests/test_native_context_reference.py",
+      "line": 88,
+      "call": "replace(reservation(), sent_owner_admission_generation=RecordedNativeAdmission(2), session_id='original-session', session_file='/original/session.jsonl', session_entry_id='original-entry', request_generation=1, llm_context_digest='f' * 64)"
+    },
+    {
+      "path": "tests/test_native_file_artifact.py",
+      "line": 78,
+      "call": "replace(owner, session_file=str(saved))"
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 207,
+      "call": "Thread('physical-parent', frozenset(), str(native.project), session_file=str(native.session), model='response-local/fixture', thinking_level='off')"
+    },
+    {
+      "path": "tests/test_native_transcript.py",
+      "line": 73,
+      "call": "Thread('worker', frozenset(), str(tmp_path), session_file=str(path))"
+    },
+    {
+      "path": "tests/test_operations.py",
+      "line": 126,
+      "call": "Thread(name='transcript-thread', tags=frozenset(), worktree=str(tmp_path), session_file=str(session_file))"
+    },
+    {
+      "path": "tests/test_operations.py",
+      "line": 161,
+      "call": "Thread(name='compacted-thread', tags=frozenset(), worktree=str(tmp_path), session_file=str(session_file))"
+    },
+    {
+      "path": "tests/test_operations.py",
+      "line": 455,
+      "call": "Thread(name='large', tags=frozenset(), worktree=str(tmp_path), session_file=str(path))"
+    },
+    {
+      "path": "tests/test_operations.py",
+      "line": 537,
+      "call": "Thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1', session_file=str(tmp_path / 's.json'))"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 70,
+      "call": "Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=witness.session_file, goal=Goal('task', 'goal'))"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 120,
+      "call": "Thread('owner', frozenset(), str(root), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(session), goal=Goal('task', 'goal'))"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 592,
+      "call": "Thread('owner', frozenset(), str(root), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(session), goal=Goal('task', 'goal'))"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 630,
+      "call": "Thread('owner', frozenset(), str(root), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(session), goal=Goal('task', 'goal'))"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 674,
+      "call": "Thread('owner', frozenset(), str(root), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(session), goal=Goal('task', 'goal'))"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 824,
+      "call": "Thread('owner', frozenset(), str(root), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(session), goal=Goal('continuing task', 'goal-unchanged'))"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 518,
+      "call": "Thread('owner', frozenset(), str(root), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(session), goal=Goal('capacity acceptance', 'goal'))"
+    },
+    {
+      "path": "tests/test_private_nk_entrypoint.py",
+      "line": 193,
+      "call": "Thread('resumable', frozenset(), str(tmp_path), process_identity=None, session_file=str(saved))"
+    },
+    {
+      "path": "tests/test_project.py",
+      "line": 32,
+      "call": "Thread(name='worker', tags=frozenset({'test'}), worktree=str(old), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(old / 'session.jsonl'), model='test/model', created_at=123)"
+    },
+    {
+      "path": "tests/test_registration_inheritance.py",
+      "line": 36,
+      "call": "Thread('owner', frozenset({'team'}), str(tmp_path), session_file=str(tmp_path / 'session.jsonl'), model='provider/model', thinking_level='high', previous_worktrees=('/old',), auto_title_pending=True, title='retained')"
+    },
+    {
+      "path": "tests/test_registration_transitions.py",
+      "line": 31,
+      "call": "replace(leased, session_file=str(tmp_path / 'new.jsonl'))"
+    },
+    {
+      "path": "tests/test_restart.py",
+      "line": 22,
+      "call": "Thread('worker', frozenset(), str(tmp_path), session_file=str(session))"
+    },
+    {
+      "path": "tests/test_restart_queue.py",
+      "line": 56,
+      "call": "Thread('worker', frozenset(), str(fixture.project), session_file=str(fixture.session), model='response-local/fixture', thinking_level='off')"
+    },
+    {
+      "path": "tests/test_retained_context_operations.py",
+      "line": 32,
+      "call": "Thread('reader', frozenset(), str(tmp_path), session_file=str(saved), goal=goal)"
+    },
+    {
+      "path": "tests/test_retained_fork_first_input.py",
+      "line": 57,
+      "call": "Thread('retained-parent', frozenset(), str(fixture.project), session_file=str(source), model='response-local/fixture', thinking_level='off')"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 129,
+      "call": "Thread('retained', frozenset(), str(project), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(session), model=model, goal=goal)"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 79,
+      "call": "replace(owner, model='response-local/fixture', thinking_level='off', session_file=str(saved))"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 26,
+      "call": "Thread('missing', frozenset({'nra', 'openhcs'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(tmp_path / 'saved.jsonl'), title='Preserved title', task='Original task', active_turn=ActiveTurn('old-turn', os.getpid()))"
+    },
+    {
+      "path": "tests/test_runtime.py",
+      "line": 518,
+      "call": "Thread(name='parent', tags=frozenset(), worktree=str(tmp_path), session_file=str(session))"
+    },
+    {
+      "path": "tests/test_runtime.py",
+      "line": 252,
+      "call": "replace(comms.registry.require('worker'), session_file=str(tmp_path / 'session.jsonl'))"
+    },
+    {
+      "path": "tests/test_runtime_cold_attachment.py",
+      "line": 50,
+      "call": "Thread('parent', frozenset(), str(fixture.project), session_file=str(fixture.session), model='response-local/fixture', thinking_level='off')"
+    },
+    {
+      "path": "tests/test_s4_read_characterization.py",
+      "line": 46,
+      "call": "Thread('worker', frozenset({'team'}), str(tmp_path), session_file=str(source))"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 173,
+      "call": "Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=file, model=fixture['model'], goal=Goal('work', 'goal') if goal else None)"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 438,
+      "call": "replace(comms.registry.require('proj'), goal=Goal('retain history', 'goal-acp'), session_file=file, model=info.model.display_name, process_identity=ProcessIdentity.capture(os.getpid()))"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 1026,
+      "call": "replace(comms.registry.require('proj'), session_file=file, model=info.model.display_name, process_identity=ProcessIdentity.capture(os.getpid()))"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 65,
+      "call": "Thread('owner', frozenset(), str(native.project), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(native.session), model=model.display_name)"
+    },
+    {
+      "path": "tests/test_selected_summary_exchange.py",
+      "line": 578,
+      "call": "Thread('summary-owner', frozenset(), str(native.project), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(native.session), model=model.display_name)"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 127,
+      "call": "Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(file), model=ready['model'])"
+    },
+    {
+      "path": "tests/test_start.py",
+      "line": 16,
+      "call": "Thread('worker', frozenset(), str(tmp_path), session_file='/saved.jsonl')"
+    },
+    {
+      "path": "tests/test_start.py",
+      "line": 44,
+      "call": "Thread('worker', frozenset(), str(tmp_path), session_file=str(source))"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 414,
+      "call": "replace(owner, session_file=str(saved), goal=Goal('Keep exact /artifacts/root', 'original-goal'))"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 470,
+      "call": "replace(owner, session_file=str(saved))"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 30,
+      "call": "Thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), title='Retained title', session_file='/retained/session.jsonl', created_at=12.5)"
+    },
+    {
+      "path": "tests/test_thread_unread.py",
+      "line": 27,
+      "call": "Thread('worker', frozenset({'ci'}), str(tmp_path), session_file=str(source))"
+    },
+    {
+      "path": "tests/test_thread_unread.py",
+      "line": 200,
+      "call": "replace(comms.registry.require('worker'), session_file=str(other))"
+    },
+    {
+      "path": "tests/test_tool_diffs.py",
+      "line": 122,
+      "call": "Thread('worker', frozenset(), str(tmp_path), session_file=str(session))"
+    },
+    {
+      "path": "tests/test_transcript_event_time.py",
+      "line": 94,
+      "call": "Thread('clock', frozenset(), str(native.project), session_file=str(native.session))"
+    },
+    {
+      "path": "tests/test_transcript_input_display.py",
+      "line": 105,
+      "call": "Thread('worker', frozenset(), str(tmp_path), session_file=str(session))"
+    },
+    {
+      "path": "tests/test_transcript_legacy_integration.py",
+      "line": 41,
+      "call": "Thread(name, frozenset(), str(tmp_path), session_file=str(session) if name == 'owner' else None)"
+    },
+    {
+      "path": "tests/test_transcript_legacy_integration.py",
+      "line": 79,
+      "call": "Thread(name, frozenset(), str(tmp_path), session_file=str(source_session) if name == 'owner' else None)"
+    },
+    {
+      "path": "tests/test_transcript_pages.py",
+      "line": 63,
+      "call": "Thread('worker', frozenset(), str(tmp_path), session_file=str(path))"
+    },
+    {
+      "path": "tests/test_transcript_pages.py",
+      "line": 29,
+      "call": "Thread('worker', frozenset(), str(tmp_path), session_file=str(path))"
+    },
+    {
+      "path": "tests/test_transcript_pages.py",
+      "line": 68,
+      "call": "replace(thread, session_file=str(tmp_path / 'other.jsonl'))"
+    },
+    {
+      "path": "tests/test_transcript_pages.py",
+      "line": 89,
+      "call": "Thread('parent', frozenset(), str(tmp_path), session_file=str(parent_path))"
+    },
+    {
+      "path": "tests/test_transcript_pages.py",
+      "line": 123,
+      "call": "Thread('parent', frozenset(), str(tmp_path), session_file=str(parent_path))"
+    },
+    {
+      "path": "tests/test_transcript_read_identity.py",
+      "line": 24,
+      "call": "Thread('worker', frozenset(), str(tmp_path), session_file=str(path))"
+    },
+    {
+      "path": "tests/test_transcript_read_identity.py",
+      "line": 45,
+      "call": "Thread('parent', frozenset(), str(tmp_path), session_file=str(parent))"
+    },
+    {
+      "path": "tests/test_transcript_read_identity.py",
+      "line": 76,
+      "call": "Thread('worker', frozenset(), str(tmp_path), session_file=str(path))"
+    },
+    {
+      "path": "tests/test_transcript_routes_index.py",
+      "line": 31,
+      "call": "Thread('worker', frozenset(), str(tmp_path), session_file=str(session))"
+    },
+    {
+      "path": "tests/test_user_view_mark_read.py",
+      "line": 24,
+      "call": "Thread('sender', frozenset({'ci'}), str(tmp_path), session_file=str(source))"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 236,
+      "call": "Thread('configured-source', frozenset(), str(project), process_identity=ProcessIdentity.capture(os.getpid()), session_file=identity.session_file, model=source.model, thinking_level=source.thinking_level, task='Bounded acceptance only. Do not resume inherited work or use tools.')"
+    }
+  ],
+  "imports": [
+    {
+      "path": "src/agent_comms/__init__.py",
+      "line": 24,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 79,
+      "import": "from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle"
+    },
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 83,
+      "import": "from .turn_runner import TurnRunner"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 13,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 14,
+      "import": "from .native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 41,
+      "import": "from .native_custody import BorrowedNative, EmptyNative, NativeCleanupFailed, NativeCustody, PiSessionChild, RetainedNative"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 19,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 26,
+      "import": "from .thread_management import ThreadManagement"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 34,
+      "import": "from .native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/collaboration_ledger.py",
+      "line": 7,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/comms.py",
+      "line": 17,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/comms.py",
+      "line": 19,
+      "import": "from .thread_management import ThreadManagement"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 20,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 20,
+      "import": "from .compaction_records import CompactionOperation, EnrolledPrivateSession, NativeForkCreation, PrivateRawInput, SelectedSummaryAttempt, SessionJournalHistory"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 95,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "line": 42,
+      "import": "from .session_lifecycle import SessionLifecycle"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 53,
+      "import": "from agent_comms.native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/cursor_owner.py",
+      "line": 15,
+      "import": "from .native_input_owner import RegistryOwner, ParticipantOwner"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 26,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 16,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 22,
+      "import": "from .native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "line": 45,
+      "import": "from .session_lifecycle import SessionLifecycle"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 18,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 15,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 35,
+      "import": "from .native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 44,
+      "import": "from .session_lifecycle import SessionLifecycle"
+    },
+    {
+      "path": "src/agent_comms/input_effects.py",
+      "line": 11,
+      "import": "from .turn_runner import TurnRunner"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 15,
+      "import": "from .native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 20,
+      "import": "from .turn_runner import TurnRunner"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 27,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 12,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 355,
+      "import": "from .compaction_records import NativeForkCreation"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 11,
+      "import": "from .compaction_records import NativeForkCreation"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 31,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 22,
+      "import": "from .native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 48,
+      "import": "from .native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 50,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 24,
+      "import": "from .native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 49,
+      "import": "from .turn_runner import TurnRunner"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 13,
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 15,
+      "import": "from .native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 19,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 16,
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 34,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_gate.py",
+      "line": 21,
+      "import": "from .native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_gate.py",
+      "line": 24,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 13,
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 17,
+      "import": "from .native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 15,
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 22,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 44,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 26,
+      "import": "from .native_input_owner import ParticipantOwner, RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 53,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "line": 35,
+      "import": "from .turn_runner import TurnRunner"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 26,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 14,
+      "import": "from .native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registration_change.py",
+      "line": 21,
+      "import": "from .registry_document import RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 35,
+      "import": "from .native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 15,
+      "import": "from .registry_document import RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 37,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/schedule_rules.py",
+      "line": 19,
+      "import": "from .turn_runner import TurnRunner"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 26,
+      "import": "from .native_input_owner import ParticipantOwner, RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 10,
+      "import": "from .backend import PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 19,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_summary_rpc.py",
+      "line": 18,
+      "import": "from .backend import MODEL_WAIT_TIMEOUT_SECONDS, PersistentPiSession"
+    },
+    {
+      "path": "src/agent_comms/session_effects.py",
+      "line": 14,
+      "import": "from .turn_runner import TurnRunner"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 20,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 210,
+      "import": "from .native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 22,
+      "import": "from .registration import Registration"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 31,
+      "import": "from .session_lifecycle import SessionLifecycle"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 34,
+      "import": "from .owned_turn import OwnedTurn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 38,
+      "import": "from .native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 46,
+      "import": "from .session_lifecycle import SessionLifecycle"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 178,
+      "import": "from .native_session_prepare import NativeSessionPreparation"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 551,
+      "import": "from .owned_turn import OwnedTurn"
+    },
+    {
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 168,
+      "import": "from agent_comms.compaction_records import NativeForkCreation"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 10,
+      "import": "from agent_comms.owned_turn import OwnedTurn"
+    },
+    {
+      "path": "tests/guards/test_owned_send_ownership.py",
+      "line": 80,
+      "import": "from agent_comms.turn_runner import TurnRunner"
+    },
+    {
+      "path": "tests/guards/test_private_send_ownership.py",
+      "line": 9,
+      "import": "from agent_comms.native_input_owner import ParticipantOwner, RegistryOwner"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 10,
+      "import": "from agent_comms.owned_turn import OwnedTurn"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 18,
+      "import": "from agent_comms.owned_turn import OwnedTurn"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 33,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 25,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 15,
+      "import": "from agent_comms.compaction_records import CompactionOperation, NativeForkCreation, SelectedSummaryAttempt"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 26,
+      "import": "from agent_comms.backend import PersistentPiSession"
+    },
+    {
+      "path": "tests/retained_native_fixture.py",
+      "line": 34,
+      "import": "from agent_comms.registry_document import RegistryDocument"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 12,
+      "import": "from agent_comms.backend import PersistentPiSession"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 23,
+      "import": "from agent_comms.native_session_prepare import NativeSessionPreparation"
+    },
+    {
+      "path": "tests/session_coverage_configured_journey.py",
+      "line": 17,
+      "import": "from agent_comms.compaction_records import NativeForkCreation"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 22,
+      "import": "from agent_comms.native_session_prepare import NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 14,
+      "import": "from agent_comms.native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "tests/test_atomic_turn_source_owner.py",
+      "line": 15,
+      "import": "from agent_comms.owned_turn import OwnedTurn"
+    },
+    {
+      "path": "tests/test_backend_native_output.py",
+      "line": 9,
+      "import": "from agent_comms.native_session_prepare import NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "line": 90,
+      "import": "from agent_comms.owned_turn import OwnedTurn"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 13,
+      "import": "from agent_comms.owned_turn import OwnedTurn"
+    },
+    {
+      "path": "tests/test_compaction_boundaries.py",
+      "line": 198,
+      "import": "from agent_comms.compaction_records import NativeForkCreation"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 20,
+      "import": "from agent_comms.registry_document import RegistryDocument"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 391,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_continued_private_session.py",
+      "line": 334,
+      "import": "from agent_comms.compaction_records import NativeForkCreation, CompactionOperation"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 65,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_coordination_response.py",
+      "line": 44,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 10,
+      "import": "from agent_comms import Registration"
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "line": 132,
+      "import": "from agent_comms.turn_runner import TurnRunner"
+    },
+    {
+      "path": "tests/test_goal_selection_owner.py",
+      "line": 21,
+      "import": "from agent_comms.native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 141,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_irc.py",
+      "line": 5,
+      "import": "from agent_comms import Registration"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 19,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 22,
+      "import": "from agent_comms.owned_turn import OwnedTurn"
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 24,
+      "import": "from agent_comms.turn_runner import TurnRunner"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 598,
+      "import": "from agent_comms.native_session_prepare import NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 607,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 15,
+      "import": "from agent_comms.native_session_prepare import NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 17,
+      "import": "from agent_comms.native_session_prepare import NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_owner_compaction_authority.py",
+      "line": 18,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 37,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 20,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 22,
+      "import": "from agent_comms.native_input_owner import RegistryOwner"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 23,
+      "import": "from agent_comms.backend import PersistentPiSession"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 36,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 17,
+      "import": "from agent_comms.owned_turn import OwnedTurn"
+    },
+    {
+      "path": "tests/test_recorded_retention_measurements.py",
+      "line": 17,
+      "import": "from agent_comms.compaction_records import NativeForkCreation, SelectedSummaryAttempt"
+    },
+    {
+      "path": "tests/test_registration_components.py",
+      "line": 15,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_registration_components.py",
+      "line": 16,
+      "import": "from agent_comms.registry_document import RegistryDocument"
+    },
+    {
+      "path": "tests/test_registration_process_identity.py",
+      "line": 11,
+      "import": "from agent_comms.registry_document import RegistryDocument"
+    },
+    {
+      "path": "tests/test_registration_transitions.py",
+      "line": 10,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_registry_current_format.py",
+      "line": 15,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_registry_revision.py",
+      "line": 8,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_route_observation.py",
+      "line": 15,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_route_observation.py",
+      "line": 16,
+      "import": "from agent_comms.registry_document import RegistryDocument"
+    },
+    {
+      "path": "tests/test_s10_boundary_guards.py",
+      "line": 127,
+      "import": "from agent_comms.turn_runner import TurnRunner"
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 18,
+      "import": "from agent_comms.owned_turn import OwnedTurn"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 27,
+      "import": "from agent_comms.native_session_prepare import NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 29,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 204,
+      "import": "from agent_comms.owned_turn import OwnedTurn"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 22,
+      "import": "from agent_comms.native_session_prepare import NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 24,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_session_components.py",
+      "line": 17,
+      "import": "from agent_comms.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 14,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 15,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 56,
+      "import": "from agent_comms.owned_turn import OwnedTurn"
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "line": 19,
+      "import": "from agent_comms.owned_turn import OwnedTurn"
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "line": 14,
+      "import": "from agent_comms.turn_runner import TurnRunner"
+    },
+    {
+      "path": "tests/test_working_memory_read.py",
+      "line": 11,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 26,
+      "import": "from agent_comms.registry_document import RegistryDocument"
+    },
+    {
+      "path": "tools/cutover/original_owner_capture.py",
+      "line": 18,
+      "import": "from agent_comms.registry_document import RegistryDocument"
+    },
+    {
+      "path": "tools/cutover/original_owner_capture_installed_pilot.py",
+      "line": 10,
+      "import": "from agent_comms.registry_document import RegistryDocument"
+    },
+    {
+      "path": "tools/cutover/owner_read_projection.py",
+      "line": 10,
+      "import": "from agent_comms.registry_document import RegistryDocument"
+    },
+    {
+      "path": "tools/cutover/read_original_owner.py",
+      "line": 13,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tools/cutover/seed_original_owner_capture.py",
+      "line": 9,
+      "import": "from agent_comms.registration import Registration"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 26,
+      "import": "from agent_comms.registry_document import RegistryDocument"
+    },
+    {
+      "path": "tools/cutover/validate_thread_retirement.py",
+      "line": 7,
+      "import": "from agent_comms.registry_document import RegistryDocument"
+    }
+  ],
+  "limits": "AST member matches are source sites, not dynamically resolved call authority; source reads establish their ownership. No runtime acceptance."
+}

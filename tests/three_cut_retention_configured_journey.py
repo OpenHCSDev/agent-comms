@@ -1,4 +1,4 @@
-"""One configured saved fork, three genuine cuts and original recorded probes.
+"""Declared case/arm execution through configured saved forks and original probes.
 
 Uses the existing configured ACP/native resource and scorer. Source publications
 are real private USER constraints; expected answers never enter model prompts.
@@ -8,10 +8,11 @@ later. No public input, original replay, policy activation or comparative study.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import replace
 import json
+import os
 from pathlib import Path
 import sys
+from unittest.mock import patch
 
 from acp.agent.router import build_agent_router
 from agent_comms.acp_extension import CompactRequest, encode_request
@@ -19,19 +20,17 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.native_fork import ForkSessionRequest
+from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.native_entries import NativeEntry
-from agent_comms.native_pi import NativeContextProof
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.message_reference import MessageReference
-from agent_comms.registry_document import RegistryDocument
 from agent_comms.pi_vocabulary import ThinkingLevel
-from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop
-from agent_comms.turn_context import FileProvenance, NativeProvenance
+from agent_comms.turn_context import FileProvenance
 
 from original_owner_capture import CurrentTypedCapture
 from compaction_source_successor_installed_journey import configured_saved_agent, digest
 from compaction_retention_fixture import (
-    Condition, RecallScenario, RecordedNativeProbes,
+    Condition, PairedRecallDesign, RecallScenario, RecordedNativeProbes,
 )
 from retained_native_fixture import RecordedNativeCheckpoint, RecordedNativeProbe
 from summary_prefix_configured_installed_journey import observe_native_requests
@@ -44,14 +43,86 @@ def record(path, value):
     return FileProvenance(str(path), digest(path))
 
 
-async def condition_application(stage,package,original_python,selected_condition: Condition,
-                                checkpoint: RecordedNativeCheckpoint, *, core_source,
-                                core_artifacts=()):
-    """Install one selection on an original SDK fork, then submit distinct input.
+async def condition_application(application_stage, package, agent, owner, fork,
+                                selected_condition: Condition, checkpoint: RecordedNativeCheckpoint,
+                                *, prompt_text: str, receipt, retire_selected):
+    """Observe one selected arm and retire its exact acquired child on any exit.
 
-    Borrow the existing completed cut/capture. This path neither repeats its
-    compaction nor produces missing historical evidence from today's sources.
-    Configured launch/model/auth/settings still come from the original owner.
+    Source selection/restoration belongs to SessionLifecycle. The yielded
+    retirement capability owns custody checks and cancellation-safe joining;
+    this consumer neither selects a current backend nor repeats those checks.
+    """
+    with observe_native_requests(package,application_stage/'condition-observation.jsonl',
+            contexts=application_stage/'sdk-contexts',
+            condition_source=application_stage/'fork-condition-source.private.json',
+            condition=selected_condition) as launch:
+        environment=dict(os.environ)
+        launch(environment)
+        with patch.dict(os.environ,environment,clear=True):
+            try:
+                return await apply_condition_input(application_stage,agent,owner,fork,
+                    selected_condition,checkpoint,prompt_text=prompt_text,receipt=receipt)
+            finally:
+                await retire_selected()
+
+
+async def apply_condition_input(application_stage, agent, owner, fork,
+                                selected_condition: Condition, checkpoint: RecordedNativeCheckpoint,
+                                *, prompt_text: str, receipt):
+    """One prepare/prompt/original-capture algorithm serves both resources.
+
+    The paired selection and the standalone owned agent have different
+    retirement authorities. Their resource scopes surround this shared body;
+    neither creates a second USER/registry or reconstructs a missing receipt.
+    """
+    contexts=application_stage/'sdk-contexts'
+    observer_output=application_stage/'condition-observation.jsonl'
+    condition_file=application_stage/'fork-condition-source.private.json'
+    service=agent._comms
+    contexts.mkdir(mode=0o700)
+    condition=checkpoint.fork_condition_source(
+        service.root/'compaction-commits.sqlite3',Path(fork.session_file))
+    record(condition_file,condition)
+    await agent.turns.prepare_selected_session(owner.name,owner)
+    before=set(InputDispositions(service.root/InputDispositions.filename).read().rows)
+    print('CONFIGURED_FORK_INSTALLED_DISTINCT_INPUT',flush=True)
+    result=await build_agent_router(agent)('session/prompt',{'sessionId':owner.name,
+        'prompt':[{'type':'text','text':prompt_text}]},False)
+    assert result.stop_reason=='end_turn'
+    document=InputDispositions(service.root/InputDispositions.filename).read()
+    row,=(row for key,row in document.rows.items() if key not in before)
+    assert row.has_started and row.source_text==prompt_text
+    session=NativeSessionIdentity(fork.session_id,fork.session_file)
+    probe=RecordedNativeProbe.capture_input(service,owner,session,row,contexts,
+        application_stage,checkpoint,observer_output)
+    record(application_stage/'recorded-probe.private.json',probe)
+    measured=probe.observe()
+    record(application_stage/'recorded-application.private.json',measured)
+    construction=measured['construction']
+    installed=construction['condition_installation']
+    assert installed['evaluated']
+    for item in installed['installations']:
+        item.require_condition(selected_condition.value)
+    assert construction['request_budget']['evaluated']
+    assert construction['request_completion']['evaluated']
+    assert service.registry.require(owner.name).active_turn is None
+    receipt.update(complete=True,original_cut_correlated=True,
+        SDK_child_binding=True,installed_source_in_actual_SDK_request=True,
+        installed_narrative_source_evaluated=installed['narrative_source']['evaluated'],
+        constructed_source_prefix=installed['constructed_prefix'],
+        full_history_sdk_admission=construction['full_history_sdk_admission'],
+        canonical_request_budget_and_terminal=True,distinct_answer=True,new_original_inputs=1,
+        model_steps=len(measured['model_steps']),model_recall_evaluated=False,
+        final_HTTP_bytes_evaluated=False)
+    return probe, measured
+
+
+async def verify_condition_application(stage, package, original_python, selected_condition,
+                                       checkpoint, *, core_source, core_artifacts=(), prompt_text):
+    """Acquire one outer private owner for the standalone functional command.
+
+    Paired arms do not use this acquisition: they borrow the source trajectory's
+    same owner through selected_native_fork and the shared application body.
     """
     captured=CurrentTypedCapture(Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'),original_python
         ).read('openhcs-architecture-memory')
@@ -62,64 +133,27 @@ async def condition_application(stage,package,original_python,selected_condition
         checkpoint.capture(identity,evidence)
         captured_source=identity.path
     stage.mkdir(mode=0o700,exist_ok=False)
+
     def capture_source():
         return captured.require_current(),captured.retained
-    chunks=[]
+
     class Receiver:
         async def session_update(self,**value):
-            update=value['update']
-            if update.session_update=='agent_message_chunk' and update.content.type=='text':
-                chunks.append(update.content.text)
+            pass
 
-    application_stage=stage/'application'
-    contexts=application_stage/'sdk-contexts'
-    observer_output=application_stage/'condition-observation.jsonl'
-    condition_file=application_stage/'fork-condition-source.private.json'
     receipt={'complete':False,'public_inputs':0,'input_replays':0,'paid_comparison':False,
-        'installed_UI':False,'acceptance_scope':'original completed cut/capture/SDK fork/installed SDK input and distinct answer',
+        'installed_UI':False,'acceptance_scope':'original completed cut/SDK fork/installed SDK input and distinct answer',
         'selected_condition':selected_condition}
-    with observe_native_requests(package,observer_output,
-            contexts=contexts,condition_source=condition_file,condition=selected_condition) as launch:
+    application_stage=stage/'application'
+    with observe_native_requests(package,application_stage/'condition-observation.jsonl',
+            contexts=application_stage/'sdk-contexts',
+            condition_source=application_stage/'fork-condition-source.private.json',
+            condition=selected_condition) as launch:
         async with configured_saved_agent(application_stage,package,captured_source,Receiver(),receipt,
                 capture_source=capture_source,observe_launch=launch,
                 core_source=core_source,core_artifacts=core_artifacts) as (agent,owner,fork):
-            contexts.mkdir(mode=0o700)
-            service=agent._comms
-            condition=checkpoint.fork_condition_source(
-                service.root/'compaction-commits.sqlite3',Path(fork.session_file))
-            record(condition_file,condition)
-            chunks.clear()
-            marker=f'ORIGINAL_INSTALLED_S4_APPLICATION_{stage.name.upper().replace("-", "_")}_VERIFIED'
-            text=f'New distinct isolated verification input. Do not use tools or resume inherited work. Reply exactly {marker}.'
-            print('CONFIGURED_FORK_INSTALLED_DISTINCT_INPUT',flush=True)
-            result=await build_agent_router(agent)('session/prompt',{'sessionId':owner.name,
-                'prompt':[{'type':'text','text':text}]},False)
-            assert result.stop_reason=='end_turn' and marker in ''.join(chunks)
-            document=InputDispositions(service.root/InputDispositions.filename).read()
-            row,=document.rows.values()
-            assert row.has_started and row.source_text==text
-            session=NativeSessionIdentity(fork.session_id,fork.session_file)
-            probe=RecordedNativeProbe.capture_input(service,owner,session,row,contexts,
-                application_stage,checkpoint,observer_output)
-            record(application_stage/'recorded-probe.private.json',probe)
-            measured=probe.observe()
-            record(application_stage/'recorded-application.private.json',measured)
-            construction=measured['construction']
-            installed=construction['condition_installation']
-            assert installed['evaluated']
-            for item in installed['installations']:
-                item.require_condition(selected_condition.value)
-            assert construction['request_budget']['evaluated']
-            assert construction['request_completion']['evaluated']
-            assert service.registry.require(owner.name).active_turn is None
-            receipt.update(complete=True,original_cut_correlated=True,
-                SDK_child_binding=True,installed_source_in_actual_SDK_request=True,
-                installed_narrative_source_evaluated=installed['narrative_source']['evaluated'],
-                constructed_source_prefix=installed['constructed_prefix'],
-                full_history_sdk_admission=construction['full_history_sdk_admission'],
-                canonical_request_budget_and_terminal=True,distinct_answer=True,new_original_inputs=1,
-                model_steps=len(measured['model_steps']),model_recall_evaluated=False,
-                final_HTTP_bytes_evaluated=False)
+            return await apply_condition_input(application_stage,agent,owner,fork,
+                selected_condition,checkpoint,prompt_text=prompt_text,receipt=receipt)
 
 
 async def request_construction(stage, package, original_python, *, core_source, core_artifacts=()):
@@ -183,195 +217,143 @@ async def request_construction(stage, package, original_python, *, core_source, 
                 action_validity_evaluated=False, model_recall_evaluated=False)
 
 
-def committed_checkpoint(stage):
-    """Explicitly locate a known successful cut; never infer input replay safety."""
-    from agent_comms.comms import Comms
-    service = Comms(stage / 'wire')
-    session_file = service.registry.require('source529').require_saved_session()
-    journal = CompactionJournal(service.root / 'compaction-commits.sqlite3')
-    attempt, = journal.summaries.history(session_file)
-    assert isinstance(attempt.state, ManualCommittedSummary)
-    scope = stage / 'cut-1-registry.private.json'
-    checkpoint = RecordedNativeCheckpoint(journal.path, attempt.identity, attempt.state.commit_id,
-                                         FileProvenance(str(scope), digest(scope)), service.root / 'bus.jsonl'
-                                         ).capture_summary_observation(stage / 'summary-assemblies')
-    checkpoint.inspect()
-    return RecordedNativeProbes({}, {'cut-1': checkpoint})
+async def run(stage, package, original_python, *, design: PairedRecallDesign,
+              sampling_seed: int, trajectory: int, core_source, core_artifacts=()):
+    """Execute one explicitly selected prospective pair, never an entire study.
 
-
-def completed_continuation(stage):
-    """Read the two original answers without consuming their ACP outcome."""
-    from agent_comms.comms import Comms
-    service = Comms(stage / 'wire')
-    scenario = RecallScenario.read(stage / 'frozen-oracle.private.json')
-    recorded = FieldCodec.decode(RecordedNativeProbes,
-                                json.loads((stage / 'original-run.private.json').read_text()))
-    document = InputDispositions(service.root / InputDispositions.filename).read()
-    submitted = record(stage / 'continuation-original-inputs.private.json', document)
-    probes = {identity: replace(probe, submitted_inputs=submitted)
-              for identity, probe in recorded.rounds.items()}
-    session_file = service.registry.require('source529').require_saved_session()
-    with NativeEntry.open_evidence(Path(session_file)) as evidence:
-        header, _ = evidence.observe()
-        session = NativeSessionIdentity(header.id, session_file)
-        for round_ in scenario.rounds[:2]:
-            if round_.identity in probes:
-                continue
-            checkpoint = FieldCodec.decode(RecordedNativeCheckpoint,
-                json.loads((stage / f'{round_.identity}-checkpoint.private.json').read_text()))
-            row, = (row for row in document.rows.values() if row.source_text == round_.probe_text())
-            assert row.has_started
-            context = NativeContextProof.read_evidence(Path(session_file), row.native_id, evidence=evidence)
-            answer, _ = RecordedNativeProbe.answer_for_input(evidence, context)
-            sdk = stage / 'sdk-contexts' / f'context-{context.llm_context_digest}.json'
-            provenance = NativeProvenance(session, context.request_generation, context.llm_context_digest)
-            manifest, = (manifest for manifest in service.bus.log.context_manifests('source529', service.registry)
-                if manifest.segments and all(provenance in segment.provenance for segment in manifest.segments))
-            probes[round_.identity] = RecordedNativeProbe(session, row.native_id, answer.id, checkpoint,
-                FileProvenance(str(sdk), digest(sdk)),
-                record(stage / f'{round_.identity}-original-manifest.private.json', manifest),
-                submitted_inputs=submitted)
-    resumed = RecordedNativeProbes(probes)
-    resumed.observe(scenario)
-    record(stage / 'continuation-original-run.private.json', resumed)
-    return resumed
-
-
-async def run(stage, package, original_python, *, core_source, core_artifacts=(), continuation=None):
+    This callable supplies no spending permission. Actual execution requires
+    the operator's separate configured/holder/artifact purpose. A new private
+    root is mandatory; uncertain or completed roots are never resumed here.
+    Source and summary work are shared between the arms, not independent costs.
+    """
+    plan = design.construction_plan(sampling_seed, trajectory=trajectory)
+    selected, = plan['trajectories']
+    scenario = RecordedNativeCheckpoint.read_record(design.oracle, RecallScenario)
+    stage.mkdir(mode=0o700, exist_ok=False)
+    record(stage / 'construction-plan.private.json', plan)
+    record(stage / 'frozen-oracle.private.json', scenario)
     captured = CurrentTypedCapture(Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'),
                                    original_python).read('openhcs-architecture-memory')
     original = captured.require_current()
-    assert ThinkingLevel.optional_name(original.thinking_level) == 'high'
-    assert 'sol' in original.model.lower(), 'Use the configured Sol model; do not select an alternative'
+    if original.model != design.model:
+        raise ValueError('Declared design differs from the selected configured model')
     source_file = Path(original.require_saved_session())
     receipt = {'complete': False, 'public_inputs': 0, 'input_replays': 0,
                'comparative_study': False, 'policy_activation': False,
-               'acceptance_scope': 'three sequential configured SDK/ACP/native cuts and recorded retention probes',
-               'completed_rounds': []}
+               'acceptance_scope': 'one declared shared-source trajectory and original installed-arm probes',
+               'sample': selected['sample'], 'condition_order': selected['condition_order'],
+               'completed_rounds': [], 'shared_preparation': True}
+    record(stage / 'receipt.json', receipt)
 
     class Receiver:
         async def session_update(self, **value):
-            # ACP is the real delivery path; scoring uses the original native answer.
             pass
 
     def capture_source():
         return captured.require_current(), captured.retained
 
-    observation = stage / 'request-observation.jsonl'
-    contexts = stage / 'sdk-contexts'
-    summaries = stage / 'summary-assemblies'
-    with observe_native_requests(package, observation, contexts=contexts,
-                                 summaries=summaries) as observe_launch:
-        async with configured_saved_agent(stage, package, source_file, Receiver(), receipt,
+    parent_stage = stage / 'source'
+    contexts = parent_stage / 'sdk-contexts'
+    summaries = parent_stage / 'summary-assemblies'
+    probes = {condition: {} for condition in selected['condition_order']}
+    stimuli, checkpoints, task_events = {}, {}, ()
+    with observe_native_requests(package, parent_stage / 'request-observation.jsonl',
+                                 contexts=contexts, summaries=summaries) as observe_launch:
+        async with configured_saved_agent(parent_stage, package, source_file, Receiver(), receipt,
                 capture_source=capture_source, observe_launch=observe_launch,
-                continuation=continuation,core_source=core_source,
-                core_artifacts=core_artifacts) as (agent, owner, creation):
-            contexts.mkdir(mode=0o700, exist_ok=continuation is not None)
-            summaries.mkdir(mode=0o700, exist_ok=continuation is not None)
+                core_source=core_source, core_artifacts=core_artifacts) as (agent, owner, creation):
+            contexts.mkdir(mode=0o700)
+            summaries.mkdir(mode=0o700)
             session = NativeSessionIdentity(creation.session_id, creation.session_file)
             service = agent._comms
             router = build_agent_router(agent)
             journal = CompactionJournal(service.root / 'compaction-commits.sqlite3')
             inputs = InputDispositions(service.root / InputDispositions.filename)
-
-            def pin(wording, **changes):
-                subject = service.messaging.send_user_message(owner.name, wording, worktree=owner.worktree)
-                declaration = service.messaging.pin_user_constraint(owner.name, subject.reference,
-                                worktree=owner.worktree, **changes)
-                return subject, declaration
-
-            if continuation is None:
-                archive_source, archive = pin('For this private retention task, the binding archive root is /artifacts/S4/α/source.')
-                prohibition, _ = pin('Never replay an uncertain input. This prohibition remains binding throughout this task.')
-                alternative, _ = pin('warm-review was chosen; cold-review remains a valid review alternative and must remain available.')
-                scenario = RecallScenario.configured_retention(json.dumps(FieldCodec.encode(archive.reference), sort_keys=True),
-                                           (archive_source, prohibition, alternative))
-                record(stage / 'frozen-oracle.private.json', scenario)
-                record(stage / 'public-questions.json', scenario.public())
-            else:
-                scenario = RecallScenario.read(stage / 'frozen-oracle.private.json')
-                reference = FieldCodec.decode(MessageReference, json.loads(scenario.rounds[0].questions[0].evidence_ref))
-                with service.bus.log.certified_read() as source:
-                    original, = source.references((reference,))
-                    archive = original.message
-            probes = {} if continuation is None else dict(continuation.rounds)
-            if probes:
-                # The original retained fact owner resolves the correction; a
-                # current body/time lookup cannot select the dropped subject.
-                checkpoint = probes[scenario.rounds[len(probes)-1].identity].checkpoint
-                with NativeEntry.open_evidence(Path(session.session_file)) as evidence:
-                    attempt, _, _, _ = checkpoint.capture(session, evidence)
-                snapshot = checkpoint.read_record(checkpoint.registry_scope, RegistryDocument).snapshot()
-                captured_owner = snapshot.require_active(attempt.request.source.incarnation.name)
-                _, archive = next((root, current) for root, current in
-                    attempt.request.retained.current_authored_lineages(captured_owner, snapshot)
-                    if root.reference == reference)
-            for number, round_ in enumerate(scenario.rounds, 1):
-                if round_.identity in probes:
-                    receipt['completed_rounds'].append(round_.identity)
-                    print(f'{round_.identity}: recorded original answer; no summary or input replay', flush=True)
-                    continue
-                if number == 2:
-                    wording, = round_.history_after(scenario.rounds[number - 2].history)
-                    _, archive = pin(wording, change=CorrectionTaskChange(archive.reference))
-                elif number == 3:
-                    wording, = round_.history_after(scenario.rounds[number - 2].history)
-                    service.messaging.send_user_message(owner.name,
-                        wording,
-                        worktree=owner.worktree, task=UserTaskDrop(CorrectionTaskChange(archive.reference)))
-
-                if continuation is not None and round_.identity in continuation.checkpoints:
-                    checkpoint = continuation.checkpoints[round_.identity]
-                    print(f'{round_.identity}: original committed cut, no summary replay', flush=True)
-                else:
-                    scope = record(stage / f'{round_.identity}-registry.private.json', service.registry.store.read())
-                    print(f'{round_.identity}: configured canonical compaction', flush=True)
-                    prior_operations = {attempt.identity.operation_id for attempt in journal.summaries.history(session.session_file)}
-                    await router('session/prompt', {'sessionId': owner.name,
-                        'prompt': [{'type': 'text', 'text': ' '}], '_meta': encode_request(CompactRequest(
-                        'Preserve exact original facts and authorized corrections/drops. Do not resume inherited work.'))}, False)
-                    attempt, = (attempt for attempt in journal.summaries.history(session.session_file)
-                                if attempt.identity.operation_id not in prior_operations)
-                    assert isinstance(attempt.state, ManualCommittedSummary)
-                    operation = journal.operations.get(attempt.state.commit_id)
-                    operation.committed_outcome()
-                    checkpoint = RecordedNativeCheckpoint(journal.path, attempt.identity,
-                        operation.commit_id, scope, service.root / 'bus.jsonl'
-                        ).capture_summary_observation(summaries)
-                # Persist the committed cut before admitting the new, distinct probe.
-                record(stage / f'{round_.identity}-checkpoint.private.json', checkpoint)
-                print(f'{round_.identity}: distinct held-out probe', flush=True)
+            # The source is frozen study data, not an instruction to modify the
+            # inherited project. Publish through the existing USER pin owner.
+            restriction = service.messaging.send_user_message(owner.name,
+                scenario.rounds[0].evaluation_instructions(),
+                worktree=owner.worktree)
+            service.messaging.pin_user_constraint(owner.name, restriction.reference,
+                                                 worktree=owner.worktree)
+            for number, operands in enumerate(plan['rounds'], 1):
+                identity = operands['round']
+                round_ = scenario.rounds[number - 1]
+                round_stage = stage / f'round-{number}'
+                round_stage.mkdir(mode=0o700)
+                task_events = round_.publish_task_sources(service,owner.name,task_events)
+                record(round_stage/'authored-task-events.private.json',
+                       round_.observe_task_events(service,owner.name,task_events))
+                # Each source body is the original construction operand, not a
+                # caller-built cumulative history or oracle answer payload.
+                before = set(inputs.read().rows)
                 result = await router('session/prompt', {'sessionId': owner.name,
-                    'prompt': [{'type': 'text', 'text': round_.probe_text()}]}, False)
+                    'prompt': [{'type': 'text', 'text': operands['source_text']}]}, False)
                 assert result.stop_reason == 'end_turn'
-                row, = (row for row in inputs.read().rows.values() if row.source_text == round_.probe_text())
-                assert row.has_started
-                probes[round_.identity]=RecordedNativeProbe.capture_input(
-                    service,owner,session,row,contexts,stage,checkpoint)
-                record(stage / ('original-run.private.json' if continuation is None else
-                                'continued-run.private.json'), RecordedNativeProbes(dict(probes)))
-                receipt['completed_rounds'].append(round_.identity)
+                document = inputs.read()
+                row, = (row for key, row in document.rows.items() if key not in before)
+                assert row.has_started and row.source_text == operands['source_text']
+                stimulus = RecordedNativeProbe.capture_input(service, owner, session, row,
+                    contexts, round_stage)
+                stimuli[identity] = stimulus
+                record(round_stage / 'source-input.private.json', stimulus)
+                # Retain the original terminal before refusing an unexpected
+                # tool attempt; never erase or retry that source input.
+                measured = stimulus.observe()
+                record(round_stage / 'source-measurement.private.json', measured)
+                assert measured['answer_support']['unassisted_recall']
                 assert service.registry.require(owner.name).active_turn is None
+                scope = record(round_stage / 'registry.private.json', service.registry.store.read())
+                prior = {attempt.identity.operation_id for attempt in journal.summaries.history(session.session_file)}
+                result = await router('session/prompt', {'sessionId': owner.name,
+                    'prompt': [{'type': 'text', 'text': ' '}], '_meta': encode_request(CompactRequest(
+                        'Preserve the exact supplied case history and its explicit corrections. '
+                        'Do not use tools or resume inherited work.'))}, False)
+                assert result.stop_reason == 'end_turn'
+                attempt, = (attempt for attempt in journal.summaries.history(session.session_file)
+                            if attempt.identity.operation_id not in prior)
+                assert isinstance(attempt.state, ManualCommittedSummary)
+                operation = journal.operations.get(attempt.state.commit_id)
+                operation.committed_outcome()
+                checkpoint = RecordedNativeCheckpoint(journal.path, attempt.identity,
+                    operation.commit_id, scope, service.root / 'bus.jsonl').capture_summary_observation(summaries)
+                checkpoints[identity] = checkpoint
+                record(round_stage / 'checkpoint.private.json', checkpoint)
+                for position, condition in enumerate(selected['condition_order'], 1):
+                    arm_stage=round_stage/f'arm-{position}'
+                    arm_stage.mkdir(mode=0o700)
+                    original_owner=RegistryOwner.capture_local(service.registry.snapshot(),owner.name)
+                    child=await journal.private_inputs.fork(ForkSessionRequest(
+                        str(package),original_owner.thread.require_saved_session(),owner.worktree,
+                        str(arm_stage/'forks')),cwd=Path(owner.worktree))
+                    arm_receipt={'complete':False,'public_inputs':0,'input_replays':0,
+                        'paid_comparison':False,'selected_condition':condition,
+                        'acceptance_scope':'same-owner selected SDK fork and original installed input; not study'}
+                    try:
+                        async with agent.sessions.selected_native_fork(owner.name,original_owner,child) as (selected_owner,retire_selected):
+                            probe, observed = await condition_application(arm_stage,package,agent,
+                                selected_owner.thread,child,condition,checkpoint,
+                                prompt_text=operands['probe_text'],receipt=arm_receipt,
+                                retire_selected=retire_selected)
+                        arm_receipt['original_source_restored']=True
+                    finally:
+                        record(arm_stage/'receipt.json',arm_receipt)
+                    probes[condition][identity] = probe
+                    record(round_stage / f'arm-{position}-measurement.private.json', observed)
+                    record(stage / f'arm-{position}-run.private.json',
+                           RecordedNativeProbes(dict(probes[condition]), stimuli=dict(stimuli)))
+                receipt['completed_rounds'].append(identity)
+                record(stage / 'receipt.json', receipt)
 
-            record(stage / 'source-publications.private.json', service.bus.log.full_history())
-            report = scenario.score_native(Condition.TASK_MEMORY, RecordedNativeProbes(probes))
-            record(stage / 'original-measurements.private.json', report)
-            assert report['three_original_cuts_observed']
-            assert all(value['evaluated'] for value in report['canonical_availability'].values())
-            measured = report['provider_prompt_presence']
-            # Previously captured SDK objects cannot supply missing original
-            # serialization. Keep that metric unavailable, not zero or credit.
-            assert all(value['exact_envelope_present'] for value in measured.values() if value['evaluated'])
-            assert measured['cut-3']['evaluated']
-            for cut in ('cut-2', 'cut-3'):
-                revision = report['checkpoints'][cut]['revision_mass']
-                assert revision['evaluated'] and revision['constraints']['unauthorized'] == 0
-            receipt.update(complete=True, three_cuts_observed=True, actual_probe_count=len(probes),
-                           recall=report['correct'], questions=report['questions'], stale=report['stale'],
-                           missing=report['missing'], measurements=report['measurements'],
-                           original_scope_and_sdk_captures=True,
-                           prompt_presence_unavailable=[key for key,value in measured.items() if not value['evaluated']],
-                           prior_ACP_outcome='UNCONFIRMED' if continuation is not None and continuation.rounds else 'not applicable')
+    candidate = RecordedNativeProbes(probes[design.candidate], stimuli=stimuli)
+    baseline = RecordedNativeProbes(probes[design.baseline], stimuli=stimuli)
+    report = scenario.compare_native(design.candidate, candidate, design.baseline, baseline)
+    record(stage / 'paired-measurements.private.json', report)
+    receipt.update(complete=True, original_sources=len(stimuli), original_cuts=len(checkpoints),
+                   original_arm_probes=sum(len(values) for values in probes.values()),
+                   whole_study_evaluated=False, capacity_HTTP_billing_evaluated=False,
+                   shared_source_and_summary_cost_not_independent=True)
+    record(stage / 'receipt.json', receipt)
 
 
 if __name__ == '__main__':
@@ -380,18 +362,25 @@ if __name__ == '__main__':
     source, artifacts, arguments = InstalledSource.command_arguments(sys.argv[1:])
     stage = Path(arguments[0]).absolute()
     package, original = Path(arguments[1]).resolve(), Path(arguments[2]).absolute()
-    modes = {'--continue-committed': committed_checkpoint, '--continue-completed': completed_continuation}
     if arguments[3:] == ['--request-construction']:
         asyncio.run(request_construction(stage, package, original,
             core_source=source,core_artifacts=artifacts))
     elif arguments[3:4]==['--condition-application']:
         if len(arguments)!=6:
             raise ValueError('--condition-application requires Condition and original checkpoint file')
-        asyncio.run(condition_application(stage,package,original,
+        marker=f'ORIGINAL_INSTALLED_S4_APPLICATION_{stage.name.upper().replace("-", "_")}_VERIFIED'
+        _, measured = asyncio.run(verify_condition_application(stage,package,original,
             FieldCodec.decode(Condition,arguments[4]),
             FieldCodec.decode(RecordedNativeCheckpoint,json.loads(Path(arguments[5]).read_text())),
-            core_source=source,core_artifacts=artifacts))
+            core_source=source,core_artifacts=artifacts,
+            prompt_text=f'New distinct isolated verification input. Do not use tools or resume inherited work. Reply exactly {marker}.'))
+        assert marker in measured['answer_text']
+    elif arguments[3:4] == ['--paired-construction']:
+        if len(arguments) != 7:
+            raise ValueError('--paired-construction requires original design file, sampling seed and trajectory')
+        design = FieldCodec.decode(PairedRecallDesign, json.loads(Path(arguments[4]).read_text()))
+        asyncio.run(run(stage, package, original, design=design,
+            sampling_seed=int(arguments[5]), trajectory=int(arguments[6]),
+            core_source=source, core_artifacts=artifacts))
     else:
-        continuation = modes[arguments[3]](stage) if arguments[3:] else None
-        asyncio.run(run(stage,package,original,continuation=continuation,
-            core_source=source,core_artifacts=artifacts))
+        raise ValueError('Select --request-construction, --condition-application or --paired-construction explicitly; existing outputs are never resumed')

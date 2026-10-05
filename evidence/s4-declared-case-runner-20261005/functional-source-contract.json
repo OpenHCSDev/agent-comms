@@ -1,0 +1,371 @@
+{
+  "source": "040e752f28abf66efa912fd2a14f97ea92233e0f",
+  "roots": {
+    "src/agent_comms": {
+      "parsed": 324,
+      "omissions": []
+    },
+    "tests": {
+      "parsed": 373,
+      "omissions": []
+    },
+    "evidence/same-idle-owner-native-source-20261005/qualification": {
+      "parsed": 2,
+      "omissions": []
+    },
+    "tools": {
+      "parsed": 54,
+      "omissions": []
+    }
+  },
+  "consumers": {
+    "tests/compaction_retention_fixture.py": [
+      {
+        "name": "tests/compaction_retention_fixture.py::construction_plan",
+        "calls": [
+          "Random",
+          "ValueError",
+          "any",
+          "construction_rounds",
+          "range",
+          "read_record",
+          "sample",
+          "tuple"
+        ]
+      },
+      {
+        "name": "tests/compaction_retention_fixture.py::recorded_resources",
+        "calls": [
+          "all",
+          "from_iterable",
+          "get",
+          "items",
+          "len",
+          "measured",
+          "metric",
+          "resource_metrics",
+          "sum",
+          "total",
+          "tuple",
+          "values"
+        ]
+      },
+      {
+        "name": "tests/compaction_retention_fixture.py::publish_task_sources",
+        "calls": [
+          "CorrectionTaskChange",
+          "UserTaskDrop",
+          "ValueError",
+          "chain",
+          "correction",
+          "dict",
+          "drop",
+          "items",
+          "keys",
+          "len",
+          "observe_task_events",
+          "publication_positions",
+          "publish",
+          "publish_constraint",
+          "publish_user_change",
+          "set",
+          "sorted",
+          "tuple"
+        ]
+      },
+      {
+        "name": "tests/compaction_retention_fixture.py::observe_task_events",
+        "calls": [
+          "ValueError",
+          "append",
+          "authored_sources",
+          "current_authored_lineages",
+          "get",
+          "original_text_source",
+          "original_wording",
+          "original_wording_context_source",
+          "retained_sources",
+          "source_wording",
+          "tuple"
+        ]
+      },
+      {
+        "name": "tests/compaction_retention_fixture.py::construction_rounds",
+        "calls": [
+          "append",
+          "history_after",
+          "join",
+          "probe_text",
+          "publication_plan",
+          "require_publication_prefix",
+          "set",
+          "tuple"
+        ]
+      }
+    ],
+    "tests/compaction_source_successor_installed_journey.py": [
+      {
+        "name": "tests/compaction_source_successor_installed_journey.py::configured_saved_agent",
+        "calls": [
+          "Comms",
+          "CommsAgent",
+          "CompactionJournal",
+          "Coordination",
+          "ForkSessionRequest",
+          "InputDispositions",
+          "Path",
+          "Thread",
+          "all",
+          "bind_owned",
+          "capture",
+          "capture_source",
+          "certified_read",
+          "check_output",
+          "chmod",
+          "declare",
+          "dict",
+          "digest",
+          "distribution",
+          "dumps",
+          "encode",
+          "exists",
+          "fork",
+          "frozenset",
+          "get",
+          "getpid",
+          "hexdigest",
+          "initialize_private_initial_protocol",
+          "is_relative_to",
+          "items",
+          "len",
+          "list",
+          "loads",
+          "mkdir",
+          "monotonic",
+          "native_environment",
+          "observe_launch",
+          "on_connect",
+          "optional_name",
+          "pin_private_nk_launch",
+          "pop",
+          "print",
+          "read_bytes",
+          "read_text",
+          "register",
+          "relative_to",
+          "replace",
+          "require",
+          "require_idle",
+          "require_package",
+          "resolve",
+          "resume_fork",
+          "sha256",
+          "shutdown",
+          "snapshot",
+          "splitlines",
+          "stable_thread_lookup",
+          "stat",
+          "str",
+          "strip",
+          "type",
+          "update",
+          "values",
+          "verify_native_package",
+          "with_name",
+          "write_text"
+        ]
+      }
+    ],
+    "tests/three_cut_retention_configured_journey.py": [
+      {
+        "name": "tests/three_cut_retention_configured_journey.py::condition_application",
+        "calls": [
+          "apply_condition_input",
+          "dict",
+          "launch",
+          "observe_native_requests",
+          "retire_selected"
+        ]
+      },
+      {
+        "name": "tests/three_cut_retention_configured_journey.py::apply_condition_input",
+        "calls": [
+          "InputDispositions",
+          "NativeSessionIdentity",
+          "Path",
+          "build_agent_router",
+          "capture_input",
+          "fork_condition_source",
+          "items",
+          "len",
+          "mkdir",
+          "observe",
+          "prepare_selected_session",
+          "print",
+          "read",
+          "record",
+          "require",
+          "require_condition",
+          "set",
+          "update"
+        ]
+      },
+      {
+        "name": "tests/three_cut_retention_configured_journey.py::run",
+        "calls": [
+          "CompactRequest",
+          "CompactionJournal",
+          "CurrentTypedCapture",
+          "ForkSessionRequest",
+          "InputDispositions",
+          "NativeSessionIdentity",
+          "Path",
+          "Receiver",
+          "RecordedNativeCheckpoint",
+          "RecordedNativeProbes",
+          "ValueError",
+          "append",
+          "build_agent_router",
+          "capture_input",
+          "capture_local",
+          "capture_summary_observation",
+          "committed_outcome",
+          "compare_native",
+          "condition_application",
+          "configured_saved_agent",
+          "construction_plan",
+          "dict",
+          "encode_request",
+          "enumerate",
+          "fork",
+          "get",
+          "history",
+          "isinstance",
+          "items",
+          "len",
+          "mkdir",
+          "observe",
+          "observe_native_requests",
+          "observe_task_events",
+          "pin_user_constraint",
+          "publish_task_sources",
+          "read",
+          "read_record",
+          "record",
+          "require",
+          "require_current",
+          "require_saved_session",
+          "router",
+          "selected_native_fork",
+          "send_user_message",
+          "set",
+          "snapshot",
+          "str",
+          "sum",
+          "update",
+          "values"
+        ]
+      }
+    ],
+    "tools/cutover/original_owner_capture.py": [
+      {
+        "name": "tools/cutover/original_owner_capture.py::observe",
+        "calls": [
+          "Path",
+          "decode",
+          "dict",
+          "dumps",
+          "encode",
+          "loads",
+          "pop",
+          "run",
+          "str",
+          "with_name"
+        ]
+      },
+      {
+        "name": "tools/cutover/original_owner_capture.py::read",
+        "calls": [
+          "CapturedOriginalOwner",
+          "capture",
+          "observe",
+          "require_current",
+          "snapshot"
+        ]
+      },
+      {
+        "name": "tools/cutover/original_owner_capture.py::require_current",
+        "calls": [
+          "observe",
+          "require_current",
+          "snapshot"
+        ]
+      }
+    ],
+    "tools/cutover/publish_retained_summary.py": [
+      {
+        "name": "tools/cutover/publish_retained_summary.py::command_arguments",
+        "calls": [
+          "ArgumentParser",
+          "Path",
+          "ReviewedArtifact",
+          "absolute",
+          "add_argument",
+          "decode",
+          "loads",
+          "parse_known_args",
+          "read_text",
+          "tuple"
+        ]
+      },
+      {
+        "name": "tools/cutover/publish_retained_summary.py::require_package",
+        "calls": [
+          "RuntimeError",
+          "encode",
+          "require_original",
+          "str"
+        ]
+      }
+    ],
+    "evidence/same-idle-owner-native-source-20261005/qualification/run-phase.py": [
+      {
+        "name": "evidence/same-idle-owner-native-source-20261005/qualification/run-phase.py::main",
+        "calls": [
+          "Path",
+          "alive",
+          "any",
+          "capture",
+          "communicate",
+          "create_task",
+          "done",
+          "dumps",
+          "encode",
+          "group_members",
+          "int",
+          "is_socket",
+          "iterdir",
+          "list",
+          "monotonic",
+          "print",
+          "read_bytes",
+          "read_text",
+          "repr",
+          "rglob",
+          "session",
+          "sha",
+          "sleep",
+          "split",
+          "str",
+          "tuple",
+          "values",
+          "wait",
+          "write_bytes",
+          "write_text"
+        ]
+      }
+    ]
+  },
+  "scope": "Existing Package/FunctionFacts AST and semantic source reading; dynamic ACP/native/provider resolution not proved.",
+  "controller_delta": "Exactly three granted substitutions; all other controller bytes match historical merged676. Source compiled, no execution."
+}

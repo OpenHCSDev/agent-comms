@@ -1,0 +1,16 @@
+{
+  "state": "PASS",
+  "controller": {
+    "pid": 3499357,
+    "start_time": 68265072
+  },
+  "elapsed_seconds": 4.4356643500505015,
+  "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent",
+  "native_manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+  "native_tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d",
+  "owner": "agent_comms.native_package.verify_native_package",
+  "READ_grant": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/native-keeper676-corrected-seven-READ-issued-20261005.json",
+  "READ_grant_sha256": "3363d7d90558340beea5b022aa774d401198ddd83bdb982235402b045e38ed1c",
+  "native_processes_started": 0,
+  "inputs": 0
+}

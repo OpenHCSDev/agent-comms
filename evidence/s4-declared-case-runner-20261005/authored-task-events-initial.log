@@ -1,0 +1,7 @@
+test_authored_case_events_use_real_user_lineage_and_admitted_decision (test_recorded_retention_measurements.RecordedMeasurementTests.test_authored_case_events_use_real_user_lineage_and_admitted_decision) ... Candidate maintenance unavailable (RelationViolationError)
+ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.493s
+
+OK

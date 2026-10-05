@@ -1,0 +1,14 @@
+{
+  "state": "Source-prepared rebound original675 mechanisms; unrun. Native stage/execution remain held until exact lifecycle release.",
+  "issued": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel676-corrected-seven-saved-fork-build-package-native-issued-grant.json",
+  "issued_sha256": "412e9ce310f3dd80cc1ecec04e5cbde7ec8c1399b0fd8f7807a889b18733ec1c",
+  "scripts": {
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/prove-installed.py": "794dc3c68e5152214ff81c140b82329838047bbe795dd3358645dd86391391bf",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed01/run-phase.py": "14f34de422b758f172496487bc2e9b21b0d5b8c6e74236d223612892a60852c6"
+  },
+  "template_source": {
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/prove-installed.py": "f29c9d87b504cb4f0bbcb0ee741b84b19afd373b87bea28814d4ac18bce77bf1",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-original-owner-boundaries675-installed02/run-phase.py": "d48c94433088d1b0d7fda9e99583f0898315ebeb7e9be455a53b4e09ba145040"
+  },
+  "application_imports_or_native_operations": 0
+}

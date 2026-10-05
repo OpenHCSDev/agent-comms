@@ -1,0 +1,29 @@
+{
+  "state": "PASS source-only original676 Git/retained normal-wheel equality; installed stage/read not run",
+  "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "3fe14077293b691000394831ed7458ecae92afd9b667af4501be2945ab86051d",
+  "wheel_bytes": 904487,
+  "source_head": "48b7db675f65fc312826a55db1bec20410ca7c70",
+  "assets": 355,
+  "all355_Git_ZIP_original_asset_SHA_equal": true,
+  "original_wheel_proof": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/wheel-source-proof.json",
+    "sha256": "d38ca0aa5da8df50afc95f1f85473d01dfa80831f71a804fd51905c7416293b2"
+  },
+  "recorded_producer_proof": {
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional02/candidate-source-proof.json",
+    "sha256": "e73eec65a8538b7245bb7cb9077ce9e2a308f7b9e76e9d4ff3c66b269d91f2cf"
+  },
+  "field_owner": {
+    "module": "agent_comms.turn_context",
+    "class": "SystemLayerSegment",
+    "field": "source_spans",
+    "related_manifest": "SegmentManifest.source_spans",
+    "validation": "ordered original coverage through ContributionCoordinates and existing strict FieldCodec"
+  },
+  "old_decoder_source": "c656a64c4887fae14227b1e0a04a2b263bdaeade",
+  "old_decoder_declares_field": false,
+  "original676_decoder_declares_field": true,
+  "runtime_native_provider_package_activity": false,
+  "currentmain_equals_original676": false
+}

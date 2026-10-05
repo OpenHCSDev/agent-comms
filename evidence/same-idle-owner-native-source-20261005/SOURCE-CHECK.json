@@ -1,0 +1,39 @@
+{
+  "base": "7b68d630caa654d3e9884f45cbd6493718752a0c",
+  "production_checkpoint": "a264da8f7251c72fae0ee0259c1d81de9ea5ed7e",
+  "runtime": "3.14.7 (main, Aug 10 2026, 07:46:56) [GCC 16.1.1 20260728]",
+  "original_Package_coverage": {
+    "src/agent_comms": {
+      "parsed": 324,
+      "omissions": []
+    },
+    "tests": {
+      "parsed": 373,
+      "omissions": []
+    },
+    "tools": {
+      "parsed": 54,
+      "omissions": []
+    }
+  },
+  "source_compilation": {
+    "production": 324,
+    "new_control": 1,
+    "PASS": true
+  },
+  "changed_family_files": [
+    "src/agent_comms/backend.py",
+    "src/agent_comms/compaction_records.py",
+    "src/agent_comms/native_custody.py",
+    "src/agent_comms/native_input_owner.py",
+    "src/agent_comms/native_session_prepare.py",
+    "src/agent_comms/registration.py",
+    "src/agent_comms/registry_document.py",
+    "src/agent_comms/session_lifecycle.py",
+    "src/agent_comms/turn_runner.py",
+    "tests/test_same_owner_native_fork.py"
+  ],
+  "shared_fixture_sha256": "a4cb188d5b472f5445cc8ba653137075455907c8e06cf0e95eb01793c4ce7575",
+  "imports_runtime_tests_SDK_provider_package_operations": 0,
+  "limitations": "Source parsing/compilation only. Seven authored SDK variants, including actual successor and restoration competing-read observations, remain unrun. Old afac build-only purpose withdrawn; no current package/READ/EXEC authority."
+}

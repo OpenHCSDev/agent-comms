@@ -1,0 +1,172 @@
+{
+  "state": "Scoped corrected configured one-cut/two-arm functional READY; fullS4 remains incomplete",
+  "tested_source_head": "58bf91370039d27b573061e86f2402157428815d",
+  "reviewed_constructor_head": "10fa51e0268a507168534d0bc47368ca7fc58a52",
+  "production_change_from_merged676": false,
+  "shared_preparation": true,
+  "registered_study_executed": false,
+  "whole_handback": {
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional02/whole-handback.json",
+    "sha256": "a62071f5d314852e4a8d3b8b93a213079b86b0897beaa2f7a7c701adc9a0bab0"
+  },
+  "receipts": {
+    "controller/terminal.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional02/controller/terminal.json",
+      "sha256": "68eea8ede0497ef25a7d74f3c51a8e859ec8a87cccdaad61ff8d7d82bea6adb7"
+    },
+    "journey/receipt.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional02/journey/receipt.json",
+      "sha256": "2f8a6df4c5ab5d24a2abb4f501e69676dadc49689b170fb562f3e84f142e746e"
+    },
+    "journey/paired-measurements.private.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional02/journey/paired-measurements.private.json",
+      "sha256": "cbe1442930461ac98e5a7634f6b069835e4e578b1b0f29ad985fa1c84c6b73b8"
+    },
+    "proof-terminal.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional02/proof-terminal.json",
+      "sha256": "38ed68160ad36e6f746d0ed6575301ca9d2cc0a7baacf93de7594e23ac3a6053"
+    },
+    "candidate-source-proof.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional02/candidate-source-proof.json",
+      "sha256": "e73eec65a8538b7245bb7cb9077ce9e2a308f7b9e76e9d4ff3c66b269d91f2cf"
+    },
+    "native-full-trust.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional02/native-full-trust.json",
+      "sha256": "f76f9fec6c1a0e4f85d2d4380c2246802c1e4f824aaf7121d218f04b51e616ec"
+    },
+    "native-postrun-full-trust.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional02/native-postrun-full-trust.json",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "restore.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional02/restore.json",
+      "sha256": "c0bb59372f99e7a76f8a3d36d299c66270a294d21fe71dede6a459f6e3dd7822"
+    },
+    "holder-postrun.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional02/holder-postrun.json",
+      "sha256": "1908e29460ac02cad3d9a67bd073c040c9c6f577a37fae49234a8d70cfa1f7dc"
+    },
+    "holder-inventory-scope-negative.json": {
+      "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-declared-case-functional02/holder-inventory-scope-negative.json",
+      "sha256": "571ae9fd8979045f1678c70bddf23682f1e78bb345b66f9ee8734d9820df7668"
+    }
+  },
+  "actual_configured": {
+    "model": "openai-codex/gpt-6.1-sol",
+    "thinking": "high",
+    "fresh_prompt_inputs": 3,
+    "manual_compactions": 1,
+    "original_cuts": 1,
+    "arm_probes": 2,
+    "tool_calls": 0,
+    "source_reply": "Acknowledged synthetic round r1.",
+    "both_arm_answers": "{\"r1\":{\"root\":\"/data/run-a\"}}",
+    "recall_scope": "One authored question per arm answered by actual configured model; descriptive functional check, not comparative margin/general recall.",
+    "arms": [
+      {
+        "complete": true,
+        "public_inputs": 0,
+        "input_replays": 0,
+        "paid_comparison": false,
+        "selected_condition": "bounded",
+        "acceptance_scope": "same-owner selected SDK fork and original installed input; not study",
+        "original_cut_correlated": true,
+        "SDK_child_binding": true,
+        "installed_source_in_actual_SDK_request": true,
+        "installed_narrative_source_evaluated": true,
+        "canonical_request_budget_and_terminal": true,
+        "distinct_answer": true,
+        "new_original_inputs": 1,
+        "model_steps": 1,
+        "model_recall_evaluated": false,
+        "final_HTTP_bytes_evaluated": false,
+        "original_source_restored": true
+      },
+      {
+        "complete": true,
+        "public_inputs": 0,
+        "input_replays": 0,
+        "paid_comparison": false,
+        "selected_condition": "task-memory",
+        "acceptance_scope": "same-owner selected SDK fork and original installed input; not study",
+        "original_cut_correlated": true,
+        "SDK_child_binding": true,
+        "installed_source_in_actual_SDK_request": true,
+        "installed_narrative_source_evaluated": false,
+        "canonical_request_budget_and_terminal": true,
+        "distinct_answer": true,
+        "new_original_inputs": 1,
+        "model_steps": 1,
+        "model_recall_evaluated": false,
+        "final_HTTP_bytes_evaluated": false,
+        "original_source_restored": true
+      }
+    ],
+    "original_inputs": [
+      {
+        "measurement": "source-measurement.private.json",
+        "input": {
+          "inputId": "30cb4ad03a1b9a0ccccd35578382dab6",
+          "sessionId": "01a10d0e-d910-74a8-af5b-42b5ab9172c4",
+          "sessionEntryId": "d0d9dbaa"
+        },
+        "answer_text": "Acknowledged synthetic round r1.",
+        "tool_calls": 0,
+        "model_steps": 1
+      },
+      {
+        "measurement": "arm-1-measurement.private.json",
+        "input": {
+          "inputId": "1bb01921773446af3e3cb1678c183755",
+          "sessionId": "01a10d11-7e46-7352-a7a2-817e1a766bf7",
+          "sessionEntryId": "c9f0417a"
+        },
+        "answer_text": "{\"r1\":{\"root\":\"/data/run-a\"}}",
+        "tool_calls": 0,
+        "model_steps": 1
+      },
+      {
+        "measurement": "arm-2-measurement.private.json",
+        "input": {
+          "inputId": "418f47055bbda3c50b6e45ec753b42a6",
+          "sessionId": "01a10d12-5bb0-70f1-a6c2-e900299b2047",
+          "sessionEntryId": "6cd3858b"
+        },
+        "answer_text": "{\"r1\":{\"root\":\"/data/run-a\"}}",
+        "tool_calls": 0,
+        "model_steps": 1
+      }
+    ]
+  },
+  "elapsed": {
+    "original_driver_seconds": 295.31207914091647,
+    "controller_seconds": 315.47064272896387
+  },
+  "cleanup": {
+    "observed_process_births": 109,
+    "alive": [],
+    "nonempty_groups": {},
+    "sockets": [],
+    "native_children_closed": true,
+    "limit": "Short-lived descendants may exit between read-only /proc observations; original fixture/process custody joins its actual children.",
+    "exact_original_floor_restored": true,
+    "claims_explicitly_returned": true,
+    "independent_Bohr_close": "Requested after actual handback; separate authoritative lifecycle, not asserted here."
+  },
+  "originals": {
+    "source_bytes": 42662475,
+    "source_sha256": "1bdd97fd57551edb2986a3289b33bc781cde45b98b4e1e591f79e7804ced7258",
+    "source_unchanged": true,
+    "prior_aee_STARTED_private_goal_and_question_unchanged": true,
+    "old_functional01_negative_untouched": true
+  },
+  "remaining": {
+    "paired_condition_construction_evaluated": false,
+    "reason": {
+      "candidate": "Original condition selection and complete-history eligibility are not supplied by a label or SDK preview",
+      "baseline": "Original condition selection and complete-history eligibility are not supplied by a label or SDK preview"
+    },
+    "HTTP_capacity_billing_interventions_study": false,
+    "budget_authority": "USD75/30-pair study remains unapproved; no further input/loan from this receipt."
+  }
+}

@@ -1,0 +1,131 @@
+{
+  "state": "SOURCE ONLY; named issued/read paths are proposed, not granted; current412e first-failed purpose returned",
+  "production_checkpoint": "a264da8f7251c72fae0ee0259c1d81de9ea5ed7e",
+  "retained_build_source": "eb8edcdae050485683fdaa2cc3f49f396f943724",
+  "retained_wheel": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl",
+    "sha256": "3fe14077293b691000394831ed7458ecae92afd9b667af4501be2945ab86051d"
+  },
+  "retained_wheel_proof": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/wheel-source-proof.json",
+    "sha256": "d38ca0aa5da8df50afc95f1f85473d01dfa80831f71a804fd51905c7416293b2"
+  },
+  "new_build_required": false,
+  "output": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed02",
+  "candidate_sourceproof": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed02/candidate-source-proof.json",
+  "native_FullTrust_receipt": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed02/native-full-trust.json",
+  "stage_argv": [
+    "uv",
+    "pip",
+    "install",
+    "--python",
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "--no-deps",
+    "--no-cache",
+    "--reinstall",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl"
+  ],
+  "proof_argv": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "-B",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/same-idle-owner-native-source-20261005/qualification/prove-installed.py",
+    "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel676-proof-output-corrected-successor-issued-grant.json",
+    "ACTUAL_NEW_ISSUED_SHA256",
+    "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/native-keeper676-proof-output-corrected-successor-READ-issued-20261005.json",
+    "ACTUAL_NEW_READ_SHA256",
+    "d38ca0aa5da8df50afc95f1f85473d01dfa80831f71a804fd51905c7416293b2"
+  ],
+  "runner_argv": [
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "-B",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/same-idle-owner-native-source-20261005/qualification/run-phase.py",
+    "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Mendel676-proof-output-corrected-successor-issued-grant.json",
+    "ACTUAL_NEW_ISSUED_SHA256"
+  ],
+  "environment": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": null,
+    "PYTHONHOME": null
+  },
+  "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+  "script_sha256": {
+    "prove-installed.py": "fda79ee25378c16199c5678bbd19ada30912b49b001eb106dabf0dc787b15b9c",
+    "run-phase.py": "d1d2313e72d32c1502ece911a69c5fa999ec6b32b5c9a2c4bb9cd28ceea0cc94"
+  },
+  "source_receipt_relation": "Future source head differs only in evidence helper/receipts; installed355 source must still equal retained build Git/local/ZIP. Fresh literal grant binds actual head and script hashes.",
+  "cases": 7,
+  "native_EXEC": "Separately issued only after final installed355/FullTrust receipt and matching Bohr release; original seven authored control bytes unchanged.",
+  "limits": "No current authority or retry; needs separately issued successor purpose after independent412e closure. No SDK/path execution performed by this proposal.",
+  "native_batch": {
+    "argv": [
+      "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+      "-B",
+      "-c",
+      "import pathlib,sys,agent_comms; assert pathlib.Path(agent_comms.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()); sys.path.append('/usr/lib/python3.14/site-packages'); import pytest; raise SystemExit(pytest.main(['-o', 'addopts=', '-o', 'pythonpath=', '-p', 'no:cacheprovider', '--basetemp', '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed02/native01/authored', '--junitxml', '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed02/native01/results.xml', '-x', '-q', 'tests/test_same_owner_native_fork.py']))"
+    ],
+    "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+    "environment": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONPATH": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests",
+      "PYTHONHOME": null,
+      "AGENT_COMMS_ROOT": null,
+      "PI_COMPACTION_TEST_PACKAGE": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent"
+    },
+    "output": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-installed02/native01",
+    "expected_distinct_cases": 7,
+    "stop_first_failure": true,
+    "expected_actual_native_inputs": 1,
+    "expected_controlled_localhost_posts": 1,
+    "SDK_authored_private_seed_sources": 7,
+    "journaledSDKforks": 7,
+    "cases": [
+      "completion with original ACP prompt",
+      "cancel without input",
+      "revoked original owner without successor",
+      "stale entry after canonical owner fence/heartbeat/acquisition and actual successor preparation",
+      "exit after canonical owner fence/heartbeat/acquisition and actual successor preparation",
+      "stale entry after canonical thinking-level change and actual successor preparation",
+      "exit after canonical thinking-level change and actual successor preparation"
+    ],
+    "restoration_observation": "Completion/cancellation original AgentInfo emission observes turn+child locks held and schedules an actual native context read; join read after resource exit, restored parent identity and original retained child alive. No new prompt.",
+    "scope": "Original NativeBackendFixture.author_history/open_owner; canonical registry/ACP/OwnedTurn, real savedSDK forks/child custody. No fake histories, lease/input records, native child, mock response stream, generic registry replacement or copied helper."
+  },
+  "source_WT": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+  "control_sha256": {
+    "tests/test_same_owner_native_fork.py": "6d057c8c49c85506b5f8bba99c1486b0e81294e6fd61a93a63df77ec3a5bac05",
+    "tests/native_backend_fixture.py": "a4cb188d5b472f5445cc8ba653137075455907c8e06cf0e95eb01793c4ce7575",
+    "tests/test_backend_native_lifecycle.py": "0bd1745a76ccb7538227d0fe895f10dd03747dfeb24e7a3b55b3fbbd97adbe6b",
+    "tests/compaction_loopback.py": "064e3e6658841746a2a15e8d2c41cea78c283a931d7b92cf1953877ad88821ea",
+    "tests/delivery_owner_fixture.py": "b03ab1801372c8d45e6cdbf91ebd2e7013ffeec9485e392e45d0479606caae5f",
+    "tests/native_proof_cases.py": "df3ed60790e3533f4c498a953c95f4c275b37c1ab51a4d3c8a24cb603ac7da60",
+    "tests/conftest.py": "ced0353a6dcf25e847a2e023d705358841bc10f869a8d5f988f03f43b7f415a4"
+  },
+  "source_assets_expected": 355,
+  "production_modules": 324,
+  "wheel_inventory": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/core-inventory.json",
+  "wheel_inventory_sha256": "1844825e239293925580bfcca1dc266030cba48724de8c05bddda9a54dd3d801",
+  "restore_argv": [
+    "uv",
+    "pip",
+    "install",
+    "--python",
+    "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+    "--no-deps",
+    "--no-cache",
+    "--reinstall",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl"
+  ],
+  "matching_native_reference": {
+    "package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent",
+    "manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+    "tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d"
+  },
+  "actual_floor_authority": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/thin540-Parent673-at-grant-floor-source-readback.json",
+    "sha256": "cdca5684eef868acbdf0b6c8f1bf7491252f21b129d392b03cb23f06ddcf16c5"
+  },
+  "original_412e_closure": {
+    "lifecycle_sha256": "49079d84196fc508b402c5b1415248a1e6ec954fc7dfff089fcc65923adb3a05",
+    "readback_sha256": "875062d92e213e54bc07b7b4d4e88287bcfe01a1778230244b09f7b6e71e02b1"
+  }
+}
