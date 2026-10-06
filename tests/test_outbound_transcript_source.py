@@ -173,6 +173,19 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     assert {item.recipient_identity for item in renamed}=={item.recipient_identity for item in notices}
 
 
+def test_notification_window_preserves_exact_receipts_and_rejects_duplicates(tmp_path):  # noqa: F811
+    root, _root_id, comms, initial, _people = _root(tmp_path)
+    records = NotificationAssignment.select(root, "w.wire_seq=?", (initial.message.seq,))
+    assert records
+    projected = tuple(NotificationAssignment.for_deliveries((initial,), records))
+    assert projected[0][0] is initial
+    assert any(outcome is records[0] for outcome in projected[0][1])
+    with pytest.raises(ValueError, match="multiple handling receipts"):
+        tuple(NotificationAssignment.for_deliveries((initial,), (*records, records[0])))
+    # Duplicate receipts outside the acquired deliveries do not change their result.
+    assert tuple(NotificationAssignment.for_deliveries((), (*records, records[0]))) == ()
+
+
 def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # noqa: F811
     from dataclasses import replace
     from agent_comms.field_codec import FieldCodec

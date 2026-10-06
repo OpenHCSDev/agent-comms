@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 from abc import abstractmethod
+from collections.abc import Iterable, Iterator
 from .declared_family import DeclaredFamily
 
 from .coordination_schema import COORDINATION_SCHEMA_VERSION
@@ -55,17 +56,23 @@ class NotificationAssignment(NotificationSource):
     activity: AssignmentActivity
 
     @classmethod
-    def for_delivery(cls, original: CommittedDelivery, records) -> tuple[NotificationSource, ...]:
-        """Classify receipt absence at the original read boundary, without minting one."""
-        sources = []
-        for recipient, decision in zip(original.audience.recipients, original.decisions, strict=True):
-            matching = tuple(record for record in records
-                if record.assignment.source == original.message.reference
-                and record.assignment.recipient_lookup == recipient.recipient_lookup)
-            if len(matching) > 1:
-                raise ValueError("Original notification recipient has multiple handling receipts")
-            sources.append(matching[0] if matching else UnrecordedNotificationSource(recipient, decision))
-        return tuple(sources)
+    def for_deliveries(
+        cls, originals: Iterable[CommittedDelivery], records: Iterable[NotificationAssignment],
+    ) -> Iterator[tuple[CommittedDelivery, tuple[NotificationSource, ...]]]:
+        """Match one acquired window by its original source and recipient identities."""
+        by_recipient = {}
+        for record in records:
+            key = (record.assignment.source, record.assignment.recipient_lookup)
+            by_recipient.setdefault(key, []).append(record)
+        for original in originals:
+            reference = original.message.reference
+            sources = []
+            for recipient, decision in zip(original.audience.recipients, original.decisions, strict=True):
+                matching = by_recipient.get((reference, recipient.recipient_lookup), ())
+                if len(matching) > 1:
+                    raise ValueError("Original notification recipient has multiple handling receipts")
+                sources.append(matching[0] if matching else UnrecordedNotificationSource(recipient, decision))
+            yield original, tuple(sources)
 
     @classmethod
     def database_path(cls, root: Path) -> Path:

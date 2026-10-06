@@ -153,9 +153,9 @@ class MessageNotification:
         )
         reads = ReadLedger(root / ReadLedger.filename)
         document = reads.read()
-        for source in sources:
+        for source, outcomes in NotificationAssignment.for_deliveries(sources, rows):
             key = (source.message.seq, source.message.message_id)
-            for outcome in NotificationAssignment.for_delivery(source, rows):
+            for outcome in outcomes:
                 observation = observations[outcome.recipient.recipient_lookup]
                 notification = observation.after_inbox_read(
                     outcome.project(observation), source, reads, document, snapshot
