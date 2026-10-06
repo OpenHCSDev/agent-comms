@@ -4,15 +4,24 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
-Current live release: Parent published merged471 once under NEW27bf native
-authority after independent private closurea758 and the original fresh guard
-(19 idle owners, no clients). Publisher1846050/b71369847 passed64.806s and
-joined; original readback1849791/b71377138 passed1.050s and joined. Receipt
-0c603573 records all19 restarted with unchanged thread births/settings/root,
-actual defaults and route pointing to485, and schema10-to10 Preserve. Accepted
-466 worker behavior is now enabled in the real public bundle (selected Core3931/
-Toad289f/Text67, not later MAIN681 or unqualified Heis native71). Parent returned
-the one-use native claim in55ff39ca; keeper remains shared by the real runtime.
+Current live release: Parent normally merged exact475 fddc0697 at55d942e2,
+then personally matched NEW4622 authority, its18 receipt references and all112
+frozen member hashes/bytes/modes. The original fresh admission passed for19
+idle owners with no clients. The sole publisher2284480/b72077438 passed52.610s
+and joined; bound readback2288574/b72083472 passed1.077s and joined. Both are
+absent. Receipt9462e14e and identity closure531be3de prove19 unchanged thread
+incarnations/settings/original root and schema10-to10 Preserve, with five
+defaults and route now pointing to style22 PUBLIC475. This delivers selected
+Core3931/3fe, new474 Toad2ece and Text71/bc47 under shared immutable native7a;
+476 warm assets and685 guard are not folded. Parent returned this one-use
+READ/EXEC authority in8f803f62, retaining all11 raw references. Private687a
+remains independently CLOSED3e600. No publisher/readback or source-witness
+claim remains. Mendel owns one fresh stationary affected475 UI check using
+the unchanged original Heis recorder/capture helpers and fresh admission;
+its result is pending. Bohr may freshly assess formerPUBLIC485 for476; the
+publication itself is not a holder grant or performance qualification.
+
+Historical public471 verification remains preserved:
 Fresh stationary default UI observe01 failed on a stale inspection helper;
 its failure and raw images are preserved. The separate observe02 used the
 existing corrected recorder and capture helper and passed24.764s, with readable
@@ -26,15 +35,15 @@ No public source witness, private operator claim or retry remains active.
 
 Latest source merge: reviewed474 frozen8373e796 is normally mergedab5f5e0f,
 including the adopted continuous468 source (GitHub records mergedadda2bc).
-The public runtime is still471; this source merge is not publication or
-continuous acceptance. Reviewed460 frozenb51a68b6 remains merged5fc73b1b.
+The selected474 receiving source is now published through475; this remains
+separate from continuous configured acceptance. Reviewed460 frozenb51a68b6 remains merged5fc73b1b.
 The full installed07 motion path passed, including width, wheel reversal, End,
 B/A return, draft/Undo and graceful UI/st exits. The earlier blank-body image
 interpretation was mistaken and is retracted: original central saved text,
 draft and Ready are visible. No missing-body paint repair is justified. The
 native71/PathContent and current recording consumers are merged; current PUBLIC471
-still uses Text67, so truthful receiving/pin integration is the next delivery
-step. Preserve accepted Core676 features rather than reverting to an older
+previously used Text67;475 now delivers Text71 with truthful receiving/pin
+provenance. Preserve accepted Core676 features rather than reverting to an older
 Core while delivering Text71. Startup/frame/CPU, loaded scaling and continuous
 configured acceptance remain unfinished with originalHeis active.
 
@@ -56,19 +65,23 @@ all23 handoff references9cff95 and independently found controller2213467 and
 child2213485 absent. The receipt proves953 installed assets, all69 packages,
 preserved originals and READ-only native FullTrust. Bohr released the four original
 preparation commands under lifecycle818e78 after independent installed-byte
-readback. Canonical/cohort execution remains pending; public publication is future.
+readback. All four subsequently completed once; publication475 is now complete.
 The four preparation commands passed0.321/0.052/2.690/0.024s and their actual
 parents are absent. Parent independently matched all112 frozen member hashes,
 bytes and modes. Source/target declarations and checkpoint match, selecting
 PreserveRuntimeInstallation and PreserveOwnerRuntime. Final census classification
-and whole handback are still being finished after a bookkeeping root-key error;
-no preparation replay or new publication occurred. Parent's reported once-readback
+and whole handback completed after the preserved bookkeeping root-key error.
+Bohr independently matched the positive candidate, all112 frozen files and
+original floor/origins, then closed687a at3e600 after a fresh223UID census with
+zero holder/output references and no gaps. Positive candidate remained held
+for Parent publication; no original465 restore or preparation replay occurred. Parent's reported once-readback
 path mismatch was WRONG and is withdrawn: parsed actual11b65 command points to
 the existing output-root helperfe0b; canonical directory is only its import path.
 Sch path review1f683 and Parent's new AST read confirm no command correction is
 needed. Original freeze/commands remain unchanged. Parent prepared source-only
 operation receipts under .release-private/receiving475-public-20261005 using the
-original publication capture body and admission owner; neither has executed.
+original publication capture body and admission owner; both have now executed
+once under NEW4622 after private closure, with successful publication/readback.
 Receiving preparation advances independently of performance and native guard work.
 Continuous468 controls are now normally landed through474; configured execution,
 loaded scaling and startup/frame/CPU gains remain unfinished. Sch published
