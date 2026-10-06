@@ -1,4 +1,4 @@
-"""Actual old720 writer → installed new schema under the central quiet batch."""
+"""Joined authored old-source writer → target index; central batch is separate."""
 import hashlib
 import json
 import os
@@ -6,11 +6,12 @@ from pathlib import Path
 import subprocess
 import sys
 
-from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.threads import Thread
+from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.store_files import _store_lock
 from agent_comms.transcript_receipts import AssignedTranscriptSource
+from agent_comms.wire_log import WireLog
 from retained_index_cutover import RetainedIndexCutover
 
 
@@ -25,11 +26,13 @@ def main():
         str(old_python), str(Path(__file__).with_name('seed_retained_index_fixture.py')), str(root),
     ], env=environment, check=True, capture_output=True, text=True)
     seed = json.loads(seeded.stdout)
-    service = Comms(root)
-    with service.bus.log.path.open('rb') as stream:
+    log = WireLog(root / 'bus.jsonl')
+    originals = {path: path.read_bytes() for path in
+                 (root / 'registry.json', Path(seed['registry_guard']))}
+    with log.path.open('rb') as stream:
         before = hashlib.file_digest(stream, 'sha256').hexdigest()
     try:
-        with service.bus.log.locked():
+        with log.locked():
             pass
     except RelationViolationError as error:
         refusal = str(error)
@@ -40,19 +43,24 @@ def main():
     # No fixture owner survives the old seed child. Existing real two-worker
     # gate owns busy/subset refusal, stop-all-before-operation and retained
     # distinct settings. This gate owns the incompatible installed writer seam.
-    assert service.owners.restart_owners(cutover=cutover) == ()
-    with service.bus.log.path.open('rb') as stream:
+    cutover.require_source()
+    with _store_lock(root / 'wire'):
+        cutover.quiet_install(root)
+    assert all(path.read_bytes() == original for path, original in originals.items())
+    with log.path.open('rb') as stream:
         assert hashlib.file_digest(stream, 'sha256').hexdigest() == before
-    original_sender = FieldCodec.decode(Thread, seed['sender'])
-    rows = AssignedTranscriptSource.for_thread(root, original_sender, service.bus.log).rows(limit=10)
+    original_sender = FieldCodec.decode(ThreadIncarnation, seed['sender'])
+    source = AssignedTranscriptSource(root, original_sender, log)
+    rows = source.rows(limit=10)
     assert len(rows) == 1 and rows[0].message.to_wire() == seed['original']
     assert sorted(row.canonical_thread for row in rows[0].audience.recipients) == ['alpha', 'beta']
-    assert [event.declared_name for event in AssignedTranscriptSource.for_thread(
-        root, original_sender, service.bus.log).events(rows[0])] == ['sent']
+    assert [event.declared_name for event in source.events(rows[0])] == ['sent']
     receipt = {'old_python': str(old_python), 'new_python': sys.executable,
                'old_schema_refusal': refusal, 'original_bytes_unchanged': True,
                'original_frozen_sender_and_audience_unchanged': True,
-               'central_batch_used': True, 'new_owner_launches': 0, 'provider_calls': 0,
+               'original_registry_and_guard_unchanged': True,
+               'central_batch_used': False, 'joined_authored_seed': True,
+               'new_owner_launches': 0, 'provider_calls': 0,
                'original_input_replays': 0}
     (stage / 'receipt.json').write_text(json.dumps(receipt, indent=2))
     print(json.dumps(receipt), flush=True)

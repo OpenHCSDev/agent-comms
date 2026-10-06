@@ -1,0 +1,86 @@
+{
+  "status": "Normal wheel fully source/ZIP/RECORD verified; installed/native qualification UNRUN",
+  "source_head": "575db4a232d7736261dacd5bf0da4a750e885fdd",
+  "source_base": "38a0533e5",
+  "wheel": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/core-wheel/wheel/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "5d6617d99f43e5aabf44f985d9fbcf1847b4c6404f976143a9a38986b33f0137",
+  "wheel_bytes": 906547,
+  "all355Git_local_ZIP_equal": true,
+  "assets": 355,
+  "PY_modules_compiled_without_import": 324,
+  "forced_assets": {
+    ".pi/APPEND_SYSTEM.md": "agent_comms/_native/APPEND_SYSTEM.md",
+    "stack/pi-native.sha256": "agent_comms/_native/pi-native.sha256",
+    "stack/native-compaction-commit-child.mjs": "agent_comms/_native/native-compaction-commit-child.mjs"
+  },
+  "all360RECORD_digest_size_complete": true,
+  "metadata": [
+    {
+      "member": "agent_comms-0.1.0.dist-info/METADATA",
+      "bytes": 5673,
+      "sha256": "9a02a0a276afadd2f609acae02a93606f53d85a904f40f0ef162f9ceafa1fc0c"
+    },
+    {
+      "member": "agent_comms-0.1.0.dist-info/RECORD",
+      "bytes": 32173,
+      "sha256": "182668c9385203c3cd1a337108b377bc3d026df07ebe8f2b9d0a4bab54e63d3c"
+    },
+    {
+      "member": "agent_comms-0.1.0.dist-info/WHEEL",
+      "bytes": 87,
+      "sha256": "58b82a17209f9bf2804afe161f2632d0fde933f9bb2792fd936b2474a2e2ac2f"
+    },
+    {
+      "member": "agent_comms-0.1.0.dist-info/entry_points.txt",
+      "bytes": 292,
+      "sha256": "6e56bfd47c28174d7978791d6e7673645c69cb06141e3306961b4a88fac53a72"
+    },
+    {
+      "member": "agent_comms-0.1.0.dist-info/licenses/LICENSE",
+      "bytes": 1070,
+      "sha256": "1fe81c33f0cdfbcea8ce2fa4bf5cc98604be54a954ff7c59cea0ff02e3c15741"
+    }
+  ],
+  "root_build_inputs": {
+    "pyproject.toml": "000139ce7da800c73574db2cd2e99af5afb63795f94f38d532e03af4b1423ad7",
+    "README.md": "b77c9e4f95fe3b1c0cbf84f70f429ff07673308099688796b24bda7e339f84a6",
+    "LICENSE": "1fe81c33f0cdfbcea8ce2fa4bf5cc98604be54a954ff7c59cea0ff02e3c15741"
+  },
+  "native_package": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent",
+  "native_manifest_sha256": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+  "native_tree": "63f18710cb9329be6ade27bac3b4dd822e2b36f013756fa8e6717b8073a4592c",
+  "native_bootstrap_sha256": "b9af81dbe003fde1c4d80dbd77fa7ae08f4a1c017deb8a94f8520452da47de27",
+  "build": {
+    "source_head": "575db4a232d7736261dacd5bf0da4a750e885fdd",
+    "argv": [
+      "/usr/bin/python",
+      "-m",
+      "build",
+      "--wheel",
+      "--no-isolation",
+      "--outdir",
+      "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/core-wheel/wheel"
+    ],
+    "cwd": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005",
+    "environment": {
+      "PYTHONPATH": "/home/ts/.cache/uv/archive-v0/RgcgNn7xR1Zs9HSF",
+      "PYTHONDONTWRITEBYTECODE": "1"
+    },
+    "cached_backend_metadata_sha256": "acd3b755437aa07859ebe3ed9b71d94536fa183cc851bbd95b437ba3fe7e09b6",
+    "pid": 2091096,
+    "birth": "71758023",
+    "joined": true,
+    "proc_absent": true,
+    "exit": 0,
+    "elapsed_seconds": 0.5422684820368886,
+    "builds_consumed": 1,
+    "package_native_provider_execution": false
+  },
+  "delta_vs_receiving474_selected3931": [
+    "src/agent_comms/compaction_records.py",
+    "src/agent_comms/pi_project_bootstrap.mjs",
+    "stack/pi-native.sha256"
+  ],
+  "metadata_origin": "normal local file wheel; Git source provenance is separate from future installed ArchiveDirectURL; no VCS installer origin claim",
+  "receiving474_keeps_original_Core3931_3fe": true
+}

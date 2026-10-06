@@ -1,0 +1,134 @@
+{
+  "state": "BUILT AND FULL SOURCE/ZIP/TREE VERIFIED; native/installed qualification UNRUN",
+  "source_head": "575db4a232d7736261dacd5bf0da4a750e885fdd",
+  "native_package": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent",
+  "native_manifest": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+  "native_manifest_file": {
+    "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/pi-native.sha256",
+    "sha256": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+    "bytes": 6969
+  },
+  "native_tree": "63f18710cb9329be6ade27bac3b4dd822e2b36f013756fa8e6717b8073a4592c",
+  "bootstrap": {
+    "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/src/agent_comms/pi_project_bootstrap.mjs",
+    "sha256": "b9af81dbe003fde1c4d80dbd77fa7ae08f4a1c017deb8a94f8520452da47de27"
+  },
+  "source_contract": {
+    "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/evidence/native-bootstrap-origin-guard-20261005/SOURCE-CONTRACT.md",
+    "sha256": "981e74f8cb6c259ce5fff8443391e6831cdd8d2619852143c016879947b5e259",
+    "bytes": 7568
+  },
+  "native_payload_delta": {
+    "dist/agent-comms-project-bootstrap.mjs": {
+      "before": {
+        "type": "file",
+        "mode": 256,
+        "bytes": 1741,
+        "sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475"
+      },
+      "after": {
+        "type": "file",
+        "mode": 256,
+        "bytes": 4801,
+        "sha256": "b9af81dbe003fde1c4d80dbd77fa7ae08f4a1c017deb8a94f8520452da47de27"
+      }
+    }
+  },
+  "full_nodes": 21276,
+  "full_files": 19190,
+  "shared7a_preserved": true,
+  "normal_Core_wheel": {
+    "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/core-wheel/wheel/agent_comms-0.1.0-py3-none-any.whl",
+    "sha256": "5d6617d99f43e5aabf44f985d9fbcf1847b4c6404f976143a9a38986b33f0137",
+    "bytes": 906547
+  },
+  "all355Git_local_ZIP_equal": true,
+  "all360RECORD_digest_size_complete": true,
+  "forced_native_resource_matches_new_commitment": true,
+  "references": [
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/native-commitment-proof.json",
+      "sha256": "f2b60688642af53e95b64ff9ad08d74cdbcc35725c29defd62c6501d38701fa5",
+      "bytes": 3372
+    },
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/native-inventory.json",
+      "sha256": "30a36159c9dbdff5568c6dae1e908b5520c7ce2907dc1f5190876c12a2473371",
+      "bytes": 4411813
+    },
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/assembly-terminal.json",
+      "sha256": "5d7184b5d0f970058656f9fb4dd1931d070a7170e8d07b59cc5ebd8032d857bc",
+      "bytes": 272
+    },
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/assembly-handle.json",
+      "sha256": "fa1634938ddd2b24032c294f6911f253bd17b8575afc50d6c7d411e20e2af3dc",
+      "bytes": 644
+    },
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/assembly.stdout",
+      "sha256": "f5d79ee63fbe2c5d70ba9015a77c0751b8dc953d8b45fcac5ea5d9166fe5d47a",
+      "bytes": 5014
+    },
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/assembly.stderr",
+      "sha256": "0c9f5909f2c0f4276b3a0125fb173a3c92cfd0d336a50e3ce2d6d9652b1bafd8",
+      "bytes": 47
+    },
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/commitment-recipe-binding.json",
+      "sha256": "357c0aee3447046f53af7eda85ae5427e19f89c23da06a6bece3db01ac289ed4",
+      "bytes": 1003
+    },
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/capture-stock-recipe.sh",
+      "sha256": "50cb2d4814a9a57e2c46a53ea6ed603b00276808789dbc906d63642769178754",
+      "bytes": 6334
+    },
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/core-wheel/wheel-source-proof.json",
+      "sha256": "87d8e686cb86127bf24a187d30b245ec56826c4a3a4b7a433407fa3932c2665e",
+      "bytes": 3750
+    },
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/core-wheel/core-inventory.json",
+      "sha256": "f1e4ca6fc109d6792ee21112bb0a537c6aa9cf002a1eb5149573e81fe2666426",
+      "bytes": 105633
+    },
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/core-wheel/record-proof.json",
+      "sha256": "142d3e1a778df5306d016b53fa69276df6f984ee0eff8c68d9651a366440ab1e",
+      "bytes": 66790
+    },
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/core-wheel/build-receipt.json",
+      "sha256": "eba78f891640e0b9da0fa3c13f9037d2137229a3ff245ee5f62517d7589e09a3",
+      "bytes": 811
+    },
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/core-wheel/build.stdout",
+      "sha256": "4b7bf8a014c9d5f684f7ec116d30793882adbf9eac7ed1f8777e9a1d35742b80",
+      "bytes": 54
+    },
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/core-wheel/build.stderr",
+      "sha256": "3fbf5c81df4d6f7774a09a7694742996e64ed07ccaea033ef3d34574059a981c",
+      "bytes": 62
+    },
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/core-wheel/wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "sha256": "5d6617d99f43e5aabf44f985d9fbcf1847b4c6404f976143a9a38986b33f0137",
+      "bytes": 906547
+    }
+  ],
+  "delta_vs_receiving474_selected3931": [
+    "src/agent_comms/compaction_records.py",
+    "src/agent_comms/pi_project_bootstrap.mjs",
+    "stack/pi-native.sha256"
+  ],
+  "receiving474_keeps_Core3931_3fe_and_public7a": true,
+  "guard_scope": "Optional declared default-SDK fetch origin boundary only. Numeric loopback positive; external origin refusal before trusted default fetch dispatch, redirect:error and supported dispatcher reinstall. No whole-process network isolation. Native qualifier still UNRUN.",
+  "Mendel_required_acceptance": "Original four localhost native/MCP cases plus committed fence/bootstrap selected named OpenAI.chat.completions request, maxRetries0, APIConnectionError.cause ERR_AGENT_COMMS_NATIVE_ORIGIN_REFUSED and exact allowed/requested origins; diagnostics_channel external request:create count zero with loopback-positive witness; repeated configureHttpDispatcher() and redirect:error.",
+  "execution_authority": "NONE from assembly/wheel permission. Fresh actual holder grant, matching new commitment READ and separate EXEC needed before acceptance; no pin public publication or runtime/package access granted here."
+}

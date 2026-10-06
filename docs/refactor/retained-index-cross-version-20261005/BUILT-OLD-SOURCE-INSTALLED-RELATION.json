@@ -1,0 +1,36 @@
+{
+  "status": "Built artifact available; source and target holder purposes still UNBOUND, qualification UNRUN",
+  "source_implementation": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+  "old_source": "72062939239b0f07707406309305a056a23f925f",
+  "newly_built_old_source_producer": true,
+  "historical_original_installed_equivalence": false,
+  "wheel": "/home/ts/.cache/agent-scratch/einstein-retained-index-cross-version-20261005/old720-wheel/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "c3e41356b1d84c67314de57dadc287aed199f249cfe88164aad0fe705242f44b",
+  "wheel_bytes": 727243,
+  "assets": 297,
+  "wheel_proof": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-index-cross-version-20261005/OLD720-BUILT-WHEEL-PROOF.json",
+  "wheel_proof_sha256": "dc3d6cc6de3e1eba7165d2855bdf5a63f3e43d0a7db7d16c4650e4d2d1c4a2e5",
+  "build_receipt": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-index-cross-version-20261005/OLD720-BUILD-RECEIPT.json",
+  "build_receipt_sha256": "17d458bde1b6c306d633b73bd2238d71e2c707da08a9271960c28715be00f537",
+  "preserved_installed_proposal": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-index-cross-version-20261005/PROPOSED-INSTALLED-OPERANDS.json",
+  "preserved_installed_proposal_sha256": "f886b3714e334e91f30c4d56d1d237e64a24bcb385cf2e6e5da67c1ad66f350d",
+  "next_required_operands": "Bohr names eligible existing nonlive source/target holders, exact actual floors/archives/source relationships and separate package/import/controlled-run grants; no old artifact hunt or target rebuild inferred",
+  "source_checkout_keeper": {
+    "owner": "Einstein684",
+    "path": "/home/ts/wt/comms-old720-retained-index-build-20261005",
+    "purpose": "Exact old Git source retained for the published all-member local/Git/wheel proof and future old-producer installed source matching",
+    "tracked_clean": true
+  },
+  "artifact_keeper": {
+    "owner": "Einstein684",
+    "path": "/home/ts/.cache/agent-scratch/einstein-retained-index-cross-version-20261005/old720-wheel",
+    "purpose": "Single approved exact-Git old-source wheel, proof and joined build raw logs for future separate qualification",
+    "wheel_bytes": 727243
+  },
+  "native_runtime_or_old_writer_executions": 0,
+  "installations": 0,
+  "new_environments": 0,
+  "build_attempts": 1,
+  "helper_source_control_unchanged": true,
+  "central_batch_and_routing_acceptance": "Separate; neither newly qualified"
+}
