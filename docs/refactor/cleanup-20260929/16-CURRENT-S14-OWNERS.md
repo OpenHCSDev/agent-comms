@@ -4,6 +4,25 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### MCP observer control source merged — 2026-10-06
+
+Parent reviewed Toad472 exactafc657ef, all three changed controls and their
+original lifecycle/SDK/presentation consumers, then mergedbdc51726 into main.
+The branch's merge-base diff changes no production, tools or pins. Parent478
+normally joined that merge with no source delta; its existing Core pin remains
+unchanged. No package installation, rebuild or frozen purpose rebind follows.
+
+The consumed d6ce grant authenticates mcp_observation_fixture7a16afdb and
+native_permission_ui8e9d11da. Parent rehashed original toad-states0248e78b,
+toad-updates3ff3e4f6 and acp-updates283579a7. The run reached Reserved/NotSent
+launcher-refusal updates after open_observer's exercise_boundaries completed;
+all of that sequence's metadata lease, retired/foreign/malformed/duplicate
+receipt and stale-cut assertions precede its yield. This supports the reached
+authored mounted observer setup/boundary sequence, not native MCP receipt,
+permission paint, permission remount or disconnect acceptance. The separate
+typed command pilot and whole native four-case behavior remain unqualified.
+Every original failed attempt, source receipt and closed floor is preserved.
+
 ### Original carry scope reviewed — 2026-10-06
 
 Parent reviewed the original RuntimeInstallation and native/schema carry
