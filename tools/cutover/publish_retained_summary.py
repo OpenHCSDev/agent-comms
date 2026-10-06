@@ -140,6 +140,17 @@ class InstalledSource:
     direct_url: VcsPackageDirectUrl | ArchivePackageDirectUrl
     inventory_sha256: str
 
+    def distribution(self):
+        """Resolve this module's package through the installed RECORD owner."""
+        from importlib.metadata import distributions
+
+        owners = tuple(distribution for distribution in distributions(
+            path=[str(Path(self.location).parent)])
+            if any(path.parts[0] == self.module for path in distribution.files or ()))
+        if len(owners) != 1:
+            raise RuntimeError(f'Installed module requires one distribution owner: {self.module}')
+        return owners[0]
+
     @classmethod
     def command_arguments(cls, arguments: list[str]):
         """Decode the declared installer source once at a private CLI boundary.
@@ -222,8 +233,6 @@ class InstalledSourceProof:
                 raise RuntimeError('Frontend publication cannot change native provenance')
             if not proof.native_full_trust or proof.source_overlay or proof.dependency_bypass:
                 raise RuntimeError('Frontend publication requires original trusted packages')
-        if original.packages != self.packages or original.sdk != self.sdk:
-            raise RuntimeError('Frontend publication cannot change backend dependencies')
         before = {source.module: source for source in original.sources}
         after = {source.module: source for source in self.sources}
         if before.keys() != after.keys() or 'toad' not in before:
@@ -240,12 +249,22 @@ class InstalledSourceProof:
                 source.require_original(proof.archive_artifacts)
         old_site = Path(before['toad'].location).parent
         new_site = Path(after['toad'].location).parent
-        def resources(site):
+        old_frontend = before['toad'].distribution()
+        new_frontend = after['toad'].distribution()
+        if old_frontend.metadata['Name'] != new_frontend.metadata['Name']:
+            raise RuntimeError('Frontend distribution identity changed')
+        frontend_name = old_frontend.metadata['Name']
+        if (tuple(package for package in original.packages if package[0] != frontend_name) !=
+                tuple(package for package in self.packages if package[0] != frontend_name)
+                or original.sdk != self.sdk):
+            raise RuntimeError('Frontend publication cannot change backend dependencies')
+        def resources(site, frontend):
+            frontend_files = {Path(path) for path in frontend.files or ()}
             return {path.relative_to(site): path for path in site.rglob('*')
                     if path.is_file() and '__pycache__' not in path.parts
-                    and path.relative_to(site).parts[0] != 'toad'
-                    and not path.relative_to(site).parts[0].startswith('batrachian_toad-')}
-        old_files, new_files = resources(old_site), resources(new_site)
+                    and path.relative_to(site) not in frontend_files}
+        old_files = resources(old_site, old_frontend)
+        new_files = resources(new_site, new_frontend)
         if old_files.keys() != new_files.keys():
             raise RuntimeError('Frontend publication changed backend resource membership')
         for relative, old in old_files.items():
