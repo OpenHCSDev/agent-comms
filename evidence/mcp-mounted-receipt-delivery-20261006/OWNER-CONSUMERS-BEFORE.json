@@ -1,0 +1,3884 @@
+{
+  "parser_owner": "audit.findings.Package.load / audit.repository.Repository",
+  "state": "source-only-before-change",
+  "roots": [
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "head": "da6b2663bb71b4941ecb862c6aa81f4191b7b44e",
+      "root": "src/agent_comms",
+      "modules": 324,
+      "unparsed": []
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "head": "da6b2663bb71b4941ecb862c6aa81f4191b7b44e",
+      "root": "tests",
+      "modules": 374,
+      "unparsed": []
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "head": "da6b2663bb71b4941ecb862c6aa81f4191b7b44e",
+      "root": "tools",
+      "modules": 54,
+      "unparsed": []
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "head": "afc657ef60e5994a16c6d19412ccacfe9f0d36ea",
+      "root": "src/toad",
+      "modules": 288,
+      "unparsed": []
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "head": "afc657ef60e5994a16c6d19412ccacfe9f0d36ea",
+      "root": "tests",
+      "modules": 398,
+      "unparsed": []
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "head": "afc657ef60e5994a16c6d19412ccacfe9f0d36ea",
+      "root": "tools",
+      "modules": 40,
+      "unparsed": []
+    }
+  ],
+  "sites": [
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/acp.py",
+      "line": 70,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from .runtime import ("
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/acp.py",
+      "line": 154,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/acp.py",
+      "line": 155,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/acp.py",
+      "line": 316,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "(client or self._runtime).session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/acp.py",
+      "line": 458,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "(client or self._runtime).session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 519,
+      "kind": "ClassDef",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "class McpClientReceiptUpdate(AgentCommsUpdate):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 21,
+      "kind": "ImportFrom",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "from .acp_extension import ("
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 57,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.client.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 83,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "client.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 105,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "client.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 120,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "client.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 126,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "client.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 141,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "client.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 171,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.client.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 198,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "client.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 214,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.client.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 157,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "client.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/agent_event_updates.py",
+      "line": 146,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/compaction_publication.py",
+      "line": 99,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/compaction_result.py",
+      "line": 56,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "runner.runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/config_options.py",
+      "line": 254,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 146,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/input_drain.py",
+      "line": 132,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "(client or self.runtime).session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/input_drain.py",
+      "line": 154,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "(client or self.runtime).session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/input_drain.py",
+      "line": 167,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "(client or self.runtime).session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/runtime.py",
+      "line": 381,
+      "kind": "ClassDef",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "class RuntimeProxy(RuntimeConnection):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/runtime.py",
+      "line": 108,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, *, session_id: str, update: Any) -> None:"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/runtime.py",
+      "line": 180,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update("
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/runtime.py",
+      "line": 213,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "client.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/runtime.py",
+      "line": 434,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.agent.sessions.client.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/runtime.py",
+      "line": 228,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "socket_client.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/runtime.py",
+      "line": 516,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.agent.sessions.client.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/session_effects.py",
+      "line": 8,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from .runtime import RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/session_effects.py",
+      "line": 26,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 41,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from .runtime import RuntimeProxy, RuntimeServer"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 70,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 336,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/transcript_updates.py",
+      "line": 34,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "client.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/transcript_updates.py",
+      "line": 53,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "destination.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 331,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/working_memory_worker.py",
+      "line": 30,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "line": 44,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "line": 45,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "super().session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 183,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **value):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 191,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "update.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/explicit_private_owner_installed_journey.py",
+      "line": 28,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/native_context_budget_installed_journey.py",
+      "line": 33,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 91,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 93,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "update.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/retained_task_native_journey.py",
+      "line": 81,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **value):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 166,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 502,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 708,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 1073,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 53,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 292,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 381,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id=None, update=None, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 497,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id=None, update=None, **kw):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 521,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id=None, update=None, **kw):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 552,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id=None, update=None, **kw):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 626,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id=None, update=None, **kw):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 671,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 700,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 735,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 796,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 854,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 890,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 927,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 976,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 1029,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 1069,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 1103,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 1193,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 1507,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, *, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 1556,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 1837,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id=None, update=None, **kw):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 1863,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id=None, update=None, **kw):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 1171,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 1243,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 215,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id=None, update=None, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp.py",
+      "line": 1125,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp_extension.py",
+      "line": 6,
+      "kind": "ImportFrom",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "from agent_comms.acp_extension import ("
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp_extension.py",
+      "line": 94,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 40,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp_goal_input_authority.py",
+      "line": 93,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp_goal_original_input.py",
+      "line": 32,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 24,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 33,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, *, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 98,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 176,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 345,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, *, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 116,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **_kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_auth.py",
+      "line": 62,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_captured_input_dispatch.py",
+      "line": 24,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_command_families.py",
+      "line": 17,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, RuntimeServer"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_command_families.py",
+      "line": 157,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 102,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 106,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "agent._runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 113,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "agent._runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 144,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 150,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "agent._runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 159,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "agent._runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 194,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, *, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 199,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "agent._runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 206,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "agent._runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 232,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, *, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 240,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, *, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 273,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 279,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 326,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 447,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 73,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 120,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "agent._runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 166,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "agent._runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 174,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "agent._runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 211,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "agent._runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 217,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "agent._runtime.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 337,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_publication.py",
+      "line": 372,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_current_input_origin.py",
+      "line": 27,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_detached_owner.py",
+      "line": 84,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_extension_ui_native.py",
+      "line": 7,
+      "kind": "ImportFrom",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "from agent_comms.acp_extension import McpClientReceiptUpdate, decode_updates"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_extension_ui_native.py",
+      "line": 9,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_extension_ui_native.py",
+      "line": 42,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_extension_ui_native.py",
+      "line": 63,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_extension_ui_native.py",
+      "line": 98,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_goal_failure_native.py",
+      "line": 31,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_goal_failure_native.py",
+      "line": 86,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_goal_failure_native.py",
+      "line": 316,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_goal_nominal.py",
+      "line": 92,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_goal_ui_creation.py",
+      "line": 15,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_goal_ui_creation.py",
+      "line": 42,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_image_inputs.py",
+      "line": 26,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_image_inputs.py",
+      "line": 103,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_image_inputs.py",
+      "line": 223,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_image_inputs.py",
+      "line": 264,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_image_inputs.py",
+      "line": 157,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_input_delivery_history.py",
+      "line": 11,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_input_delivery_history.py",
+      "line": 100,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_input_delivery_history.py",
+      "line": 104,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_input_drain.py",
+      "line": 227,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_input_drain_native.py",
+      "line": 63,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 30,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_l0_goal_input_closure.py",
+      "line": 183,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_managed_project_native_latency.py",
+      "line": 87,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 29,
+      "kind": "ImportFrom",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "from agent_comms.acp_extension import ("
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 38,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 416,
+      "kind": "Name",
+      "symbols": [
+        "attachment_settled"
+      ],
+      "source": "attachment_settled"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 413,
+      "kind": "Name",
+      "symbols": [
+        "receipt_seen"
+      ],
+      "source": "receipt_seen"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 413,
+      "kind": "Name",
+      "symbols": [
+        "second_request"
+      ],
+      "source": "second_request"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 413,
+      "kind": "Name",
+      "symbols": [
+        "release_final"
+      ],
+      "source": "release_final"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 375,
+      "kind": "Name",
+      "symbols": [
+        "receipt_seen"
+      ],
+      "source": "receipt_seen"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 376,
+      "kind": "Name",
+      "symbols": [
+        "release_final"
+      ],
+      "source": "release_final"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 399,
+      "kind": "Attribute",
+      "symbols": [
+        "open_observer"
+      ],
+      "source": "module.open_observer"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 415,
+      "kind": "Name",
+      "symbols": [
+        "release_final"
+      ],
+      "source": "release_final"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 433,
+      "kind": "Name",
+      "symbols": [
+        "receipt_seen"
+      ],
+      "source": "receipt_seen"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 433,
+      "kind": "Name",
+      "symbols": [
+        "second_request"
+      ],
+      "source": "second_request"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 433,
+      "kind": "Name",
+      "symbols": [
+        "release_final"
+      ],
+      "source": "release_final"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 487,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 500,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 532,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 313,
+      "kind": "Name",
+      "symbols": [
+        "receipt_seen"
+      ],
+      "source": "receipt_seen"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 664,
+      "kind": "Name",
+      "symbols": [
+        "release_final"
+      ],
+      "source": "release_final"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 665,
+      "kind": "Name",
+      "symbols": [
+        "receipt_seen"
+      ],
+      "source": "receipt_seen"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 334,
+      "kind": "Name",
+      "symbols": [
+        "second_request"
+      ],
+      "source": "second_request"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 335,
+      "kind": "Name",
+      "symbols": [
+        "release_final"
+      ],
+      "source": "release_final"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 535,
+      "kind": "Name",
+      "symbols": [
+        "attachment_settled"
+      ],
+      "source": "attachment_settled"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 626,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 598,
+      "kind": "Name",
+      "symbols": [
+        "release_final"
+      ],
+      "source": "release_final"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 494,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 497,
+      "kind": "Name",
+      "symbols": [
+        "receipt_seen"
+      ],
+      "source": "receipt_seen"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 503,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "observer.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 579,
+      "kind": "Name",
+      "symbols": [
+        "second_request"
+      ],
+      "source": "second_request"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 601,
+      "kind": "Name",
+      "symbols": [
+        "attachment_settled"
+      ],
+      "source": "attachment_settled"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 513,
+      "kind": "Name",
+      "symbols": [
+        "attachment_settled"
+      ],
+      "source": "attachment_settled"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_relay.py",
+      "line": 16,
+      "kind": "ImportFrom",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "from agent_comms.acp_extension import ("
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_relay.py",
+      "line": 23,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import UNBOUND_CONTROLLER, RuntimeProxy, SocketClient"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_relay.py",
+      "line": 50,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_relay.py",
+      "line": 164,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_relay.py",
+      "line": 338,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_relay.py",
+      "line": 62,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 232,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_native_context_inspection.py",
+      "line": 85,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_native_fork_first_input.py",
+      "line": 228,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_native_inspector_lifetime.py",
+      "line": 116,
+      "kind": "Name",
+      "symbols": [
+        "receipt_seen"
+      ],
+      "source": "receipt_seen"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_native_inspector_lifetime.py",
+      "line": 134,
+      "kind": "Name",
+      "symbols": [
+        "receipt_seen"
+      ],
+      "source": "receipt_seen"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_native_inspector_lifetime.py",
+      "line": 169,
+      "kind": "Name",
+      "symbols": [
+        "receipt_seen"
+      ],
+      "source": "receipt_seen"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_native_inspector_lifetime.py",
+      "line": 168,
+      "kind": "Name",
+      "symbols": [
+        "receipt_seen"
+      ],
+      "source": "receipt_seen"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_native_tool_declarations.py",
+      "line": 172,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_outbound_native_journey.py",
+      "line": 60,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 915,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_project.py",
+      "line": 107,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_project.py",
+      "line": 241,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_project.py",
+      "line": 78,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_project.py",
+      "line": 114,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, *, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_project.py",
+      "line": 255,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_project.py",
+      "line": 128,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_project.py",
+      "line": 262,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_prompt_queue.py",
+      "line": 30,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_prompt_queue.py",
+      "line": 82,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_reply_routing.py",
+      "line": 31,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_retained_fork_first_input.py",
+      "line": 77,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 156,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime.py",
+      "line": 21,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, present_session, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime.py",
+      "line": 128,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime.py",
+      "line": 200,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, *, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime.py",
+      "line": 373,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime.py",
+      "line": 476,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime.py",
+      "line": 87,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime.py",
+      "line": 146,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime.py",
+      "line": 242,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime.py",
+      "line": 347,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime.py",
+      "line": 385,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime.py",
+      "line": 491,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime.py",
+      "line": 180,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime_attachment_lifetime.py",
+      "line": 13,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime_attachment_lifetime.py",
+      "line": 24,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime_cold_attachment.py",
+      "line": 81,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime_goal_edit.py",
+      "line": 16,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime_goal_edit.py",
+      "line": 32,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime_goal_edit.py",
+      "line": 37,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 25,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 52,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 123,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "line": 224,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 26,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "line": 40,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime_owned_session_admission.py",
+      "line": 16,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime_owned_session_admission.py",
+      "line": 39,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime_subscription_handshake.py",
+      "line": 12,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_runtime_subscription_handshake.py",
+      "line": 63,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 404,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 985,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 446,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(**_kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 449,
+      "kind": "Name",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_session_components.py",
+      "line": 167,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_stack_channel_delivery.py",
+      "line": 219,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_stack_goal_cancel_resume.py",
+      "line": 19,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_stack_goal_cancel_resume.py",
+      "line": 139,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_stack_goal_cancel_resume.py",
+      "line": 151,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_stack_native_compaction.py",
+      "line": 376,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_stack_native_compaction.py",
+      "line": 477,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "update.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_stack_persistent_compaction.py",
+      "line": 225,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_stack_persistent_compaction.py",
+      "line": 239,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_stack_retry_running.py",
+      "line": 14,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_stack_retry_running.py",
+      "line": 48,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_stack_send_now.py",
+      "line": 295,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_toad_contract.py",
+      "line": 36,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_tool_diffs.py",
+      "line": 132,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_transcript_event_time.py",
+      "line": 109,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_transcript_input_display.py",
+      "line": 112,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_turn_runner.py",
+      "line": 149,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_turn_runner.py",
+      "line": 198,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_turn_runner.py",
+      "line": 247,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 142,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self,**value):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 179,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **value):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 364,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **value):"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 181,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "update.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent.py",
+      "line": 3,
+      "kind": "ImportFrom",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "from toad.acp.client_session import ClientRequestOwner, ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent.py",
+      "line": 216,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "retire_surface"
+      ],
+      "source": "async def retire_surface(self, surface):"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent.py",
+      "line": 314,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "get_thread_presentation"
+      ],
+      "source": "async def get_thread_presentation(self):"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent.py",
+      "line": 270,
+      "kind": "ImportFrom",
+      "symbols": [
+        "OwnerSnapshotConsumer"
+      ],
+      "source": "from .comms_updates import OwnerSnapshotConsumer"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent.py",
+      "line": 316,
+      "kind": "ImportFrom",
+      "symbols": [
+        "OwnerSnapshotConsumer"
+      ],
+      "source": "from .comms_updates import OwnerSnapshotConsumer"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent.py",
+      "line": 206,
+      "kind": "Attribute",
+      "symbols": [
+        "bind_session"
+      ],
+      "source": "self.controller.bind_session"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent.py",
+      "line": 324,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent.py",
+      "line": 325,
+      "kind": "Name",
+      "symbols": [
+        "OwnerSnapshotConsumer"
+      ],
+      "source": "OwnerSnapshotConsumer"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent.py",
+      "line": 351,
+      "kind": "Attribute",
+      "symbols": [
+        "observe_owner"
+      ],
+      "source": "self.session.observe_owner"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent.py",
+      "line": 278,
+      "kind": "Name",
+      "symbols": [
+        "OwnerSnapshotConsumer"
+      ],
+      "source": "OwnerSnapshotConsumer"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_configuration.py",
+      "line": 67,
+      "kind": "ImportFrom",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "from toad.acp.client_session import ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_configuration.py",
+      "line": 68,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 17,
+      "kind": "ImportFrom",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "from .client_session import ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 77,
+      "kind": "FunctionDef",
+      "symbols": [
+        "bind_session"
+      ],
+      "source": "def bind_session(self, session_id):"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 150,
+      "kind": "FunctionDef",
+      "symbols": [
+        "connection_closed"
+      ],
+      "source": "def connection_closed(self):"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 232,
+      "kind": "FunctionDef",
+      "symbols": [
+        "admits_turn_snapshot"
+      ],
+      "source": "def admits_turn_snapshot(self, sequence):"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 355,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 69,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "self.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 214,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "self.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 206,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 218,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "self.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 263,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 308,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 316,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 358,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 128,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 234,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "self.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 219,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "self.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 226,
+      "kind": "Attribute",
+      "symbols": [
+        "get_thread_presentation"
+      ],
+      "source": "self.agent.get_thread_presentation"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 365,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_controller.py",
+      "line": 340,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_process.py",
+      "line": 26,
+      "kind": "Attribute",
+      "symbols": [
+        "connection_closed"
+      ],
+      "source": "agent.controller.connection_closed"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_session.py",
+      "line": 11,
+      "kind": "ImportFrom",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "from toad.acp.client_session import ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_session.py",
+      "line": 106,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "observe_owner"
+      ],
+      "source": "async def observe_owner(self, presentation) -> None:"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_session.py",
+      "line": 152,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_session.py",
+      "line": 164,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_session.py",
+      "line": 187,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_session.py",
+      "line": 204,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_session.py",
+      "line": 243,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/agent_session.py",
+      "line": 316,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/client_session.py",
+      "line": 14,
+      "kind": "ClassDef",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "class ClientSessionRequest:"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/client_session.py",
+      "line": 48,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/comms_updates.py",
+      "line": 7,
+      "kind": "ImportFrom",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "from agent_comms.acp_extension import ("
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/comms_updates.py",
+      "line": 31,
+      "kind": "ImportFrom",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "from toad.acp.client_session import ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/comms_updates.py",
+      "line": 201,
+      "kind": "ClassDef",
+      "symbols": [
+        "OwnerSnapshotConsumer"
+      ],
+      "source": "class OwnerSnapshotConsumer(CommsUpdateConsumer):"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/comms_updates.py",
+      "line": 171,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/comms_updates.py",
+      "line": 172,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/comms_updates.py",
+      "line": 210,
+      "kind": "Attribute",
+      "symbols": [
+        "admits_turn_snapshot"
+      ],
+      "source": "self.agent.controller.admits_turn_snapshot"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/comms_updates.py",
+      "line": 219,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/permission_controller.py",
+      "line": 9,
+      "kind": "ImportFrom",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "from .client_session import ClientRequestOwner, ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/permission_controller.py",
+      "line": 151,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/session_updates.py",
+      "line": 13,
+      "kind": "ImportFrom",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "from toad.acp.client_session import ClientRequestOwner, ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/session_updates.py",
+      "line": 123,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/acp/session_updates.py",
+      "line": 134,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/agent.py",
+      "line": 30,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "retire_surface"
+      ],
+      "source": "async def retire_surface(self, surface):"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/agent.py",
+      "line": 33,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "get_thread_presentation"
+      ],
+      "source": "async def get_thread_presentation(self) -> ThreadPresentation | None:"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/agent_presentation.py",
+      "line": 8,
+      "kind": "ImportFrom",
+      "symbols": [
+        "ManagedTurnBinding"
+      ],
+      "source": "from toad.conversation_turn import TurnBinding, LocalTurnBinding, ManagedTurnBinding"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/agent_presentation.py",
+      "line": 39,
+      "kind": "FunctionDef",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "def prompt_in_flight(self):"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/agent_presentation.py",
+      "line": 99,
+      "kind": "FunctionDef",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "def prompt_in_flight(self):"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/agent_presentation.py",
+      "line": 100,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "self.agent.controller.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/agent_presentation.py",
+      "line": 95,
+      "kind": "Name",
+      "symbols": [
+        "ManagedTurnBinding"
+      ],
+      "source": "ManagedTurnBinding"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/conversation_submission.py",
+      "line": 13,
+      "kind": "ImportFrom",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "from toad.acp.client_session import ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/conversation_submission.py",
+      "line": 166,
+      "kind": "Name",
+      "symbols": [
+        "ClientSessionRequest"
+      ],
+      "source": "ClientSessionRequest"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/conversation_turn.py",
+      "line": 204,
+      "kind": "ClassDef",
+      "symbols": [
+        "ManagedTurnBinding"
+      ],
+      "source": "class ManagedTurnBinding(TurnBinding):"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/widgets/conversation.py",
+      "line": 26,
+      "kind": "ImportFrom",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "from agent_comms.acp_extension import ("
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/widgets/conversation.py",
+      "line": 2234,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/widgets/conversation.py",
+      "line": 2235,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/widgets/conversation.py",
+      "line": 968,
+      "kind": "Attribute",
+      "symbols": [
+        "get_thread_presentation"
+      ],
+      "source": "agent.get_thread_presentation"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/widgets/conversation.py",
+      "line": 1045,
+      "kind": "Attribute",
+      "symbols": [
+        "retire_surface"
+      ],
+      "source": "self.agent.retire_surface"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/widgets/conversation.py",
+      "line": 1155,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "agent.presentation.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "src/toad/widgets/conversation.py",
+      "line": 1811,
+      "kind": "Attribute",
+      "symbols": [
+        "get_thread_presentation"
+      ],
+      "source": "agent.get_thread_presentation"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/acp_completion_server.py",
+      "line": 39,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.connection.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/acp_completion_server.py",
+      "line": 46,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.connection.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/acp_navigation_server.py",
+      "line": 41,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.connection.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/acp_navigation_server.py",
+      "line": 53,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.connection.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/acp_plan_server.py",
+      "line": 33,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.connection.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/acp_specification_server.py",
+      "line": 23,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.connection.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/acp_specification_server.py",
+      "line": 33,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.connection.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/acp_specification_server.py",
+      "line": 44,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.connection.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/acp_specification_server.py",
+      "line": 62,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.connection.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/acp_specification_server.py",
+      "line": 64,
+      "kind": "Attribute",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "self.connection.session_update"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/backend_failure_feedback_installed_journey.py",
+      "line": 19,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "agent.presentation.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/comms_boundary_pilot.py",
+      "line": 78,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/first_fork_native_installed_pilot.py",
+      "line": 291,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "view.agent.presentation.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/input_visibility_native_installed_pilot.py",
+      "line": 263,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "agent.presentation.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/l0a_native_installed_pilot.py",
+      "line": 377,
+      "kind": "Name",
+      "symbols": [
+        "retire_surface"
+      ],
+      "source": "retire_surface"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/l0a_native_installed_pilot.py",
+      "line": 389,
+      "kind": "Name",
+      "symbols": [
+        "retire_surface"
+      ],
+      "source": "retire_surface"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/l0a_native_installed_pilot.py",
+      "line": 608,
+      "kind": "Attribute",
+      "symbols": [
+        "retire_surface"
+      ],
+      "source": "args.retire_surface"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/l0a_native_installed_pilot.py",
+      "line": 412,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "agent.presentation.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/mcp_observation_fixture.py",
+      "line": 14,
+      "kind": "ImportFrom",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "from agent_comms.acp_extension import ("
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/mcp_observation_fixture.py",
+      "line": 73,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "exercise_boundaries"
+      ],
+      "source": "async def exercise_boundaries(agent, view, pilot):"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/mcp_observation_fixture.py",
+      "line": 98,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/mcp_observation_fixture.py",
+      "line": 112,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/mcp_observation_fixture.py",
+      "line": 136,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/mcp_observation_fixture.py",
+      "line": 109,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/mcp_observation_fixture.py",
+      "line": 110,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/mcp_observation_fixture.py",
+      "line": 122,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/mcp_observation_fixture.py",
+      "line": 125,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/native_permission_ui.py",
+      "line": 15,
+      "kind": "ImportFrom",
+      "symbols": [
+        "exercise_boundaries"
+      ],
+      "source": "from mcp_observation_fixture import AGENT_DATA, exercise_boundaries, notes"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/native_permission_ui.py",
+      "line": 18,
+      "kind": "ImportFrom",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "from agent_comms.acp_extension import McpClientReceiptUpdate, TurnChangedUpdate, decode_updates"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/native_permission_ui.py",
+      "line": 145,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "open_observer"
+      ],
+      "source": "async def open_observer(case: str, artifact_dir: Path) -> AsyncIterator[Observer]:"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/native_permission_ui.py",
+      "line": 39,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id: str, update: dict[str, Any]) -> None:"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/native_permission_ui.py",
+      "line": 55,
+      "kind": "Name",
+      "symbols": [
+        "McpClientReceiptUpdate"
+      ],
+      "source": "McpClientReceiptUpdate"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/native_permission_ui.py",
+      "line": 167,
+      "kind": "Name",
+      "symbols": [
+        "exercise_boundaries"
+      ],
+      "source": "exercise_boundaries"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/original_turn_resource_real_installed_pilot.py",
+      "line": 168,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "view.agent.presentation.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/original_turn_resource_real_installed_pilot.py",
+      "line": 180,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "view.agent.presentation.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/owner_poll_latency_pilot.py",
+      "line": 16,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/owner_poll_latency_pilot.py",
+      "line": 53,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/owner_reader_reuse_pilot.py",
+      "line": 12,
+      "kind": "ImportFrom",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "from agent_comms.runtime import RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/owner_reader_reuse_pilot.py",
+      "line": 58,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/owner_reader_reuse_pilot.py",
+      "line": 81,
+      "kind": "Name",
+      "symbols": [
+        "RuntimeProxy"
+      ],
+      "source": "RuntimeProxy"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/post_cancel_session_installed_journey.py",
+      "line": 58,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "agent.presentation.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/post_cancel_session_installed_journey.py",
+      "line": 69,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "agent.presentation.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/post_cancel_session_installed_journey.py",
+      "line": 78,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "agent.presentation.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/post_cancel_session_installed_journey.py",
+      "line": 42,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "agent.presentation.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/queue_admission_pilot.py",
+      "line": 72,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, *, session_id, update):"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/response_source_custody_pilot.py",
+      "line": 75,
+      "kind": "Attribute",
+      "symbols": [
+        "get_thread_presentation"
+      ],
+      "source": "agent.get_thread_presentation"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/restored_inbound_continuous_installed_pilot.py",
+      "line": 57,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/saved_state_user_journey_pilot.py",
+      "line": 121,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, **kwargs):"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/saved_state_user_journey_pilot.py",
+      "line": 224,
+      "kind": "Attribute",
+      "symbols": [
+        "get_thread_presentation"
+      ],
+      "source": "agent.get_thread_presentation"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/submission_native_installed_pilot.py",
+      "line": 117,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "agent.controller.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/test_input_custody.py",
+      "line": 27,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "agent.controller.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/test_input_custody.py",
+      "line": 38,
+      "kind": "Attribute",
+      "symbols": [
+        "prompt_in_flight"
+      ],
+      "source": "agent.controller.prompt_in_flight"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/transcript_reader_reuse.py",
+      "line": 153,
+      "kind": "Attribute",
+      "symbols": [
+        "get_thread_presentation"
+      ],
+      "source": "attachments[0].get_thread_presentation"
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "path": "tests/typed_comms_command_pilot.py",
+      "line": 30,
+      "kind": "AsyncFunctionDef",
+      "symbols": [
+        "session_update"
+      ],
+      "source": "async def session_update(self, session_id, update):"
+    }
+  ],
+  "dynamic_limits": [
+    "AC_MCP_TOAD_ADAPTER selects an external file module.open_observer; only the issued native_permission_ui.py family was read. Unselected third-party adapters are not qualified.",
+    "Source establishes a permitted ordering race, not a captured forwarding task exception or proof of the precise runtime reset path."
+  ]
+}

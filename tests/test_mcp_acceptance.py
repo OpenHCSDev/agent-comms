@@ -490,11 +490,6 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                             "update": update.model_dump(mode="json", by_alias=True, exclude_none=True),
                         }
                         updates.append(row)
-                        if any(
-                            isinstance(fact, McpClientReceiptUpdate)
-                            for fact in decode_updates(update.field_meta)
-                        ):
-                            receipt_seen.set()
 
                 class Attachment:
                     async def session_update(self, session_id, update):
@@ -502,6 +497,12 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                         if observer:
                             await observer.session_update(session_id=session_id, update=update)
                         for fact in decode_updates(update.get("_meta")):
+                            if isinstance(fact, McpClientReceiptUpdate):
+                                # The original response gate belongs to this
+                                # attachment, after any mounted observer has
+                                # consumed the receipt. Passive owner logging
+                                # cannot attest that the live view received it.
+                                receipt_seen.set()
                             if isinstance(fact, TurnChangedUpdate):
                                 if fact.state.busy:
                                     if attachment_turn is None:

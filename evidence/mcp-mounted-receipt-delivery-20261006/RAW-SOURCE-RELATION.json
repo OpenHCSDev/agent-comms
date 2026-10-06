@@ -1,0 +1,583 @@
+{
+  "state": "original immutable consumed attempt evidence, source reading only",
+  "whole": {
+    "path": "/home/ts/.cache/agent-scratch/m687n03/whole-handback.json",
+    "sha256": "cb8b62590c3848873d5c2ae2750870791b8fba633e35fe0185cbc0b72b30211d",
+    "bytes": 99630
+  },
+  "batch_terminal": {
+    "path": "/home/ts/.cache/agent-scratch/m687n03/terminal.json",
+    "sha256": "3b31e22c6faa98271d22320d9fce4e1599314a840dd1c4657ea3b185aab1461e",
+    "bytes": 312
+  },
+  "junit": {
+    "path": "/home/ts/.cache/agent-scratch/m687n03/native.xml",
+    "sha256": "16bd66bf9e88c6375dc108461c8526dccb7fb23f81e9f0f3d7dff2adc54df4ea",
+    "bytes": 15245
+  },
+  "artifact_closure": {
+    "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/native-keeper687-installed-entrypoint-native4B-READ-EXEC-handback-20261005.json",
+    "sha256": "64d2100bdd71785bba7296f631af23abdc91ec3a142684e0535ac9de1eb91765",
+    "bytes": 104942
+  },
+  "cases": {
+    "allow": {
+      "audit_update_count": 33,
+      "mounted_update_count": 37,
+      "mounted_state_count": 37,
+      "model_requests": 2,
+      "model_errors": [],
+      "selected_mounted_sequence": [
+        {
+          "index": 2,
+          "facts": [
+            {
+              "kind": "turn_changed",
+              "state": {
+                "active": null,
+                "finished_turn_id": null
+              }
+            }
+          ],
+          "state": {
+            "agent": null,
+            "view": null,
+            "notes": []
+          }
+        },
+        {
+          "index": 8,
+          "facts": [
+            {
+              "kind": "turn_changed",
+              "state": {
+                "active": {
+                  "id": "37ed2fb2d4da4d7893ac5e0b203a078c",
+                  "owner_pid": 2896207,
+                  "started_at": 1791255410.3245885,
+                  "routing": {
+                    "requests": [],
+                    "reply": null
+                  },
+                  "admission_generation": 3,
+                  "turn_generation": 1,
+                  "phase": {
+                    "kind": "preparing",
+                    "detail": "Run fixture echo once."
+                  }
+                },
+                "finished_turn_id": null
+              }
+            }
+          ],
+          "state": {
+            "agent": "37ed2fb2d4da4d7893ac5e0b203a078c",
+            "view": "37ed2fb2d4da4d7893ac5e0b203a078c",
+            "notes": []
+          }
+        },
+        {
+          "index": 10,
+          "facts": [
+            {
+              "kind": "turn_changed",
+              "state": {
+                "active": {
+                  "id": "37ed2fb2d4da4d7893ac5e0b203a078c",
+                  "owner_pid": 2896207,
+                  "started_at": 1791255410.3245885,
+                  "routing": {
+                    "requests": [],
+                    "reply": null
+                  },
+                  "admission_generation": 3,
+                  "turn_generation": 1,
+                  "phase": {
+                    "kind": "prompt_acceptance",
+                    "detail": ""
+                  }
+                },
+                "finished_turn_id": null
+              }
+            }
+          ],
+          "state": {
+            "agent": "37ed2fb2d4da4d7893ac5e0b203a078c",
+            "view": "37ed2fb2d4da4d7893ac5e0b203a078c",
+            "notes": []
+          }
+        },
+        {
+          "index": 12,
+          "facts": [
+            {
+              "kind": "turn_changed",
+              "state": {
+                "active": {
+                  "id": "37ed2fb2d4da4d7893ac5e0b203a078c",
+                  "owner_pid": 2896207,
+                  "started_at": 1791255410.3245885,
+                  "routing": {
+                    "requests": [],
+                    "reply": null
+                  },
+                  "admission_generation": 3,
+                  "turn_generation": 1,
+                  "phase": {
+                    "kind": "model_wait",
+                    "detail": ""
+                  }
+                },
+                "finished_turn_id": null
+              }
+            }
+          ],
+          "state": {
+            "agent": "37ed2fb2d4da4d7893ac5e0b203a078c",
+            "view": "37ed2fb2d4da4d7893ac5e0b203a078c",
+            "notes": []
+          }
+        },
+        {
+          "index": 16,
+          "facts": [
+            {
+              "kind": "mcp_client_receipt",
+              "turn_id": "37ed2fb2d4da4d7893ac5e0b203a078c",
+              "receipt": {
+                "version": 1,
+                "source": "pi-mcp-client",
+                "inputId": "6a790004a5207b714d4681e3c50c5d4f",
+                "state": "running",
+                "lifetime": "turn",
+                "servers": [
+                  {
+                    "id": "fixture",
+                    "scope": "project",
+                    "state": "ready",
+                    "calls": "confirm",
+                    "tools": 1,
+                    "resources": 0,
+                    "prompts": 0
+                  }
+                ]
+              }
+            }
+          ],
+          "state": {
+            "agent": "37ed2fb2d4da4d7893ac5e0b203a078c",
+            "view": "37ed2fb2d4da4d7893ac5e0b203a078c",
+            "notes": [
+              "MCP live (this turn, not a grant): fixture[project] ready calls=confirm tools=1 resources=0 prompts=0"
+            ]
+          }
+        },
+        {
+          "index": 22,
+          "facts": [
+            {
+              "kind": "turn_changed",
+              "state": {
+                "active": {
+                  "id": "37ed2fb2d4da4d7893ac5e0b203a078c",
+                  "owner_pid": 2896207,
+                  "started_at": 1791255410.3245885,
+                  "routing": {
+                    "requests": [],
+                    "reply": null
+                  },
+                  "admission_generation": 3,
+                  "turn_generation": 1,
+                  "phase": {
+                    "kind": "tool_running",
+                    "detail": "",
+                    "tools": [
+                      [
+                        "echo-1",
+                        "mcp_fixture_echo_092c79e8f8"
+                      ]
+                    ]
+                  }
+                },
+                "finished_turn_id": null
+              }
+            }
+          ],
+          "state": {
+            "agent": "37ed2fb2d4da4d7893ac5e0b203a078c",
+            "view": "37ed2fb2d4da4d7893ac5e0b203a078c",
+            "notes": [
+              "MCP live (this turn, not a grant): fixture[project] ready calls=confirm tools=1 resources=0 prompts=0"
+            ]
+          }
+        },
+        {
+          "index": 24,
+          "facts": [
+            {
+              "kind": "turn_changed",
+              "state": {
+                "active": {
+                  "id": "37ed2fb2d4da4d7893ac5e0b203a078c",
+                  "owner_pid": 2896207,
+                  "started_at": 1791255410.3245885,
+                  "routing": {
+                    "requests": [],
+                    "reply": null
+                  },
+                  "admission_generation": 3,
+                  "turn_generation": 1,
+                  "phase": {
+                    "kind": "model_wait",
+                    "detail": ""
+                  }
+                },
+                "finished_turn_id": null
+              }
+            }
+          ],
+          "state": {
+            "agent": null,
+            "view": null,
+            "notes": []
+          }
+        },
+        {
+          "index": 30,
+          "facts": [
+            {
+              "kind": "turn_changed",
+              "state": {
+                "active": {
+                  "id": "37ed2fb2d4da4d7893ac5e0b203a078c",
+                  "owner_pid": 2896207,
+                  "started_at": 1791255410.3245885,
+                  "routing": {
+                    "requests": [],
+                    "reply": null
+                  },
+                  "admission_generation": 3,
+                  "turn_generation": 1,
+                  "phase": {
+                    "kind": "settling_stats",
+                    "detail": ""
+                  }
+                },
+                "finished_turn_id": null
+              }
+            }
+          ],
+          "state": {
+            "agent": null,
+            "view": null,
+            "notes": []
+          }
+        },
+        {
+          "index": 33,
+          "facts": [
+            {
+              "kind": "turn_changed",
+              "state": {
+                "active": {
+                  "id": "37ed2fb2d4da4d7893ac5e0b203a078c",
+                  "owner_pid": 2896207,
+                  "started_at": 1791255410.3245885,
+                  "routing": {
+                    "requests": [],
+                    "reply": null
+                  },
+                  "admission_generation": 3,
+                  "turn_generation": 1,
+                  "phase": {
+                    "kind": "publishing",
+                    "detail": ""
+                  }
+                },
+                "finished_turn_id": null
+              }
+            }
+          ],
+          "state": {
+            "agent": null,
+            "view": null,
+            "notes": []
+          }
+        },
+        {
+          "index": 36,
+          "facts": [
+            {
+              "kind": "turn_changed",
+              "state": {
+                "active": null,
+                "finished_turn_id": "37ed2fb2d4da4d7893ac5e0b203a078c"
+              }
+            }
+          ],
+          "state": {
+            "agent": null,
+            "view": null,
+            "notes": []
+          }
+        }
+      ],
+      "audit_terminal": {
+        "sessionId": "project",
+        "update": {
+          "content": {
+            "text": "",
+            "type": "text"
+          },
+          "_meta": {
+            "agentComms": {
+              "updates": [
+                {
+                  "kind": "turn_changed",
+                  "state": {
+                    "active": null,
+                    "finished_turn_id": "37ed2fb2d4da4d7893ac5e0b203a078c"
+                  }
+                }
+              ]
+            }
+          },
+          "sessionUpdate": "agent_message_chunk"
+        }
+      },
+      "raw": [
+        {
+          "path": "/home/ts/.cache/agent-scratch/m687n03/n/test_real_pi_mcp_acp_link_allo0/acp-updates.json",
+          "sha256": "514a6c645e6f344b1d4e71feb80278c59cbd3da4431b37f1daa7251d4ef31de0",
+          "bytes": 18754
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/m687n03/n/test_real_pi_mcp_acp_link_allo0/toad-updates.jsonl",
+          "sha256": "6c7869431d402e94bca98818a1a096e87d7c294f556566264e93c7e1dfdb0b9b",
+          "bytes": 14554
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/m687n03/n/test_real_pi_mcp_acp_link_allo0/toad-states.jsonl",
+          "sha256": "c8db7ede0a4a2cb63f0c6a1c35e04c134322b0f191977494a484c1b31ffdd1ee",
+          "bytes": 3392
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/m687n03/n/test_real_pi_mcp_acp_link_allo0/model-requests.json",
+          "sha256": "d64a12ada7011be25d78351676052f1774099feacb61ac2355c76f0d6939a166",
+          "bytes": 46247
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/m687n03/n/test_real_pi_mcp_acp_link_allo0/model-errors.json",
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "bytes": 2
+        }
+      ]
+    },
+    "no_controller": {
+      "audit_update_count": 33,
+      "mounted_update_count": 17,
+      "mounted_state_count": 17,
+      "model_requests": 2,
+      "model_errors": [],
+      "selected_mounted_sequence": [
+        {
+          "index": 3,
+          "facts": [
+            {
+              "kind": "turn_changed",
+              "state": {
+                "active": null,
+                "finished_turn_id": null
+              }
+            }
+          ],
+          "state": {
+            "agent": null,
+            "view": null,
+            "notes": []
+          }
+        },
+        {
+          "index": 8,
+          "facts": [
+            {
+              "kind": "turn_changed",
+              "state": {
+                "active": {
+                  "id": "cda9b56a921a431da72e959c96bbe540",
+                  "owner_pid": 2896207,
+                  "started_at": 1791255455.794394,
+                  "routing": {
+                    "requests": [],
+                    "reply": null
+                  },
+                  "admission_generation": 3,
+                  "turn_generation": 1,
+                  "phase": {
+                    "kind": "preparing",
+                    "detail": "Run fixture echo once."
+                  }
+                },
+                "finished_turn_id": null
+              }
+            }
+          ],
+          "state": {
+            "agent": "cda9b56a921a431da72e959c96bbe540",
+            "view": "cda9b56a921a431da72e959c96bbe540",
+            "notes": []
+          }
+        },
+        {
+          "index": 10,
+          "facts": [
+            {
+              "kind": "turn_changed",
+              "state": {
+                "active": {
+                  "id": "cda9b56a921a431da72e959c96bbe540",
+                  "owner_pid": 2896207,
+                  "started_at": 1791255455.794394,
+                  "routing": {
+                    "requests": [],
+                    "reply": null
+                  },
+                  "admission_generation": 3,
+                  "turn_generation": 1,
+                  "phase": {
+                    "kind": "prompt_acceptance",
+                    "detail": ""
+                  }
+                },
+                "finished_turn_id": null
+              }
+            }
+          ],
+          "state": {
+            "agent": null,
+            "view": null,
+            "notes": []
+          }
+        },
+        {
+          "index": 12,
+          "facts": [
+            {
+              "kind": "turn_changed",
+              "state": {
+                "active": {
+                  "id": "cda9b56a921a431da72e959c96bbe540",
+                  "owner_pid": 2896207,
+                  "started_at": 1791255455.794394,
+                  "routing": {
+                    "requests": [],
+                    "reply": null
+                  },
+                  "admission_generation": 3,
+                  "turn_generation": 1,
+                  "phase": {
+                    "kind": "model_wait",
+                    "detail": ""
+                  }
+                },
+                "finished_turn_id": null
+              }
+            }
+          ],
+          "state": {
+            "agent": null,
+            "view": null,
+            "notes": []
+          }
+        },
+        {
+          "index": 16,
+          "facts": [
+            {
+              "kind": "mcp_client_receipt",
+              "turn_id": "cda9b56a921a431da72e959c96bbe540",
+              "receipt": {
+                "version": 1,
+                "source": "pi-mcp-client",
+                "inputId": "9cf8ef1ca89cc9a4f0c48982a85a15c6",
+                "state": "running",
+                "lifetime": "turn",
+                "servers": [
+                  {
+                    "id": "fixture",
+                    "scope": "project",
+                    "state": "ready",
+                    "calls": "confirm",
+                    "tools": 1,
+                    "resources": 0,
+                    "prompts": 0
+                  }
+                ]
+              }
+            }
+          ],
+          "state": {
+            "agent": null,
+            "view": null,
+            "notes": []
+          }
+        }
+      ],
+      "audit_terminal": {
+        "sessionId": "project",
+        "update": {
+          "content": {
+            "text": "",
+            "type": "text"
+          },
+          "_meta": {
+            "agentComms": {
+              "updates": [
+                {
+                  "kind": "turn_changed",
+                  "state": {
+                    "active": null,
+                    "finished_turn_id": "cda9b56a921a431da72e959c96bbe540"
+                  }
+                }
+              ]
+            }
+          },
+          "sessionUpdate": "agent_message_chunk"
+        }
+      },
+      "raw": [
+        {
+          "path": "/home/ts/.cache/agent-scratch/m687n03/n/test_real_pi_mcp_acp_link_no_c0/acp-updates.json",
+          "sha256": "ca60ade7f5c25fdb509aee01c5603b16130a7e8f11daa66e3b9c96673d73af12",
+          "bytes": 18757
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/m687n03/n/test_real_pi_mcp_acp_link_no_c0/toad-updates.jsonl",
+          "sha256": "186d25a533ea04242400f00d02dd13cc0a52a65f6a538369bb0a2150be111dc1",
+          "bytes": 9340
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/m687n03/n/test_real_pi_mcp_acp_link_no_c0/toad-states.jsonl",
+          "sha256": "d05ede6df672ca48f67fd10964bb31b50836a4df0dcf228e4586d08a35f23194",
+          "bytes": 1031
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/m687n03/n/test_real_pi_mcp_acp_link_no_c0/model-requests.json",
+          "sha256": "01221883a759ecdecae0ffb89aab5417fa84580ce9c06ae3597faa9813cadc31",
+          "bytes": 46406
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/m687n03/n/test_real_pi_mcp_acp_link_no_c0/model-errors.json",
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "bytes": 2
+        }
+      ]
+    }
+  },
+  "limitations": [
+    "The last forwarding callback exception was not captured in the original evidence.",
+    "An idle owner snapshot may overtake queued native notifications; the precise reset/read invocation in this run is not recorded.",
+    "Allow remains scoped PASS; no_controller remains FAIL, revoke_midturn and disconnect remain UNRUN."
+  ]
+}
