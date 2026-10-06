@@ -4,6 +4,24 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Clean configured producer merged — 2026-10-06
+
+Heis published clean Core691ef5fd6be based on actualmain, retaining the superseded
+Core69012575 checkpoint unchanged. Parent verified the four-file diff is byte
+identical to the original method and three evidence files; configured_saved_agent
+is the sole changed declaration and compilation/diff checking pass. Core691
+normally merged48f6d695. Parent integration normally joined that actualmain with
+zero file delta, retaining its earlier reviewed original contribution. Core690 is
+closed as superseded publication, not an inherited MCP source merge.
+
+The optional private cwd and original membership/process/runtime producer owners
+are now delivered in source. Configured saved-session/provider/UI acceptance is
+still unrun and remains Heis's active consumer work. No package build, original
+session operation, native purpose, frozen control or pin change follows. Parent688
+PR body now reflects merged routing, independent warm03 closure, integrated
+partial-retirement source and narrow real-process preflight results, replacing
+stale unrun/held descriptions at their actual scopes.
+
 ### Integrated source preflight and remaining release consumer — 2026-10-06
 
 Parent ran two unchanged real-process preflight controls against integration:
