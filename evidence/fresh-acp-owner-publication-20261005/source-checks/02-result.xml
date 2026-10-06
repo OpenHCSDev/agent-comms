@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="2.253" timestamp="2026-10-05T20:43:44.852645-04:00" hostname="desktop"><testcase classname="tests.test_acp_private_nk_delivery" name="test_acp_new_session_owner_consumes_private_selected_source" time="0.866"><failure message="AttributeError: 'PosixPath' object has no attribute 'session_file'">tmp_path = PosixPath('/var/tmp/ac-sealed-test-cpjqii9e')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fb0be7e9a70&gt;
+
+    async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, monkeypatch):
+        root = tmp_path / "wire"
+        project = tmp_path / "proj"
+        project.mkdir()
+        comms = Comms(root)
+        comms.registry.declare(
+            Thread(
+                "sender",
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
+        root_id = comms.messaging.initialize_private_initial_protocol()
+        agent = CommsAgent(
+            comms,
+            runtime_enabled=True,
+            private_nk_native_package=tmp_path,
+            private_nk_wire_root_id=root_id,
+        )
+    
+        async def noop(*args, **kwargs):
+            return None
+    
+        async def no_options(*args, **kwargs):
+            return []
+    
+        monkeypatch.setattr(agent._runtime, "start", noop)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(agent.sessions.config, "options", no_options)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="FULL")
+        monkeypatch.setattr(TrackedTurnSession, "execute", fake)
+        session = await agent.new_session(cwd=str(project), mcp_servers=[])
+        owner = comms.registry.require(session.session_id)
+        with Coordination(str(root / "coordination.sqlite3")) as store:
+            participant = store.participants.get(stable_thread_lookup(owner.created_at))
+        assert participant.committed and participant.owner_thread == owner.name
+        invoke_tool(
+            comms,
+            "comms_send",
+            {"from": "sender", "to": owner.name, "body": "Compute 17+25"},
+        )
+&gt;       assert await agent.inputs.drain_inbox(session.session_id) == 1
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_private_nk_delivery.py:140: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/input_drain.py:258: in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/input_drain.py:340: in drain_owned_inbox
+    pushed = await self._drain_private_if_changed(session_id, private_root)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/input_drain.py:331: in _drain_private_if_changed
+    result = await self.effects._drain_private_nk(session_id, root_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:428: in _drain_private_nk
+    result = await self.turns.run_selected(session_id, execution)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/turn_runner.py:524: in run_selected
+    result = await execution.run(
+src/agent_comms/coordinated_runtime.py:124: in run
+    return await SelectedConsideration(participant).run(self, session)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/selected_turn.py:241: in run
+    return await attempt.run(execution, session,
+src/agent_comms/selected_turn.py:200: in run
+    result = await request.admission.execute(
+src/agent_comms/private_send_admission.py:157: in execute
+    result = await TrackedTurnSession.execute(
+tests/test_coordinated_runtime.py:219: in fake
+    await asyncio.to_thread(admitted)
+/usr/lib/python3.14/asyncio/threads.py:26: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+tests/test_coordinated_runtime.py:213: in admitted
+    admission(session_file, revision)
+/usr/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/private_send_admission.py:283: in __call__
+    self._admit_once(identity, selected_runtime_revision)
+src/agent_comms/private_send_admission.py:230: in _admit_once
+    saved = self.session.admit(identity, selected_runtime_revision)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/selected_session.py:94: in admit
+    return self.attest(actual)
+           ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = SelectedSession(directory=PosixPath('/var/tmp/ac-sealed-test-cpjqii9e/wire/native-sessions/ec590db4b20a17f0efe5b0ec8b27fc30'), creation=None)
+identity = PosixPath('/var/tmp/ac-sealed-test-cpjqii9e/wire/native-sessions/ec590db4b20a17f0efe5b0ec8b27fc30/one.jsonl')
+
+    def attest(self, identity: NativeSessionIdentity) -&gt; Path:
+        # Only an unselected new session uses the originally allocated directory.
+&gt;       return _session_location(self.directory, identity.session_file)
+                                                 ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'PosixPath' object has no attribute 'session_file'
+
+src/agent_comms/selected_session.py:90: AttributeError</failure></testcase></testsuite></testsuites>
