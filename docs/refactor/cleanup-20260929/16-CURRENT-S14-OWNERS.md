@@ -13,11 +13,18 @@ The original objective remains incomplete. CI is deferred as a merge gate.
   frame. Native Textual72 owns geometry, retained damage, cut cells and sender
   callback admission. Parent consumes the publication hook through the existing
   writer/scene lifetime; the competing App-level dispatch is deleted.
-- Matching source App verification is underway. Existing right-sidebar p95
-  429.5ms remains a demonstrated problem, not a passing responsiveness claim.
-  Physical UI and installed delivery remain outstanding.
+- Textual72 and Toad482 are merged: native4e3a877f and Toad6fd049622.
+  SideBar now uses displayed ancestry to defer parked-tab style/hydration/layout.
+  The competing conversation sidebar-padding subscriber is deleted.
+- Actual visible pointer App: right median50.4ms/p9558.5ms/max112.9ms; left
+  median54.5ms/p9571.6ms/max185.5ms, empty stderr. Earlier429/424ms measurements
+  selected a hidden zero-size sidebar and are invalid visible-toggle results,
+  not a speedup baseline. The matched held-body/modal App passed7.55s with
+  strict native damage/cut-cell/selection/draft/reentry checks. Physical saved
+  history, wheel scrolling, coherent staged packaging and live installation
+  remain outstanding; no smooth-scrolling or installed claim.
 - Toad483 loaded native-retirement witnesses and Toad484 native participant-cell
-  clicks are normally merged into Toad478. Exact warm identity remains strict;
+  clicks are included in main through482; all478 commits are ancestors. Exact warm identity remains strict;
   retirement gets separate credit. Neither source repair supplies mounted
   qualification. Frozen wheels and original run evidence remain unchanged.
 - Configured03 reached real source paint, saved-channel return and peer busy
