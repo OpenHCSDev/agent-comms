@@ -163,10 +163,10 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         input_id,
         prompt,
         worktree,
-        session_dir,
-        session_file=None,
+        session,
         **_kwargs,
     ):
+        session_dir, session_file = session.directory, session.path
         # The real Pi get_state returns a saved file BEFORE raw prompt send.
         fresh = session_file is None
         if fresh:
@@ -176,7 +176,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             )
             session_file.chmod(0o600)
         assert session_file is not None
-        selected = _kwargs.get("fresh_selected")
+        selected = session.creation
         if selected is not None:
             assert selected.path == session_file
             selected.verify_prewrite()
