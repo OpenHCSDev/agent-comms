@@ -1,0 +1,10 @@
+[
+  {
+    "path": "/guard-positive",
+    "host": "127.0.0.1:42117"
+  },
+  {
+    "path": "/guard-redirect",
+    "host": "127.0.0.1:42117"
+  }
+]

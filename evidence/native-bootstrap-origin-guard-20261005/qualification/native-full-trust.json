@@ -1,0 +1,13 @@
+{
+  "native_package": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent",
+  "manifest": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+  "tree": "63f18710cb9329be6ade27bac3b4dd822e2b36f013756fa8e6717b8073a4592c",
+  "native_full_trust": true,
+  "owner": "installed agent_comms.native_package.verify_native_package",
+  "matching_native_READ": {
+    "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/native-keeper682-native4B-READ-issued-20261005.json",
+    "sha256": "fcf9ff2222b853bf94ab1609405382749beedd4cd46f5dc607a76f2135fba6e1",
+    "bytes": 10548
+  },
+  "native_execution": 0
+}

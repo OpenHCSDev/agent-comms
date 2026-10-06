@@ -1,0 +1,115 @@
+{
+  "status": "DRAFT SOURCE ONLY / UNRUN / new deployment pin and wheel UNBOUND",
+  "source_checkpoint": "e1a64efd2decaa9edaa30379ddc73796f0419267",
+  "base": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+  "PR": 685,
+  "owner": "Original Sch bootstrap deployment source; Original Mendel qualifier only",
+  "guard": {
+    "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/src/agent_comms/pi_project_bootstrap.mjs",
+    "sha256": "b9af81dbe003fde1c4d80dbd77fa7ae08f4a1c017deb8a94f8520452da47de27",
+    "bytes": 4801
+  },
+  "origin_contract": {
+    "environment": "AGENT_COMMS_NATIVE_ORIGIN",
+    "absent": "existing behavior unchanged",
+    "present": "canonical numeric loopback HTTP origin",
+    "external_code": "ERR_AGENT_COMMS_NATIVE_ORIGIN_REFUSED",
+    "external_properties": [
+      "allowed_origin",
+      "requested_origin"
+    ],
+    "SDK": "OpenAI named export from client.mjs; chat.completions.create; no custom fetch/dispatcher; maxRetries0; APIConnectionError.cause preserved",
+    "default_timeout_ms": 300000,
+    "reconfigure": "configureHttpDispatcher() reinstalls Undici when fetch equals captured original/installed fetch; accessor preserves wrapped function identity",
+    "redirect": "error; no follow; transport error distinct from origin refusal",
+    "scope": "selected trusted default fetch SDK path only; no whole-process egress claim"
+  },
+  "static_checks": {
+    "node_check": true,
+    "git_diff_check": true,
+    "JavaScript_parsed": 444,
+    "JavaScript_omissions": [],
+    "Python_production_parsed": 324,
+    "Python_omissions": [],
+    "existing_session_bootstrap_AST_equal": true,
+    "application_imports": 0,
+    "native_SDK_test_provider_executions": 0,
+    "artifact_build_copy_pin_changes": 0,
+    "package_prefix_operations": 0
+  },
+  "source_dependency_receipts": [
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent/dist/core/http-dispatcher.js",
+      "sha256": "f9aa2c81b0a5958ffba6368506f24c9b202904c234ada19494cdc9c4a1d0e97b",
+      "bytes": 4022
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent/node_modules/undici/index.js",
+      "sha256": "93fc85c00a59b58f410c901e5477d56770de3816bfbe183e751624aeb4a5e6a5",
+      "bytes": 8594
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent/node_modules/undici/lib/dispatcher/env-http-proxy-agent.js",
+      "sha256": "1f572709bc4f0e0469579c37192c0d6376c1b4875b7667b80513706fbc13b41a",
+      "bytes": 4343
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent/node_modules/undici/lib/core/request.js",
+      "sha256": "a78e25125e88b5907e4e5b3ad8f219645d422e7031d5320174b1957a002a34a5",
+      "bytes": 14597
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent/node_modules/undici/lib/core/diagnostics.js",
+      "sha256": "907ce2d66cede91b860a1c1318ebdf0d9577c0f747a3b35510162c63489f28bc",
+      "bytes": 6575
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent/node_modules/undici/lib/web/fetch/index.js",
+      "sha256": "55373246471efb77ed557472f3ddfe7262f6862816e629740233288822cfb1cd",
+      "bytes": 90920
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+      "sha256": "4997fe9facc7cd1623e9dbc18e64fdcfbcceee5c1b5a43946ba7140d73682347",
+      "bytes": 65442
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/utils/error-body.js",
+      "sha256": "3fbe4d7fdaa35ef2a65bd8d84f83317d774ad49db9403b00ef663a09ce1d454b",
+      "bytes": 5811
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent/node_modules/openai/client.mjs",
+      "sha256": "45b54e0c0a779a8b284cc8bcfb41a0a0f1817eac32d9cc585ff71875b62aeb6b",
+      "bytes": 36154
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent/node_modules/openai/internal/shims.mjs",
+      "sha256": "0eeb939ee18f8df00273d819ffe94d84fa2c3e990485902c4c94a108669ffaea",
+      "bytes": 3125
+    }
+  ],
+  "unchanged_source_resource_sha256": {
+    "src/agent_comms/native_pi.py": "fca8279de2bbd9fb7f28ba62a956385212ba9cf1acb5193bba9040e32db5af89",
+    "src/agent_comms/native_package.py": "f6832d49ee594855a1ad570bf5fb01ed1445c95c74c33f817bf3723c8fcc5c68",
+    "stack/bin/pi-native": "4fa65fe575ef47358346b63d03f3dc1fa6bf5e27563483bdce59a2b1f1328474",
+    "stack/bin/prepare-pi-native": "5fe0b7c3b60ce0bb00b4025aa4aadd40c1157ac96103fe5420692da7eab6d100",
+    "stack/native-import-fence.mjs": "b732b504a3d92177443fc0c983dd8d0cca4c6d7f1c51c7393be6e5d057e759ec",
+    "stack/native-import-manifest.json": "77559b1b0b2b808e2b9b01435093760eebe4d2df2bcffb180fd98dac470bb3b1",
+    "stack/pi-native.sha256": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+    "pyproject.toml": "000139ce7da800c73574db2cd2e99af5afb63795f94f38d532e03af4b1423ad7"
+  },
+  "future_commitment": {
+    "native_package": null,
+    "native_tree_pin": null,
+    "native_manifest": null,
+    "consuming_Core_wheel": null,
+    "qualification": null
+  },
+  "selected_current7a_is_inactive_for_guard": true,
+  "qualification_proposal": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/FUTURE-INSTALLED-PURPOSE.json",
+    "sha256": "849bc21dd59688f1202459bf88a06774612bde44ba4746140d2f99df38ad3110",
+    "bytes": 11935
+  }
+}
