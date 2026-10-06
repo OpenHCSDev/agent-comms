@@ -65,3 +65,20 @@ def test_toad_launcher_drops_inherited_pythonpath(tmp_path: Path) -> None:
         assert "client not launched" in refused.stderr
     finally:
         os.close(descriptor)
+
+    # A frontend publication must not select a replacement backend interpreter.
+    frontend = tmp_path / 'frontend'
+    frontend.mkdir()
+    ui = frontend / 'toad'
+    ui.write_text('#!/bin/sh\nprintf "UI=%s ACP=%s\\n" "$0" "$2"\n')
+    ui.chmod(0o755)
+    acp = bin_dir / 'agent-comms-acp'
+    acp.write_text('#!/bin/sh\nexit 89\n')
+    acp.chmod(0o755)
+    env.pop('AGENT_COMMS_RUNTIME_ROOT')
+    env['AGENT_COMMS_ACP_LAUNCHER'] = str(acp)
+    env['PATH'] = str(frontend) + os.pathsep + env['PATH']
+    split = subprocess.run([str(launcher), 'thread'], env=env,
+                           text=True, capture_output=True)
+    assert split.returncode == 0, split.stderr
+    assert split.stdout == f'UI={ui} ACP={python} -m agent_comms.acp\n'

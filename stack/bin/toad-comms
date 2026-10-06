@@ -24,6 +24,7 @@ if ! flock --shared --nonblock "$route_lease"; then
 fi
 
 runtime="${AGENT_COMMS_RUNTIME_ROOT:-}"
+toad=""
 if [[ -z "$runtime" ]]; then
     acp_launcher="${AGENT_COMMS_ACP_LAUNCHER:-$(command -v agent-comms-acp || true)}"
     if [[ -z "$acp_launcher" ]]; then
@@ -34,9 +35,12 @@ if [[ -z "$runtime" ]]; then
         exit 1
     fi
     runtime="$(dirname "$(readlink -f "$acp_launcher")")"
+    # The published frontend can advance without replacing backend owners.
+    toad="$(command -v toad || true)"
+else
+    toad="$runtime/toad"
 fi
 python="$runtime/python"
-toad="$runtime/toad"
 if [[ ! -x "$python" || ! -x "$toad" ]]; then
     printf 'Installed Toad environment is unavailable: %s\n' "$runtime" >&2
     exit 1
