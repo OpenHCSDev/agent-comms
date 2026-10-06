@@ -5183,7 +5183,7 @@ Remaining delivery checks:
 - [x] Verify the installed source with the matching READ and sole proof release.
 - [ ] Run and review the isolated saved-history sidebar/scroll recording.
 - [ ] Verify installed multi-selection and truthful backend partial outcomes.
-- [ ] Complete original package/source returns and independent closures.
+- [x] Complete Physical03 original package/source returns and independent holder closure; artifact closure stays with its issuer.
 - [ ] Deliver the reviewed pair to the actual local runtime and verify fresh attachment.
 Live PUBLIC475 packages and original saved histories remain unchanged. No
 performance improvement or completed integration goal is claimed from staging.
@@ -5202,3 +5202,30 @@ a privileged no-reference/no-gap census and confirming none of the issued
 inputs borrows those paths. Wheels, raw build logs, receipts, source Git commits,
 previous recordings and journals remain held; BUILD-SCRATCH-RELEASE.json records
 the exact removed paths and archive hashes.
+
+### Physical03 returned and independently closed; real input task defect assigned
+
+The sole physical recording stopped after 83.49 seconds when its native-cell
+lookup found no visible right-sidebar resize handle. It did not reach the later
+wheel/context-tree/saved-return phases; no smoothness acceptance is claimed.
+Original two saved SDK forks and source currentness were verified at use, and
+source custody returned separately after the authentic witness marker. No
+submitted input or original history replay occurred.
+The original three-package restoration passed once in 0.312 seconds. The whole
+handback retains 225 raw references and 31 authored fixture files including both
+journals; all recorded private processes and owned sockets are gone. Bohr's
+existing physical03 lifecycle is independently CLOSED, with the actual original
+floor, fresh private census and explicit private/source returns bound. The public
+installation remains unchanged. No second launch or duplicate restoration follows.
+Whole handback:
+/home/ts/wt/toad-sidebar-selected-targets-20261006/.artifacts/sidebar-latency-physical03-20261006/485-installed-purpose/whole-handback.json.
+
+A concrete native input ownership gap was found in selected native73 source:
+App.run_test assigns the message-pump task, but App.run_async does not. The new
+pointer-completion transfer compares against that task to avoid returning work
+to its waiting caller; the real entrypoint can therefore form a queue/wait cycle.
+Arendt received the exact source relationship and real-run_async acceptance
+requirement through the existing route. This is a source defect, not proof of
+the sole physical03 cause: no task stack was captured. Parent retains the
+recorder geometry trace and installed selected-target acceptance. Native task
+custody belongs to Arendt; no competing Toad override, queue or timing patch.
