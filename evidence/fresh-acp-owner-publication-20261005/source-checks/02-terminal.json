@@ -1,0 +1,15 @@
+{
+  "exit_code": 1,
+  "elapsed_seconds": 4.065403655986302,
+  "pid": 2423746,
+  "birth": "72306312",
+  "child_joined": true,
+  "pid_absent": true,
+  "raw": {
+    "launch.json": "04c5938ee1bd3df91091a5d794ec4e32aaffa682d3299e13fe2a8eee411579f9",
+    "stdout.log": "4cbb04dfccd82c54113444e9629ccbbf0399ad4813f85bbc561c7ccf3044d8a4",
+    "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "result.xml": "a2551233bc593dac5d139d2a08a68e810b25f12a0d09dfc91d8ea915abaea455"
+  },
+  "native_execution": false
+}

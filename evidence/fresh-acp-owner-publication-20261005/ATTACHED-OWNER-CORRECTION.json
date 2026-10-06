@@ -1,0 +1,146 @@
+{
+  "source_head": "9027b7bbe142035414310a93f70b458fb1f5bb50",
+  "normal_joined_main": "6de443afcf3ebba7a0f863358eb60af2c2660700",
+  "corrects_initial_source_head": "2785377f906f8ded3814f11feb4a019f17bf14f2",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 324,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 373,
+      "omissions": []
+    },
+    {
+      "root": "tools",
+      "parsed": 54,
+      "omissions": []
+    }
+  ],
+  "lifecycle_inheritance": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 499,
+      "class": "CommsClient",
+      "bases": [
+        "CommsAgent"
+      ]
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 421,
+      "class": "AttachedSessionLifecycle",
+      "bases": [
+        "SessionLifecycle"
+      ]
+    }
+  ],
+  "direct_consumer_sites": [
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 162,
+      "expression": "self.acquire_declared_thread"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 258,
+      "expression": "self.declare_thread"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 432,
+      "expression": "self.declare_thread"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 64,
+      "expression": "agent.sessions.declare_thread"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 74,
+      "expression": "self.attach_saved_owner"
+    },
+    {
+      "path": "tests/test_session_components.py",
+      "line": 89,
+      "expression": "attachment.sessions.declare_thread"
+    }
+  ],
+  "production_methods_changed": [
+    "AttachedSessionLifecycle.acquire_declared_thread",
+    "AttachedSessionLifecycle.new_session",
+    "SessionLifecycle.acquire_declared_thread",
+    "SessionLifecycle.declare_thread",
+    "SessionLifecycle.new_session"
+  ],
+  "other_session_lifecycle_methods_ast_equal": true,
+  "sanity": [
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "sha256": "e7ae96b2846c4bf7f88d663c53e7fd6b52e85c8f286afb2c3a04fde3a24a0cd6",
+      "git_local_equal": true,
+      "compile_only": true
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "sha256": "cec2adf15305aa620673b413e52c9d31d6ea4b17c8ae1b6633a8b1f8d8707ba2",
+      "git_local_equal": true,
+      "compile_only": true
+    },
+    {
+      "path": "tests/test_session_components.py",
+      "sha256": "61c70041524692349ef028ecb4e19fcf45db477a1d91fe913794e7a0064022a4",
+      "git_local_equal": true,
+      "compile_only": true
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "sha256": "d37053cff80d4f462cfa57dedd183feb24e01cde1038ee38edc92f5440077530",
+      "git_local_equal": true,
+      "compile_only": true
+    }
+  ],
+  "merged_guard_pin_build_seams": [
+    {
+      "path": "src/agent_comms/pi_project_bootstrap.mjs",
+      "sha256": "b9af81dbe003fde1c4d80dbd77fa7ae08f4a1c017deb8a94f8520452da47de27",
+      "equal_merged_main": "6de443afcf3ebba7a0f863358eb60af2c2660700"
+    },
+    {
+      "path": "stack/pi-native.sha256",
+      "sha256": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+      "equal_merged_main": "6de443afcf3ebba7a0f863358eb60af2c2660700"
+    },
+    {
+      "path": "stack/bin/prepare-pi-native",
+      "sha256": "f51062ca921d539948fd35db2fc65207b60d4f017a52d6b4e338fd5c810035cc",
+      "equal_merged_main": "6de443afcf3ebba7a0f863358eb60af2c2660700"
+    },
+    {
+      "path": "stack/prepare-native-import-boundary.py",
+      "sha256": "4d6ccde95032ef77cf15758a4c490767af29e60cf431ad2df90486079e628c13",
+      "equal_merged_main": "6de443afcf3ebba7a0f863358eb60af2c2660700"
+    }
+  ],
+  "ownership": {
+    "common": "SessionLifecycle.declare_thread claims the unique PID0 declaration and ThreadManagement.restore_stopped publishes committed private membership",
+    "owning": "SessionLifecycle.acquire_declared_thread uses original OwnerLifecycle.acquire_thread with current process; new_session then binds and drains",
+    "attached": "AttachedSessionLifecycle.acquire_declared_thread preserves PID0; new_session/load_session use original SessionLoadAdmission to resolve a separate executor; matching registry incarnation remains active because restore_stopped preserves existing status, so ensure_owner remains the later launch authority",
+    "saved_fixture": "NativeBackendFixture.attach_saved_owner consumes the same owning declaration then attaches original saved file",
+    "removed_copy": "Fresh private ACP delivery test now reads the declared participant; deleted its post-new_session register write"
+  },
+  "source_controls": {
+    "owned": "Existing test_state_is_owned_once_and_attachments_do_not_share_negotiation adds actual registry process identity and committed participant reads",
+    "attached": "test_attached_declaration_publishes_membership_without_acquiring_executor calls real attached declaration; reads PID0, committed membership, active status and no local binding/proxy; remote executor load is not simulated",
+    "private_delivery": "Existing test_acp_new_session_owner_consumes_private_selected_source reads membership instead of injecting it",
+    "execution": "UNRUN: source compile only; no imports/collection/app/native/test run/package/build or active holder purpose"
+  },
+  "limits": [
+    "Original initial census enumerated AttachedSessionLifecycle.new_session but failed to resolve its inherited PID0 semantics. This correction includes inherited lifecycle dispatch and both original new_session callers.",
+    "Tracked source/AST does not resolve arbitrary external dynamic calls. declare_thread is an internal lifecycle/helper seam; ACP new_session/load_session protocol signatures are unchanged.",
+    "Remote attached executor load and genuine four-case MCP acceptance require future coherent installed custody; source controls do not promote the closed native failure."
+  ]
+}

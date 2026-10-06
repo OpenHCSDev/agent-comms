@@ -1,0 +1,16 @@
+{
+  "exit_code": 1,
+  "elapsed_seconds": 4.255445722024888,
+  "pid": 2414989,
+  "birth": "72293899",
+  "child_joined": true,
+  "pid_absent": true,
+  "raw": {
+    "launch.json": "0506df014db507b4bc2c9876d673be089f4c67e4d510bf053d8d7c77736bb834",
+    "stdout.log": "94813d200018e5d1c234787da87097575e062c05feacf9063d6b6c64c1d1a711",
+    "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "result.xml": "312cb460993b546b6101d0c0d2ada25c81817a6035b121a802d71e2cf7ece29c"
+  },
+  "native_execution": false,
+  "scope": "Three focused source tests only; existing sealed private tmp_path fixture uses and closes original /var/tmp scratch; permanent command/log/XML/basetemp under owned worktree"
+}

@@ -1,0 +1,45 @@
+{
+  "source_head": "2785377f906f8ded3814f11feb4a019f17bf14f2",
+  "base": "d41d725fd5400aab74c891dd3700e7071853b2ff",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 324,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 373,
+      "omissions": []
+    },
+    {
+      "root": "tools",
+      "parsed": 54,
+      "omissions": []
+    }
+  ],
+  "sanity": [
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "sha256": "79f099176d11cb469b8a7e38632b6da19022f1486a2a171c1d1ce27900a96062",
+      "compile_only": true
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "sha256": "d186a584f5e94906da9024020b721d74b9fb4c408249c0a7e5bae4de0be76dd1",
+      "compile_only": true
+    }
+  ],
+  "production_changed_methods": [
+    "declare_thread"
+  ],
+  "fixture_duplicate_decisions_removed": [
+    "claim name/tags/model/thinking/initialcursor",
+    "private committed membership publication",
+    "local process acquisition"
+  ],
+  "fixture_now_consumes": "SessionLifecycle.declare_thread then ThreadManagement.attach_session",
+  "other_restore_acquire_sites": "Retained originals/foreignowner/recovery/fenced-native replacement, distinct lifetimes; not fresh-declaration copies",
+  "behavior": "UNRUN/no installedacceptance/no newinput/borrow/build",
+  "dynamic_limits": "Attribute-site census candidates and trackedroots only; external open_observer/indirect callers unresolved; original publicshape unchanged"
+}
