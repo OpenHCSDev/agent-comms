@@ -13,8 +13,12 @@ Configured binds2100 overall with original readiness20; loaded binds1800 with
 original20/10/25 phase checks and corrected handoff references. Each permits root
 preparation and one normal three-wheel stage. Both immutable grants match the
 [batched issue evidence](/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/configured485-loaded334-stage-only-issue-handoff.json).
-Stage attempts are0 at this readback; proof, source capture and App remain held.
-Sch owns separate fresh4b READ receipts, followed by existing proof/EXEC releases.
+Both original stages passed and joined: configured in .286 seconds, loaded in
+.416 seconds. Configured staging is recorded as consumed and disabled; Bohr
+records the loaded joined stage in its existing lifecycle before proof release.
+Both fresh4b READ receipts are now present and were relayed to the original
+owners. Proof, source capture and App remain held pending their existing releases.
+No second stage or duplicate receipt is needed.
 Original floors, PUBLIC475, uncertain inputs and held journals remain preserved.
 
 Parent checked Bohr's actual turn: his floor/borrower verification completed
