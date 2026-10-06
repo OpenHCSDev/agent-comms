@@ -1,0 +1,86 @@
+{
+  "scope": "affected source/control compilation only; no application imports or execution",
+  "parser": "existing refactor-audit Repository/Package.load",
+  "before": {
+    "revision": "220fd948",
+    "parsed": 52,
+    "omissions": []
+  },
+  "after": {
+    "revision": "085eca0511a90375b7694f186f654867476bb2ee",
+    "parsed": 52,
+    "omissions": []
+  },
+  "controls": [
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_routing_installed_pilot.py",
+      "compile": true,
+      "declarations": [
+        {
+          "name": "render",
+          "line": 21
+        },
+        {
+          "name": "main",
+          "line": 186
+        },
+        {
+          "name": "captured",
+          "line": 40
+        },
+        {
+          "name": "inspect",
+          "line": 56
+        },
+        {
+          "name": "retire",
+          "line": 99
+        },
+        {
+          "name": "acquire",
+          "line": 112
+        },
+        {
+          "name": "published",
+          "line": 125
+        },
+        {
+          "name": "failed",
+          "line": 130
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/tests/historical_views_pilot.py",
+      "compile": true,
+      "declarations": [
+        {
+          "name": "until",
+          "line": 23
+        },
+        {
+          "name": "main",
+          "line": 29
+        },
+        {
+          "name": "installed_handling",
+          "line": 176
+        },
+        {
+          "name": "physical",
+          "line": 235
+        },
+        {
+          "name": "screenshot",
+          "line": 248
+        },
+        {
+          "name": "inspected",
+          "line": 253
+        }
+      ]
+    }
+  ],
+  "installed_mounted_scope": "UNRUN",
+  "old684_repeated": false
+}

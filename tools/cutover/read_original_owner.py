@@ -8,8 +8,6 @@ import json
 from pathlib import Path
 import sys
 
-from agent_comms.field_codec import FieldCodec
-from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.registration import Registration
 from owner_read_projection import OwnerReadProjection
 
@@ -22,18 +20,8 @@ def main():
         raise ValueError('Original registry and existing shared lock are required')
     expected = sys.stdin.read()
     registry = Registration(registry_path)
-    with registry.store.reading() as document:
-        snapshot = document.snapshot()
-        selection = (
-            FieldCodec.decode(OwnerRestartSelection, json.loads(expected))
-            if expected else OwnerRestartSelection.capture(snapshot, name)
-        )
-        selection.require_current(snapshot)
-        packet = {
-            'document': projection.project(document),
-            'selection': FieldCodec.encode(selection),
-        }
-        print(json.dumps(packet), flush=True)
+    packet = projection.read(registry, Path(root), name, json.loads(expected) if expected else None)
+    print(json.dumps(packet), flush=True)
 
 
 if __name__ == '__main__':

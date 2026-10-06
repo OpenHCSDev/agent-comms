@@ -1,0 +1,93 @@
+{
+  "scope": "development source controls only; no installed/App/native/old720 qualification",
+  "distinct_selected_controls_with_pass_result": 11,
+  "one_shot_green_full_batch": false,
+  "first_batch": "4 PASS/6 FAIL: one authored USER audience was empty; five callbacks blocked by system Textual missing fork API",
+  "second_batch": "1 PASS/5 FAIL: sparse ledger fixture corrected using genuine producer audience; callbacks blocked by missing declared aiosqlite dev dependency",
+  "third_batch": "6 PASS: five source callback lifetimes + live CLI ACK/recorded separation/recorded declared-family roundtrip",
+  "production_changed_for_test_failures": false,
+  "fixture_correction": "Source reader is actual AGENT at frozen delivery, current destination human reader is actual USER with same declared incarnation; no manufactured audience/receipt/role decoder",
+  "development_dependencies": "read existing cache archives matching declared requirements and byte-equal pinned Textual source; no install/resolve/env/holder borrowed",
+  "compiled_changed_source_files_3_11": true,
+  "batches": [
+    {
+      "batch": 1,
+      "exit_code": 1,
+      "elapsed_seconds": 6.591834936058149,
+      "keepers": [
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/notification-source01/terminal.json",
+          "sha256": "a4a06f0f97c8f84aba34e93164432a9aaf9adca6404bae2ff68eaf04815aabd7",
+          "bytes": 1734
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/notification-source01/stdout.log",
+          "sha256": "de2f518ab4864ce861d8f89ba8baa3e3293269001a4a55ff69d794acd81c7e38",
+          "bytes": 5500
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/notification-source01/stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "batch": 2,
+      "exit_code": 1,
+      "elapsed_seconds": 5.523193754022941,
+      "keepers": [
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/notification-source02/terminal.json",
+          "sha256": "6ace6eb73891f1535c9bebd2647ffc00d93f969938ee00108b791fc759f6784b",
+          "bytes": 1035
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/notification-source02/stdout.log",
+          "sha256": "5db81875643599d1ea9208610f99959aab0edc64af62e02b1c1267b8645163f7",
+          "bytes": 7462
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/notification-source02/stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "batch": 3,
+      "exit_code": 0,
+      "elapsed_seconds": 6.66398859792389,
+      "keepers": [
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/notification-source03/terminal.json",
+          "sha256": "bdd3e6607999fbc5e6e5827377b33877c6f5ed2aa64959f3c0e452116eb32174",
+          "bytes": 3616
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/notification-source03/stdout.log",
+          "sha256": "6873e1ab1bf3e9db816304a62105405ead062d245235247296915e43458de202",
+          "bytes": 98
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/notification-source03/stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        }
+      ]
+    }
+  ],
+  "structural_coverage": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 324,
+      "omissions": []
+    },
+    {
+      "root": "src/toad",
+      "parsed": 288,
+      "omissions": []
+    }
+  ],
+  "remaining": "genuine old720 routing/native-page and live central-batch installed acceptance; existing unconsumed full recursive live Thread schema not redesigned"
+}

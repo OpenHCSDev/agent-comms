@@ -122,6 +122,11 @@ def test_golden_nested_family_record_round_trip():
     }
     assert FieldCodec.encode(record) == golden
     assert FieldCodec.decode(Record, golden) == record
+    assert FieldCodec.record_schema(Record)["properties"]["aliases"] == {
+        "type": "object", "additionalProperties": {"type": "array", "items": {"type": "integer"}},
+    }
+    with pytest.raises(TypeError, match="No declared JSON schema"):
+        FieldCodec.value_schema(dict[int, str])
     del golden["externalLabel"]
     assert FieldCodec.decode(Record, golden) == record
 

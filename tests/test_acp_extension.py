@@ -10,6 +10,7 @@ from agent_comms.acp_extension import (
     CompactionCommittedUpdate,
     CompactionPublishedUpdate,
     CoordinationChangedUpdate,
+    ContextAnnotatedUpdate,
     CursorAdvancedUpdate,
     CursorEnvelope,
     CursorScope,
@@ -39,6 +40,8 @@ from agent_comms.pi_payloads import McpLiveReceipt
 from agent_comms.thread_identity import AdmissionIdentity, ThreadIncarnation
 from agent_comms.transcripts import TranscriptCursor, TranscriptPage
 from agent_comms.turn_lease import ActiveTurn, TurnState
+from agent_comms.turn_context import ContextManifest, NextContextTurn
+from agent_comms.private_path import FileRevision
 
 
 def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
@@ -49,7 +52,14 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     read = comms.transcripts.capture_page_read("pilot")
     owner = AdmissionIdentity(ThreadIncarnation("pilot", 1.0), 1)
     queue_scope = QueueScope("pilot", owner, 123)
+    native = tmp_path / "authored-revision.jsonl"
+    native.write_text("")
     samples = (
+        ContextAnnotatedUpdate(
+            ContextManifest(
+                owner.incarnation, NextContextTurn(), (), "source-codec-control"
+            ), (),
+        ),
         RequestFailedUpdate(ACPFailure.from_error(-32603, "The usage limit has been reached")),
         PromptCancelledUpdate(None),
         SelectedWriteAcceptedUpdate("operation", 1, "claim"),
@@ -78,7 +88,8 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         ),
         InputDeliveryChangedUpdate("input"),
         CompactionPublishedUpdate(
-            CompactionPublishedMetadata(commit_id="commit", entry_id="entry", revision="revision", leaf_id="leaf")
+            CompactionPublishedMetadata(commit_id="commit", entry_id="entry",
+                                        revision=FileRevision.from_stat(native.stat()), leaf_id="leaf")
         ),
         McpClientReceiptUpdate(
             "turn", McpLiveReceipt(1, "pi-mcp-client", "a" * 32, "running", "turn", ())
@@ -90,6 +101,12 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         InputFailedUpdate("prompt", BackendDeliveryFailure("provider refused")),
     )
     assert {type(item) for item in samples} == set(AgentCommsUpdate.members_with(AgentCommsUpdate))
+    for sample in samples:
+        try:
+            assert decode_updates(encode_updates(sample)) == (sample,)
+        except (TypeError, ValueError) as error:
+            error.add_note(f"ACP sample {type(sample).__name__}: {encode_updates(sample)!r}")
+            raise
     assert decode_updates(encode_updates(*samples)) == samples
     for invalid in (
         {"agentComms": {"turnStarted": True}},

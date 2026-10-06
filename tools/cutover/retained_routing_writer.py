@@ -14,7 +14,7 @@ from routing_recovery import retain_originals
 
 
 def main():
-    root, target_python, installer, root_id, receipt = sys.argv[1:]
+    root, target_python, installer, root_id, receipt, provenance_declaration = sys.argv[1:]
     service = Comms(Path(root))
     environment = dict(os.environ)
     environment.pop('PYTHONPATH', None)
@@ -24,7 +24,7 @@ def main():
         marker = service.bus.log._private_marker_unlocked()
         if marker.root_id != root_id or marker.checkpoint_seal is None:
             raise ValueError('Original certified writer identity changed.')
-        plan = prepare_original(service, marker)
+        plan = prepare_original(service, marker, json.loads(provenance_declaration))
         encoded = json.dumps(FieldCodec.encode(plan))
         subprocess.run([
             target_python, str(Path(installer).with_name('validate_retained_routing.py')),

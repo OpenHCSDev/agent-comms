@@ -1,0 +1,1847 @@
+{
+  "method": "Existing refactor-audit Package.load/Repository with working source read override; AST parse and compile only, no application imports or executions.",
+  "coverage": [
+    {
+      "repo": "/home/ts/wt/comms-field-codec-closure-20260928",
+      "root": "src/agent_comms",
+      "parsed": 324,
+      "omissions": []
+    },
+    {
+      "repo": "/home/ts/wt/comms-field-codec-closure-20260928",
+      "root": "tools/cutover",
+      "parsed": 52,
+      "omissions": []
+    },
+    {
+      "repo": "/home/ts/wt/toad-regression-widget-cost-20261001",
+      "root": "src/toad",
+      "parsed": 288,
+      "omissions": []
+    }
+  ],
+  "compiled_changed_modules": [
+    "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/install_retained_routing.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/original_owner_capture.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/owner_read_projection.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/read_original_owner.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_routing_cutover.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_routing_installed_pilot.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_routing_writer.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/routing_carry.py",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/screens/historical_sessions.py"
+  ],
+  "declarations": [
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 43,
+      "declaration": "AgentCommsUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 61,
+      "declaration": "ContextAnnotatedUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 67,
+      "declaration": "TurnChangedUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 72,
+      "declaration": "TextRouteUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 77,
+      "declaration": "TranscriptChangedUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 82,
+      "declaration": "UnknownDeliveryFailure"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 91,
+      "declaration": "AdmissionBlockedFailure"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 97,
+      "declaration": "InputFailedUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 103,
+      "declaration": "UpdateBatch"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 107,
+      "declaration": "encode_updates"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 111,
+      "declaration": "decode_updates"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 125,
+      "declaration": "AttachmentScope"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 148,
+      "declaration": "AttachmentRelation"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 183,
+      "declaration": "CursorScope"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 205,
+      "declaration": "CursorObservation"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 221,
+      "declaration": "UnavailableCursorObservation"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 232,
+      "declaration": "EmptyCursorObservation"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 244,
+      "declaration": "VerifiedCursorObservation"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 264,
+      "declaration": "CursorEnvelope"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 290,
+      "declaration": "CursorAdvancedUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 306,
+      "declaration": "QueueScope"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 318,
+      "declaration": "QueueItem"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 323,
+      "declaration": "QueueProjection"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 362,
+      "declaration": "PendingQueueProjection"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 372,
+      "declaration": "UnavailableQueueProjection"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 382,
+      "declaration": "AvailableQueueProjection"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 405,
+      "declaration": "QueueChangedUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 432,
+      "declaration": "InputStartedUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 448,
+      "declaration": "ContextUsage"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 454,
+      "declaration": "CoordinationChangedUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 474,
+      "declaration": "GoalChangedUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 486,
+      "declaration": "CompactionChangedUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 491,
+      "declaration": "CompactionCommittedUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 497,
+      "declaration": "TranscriptSnapshotUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 509,
+      "declaration": "InputDeliveryChangedUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 514,
+      "declaration": "CompactionPublishedUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 519,
+      "declaration": "McpClientReceiptUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 524,
+      "declaration": "CommsRequest"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 533,
+      "declaration": "PromptRequest"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 557,
+      "declaration": "QueuePromptRequest"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 561,
+      "declaration": "SteerPromptRequest"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 570,
+      "declaration": "ClearQueueRequest"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 575,
+      "declaration": "SendNowRequest"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 580,
+      "declaration": "CompactRequest"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 589,
+      "declaration": "SelectedWriteRequest"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 601,
+      "declaration": "SelectedWriteAcceptedUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 607,
+      "declaration": "encode_request"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 611,
+      "declaration": "decode_request"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 626,
+      "declaration": "RequestFailedUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 631,
+      "declaration": "PromptCancelledUpdate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 46,
+      "declaration": "for_session"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 49,
+      "declaration": "acp_chunk"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 87,
+      "declaration": "present"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 92,
+      "declaration": "present"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 133,
+      "declaration": "logical_key"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 136,
+      "declaration": "owner_created_at"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 140,
+      "declaration": "admission_generation"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 143,
+      "declaration": "relation"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 154,
+      "declaration": "foreign"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 158,
+      "declaration": "same_incarnation"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 162,
+      "declaration": "ambiguous"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 168,
+      "declaration": "newer"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 172,
+      "declaration": "older"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 176,
+      "declaration": "current"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 189,
+      "declaration": "__post_init__"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 200,
+      "declaration": "logical_key"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 210,
+      "declaration": "status"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 212,
+      "declaration": "validate_scope"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 216,
+      "declaration": "needs_refresh"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 223,
+      "declaration": "needs_refresh"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 227,
+      "declaration": "status"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 234,
+      "declaration": "needs_refresh"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 239,
+      "declaration": "status"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 248,
+      "declaration": "status"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 251,
+      "declaration": "validate_scope"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 269,
+      "declaration": "__post_init__"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 275,
+      "declaration": "status"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 278,
+      "declaration": "same_observation"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 283,
+      "declaration": "digest"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 294,
+      "declaration": "for_session"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 312,
+      "declaration": "logical_key"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 329,
+      "declaration": "status"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 332,
+      "declaration": "feedback"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 335,
+      "declaration": "capture"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 353,
+      "declaration": "validate_scope"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 356,
+      "declaration": "capture_human_input"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 364,
+      "declaration": "status"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 367,
+      "declaration": "feedback"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 374,
+      "declaration": "status"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 377,
+      "declaration": "feedback"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 387,
+      "declaration": "status"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 390,
+      "declaration": "feedback"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 393,
+      "declaration": "validate_scope"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 400,
+      "declaration": "capture_human_input"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 410,
+      "declaration": "__post_init__"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 413,
+      "declaration": "for_session"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 421,
+      "declaration": "status"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 425,
+      "declaration": "digest"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 439,
+      "declaration": "for_session"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 465,
+      "declaration": "persistence"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 469,
+      "declaration": "transport"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 478,
+      "declaration": "__post_init__"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 502,
+      "declaration": "capture"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 528,
+      "declaration": "draft_text"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 540,
+      "declaration": "__post_init__"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 544,
+      "declaration": "draft_text"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 548,
+      "declaration": "accepted"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 550,
+      "declaration": "enqueue_control"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 553,
+      "declaration": "publish_acceptance"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 558,
+      "declaration": "accepted"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 562,
+      "declaration": "accepted"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 565,
+      "declaration": "enqueue_control"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 583,
+      "declaration": "__post_init__"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 595,
+      "declaration": "__post_init__"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/acp_extension.py",
+      "line": 635,
+      "declaration": "feedback"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 30,
+      "declaration": "HistoryView"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 73,
+      "declaration": "ChannelHistory"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 85,
+      "declaration": "ChannelDisplayHistory"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 97,
+      "declaration": "DMHistory"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 109,
+      "declaration": "DMDisplayHistory"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 134,
+      "declaration": "HistoryCursor"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 140,
+      "declaration": "HistorySource"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 186,
+      "declaration": "HistoricalMessage"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 252,
+      "declaration": "HistoricalThread"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 258,
+      "declaration": "HistoricalDisplay"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 289,
+      "declaration": "HistoryArchive"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 36,
+      "declaration": "live_page"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 39,
+      "declaration": "page"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 42,
+      "declaration": "display_evidence"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 59,
+      "declaration": "full_history"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 68,
+      "declaration": "capture"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 77,
+      "declaration": "live_page"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 80,
+      "declaration": "capture"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 89,
+      "declaration": "live_page"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 92,
+      "declaration": "capture"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 101,
+      "declaration": "live_page"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 104,
+      "declaration": "capture"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 113,
+      "declaration": "viewer"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 116,
+      "declaration": "live_page"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 153,
+      "declaration": "key"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 156,
+      "declaration": "validate"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 164,
+      "declaration": "require_original"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 177,
+      "declaration": "require"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 193,
+      "declaration": "project"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 214,
+      "declaration": "notification_references"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 219,
+      "declaration": "response_policy"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 223,
+      "declaration": "view_cursor"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 227,
+      "declaration": "view_key"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 231,
+      "declaration": "view_order"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 235,
+      "declaration": "display_metadata"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 246,
+      "declaration": "to_wire"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 263,
+      "declaration": "viewer"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 267,
+      "declaration": "viewer_created_at"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 270,
+      "declaration": "select"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 273,
+      "declaration": "acknowledge"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 294,
+      "declaration": "__init__"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 298,
+      "declaration": "sources"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 305,
+      "declaration": "attach"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 411,
+      "declaration": "page"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 449,
+      "declaration": "integrated_page"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 501,
+      "declaration": "threads"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/historical_views.py",
+      "line": 196,
+      "declaration": "creation"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 56,
+      "declaration": "HistoryViews"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 57,
+      "declaration": "__init__"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 85,
+      "declaration": "message_notifications"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 88,
+      "declaration": "message_notifications_for_references"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 91,
+      "declaration": "recent_notifications"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 94,
+      "declaration": "dm_history"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 97,
+      "declaration": "channel_history"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 101,
+      "declaration": "dm_history_page"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 121,
+      "declaration": "attach_history"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 133,
+      "declaration": "historical_threads"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 136,
+      "declaration": "dm_display_page"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 155,
+      "declaration": "channel_display_page"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 186,
+      "declaration": "mark_historical_view_read"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 189,
+      "declaration": "channel_history_page"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 208,
+      "declaration": "last_sent_timestamps"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 217,
+      "declaration": "full_history"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 222,
+      "declaration": "full_history_page"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 238,
+      "declaration": "export_wire"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 263,
+      "declaration": "channel_views"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 282,
+      "declaration": "thread_views"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 295,
+      "declaration": "thread_presentation"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 321,
+      "declaration": "coordination_snapshot"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 345,
+      "declaration": "viewer_snapshot"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 371,
+      "declaration": "mark_thread_view_read"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 379,
+      "declaration": "mark_channel_view_read"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 394,
+      "declaration": "mark_dm_view_read"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 408,
+      "declaration": "mark_user_view_read"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 426,
+      "declaration": "revision"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 448,
+      "declaration": "who"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 452,
+      "declaration": "presence"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 456,
+      "declaration": "_presence"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 467,
+      "declaration": "list_threads"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 495,
+      "declaration": "thread_detail"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/history_views.py",
+      "line": 508,
+      "declaration": "poll"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 43,
+      "declaration": "TranscriptCursor"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 114,
+      "declaration": "TranscriptPage"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 130,
+      "declaration": "TranscriptReadIdentity"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 222,
+      "declaration": "LiveTranscriptReadIdentity"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 246,
+      "declaration": "RecordedTranscriptReadIdentity"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 284,
+      "declaration": "TranscriptRead"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 315,
+      "declaration": "Transcripts"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 50,
+      "declaration": "outcome_seq"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 53,
+      "declaration": "at_outcome"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 63,
+      "declaration": "wire_seq"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 66,
+      "declaration": "at_offset"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 71,
+      "declaration": "at_sequence"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 80,
+      "declaration": "contains"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 87,
+      "declaration": "native_within"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 90,
+      "declaration": "outcomes_within"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 93,
+      "declaration": "includes_outcomes"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 98,
+      "declaration": "receipts_within"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 101,
+      "declaration": "includes_receipts"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 104,
+      "declaration": "require_source"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 108,
+      "declaration": "covers_incoming"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 121,
+      "declaration": "metadata"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 155,
+      "declaration": "content_thread"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 159,
+      "declaration": "historical_source"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 164,
+      "declaration": "resolve_source"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 168,
+      "declaration": "namespace"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 171,
+      "declaration": "publish_turn"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 174,
+      "declaration": "recapture"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 180,
+      "declaration": "require_binding"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 189,
+      "declaration": "content_bus"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 195,
+      "declaration": "content_identity"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 202,
+      "declaration": "page_bound"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 211,
+      "declaration": "same_content"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 226,
+      "declaration": "content_thread"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 230,
+      "declaration": "resolve_source"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 238,
+      "declaration": "namespace"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 241,
+      "declaration": "publish_turn"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 250,
+      "declaration": "historical_source"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 254,
+      "declaration": "content_source"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 260,
+      "declaration": "resolve_source"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 272,
+      "declaration": "namespace"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 278,
+      "declaration": "recapture"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 290,
+      "declaration": "current"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 293,
+      "declaration": "content_current"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 296,
+      "declaration": "current_identity"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 299,
+      "declaration": "read"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 316,
+      "declaration": "__init__"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 324,
+      "declaration": "bind_page_read"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 341,
+      "declaration": "capture_page_read"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 355,
+      "declaration": "capture_page_window"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 417,
+      "declaration": "_page_source"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 424,
+      "declaration": "thread_transcript"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 437,
+      "declaration": "_thread_transcript_source"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 460,
+      "declaration": "_fork_start_events"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 468,
+      "declaration": "thread_transcript_page"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 550,
+      "declaration": "transcript_checkpoint"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 567,
+      "declaration": "record_turn_publication"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/transcripts.py",
+      "line": 576,
+      "declaration": "repair_input_routing"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/install_retained_routing.py",
+      "line": 20,
+      "declaration": "main"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/original_owner_capture.py",
+      "line": 29,
+      "declaration": "OriginalOwnerRead"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/original_owner_capture.py",
+      "line": 35,
+      "declaration": "OriginalTypedCapture"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/original_owner_capture.py",
+      "line": 74,
+      "declaration": "CurrentTypedCapture"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/original_owner_capture.py",
+      "line": 81,
+      "declaration": "CapturedOriginalOwner"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/original_owner_capture.py",
+      "line": 40,
+      "declaration": "_acquire"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/original_owner_capture.py",
+      "line": 50,
+      "declaration": "observe"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/original_owner_capture.py",
+      "line": 55,
+      "declaration": "recorded"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/original_owner_capture.py",
+      "line": 62,
+      "declaration": "read"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/original_owner_capture.py",
+      "line": 87,
+      "declaration": "require_current"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/owner_read_projection.py",
+      "line": 18,
+      "declaration": "OwnerReadProjection"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/owner_read_projection.py",
+      "line": 25,
+      "declaration": "LiveOwnerReadProjection"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/owner_read_projection.py",
+      "line": 45,
+      "declaration": "RetiredGoalReportProjection"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/owner_read_projection.py",
+      "line": 51,
+      "declaration": "CurrentThreadProjection"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/owner_read_projection.py",
+      "line": 57,
+      "declaration": "RecordedRegistryProjection"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/owner_read_projection.py",
+      "line": 21,
+      "declaration": "read"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/owner_read_projection.py",
+      "line": 27,
+      "declaration": "read"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/owner_read_projection.py",
+      "line": 41,
+      "declaration": "project"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/owner_read_projection.py",
+      "line": 47,
+      "declaration": "project"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/owner_read_projection.py",
+      "line": 53,
+      "declaration": "project"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/owner_read_projection.py",
+      "line": 61,
+      "declaration": "project"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/owner_read_projection.py",
+      "line": 72,
+      "declaration": "read"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/owner_read_projection.py",
+      "line": 78,
+      "declaration": "capture"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/read_original_owner.py",
+      "line": 15,
+      "declaration": "main"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_routing_cutover.py",
+      "line": 15,
+      "declaration": "RetainedRoutingCutover"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_routing_cutover.py",
+      "line": 21,
+      "declaration": "operation_arguments"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_routing_cutover.py",
+      "line": 24,
+      "declaration": "require_source"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_routing_installed_pilot.py",
+      "line": 19,
+      "declaration": "render"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_routing_installed_pilot.py",
+      "line": 40,
+      "declaration": "main"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_routing_writer.py",
+      "line": 16,
+      "declaration": "main"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/routing_carry.py",
+      "line": 21,
+      "declaration": "digest_bytes"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/routing_carry.py",
+      "line": 25,
+      "declaration": "digest_json"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/routing_carry.py",
+      "line": 29,
+      "declaration": "file_witness"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/routing_carry.py",
+      "line": 43,
+      "declaration": "tables"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/routing_carry.py",
+      "line": 47,
+      "declaration": "primary_keys"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/routing_carry.py",
+      "line": 52,
+      "declaration": "table_rows"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/routing_carry.py",
+      "line": 62,
+      "declaration": "registry_without_routing"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/routing_carry.py",
+      "line": 72,
+      "declaration": "RoutingCell"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/routing_carry.py",
+      "line": 80,
+      "declaration": "RegistryRouting"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/routing_carry.py",
+      "line": 87,
+      "declaration": "RoutingCarryPlan"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/routing_carry.py",
+      "line": 162,
+      "declaration": "prepare_original"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/routing_carry.py",
+      "line": 101,
+      "declaration": "require_sources"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/routing_carry.py",
+      "line": 108,
+      "declaration": "require_target"
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/routing_carry.py",
+      "line": 180,
+      "declaration": "convert"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 36,
+      "declaration": "CommsUpdateConsumer"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 201,
+      "declaration": "OwnerSnapshotConsumer"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 37,
+      "declaration": "__init__"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 52,
+      "declaration": "consume_metadata"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 56,
+      "declaration": "accepts_turn"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 59,
+      "declaration": "require_compaction_receipt"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 65,
+      "declaration": "text_route"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 69,
+      "declaration": "input_failed"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 73,
+      "declaration": "transcript_changed"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 77,
+      "declaration": "context_annotated"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 81,
+      "declaration": "turn_changed"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 91,
+      "declaration": "cursor_advanced"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 101,
+      "declaration": "queue_changed"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 112,
+      "declaration": "input_started"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 121,
+      "declaration": "coordination_changed"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 142,
+      "declaration": "goal_changed"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 146,
+      "declaration": "compaction_changed"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 153,
+      "declaration": "compaction_committed"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 157,
+      "declaration": "transcript_snapshot"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 163,
+      "declaration": "input_delivery_changed"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 168,
+      "declaration": "compaction_published"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 172,
+      "declaration": "mcp_receipt"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 184,
+      "declaration": "selected_write_accepted"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 188,
+      "declaration": "request_failed"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 197,
+      "declaration": "prompt_cancelled"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 204,
+      "declaration": "__init__"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 208,
+      "declaration": "accepts_turn"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 213,
+      "declaration": "thread_presentation"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/comms_updates.py",
+      "line": 219,
+      "declaration": "publish_thread_turn"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 23,
+      "declaration": "NativeTranscriptReadWork"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 39,
+      "declaration": "PublishedNativeTranscriptReadWork"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 48,
+      "declaration": "CoordinationTranscriptReader"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 122,
+      "declaration": "DirectTranscriptReadDelivery"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 129,
+      "declaration": "PreparedTranscriptReadDelivery"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 28,
+      "declaration": "work_key"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 34,
+      "declaration": "prepare"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 42,
+      "declaration": "prepare"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 51,
+      "declaration": "__init__"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 56,
+      "declaration": "deliver"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 58,
+      "declaration": "service"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 61,
+      "declaration": "with_runtime"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 65,
+      "declaration": "bind"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 75,
+      "declaration": "publication"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 91,
+      "declaration": "notifications"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 95,
+      "declaration": "page"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 102,
+      "declaration": "snapshot"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 125,
+      "declaration": "deliver"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 132,
+      "declaration": "__init__"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 137,
+      "declaration": "deliver"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 140,
+      "declaration": "service"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/acp/transcript_reader.py",
+      "line": 146,
+      "declaration": "with_runtime"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/screens/historical_sessions.py",
+      "line": 30,
+      "declaration": "HistoricalSessions"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/screens/historical_sessions.py",
+      "line": 40,
+      "declaration": "__init__"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/screens/historical_sessions.py",
+      "line": 56,
+      "declaration": "project_root"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/screens/historical_sessions.py",
+      "line": 60,
+      "declaration": "compose"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/screens/historical_sessions.py",
+      "line": 93,
+      "declaration": "selected"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/screens/historical_sessions.py",
+      "line": 142,
+      "declaration": "action_focus_prompt"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/screens/historical_sessions.py",
+      "line": 146,
+      "declaration": "request_message_handling"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/screens/historical_sessions.py",
+      "line": 153,
+      "declaration": "publish_handling"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/screens/historical_sessions.py",
+      "line": 193,
+      "declaration": "action_close"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/screens/historical_sessions.py",
+      "line": 114,
+      "declaration": "load"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/screens/historical_sessions.py",
+      "line": 163,
+      "declaration": "read"
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/src/toad/screens/historical_sessions.py",
+      "line": 115,
+      "declaration": "read"
+    }
+  ],
+  "runtime_imports": false,
+  "tests_run": false,
+  "native_or_package_access": false,
+  "source_check_interpreter": "3.14.7 (main, Aug 10 2026, 07:46:56) [GCC 16.1.1 20260728]",
+  "changed_modules_parse_grammar": "Python3.11; syntax only, no 3.11 runtime/import acceptance"
+}

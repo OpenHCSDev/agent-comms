@@ -340,16 +340,9 @@ class EngagedAssignment(BoundAssignment):
         triage_inflight=False,
         blocked_by_prior=False,
     ):
-        from .presentation import MessageNotification
-
-        if not observation.turn_started_by(updated_at_ms):
-            return MessageNotification(
-                recipient,
-                "Paused",
-                "A response was selected, but no matching active turn is running. "
-                "Outcome is unconfirmed; do not automatically retry.",
-            )
-        return super().notification(recipient, observation=observation)
+        return observation.selected_response(
+            super().notification(recipient, observation=observation), updated_at_ms
+        )
 
     notification_state = "Responding…"
     notification_detail = "The agent chose to respond; work is in progress."

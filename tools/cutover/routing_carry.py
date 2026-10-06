@@ -96,6 +96,7 @@ class RoutingCarryPlan:
     turns: tuple[RegistryRouting, ...]
     originals: tuple[dict[str, Any], ...]
     protected: dict[str, dict[str, Any]]
+    recorded_source: dict[str, Any]
 
     def require_sources(self, root: Path) -> None:
         if file_witness(root / 'bus.jsonl') != self.bus:
@@ -107,8 +108,11 @@ class RoutingCarryPlan:
     def require_target(self, root: Path, connection):
         """Validate every target row/identity before the first update."""
         from agent_comms.routing import TurnRouting
+        from agent_comms.historical_views import HistorySource
 
         self.require_sources(root)
+        source = FieldCodec.decode(HistorySource, self.recorded_source)
+        source.require_original(root)
         registry_bytes = (root / 'registry.json').read_bytes()
         document = json.loads(registry_bytes)
         if digest_bytes(registry_bytes) != self.registry_digest:
@@ -152,19 +156,24 @@ class RoutingCarryPlan:
             if digest_json(routing) != turn.original_digest:
                 raise ValueError('Original active-turn routing changed.')
             TurnRouting.from_wire(turn.routing)
-        return document
+        return document, source
 
 
-def prepare_original(service, marker) -> RoutingCarryPlan:
+def prepare_original(service, marker, provenance_declaration) -> RoutingCarryPlan:
     """Only the original interpreter may decode embedded Message requests."""
     from agent_comms.bus_publication import unique_wire_object
     from agent_comms.routing import TurnRouting
     from agent_comms.messages import Message
+    from owner_read_projection import RecordedRegistryProjection
 
     root = service.root
     database = root / 'transcript_routes.sqlite3'
     registry_bytes = (root / 'registry.json').read_bytes()
     document = json.loads(registry_bytes, object_pairs_hook=unique_wire_object)
+    recorded = RecordedRegistryProjection.capture(
+        root, service.registry.store.path, service.registry.store._read_unlocked(),
+        provenance_declaration,
+    )
     # Keep only referenced originals, not a second full wire history.
     wanted = {}
 
@@ -238,4 +247,4 @@ def prepare_original(service, marker) -> RoutingCarryPlan:
         digest_json(registry_without_routing(document)),
         file_witness(database),
         tuple(cells), tuple(turns), tuple(originals),
-        {str(path): file_witness(path) for path in sorted(paths)})
+        {str(path): file_witness(path) for path in sorted(paths)}, recorded)

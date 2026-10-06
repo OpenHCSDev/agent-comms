@@ -1,0 +1,224 @@
+{
+  "head": "d08c1a49b068c66e021e1ef31a497308022b774c",
+  "scope": "retained own source artifacts plus named685 builder Corewheel",
+  "assets": 319,
+  "examined": [
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/patch-preparation-368/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-gui-prepared-sourcebee4/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/comms_updates.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-historical-main76ec-source/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/comms_updates.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/context-text-377/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/transcript-task-boundary-369/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/response403-restore-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/native-theme-choice-boundary-371/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/headless-shell-383/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/catalog-native-386/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-gui-prepared-source6e4/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/comms_updates.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-gui-prepared-source70e2/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/comms_updates.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-attachment-successor-source/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/comms_updates.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/render-execution-preparation-366/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-current-main-f071-source/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/comms_updates.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/working-memory-w6-filewheels-00b9ad8a/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/comms_updates.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/terminal-model-damage-379/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/canonical-layout-preferences-394/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/permission-projection-374/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/response403-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/prepared-render-transport-20261005/toad-filewheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/comms_updates.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/session-initial-prompt-custody-20261005/union34bd-source-wheel/toad-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/comms_updates.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/session-initial-prompt-custody-20261005/source-wheel/toad-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/comms_updates.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/shell-mcp-392/core/agent_comms-0.1.0-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/__init__.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/shell-mcp-392/toad/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/theme410-code-loan-20261003/wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/recorded-context-reader-20261004/wheel-lifetime/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/recorded-context-reader-20261004/wheel-next/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/recorded-context-reader-20261004/wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/recorded-context-reader-20261004/wheel-corrected/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/recorded-context-reader-20261004/wheel-final/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/recorded-context417-source-closure/tree58-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/recorded-context417-source-closure/typed-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/recorded-context417-source-closure/intent04b-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/comms_updates.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/annotation-address-successor/wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/comms_updates.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/declared-target-menus-20261003/wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/agent.py",
+      "metadata_pin_equal": false
+    },
+    {
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/viewport-worker-custody-20261005/wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "toad/acp/comms_updates.py",
+      "metadata_pin_equal": false
+    }
+  ],
+  "matching_full_artifact": null
+}

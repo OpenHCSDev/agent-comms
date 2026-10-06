@@ -378,6 +378,8 @@ class FieldCodec(Sealed):
             return {**cls.value_schema(type(args[0])), "enum": list(args)}
         if origin in (list, tuple, frozenset):
             return {"type": "array", "items": cls.value_schema(args[0])}
+        if origin is dict and args[0] is str:
+            return {"type": "object", "additionalProperties": cls.value_schema(args[1])}
         if origin is type and args and issubclass(args[0], DeclaredFamily):
             return {"type": "string", "enum": list(args[0].names())}
         if isinstance(annotation, type) and issubclass(annotation, Enum):

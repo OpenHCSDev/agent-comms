@@ -1,0 +1,48 @@
+{
+  "source_head": "b97345686f8b498db24069d262f364c5ad1ffb1b",
+  "wheel": {
+    "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/wheel/agent_comms-0.1.0-py3-none-any.whl",
+    "sha256": "c44d5a6c786dfd0bd82dfd50304c0ac7e02258d272855005fc915a943c3679ca",
+    "bytes": 908303
+  },
+  "assets": 355,
+  "all_Git_local_ZIP_equal": true,
+  "RECORD_file_count": 360,
+  "RECORD_digest_size_complete": true,
+  "metadata_sha256": {
+    "agent_comms-0.1.0.dist-info/entry_points.txt": "6e56bfd47c28174d7978791d6e7673645c69cb06141e3306961b4a88fac53a72",
+    "agent_comms-0.1.0.dist-info/licenses/LICENSE": "1fe81c33f0cdfbcea8ce2fa4bf5cc98604be54a954ff7c59cea0ff02e3c15741",
+    "agent_comms-0.1.0.dist-info/METADATA": "9a02a0a276afadd2f609acae02a93606f53d85a904f40f0ef162f9ceafa1fc0c",
+    "agent_comms-0.1.0.dist-info/RECORD": "b7c48b1cf86d018de6a957e8dc0b96f524e2ca5972a861091a7b871b64f697b4",
+    "agent_comms-0.1.0.dist-info/WHEEL": "58b82a17209f9bf2804afe161f2632d0fde933f9bb2792fd936b2474a2e2ac2f"
+  },
+  "build_inputs": {
+    "pyproject.toml": {
+      "sha256": "000139ce7da800c73574db2cd2e99af5afb63795f94f38d532e03af4b1423ad7",
+      "Git_equal": true
+    },
+    "README.md": {
+      "sha256": "b77c9e4f95fe3b1c0cbf84f70f429ff07673308099688796b24bda7e339f84a6",
+      "Git_equal": true
+    },
+    "LICENSE": {
+      "sha256": "1fe81c33f0cdfbcea8ce2fa4bf5cc98604be54a954ff7c59cea0ff02e3c15741",
+      "Git_equal": true
+    }
+  },
+  "build_receipt": {
+    "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/wheel/build-receipt.json",
+    "sha256": "84b7303ef3422275eec6f5c09441f34ba6c2c623a26a7c7533be38340611123b"
+  },
+  "inventory": {
+    "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/wheel/source-inventory.json",
+    "sha256": "02ec29304a4a3020e9485f01a00f0985973da28647a0c8fea8a68e47d26556b4"
+  },
+  "record_proof": {
+    "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/wheel/record-proof.json",
+    "sha256": "cfa19e0246c2317bd3b3a6b291b98f6a12516c672932a7a843e06c2717ce7975"
+  },
+  "native_manifest_sha256": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+  "installed_qualification": "UNRUN",
+  "native_READ_or_execution": false
+}

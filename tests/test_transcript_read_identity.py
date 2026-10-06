@@ -40,7 +40,7 @@ def test_native_append_and_fork_source_change_revoke_prior_read(tmp_path):
     comms = wire(tmp_path / "wire")
     parent = tmp_path / "parent.jsonl"
     parent.write_text(json.dumps({"type": "message", "message": {
-        "role": "assistant", "content": "parent answer",
+        "role": "assistant", "content": [{"type": "text", "text": "parent answer"}],
     }}) + "\n")
     comms.registry.declare(Thread("parent", frozenset(), str(tmp_path), session_file=str(parent)))
     comms.registry.declare(Thread("child", frozenset(), str(tmp_path), parent="parent", task="continue"))
@@ -48,7 +48,7 @@ def test_native_append_and_fork_source_change_revoke_prior_read(tmp_path):
     assert any(event.text == "parent answer" for event in captured.read().events)
     with parent.open("a") as output:
         output.write(json.dumps({"type": "message", "message": {
-            "role": "assistant", "content": "later answer",
+            "role": "assistant", "content": [{"type": "text", "text": "later answer"}],
         }}) + "\n")
     with pytest.raises(StaleRevision):
         captured.read()
@@ -56,9 +56,9 @@ def test_native_append_and_fork_source_change_revoke_prior_read(tmp_path):
     assert any(event.text == "later answer" for event in fresh.read().events)
     child = tmp_path / "child.jsonl"
     child.write_text(json.dumps({"type": "message", "message": {
-        "role": "assistant", "content": "child answer",
+        "role": "assistant", "content": [{"type": "text", "text": "child answer"}],
     }}) + "\n")
-    comms.threads.attach_session("child", str(child))
+    comms.threads.attach_session(comms.registry.require("child"), str(child))
     with pytest.raises(StaleRevision):
         fresh.read()
     assert [event.text for event in comms.transcripts.capture_page_read("child").read().events] == ["child answer"]
@@ -71,7 +71,7 @@ def test_thread_activity_and_annotations_do_not_replay_saved_content(tmp_path):
     comms = wire(tmp_path / "wire")
     path = tmp_path / "native.jsonl"
     path.write_text(json.dumps({"type": "message", "message": {
-        "role": "assistant", "content": "Original retained answer",
+        "role": "assistant", "content": [{"type": "text", "text": "Original retained answer"}],
     }}) + "\n")
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
     captured = comms.transcripts.capture_page_read("worker")

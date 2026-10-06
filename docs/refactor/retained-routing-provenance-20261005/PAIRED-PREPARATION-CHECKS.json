@@ -1,0 +1,15 @@
+{
+  "status": "Source preparation only; no proof/controller/application imports or execution",
+  "tools_parsed": 13,
+  "parse_omissions": [],
+  "control_tail_equal": true,
+  "normal_Core_builds": 1,
+  "normal_Toad_builds": 1,
+  "Core_assets": 355,
+  "Toad_assets": 319,
+  "Core_native_manifest": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+  "Toad_declared_Core_pin": "b97345686f8b498db24069d262f364c5ad1ffb1b",
+  "remaining": "Bohr fresh actual floor/dependency/metadata/restore fields and actual paired grants; originalSch fresh4b READ+SDK execution receipt; affected installed mounted control remains UNRUN",
+  "accepted684_repeated": false,
+  "old_fullcentralbatch_qualified": false
+}

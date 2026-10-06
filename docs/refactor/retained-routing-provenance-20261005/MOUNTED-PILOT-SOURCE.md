@@ -1,0 +1,21 @@
+# Mounted historical consumer source checkpoint
+
+The existing retained_routing_installed_pilot now mounts HistoricalSessions in the normal store App. Its native Select.Changed handler captures the original recorded identity and owns TranscriptHistory construction. Mounted WireMessageHandling events acquire notification feedback through the same HistorySource.
+
+The control selects alpha, beta, then alpha from the authentic old producer namespace. Temporary control instrumentation delegates the original notification reader and holds its completed read at return. Actual selection and unmount cancel the original handling worker; original body publication is observed without replacing reader results, workers, tasks or scheduler. The held thread is released in finally and the original default executor is joined after App shutdown. No timer/retry or forced focus is added.
+
+The old corrupt-routing refusal mode remains intact on a distinct new authored root. Original and archived bus/registry/guard and UNKNOWN/native journal bytes are frozen across mounted reading. No hand-authored legacy schema, coordination table, live settlement or historical Comms decode is used. The older Toad historical pilot expectation now also borrows HistorySource.notification_references.
+
+This checkpoint has not launched the App or old producer. Actual installed mounted selection, notifications and retirement remain unqualified. Accepted684 index evidence and prior source-control negatives are unchanged. Parent requested normal main6de443/bootstrap685 union before the single authorized Core wheel; native resource/paired pin will be frozen only after that union.
+
+## Separate central batch work
+
+The quiet routing path does not acquire AdmittedOwnerBatch. Genuine live qualification must use OwnerCutover.restart -> AdmittedOwnerBatch.restart under the original decoder, exact RetainedOwnerLaunch capture and fence, FencedOwnerBatch complete after process retirement, StoppedOwnerBatch inherited wire OFD, RetainedRoutingCutover.after_stopped and target launch binding. It must validate every original OwnerIdentity/AdmissionIdentity/process before replacement launch. Old720 cannot be assigned later admission APIs or treated as a live stopped-batch witness. That original owner_restart/owner_launch integration is the next separate source/qualifier relation to investigate with Parent; no live batch claim is made by the mounted historical pilot.
+
+## Joined source and next original admission seam
+
+Normal main6de443 is now joined, preserving merged683/681 and685. The forced native declaration is4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50/tree63f18710cb9329be6ade27bac3b4dd822e2b36f013756fa8e6717b8073a4592c. Future SDK scope must name the existing matching4b keeper. No687 membership or476 warm-budget source is included.
+
+Concrete separate central-batch risk: current OwnerRestartRequest.threads and AdmittedOwnerBatch.restart use Thread.execution; genuine720 Thread has no execution property and its original OwnerLifecycle.restart_owners has no cutover parameter. Existing phased_owner_kernel loads current phase modules while retaining original Thread/lifecycle declarations; loading those modules alone does not establish that admission contract. The next work belongs at original OwnerRestartRequest/AdmittedOwnerBatch acquisition and phased_owner_kernel/restart_original_thread_format consumers, coordinated with Parent. The authentic source decoder/lifecycle must own selection, retirement and launch custody; no target old-Thread decode, stripped registry, compatibility property or second stop/start implementation is proposed. Runtime qualification of this relation remains separate and ungranted.
+
+Parent identified the earlier bootstrap failure: current owner_restart imports owner_launch at module load, but genuine720 has no owner_launch module. The bounded source declaration closure now includes all owner_launch/admission dependencies, eager/deferred/TYPE_CHECKING imports separately from any behavioral proof. Merely loading or copying current phases is not a genuine original720 admission path. No central-batch implementation is folded into this independent stopped-routing checkpoint.

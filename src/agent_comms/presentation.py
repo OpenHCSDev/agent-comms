@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -43,6 +44,8 @@ if TYPE_CHECKING:
     from .read_ledger import ReadDocument
     from .registration import Registration
     from .registry_document import RegistrySnapshot
+    from .registry_provenance import RegistryProvenance
+    from .agent_activity import RecipientActivity
     from .wire_log import WireLog
 
 
@@ -88,18 +91,54 @@ class MessageNotification:
         references: Sequence[MessageReference],
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Borrow mounted references in the original bounded delivery windows."""
+        return cls.read_references(log, references, partial(cls.delivery_window, root, registry))
+
+    @classmethod
+    def read_references(
+        cls, log: WireLog, references: Sequence[MessageReference],
+        project: Callable[[Sequence[CommittedDelivery]], dict[tuple[int, str], tuple[MessageNotification, ...]]],
+    ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
+        """Share bounded original delivery acquisition across live/recorded cuts."""
         result = {}
         for start in range(0, len(references), cls.window_limit):
             sources = log.deliveries_for_references(
                 references[start : start + cls.window_limit]
             )
-            result.update(cls.delivery_window(root, registry, sources))
+            result.update(project(sources))
         return result
 
     @classmethod
     def delivery_window(cls, root: Path, registry: Registration,
                         sources: Sequence[CommittedDelivery]):
         """Project the original frozen audience even before handling is recorded."""
+        from .agent_activity import AgentActivity
+
+        if not sources:
+            return {}
+        snapshot = registry.snapshot()
+        observations = AgentActivity(root, registry).observe_recipients(
+            (recipient for source in sources for recipient in source.audience.recipients),
+            snapshot=snapshot,
+        )
+        return cls.project_delivery_window(root, snapshot, sources, observations)
+
+    @classmethod
+    def recorded_delivery_window(cls, root: Path, namespace: RegistryProvenance,
+                                 sources: Sequence[CommittedDelivery]):
+        from .agent_activity import RecordedRecipientActivity
+
+        observations = {
+            recipient.recipient_lookup: RecordedRecipientActivity()
+            for source in sources for recipient in source.audience.recipients
+        }
+        return cls.project_delivery_window(root, namespace, sources, observations)
+
+    @classmethod
+    def project_delivery_window(
+        cls, root: Path, snapshot: RegistryProvenance,
+        sources: Sequence[CommittedDelivery], observations: Mapping[str, RecipientActivity],
+    ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
+        """Original assignment and read authorities own both display projections."""
         from .notification_assignment import NotificationAssignment
 
         if len(sources) > cls.window_limit:
@@ -111,14 +150,6 @@ class MessageNotification:
         placeholders = ",".join("?" for _ in keys)
         rows = NotificationAssignment.select(
             root, f"w.wire_seq IN ({placeholders})", tuple(key[0] for key in keys)
-        )
-        snapshot = registry.snapshot()
-        from .agent_activity import AgentActivity
-
-        agents = AgentActivity(root, registry)
-        observations = agents.observe_recipients(
-            (recipient for source in sources for recipient in source.audience.recipients),
-            snapshot=snapshot,
         )
         reads = ReadLedger(root / ReadLedger.filename)
         document = reads.read()
@@ -132,11 +163,8 @@ class MessageNotification:
                 result[key].append(
                     replace(
                         notification,
-                        displayed_to=reads.displayed_recipient(
-                            source.message,
-                            notification.recipient_identity,
-                            snapshot,
-                            document=document,
+                        displayed_to=observation.displayed_recipient(
+                            notification, source, reads, document, snapshot
                         ),
                     )
                 )
