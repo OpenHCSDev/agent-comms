@@ -17,18 +17,19 @@ Core3931/3fe, new474 Toad2ece and Text71/bc47 under shared immutable native7a;
 READ/EXEC authority in8f803f62, retaining all11 raw references. Private687a
 remains independently CLOSED3e600. No Parent publisher/readback or source-witness
 claim remains. Sch independently closed NEW4622 at4760a81c; Parent personally
-matched its19 references and all permission flags are disabled. Mendel launched
-the fresh stationary affected475 check using unchanged Heis helpers, then
-called ParentedProcess.reap while the recorder was still running. Its two-second
-retirement wait failed before the recorder completed; this is an operator error,
-not a demonstrated UI defect or45-second recorder timeout. Parent read the
-original wait owner and observed the recorder/controller absent while four
-recorded UI/st/guardian identities remained alive. Mendel owns birth-bound
-cleanup and whole client return; private native SDK cases remain idle. The
-unchanged original async parent wait is the operative correction. A separately
-recorded changed-operator observe02 is authorized only after actual01 whole
-return and fresh admission; no old attempt or UNKNOWN input is replayed. Bohr may freshly assess formerPUBLIC485 for476; the
-publication itself is not a holder grant or performance qualification.
+matched its19 references and all permission flags are disabled.
+Mendel's first stationary affected475 operator prematurely called
+ParentedProcess.reap while the recorder was live. Its original forced cleanup
+and whole return4c8bacc5 are preserved as unqualified. The separately authorized
+changed operator uses the original async child.wait; observe02 then passed
+24.689s, with recorder completion11.791s, runtime unchanged and real UI/st
+parent outcomes0 without UI/st signals. Whole returndf6a37f5 binds47 raw
+references. Parent matched those references and personally viewed the original
+after PNG: saved NRA body, outbound content and Ready roster/status are readable.
+All18 owned identities and the isolated display are retired; the original public
+owner/settings/source remain unchanged. This proves stationary attachment and
+graceful exit only, not configured input, continuous navigation or performance.
+No Parent public client or source witness remains.
 
 Historical public471 verification remains preserved:
 Fresh stationary default UI observe01 failed on a stale inspection helper;
@@ -127,15 +128,29 @@ Nonempty committed source and actual saved bodies precede loaded membership;
 strong witness references are cleared before native resource counting. Warm
 retained identity/raw-reads-zero return and genuine eviction/Undo/non-tail
 restoration remain separate mandatory outcomes. Warm e781 and loaded2d1c are
-source-only operands; no holder is reserved or issued.
+source-only operands. The loaded request descriptor is now corrected in
+append-only d72f9864: two seed plus eight HELD/QUEUED localhost requests across
+four cohorts, ten total; warm's separate two-input scope is unchanged.
+Bohr freshly assessed formerPUBLIC485 at its actual CURRENT4711467/953/full69
+floor,2253 other67 records,266 protected/bootstrap2/PREFIX. Historical1563
+archive is CURRENT459 only. Final warm operandsacad2011 bind this actual floor,
+retained source/wheel/controller and original150s BoundRun. Bohr issued fresh
+89e82fcf/lifecycle0c9d5039 after a new zero-reference floor readback. Only the
+single Toad61bf+Text71bc47 stage and own-root preparation are released; Core3fe
+is unchanged. Heis personally read the actual issue and owns that stage.
+New matching7a READ, exclusive proof bindings, actual proof/DTO/Trust and separate
+EXEC/App release remain required in this same purpose. No public decoder,
+configured fork, loaded cohort, accepted07/466 replay or new build is included.
+Normal return is actual CURRENT471 ToAdb2e+Text16c9 once; all original floor,
+origins and protected assets must match before independent closure.
 
 MCP472/682 preparation identified an inactive network preload. OriginalSch
 published685 canonical pre-SDK fetch-origin guard; one necessary native assembly
 passed12.986s and one matching Core wheel passed0.542s. Parent verified the
 artifact handoff179fd and normal683 joined relationb1d97: all18 referenced
 hashes/sizes match, the independent arm runner is retained, and the existing
-wheel5d661 is reused without another build. Shared7a remains immutable. Guarded
-installed execution and all-process network containment are not proved.
+wheel5d661 is reused without another build. Shared7a remains immutable. The separately reached installed fetch guard is qualified below;
+all-process network containment is outside this guard and is not proved.
 Mendel's independent typed-only stage and pure installed proof passed; the
 proof completed2.155s. The launch-admission code then failed before Popen by
 treating mapping keys as records. No wrapper/control/App child started: mounted
@@ -167,9 +182,31 @@ and joined all three identities. New matching4b READfcf9 is bound in lifecycle
 f330; the sole installed proof passed6.499s with953 Git/ZIP/installed assets,
 full69 truthful origins,428 protected/1883 other records/five environment
 nodes/PREFIX and original4b FullTrust. Both proof identities are absent. Final
-controller operandsf63e are delivered; the separate matching EXEC and Bohr
-control release remain pending. No native case/input has executed, and this
-purpose does not inherit or retry the earlier typed-only attempt.
+controller operandsf63e were bound under separate matching4b EXECd4c4 and
+Bohr release5cba. After actual PUBLIC475 observe02 whole return, the sole batch
+failed1 in63.727s at its first allow case waiting40s for permission; the other
+three cases were not run. Original diagnostics identify OwnedTurn.prepare_native
+-> InputDrain private observation -> ParticipantStore.get IdentityConflict:
+participant aggregate is not registered. The original prompt disposition is
+NotSent; no model request/POST or native permission was reached. This is an
+actual fresh ACP membership publication/acquisition gap, not justification for
+injecting test participants. Mendel owns the original SessionLifecycle/
+ThreadManagement/Registration capability and related consumer source closure;
+no competing fresh-session writer was identified.
+
+The separately reached origin guard receipt6613ec67 and HTTP receipt03a4fba3
+show localhost positive, exact refused-origin causes before and after dispatcher
+reset, redirect refusal and exactly two localhost GET dispatches with no outside
+origin dispatch. Parent read these actual bytes and the committed bootstrap.
+This is default-fetch origin-guard qualification, not whole MCP success or
+all-process network containment. No retry is authorized. Original four-wheel
+restore ran once; whole1279b93f and append-only node-helper supplement0727aba2
+preserve the raw failure and actual joins. Bohr independently closed9b320 at
+71fabd7e after matching the original1468/945/full69 RAW floor,428 protected,
+1883 other66/five environment nodes/PREFIX and fresh zero private references.
+Source-stage/proof/control/restore attempts are consumed once, all execution
+flags disabled. Sch's exact artifact-authority closure is separate; old issued
+bytes and every failed/NotSent input remain preserved.
 
 S4 source683 is normally merged208b8f07 after review of complete arm acquisition,
 inputs/cuts/probes and cleanup clocks. Four authored orchestration controls and
@@ -208,8 +245,19 @@ three coordinated Toad consumers. Parent reviewed actual owner methods and the
 original720 codec declarations: no target old-registry decode or live settlement
 from recorded evidence is introduced. Dynamic family registration and strict
 codec/currentness behavior are not established by compilation; Einstein owns
-one final affected source-check batch before the separately scoped installed
-old720 routing/SDK acceptance. No accepted684 qualifier is replayed.
+the complete affected source-check batch. Paired source checkpoints Core45e41cec
+and Toadf3e99cff preserve32 distinct passing controls across the original batch
+and its concrete failure resolutions, including a final3-pass schema/projection/
+strict-decode/current-FileRevision batch. The original FieldCodec now derives
+additionalProperties for declared dict[str,V]; its decoder is unchanged and
+non-string keys remain refused. Earlier28-pass/3-fail results and all negatives
+remain raw evidence; no one-shot-green claim is made. The existing recursive
+full live Thread schema graph is an explicit unconsumed gap. Installed old720
+routing/SDK and genuine live central-batch acceptance remain unrun. Einstein
+continues the concrete HistoricalSessions.publish_handling -> MessageNotification
+historical assignment/read-ledger acquisition, which still tries a live registry
+snapshot on an archive. He owns this source closure; Mendel's fresh ACP membership
+seam is separate. No accepted684 qualifier is replayed.
 
 Core681 fork-source delivery is actually merged38a0533e at frozen3dc11331.
 Its nine authored source checks support recorded inheritance, not independent
