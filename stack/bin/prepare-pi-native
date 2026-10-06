@@ -96,7 +96,8 @@ patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
 python3 "$stack_root/patch-native-request-observation.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 python3 "$stack_root/prepare-native-import-boundary.py" \
-    "$stage/node_modules/@earendil-works/pi-coding-agent"
+    "$stage/node_modules/@earendil-works/pi-coding-agent" \
+    ${PI_MCP_DEPENDENCY_PACKAGE:+"$PI_MCP_DEPENDENCY_PACKAGE"}
 python3 "$repo_root/src/agent_comms/native_package.py" --share-resources \
     "$stage/node_modules/@earendil-works/pi-coding-agent" "$stack_root"
 verify "$stage"
