@@ -6,6 +6,20 @@ The original objective remains incomplete. CI is deferred as a merge gate.
 
 ### Current priority: sidebar and scrolling responsiveness
 
+- [x] Core696 batch declarations, Core697 notification ownership and Toad486–490 sidebar/selection fixes are merged. Native73 pointer FIFO, native74 real sender-task lifetime, native75 callback execution ownership and their Toad pins are merged. Toad494 capture entry/error receipts are merged. Historical source and negative results below remain evidence, not current phase authority.
+- [x] Physical05 exercised the explicitly selected Core696d846/Toad2f111/native75c1e installed wheels through one isolated st App with a real42.7MB original source and two new private SDK journals. All11 native saved-history/tab/draft/Undo checks passed. One original restoration and whole/source returns completed; the holder is independently CLOSED. Raw files and journals remain held.
+- [x] Native records prove transcript travel302→230→302→230 and right-context travel12→24→12. Right-sidebar handlers took1.50/3.90/5.27ms; next writer completions50.06/38.66/69.45ms. These are not input-to-photon measurements or a comparison against the live build. Timing review is published at9362dfb4a.
+- [ ] Left-sidebar scrolling remains unqualified: the physical fixture contained only two threads and fitted entirely. Full presentation/footage and many-agent response-burst review remain open. Parent owns this actual acceptance and public delivery.
+- [ ] Native arrangement work remains a measured latency risk: layout median/p9514.49/26.05ms and maximum73.47ms; an original TextArea reader triggered full_map arrangement96.39ms. Arendt owns the complete native geometry/map-validity consumer trace. Parent sent exact original stacks/records; no cause, cache bypass or performance fix is claimed from these measurements.
+- [ ] DraftToad491 is the remaining open Toad PR. Its existing selected_target_actions now runs inside the original SDK/ACP batch App; all117 prior assertions remain. One App covers Ctrl/Shift selection, mixed channel/thread read/pin/archive/partial failure/tag survival and native deduplicated start/stop/reconnect with zero provider requests. Published helper8a8bab/final preparationfcef75f8c binds actual fresh returned485 contract97e8f30, unchanged reviewed wheels, a600s safety deadline and exact original three-package return. Specific fresh issue is requested; no stage or App has run.
+- [ ] The user's live installation remains unchanged. Installed batch acceptance, final coherent pair/cutover and actual live attachment/feature/response-latency verification remain. Original durable history, native sessions, journals and UNKNOWN inputs must be preserved. Current wheel revisions are explicit; later Core source is not silently relabeled as the selected artifact.
+- [ ] Configured and loaded continuous journeys remain incomplete at their recorded scopes. Their closed failures, partial successes and owned consumer repairs are retained below; neither a source repair nor the physical navigation pass supplies whole configured/loaded acceptance.
+
+The full original integration/refactor objective remains active. This checklist
+states current delivery; older phase snapshots below do not authorize replay.
+
+### Historical sidebar checkpoints retained from earlier summaries
+
 - Core696 and Toad488 are merged together. Ctrl/Shift thread/channel selection,
   retained right-click batch, original backend dialogs/read/archive and actual
   partial refusal display passed in the real private App with native73 sources.
