@@ -1,0 +1,36 @@
+{
+  "core": {
+    "source_head": "ddcdc422c7fe01453edb2469bcfa8303d771db67",
+    "wheel": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/current-paired-core-20261006/wheel/agent_comms-0.1.0-py3-none-any.whl",
+    "sha256": "6b426d7ea31f4a6e30db2c2fdbd4eaa4d1be6dcea9aba3c6e599f7c063987b6b",
+    "bytes": 910730,
+    "package_assets": 355,
+    "record_rows": 360,
+    "git_local_zip_equal": true,
+    "no_package_extras": true,
+    "complete_RECORD": true,
+    "native_manifest_sha256": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+    "installed": false
+  },
+  "toad": {
+    "source_head": "c2b4c3e828322b9e4803a8d29f38ad6ddc27065a",
+    "core_source_pin": "ddcdc422c7fe01453edb2469bcfa8303d771db67",
+    "wheel": "/home/ts/wt/toad-current-installed-integration-20261006/.artifacts/current-paired-toad-20261006/wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+    "sha256": "bfbde5ba4026e5fb6c30cbaf58cc4b97bcc8ae5c0f528379db77b3c9f859289d",
+    "bytes": 2251133,
+    "package_assets": 319,
+    "record_rows": 324,
+    "git_local_zip_equal": true,
+    "no_package_extras": true,
+    "complete_RECORD": true,
+    "metadata_dependency": "agent-comms[acp]; exact fork pin owned by Git build inputs",
+    "installed": false
+  },
+  "native_package_selection": "Exact existing 4b manifest; FullTrust/READ/EXEC must be fresh purpose-bound, not inherited",
+  "textual_source_pin": "a2dd8a9a37825a828df0d8f651ca57d92db69e5f",
+  "builds_per_project": 1,
+  "installed": false,
+  "runtime_acceptance": "UNRUN; no prefix/grant/source custody inferred",
+  "preserved": "Original allow and routing positives, held failed inputs/journals and frozen old artifacts remain unchanged",
+  "next_owner": "Original Heis final configured operands and Original Bohr actual eligible floor/purpose; Sch fresh matching READ/EXEC afterwards"
+}

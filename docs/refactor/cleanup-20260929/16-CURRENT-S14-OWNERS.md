@@ -4,6 +4,35 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Matched current wheels retained once — 2026-10-06
+
+Parent normally joined configured Toad479 into478 and selected published Core
+ddcdc422 explicitly in pyproject and three lock locators. Both changed controls
+match original8dc69 source bytes and compile without imports; the selected
+producer matches original b086 helper and declares auto_wake. No resolver ran.
+
+ONE cached ordinary Core build passed0.557754024: wheel6b426d7e,910730 bytes,
+355 package assets and360 complete RECORD rows. ONE cached ordinary Toad build
+passed: wheelbfbde5ba,2251133 bytes,319 package assets and324 complete RECORD rows.
+All package assets match Git/local/ZIP byte for byte, without extras. Source
+heads ddcdc422/c2b4c3e8 and build inputs/raw/joined process receipts are retained
+in evidence/current-paired-artifacts-20261006; no second build or environment
+was made. The native manifest remains exact4b. Pin ownership is in Git build
+inputs; normal Toad METADATA declares agent-comms[acp], not a source revision.
+
+These are real paired build artifacts, not installed acceptance. No holder,
+source witness, new READ/EXEC or public cutover follows the builds. Original
+owners must bind the actual current floor, configured source and exact final
+operator tuple before their purpose release. Six authored configured UI inputs
+are distinct from automatic configured-provider requests; that count and the
+outer run bound remain actual next-purpose facts. Current stores support the
+reviewed Preserve relation, conditional on installed equality at use.
+
+Warm04 source/FullTrust proof has now passed7.810569731 and its original two
+identities joined/absent. Parent relayed final4d237/Appmapa685/source/DTO/Trust
+literals to Bohr and Sch. App remains separately held pending actual new EXEC
+and same-purpose release. Old failures and original journal custody persist.
+
 ### Canonical handoff and affected consumers integrated — 2026-10-06
 
 Parent normally merged original689 fe32f518, clean configured producer692
