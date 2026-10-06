@@ -25,9 +25,14 @@ Toad496 f61776f3 pins native77 in pyproject/lock. One serial cached build passed
 full Git/archive/ZIP and RECORD checks. Nativea59 is new; Toad1c14 is byte-identical
 to the retained wheel and is explicitly reused; Coreb55/d846 stays unchanged.
 SELECTED-WHEEL-READBACK.json in native77-selection-pair records selected paths.
-Fresh readonly returned485 assessment is requested for Batch06, with current
-helper dependencies after the normal main join. No purpose or access follows
-that request. Installed clipped60-row/range and later native batch acceptance,
+Batch06 binds the actual fresh returned485 floor, full69 origins, census and
+original three-package restoration. Its sole stage passed in0.246s; all three
+stage processes joined and are absent. The fresh READ and exact four-literal
+proof were bound; its sole proof passed in3.319s, all953 assets/full69 origins
+and protected files matched, and both proof processes joined and are absent.
+Stage/proof are consumed and disabled. The exact600s controller and13-file App
+map are bound; App is unrun, held for separate EXEC and final release.
+Installed clipped60-row/range and later native batch acceptance,
 physical latency, continuous configured/loaded journeys and public cutover remain
 open. The full original objective remains active.
 
