@@ -9,6 +9,9 @@ import sys
 
 from agent_comms.comms import Comms
 from agent_comms.message_reference import MessageReference
+from agent_comms.store_files import _store_lock
+from agent_comms.field_codec import FieldCodec
+from agent_comms.historical_views import HistorySource
 from routing_carry import file_witness
 from retained_routing_cutover import RetainedRoutingCutover
 
@@ -56,7 +59,7 @@ def main():
     native_before = file_witness(Path(seed['session']))
     original_bus = file_witness(root / 'bus.jsonl')
     cutover = RetainedRoutingCutover(old_python, seed['root_id'], package, stage / 'carry-receipt.json')
-    service = Comms(root)
+    cutover.require_source()
     if '--reject-corrupt-original' in sys.argv:
         # Corrupt the last genuine old annotation, after two earlier valid
         # cells. The operation must refuse the whole plan before any writes.
@@ -68,7 +71,8 @@ def main():
                        (json.dumps(old), seed['final']))
         original_files = {str(path): file_witness(path) for path in root.rglob('*') if path.is_file()}
         try:
-            service.owners.restart_owners(cutover=cutover)
+            with _store_lock(root / 'wire'):
+                cutover.quiet_install(root)
         except subprocess.CalledProcessError as error:
             assert error.returncode != 0
         else:
@@ -82,7 +86,8 @@ def main():
         (stage / 'receipt.json').write_text(json.dumps(receipt, indent=2))
         print(json.dumps(receipt), flush=True)
         return
-    assert service.owners.restart_owners(cutover=cutover) == ()
+    with _store_lock(root / 'wire'):
+        cutover.quiet_install(root)
     assert file_witness(root / 'input_dispositions.json') == inputs_before
     assert file_witness(Path(seed['session'])) == native_before
     assert file_witness(root / 'bus.jsonl') == original_bus
@@ -96,16 +101,22 @@ def main():
         assert 'publications' not in json.loads(display[3])
         assert all(json.loads(row[0])['requests'] == json.loads(display[3])['requests']
                    for row in db.execute('SELECT routing FROM transcript_route'))
-    page = service.transcripts.capture_page_read('alpha').read()
+    service = Comms(stage / 'reader')
+    receipt = json.loads((stage / 'carry-receipt.json').read_text())
+    acquired = FieldCodec.decode(HistorySource, receipt['recorded_source'])
+    source = service.views.attach_history(root, source_read=acquired)
+    read = service.transcripts.capture_page_read('alpha', historical_source=source.key)
+    page = service.transcripts.bind_page_read('alpha', read.identity).read()
     reference = MessageReference(seed['original']['seq'], seed['original']['id'])
     assert any(reference in event.incoming_sources for event in page.events)
     assert not any('c' * 32 in event.native_inputs for event in page.events)
-    result = asyncio.run(render(page, root))
-    receipt = json.loads((stage / 'carry-receipt.json').read_text())
+    os.environ['AGENT_COMMS_ROOT'] = str(service.root)
+    result = asyncio.run(render(page, service.root))
     assert receipt['routing_cells'] == 3 and receipt['registry_routings'] == 1
     (stage / 'receipt.json').write_text(json.dumps({**result,
         'original_input_unknown_unchanged': True, 'source_bytes_unchanged': True,
-        'central_batch_used': True, 'provider_calls': 0, 'input_replays': 0,
+        'central_batch_used': False, 'joined_authored_seed': True, 'new_owner_launches': 0,
+        'provider_calls': 0, 'input_replays': 0,
         'routing_cells': receipt['routing_cells'], 'registry_routings': receipt['registry_routings']}, indent=2))
     print(json.dumps(json.loads((stage / 'receipt.json').read_text())), flush=True)
 

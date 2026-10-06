@@ -176,6 +176,57 @@ def test_byte_boundaries_and_stale_cursor(migrated):
         live.views.channel_display_page("#team", before=HistoryCursor("detached", 2))
 
 
+def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path):
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.transcripts import TranscriptReadIdentity, RecordedTranscriptReadIdentity
+
+    old, live = setup(tmp_path / "old", 1), setup(tmp_path / "live", 0)
+    native = tmp_path / "recorded.jsonl"
+    native.write_text(json.dumps({"type": "message", "message": {
+        "role": "assistant", "content": "original recorded answer",
+    }}) + "\n")
+    old.threads.attach_session("alice", str(native))
+    old.registry.rename("alice", "recorded-alice")
+    replacement = replace(live.registry.require("alice"), created_at=20.0)
+    live.registry.unregister("alice")
+    live.registry.remove("alice")
+    live.registry.register(replacement)
+    source = live.views.attach_history(old.root)
+    original_registry = (old.root / "registry.json").read_bytes()
+    original_native = native.read_bytes()
+
+    read = live.transcripts.capture_page_read("alice", historical_source=source.key)
+    assert isinstance(read.identity, RecordedTranscriptReadIdentity)
+    assert read.identity.thread.incarnation == old.registry.require("recorded-alice").incarnation
+    decoded = FieldCodec.decode(TranscriptReadIdentity, FieldCodec.encode(read.identity))
+    assert decoded == read.identity
+    rebound = live.transcripts.bind_page_read("recorded-alice", decoded)
+    assert rebound.current_identity() == decoded
+    assert any(event.text == "original recorded answer" for event in rebound.read().events)
+    delivered = []
+    decoded.publish_turn(lambda root, thread: delivered.append((root, thread)))
+    assert delivered == []
+    live_identity = live.transcripts.capture_page_read("alice").identity
+    live_identity.publish_turn(lambda root, thread: delivered.append((root, thread)))
+    assert delivered == [(str(live.root), live.registry.require("alice"))]
+    assert (old.root / "registry.json").read_bytes() == original_registry
+    assert native.read_bytes() == original_native
+
+
+def test_detached_recorded_witness_cannot_rebind_to_same_name_live_thread(migrated):
+    from agent_comms.coordination_errors import StaleRevision
+
+    _old, _prior, live, source = migrated
+    read = live.transcripts.capture_page_read("alice", historical_source=source.key)
+    with pytest.raises(StaleRevision, match="original thread"):
+        live.transcripts.bind_page_read("bob", read.identity)
+    live.bus.history.path.write_text("[]")
+    with pytest.raises(ValueError, match="detached"):
+        read.current_identity()
+    with pytest.raises(ValueError, match="detached"):
+        live.transcripts.bind_page_read("alice", read.identity)
+
+
 def test_normal_comms_api_contains_history_and_execution_stays_live(migrated):
     _, _, live, _ = migrated
     viewer = live.messaging.user_identity(str(live.root)).name
