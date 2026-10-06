@@ -15,10 +15,19 @@ defaults and route now pointing to style22 PUBLIC475. This delivers selected
 Core3931/3fe, new474 Toad2ece and Text71/bc47 under shared immutable native7a;
 476 warm assets and685 guard are not folded. Parent returned this one-use
 READ/EXEC authority in8f803f62, retaining all11 raw references. Private687a
-remains independently CLOSED3e600. No publisher/readback or source-witness
-claim remains. Mendel owns one fresh stationary affected475 UI check using
-the unchanged original Heis recorder/capture helpers and fresh admission;
-its result is pending. Bohr may freshly assess formerPUBLIC485 for476; the
+remains independently CLOSED3e600. No Parent publisher/readback or source-witness
+claim remains. Sch independently closed NEW4622 at4760a81c; Parent personally
+matched its19 references and all permission flags are disabled. Mendel launched
+the fresh stationary affected475 check using unchanged Heis helpers, then
+called ParentedProcess.reap while the recorder was still running. Its two-second
+retirement wait failed before the recorder completed; this is an operator error,
+not a demonstrated UI defect or45-second recorder timeout. Parent read the
+original wait owner and observed the recorder/controller absent while four
+recorded UI/st/guardian identities remained alive. Mendel owns birth-bound
+cleanup and whole client return; private native SDK cases remain idle. The
+unchanged original async parent wait is the operative correction. A separately
+recorded changed-operator observe02 is authorized only after actual01 whole
+return and fresh admission; no old attempt or UNKNOWN input is replayed. Bohr may freshly assess formerPUBLIC485 for476; the
 publication itself is not a holder grant or performance qualification.
 
 Historical public471 verification remains preserved:
