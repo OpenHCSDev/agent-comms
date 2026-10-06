@@ -32,6 +32,11 @@ passed0/.256676; full1467/953/69RAW origins/keepers/PREFIX exact,10 recorded IDs
 absent and fresh206 census refs/gaps0. Whole52221704 retains84raw/46files/2journals
 and explicitly returns private custody; holder and matching private READ/EXEC
 are independently CLOSED. Raw/journals and prior negatives remain held.
+PR491 is now merged as the working acceptance helper and retained diagnostics,
+not a production/readiness claim. Normal join included current main/pin495;
+production/pins have no determining delta. Changed control/template compile;
+retained literal template-diff whitespace and finally-return warning are honest
+source limitations, not altered evidence. PR496's production range remains open.
 Arendt has taken the concrete native Pilot contract correction: documented final-event bool
 caches first hit, whereas driver owns down/up Click admission. No backend fix or
 sole runtime cause is claimed. Parent owns Toad consumers and broader live
