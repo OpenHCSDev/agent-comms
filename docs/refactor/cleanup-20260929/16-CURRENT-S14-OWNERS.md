@@ -58,8 +58,11 @@ The original objective remains incomplete. CI is deferred as a merge gate.
   three-wheel stage passed0.230s and all original stage processes joined/are
   absent. The recorder scrolls the outer right panel before the visible tree;
   useful-paint passes original --fit-window for a usable isolated message area.
-  Same built wheels,600/240/20/2 bounds; proof/source capture/App are held pending
-  actual matching receipts and same-purpose releases. Completed old motion
+  Same built wheels,600/240/20/2 bounds. The one installed proof passed3.478s;
+  both processes joined/are absent, all953/full69 source assets match, and the
+  original typed Core member is included in the thirteen-file App map. Bohr
+  consumed/disabled that proof; App/source capture still require the separate
+  actual execution/source receipts and final release. Completed old motion
   review preserves source-bound body/writer evidence without latency acceptance.
 - Actual visible pointer App: right median50.4ms/p9558.5ms/max112.9ms; left
   median54.5ms/p9571.6ms/max185.5ms, empty stderr. Earlier429/424ms measurements
