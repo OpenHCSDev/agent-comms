@@ -16,10 +16,15 @@ change.
 Fresh returned485 Batch04 assessment is verified, including immutable preimage,
 full69 origins, clear private census and exact original three-package return.
 Draft491 b1f1caf55 publishes `PROPOSED-BATCH04-OPERANDS.json` with the corrected
-helper and new absent Batch04 output roots. The actual tuple was delivered to
-Bohr for fresh specific stage-only issue; issue and runtime are not inferred
-from preparation. Same built Core d846/Toad3182/native8814 wheels, provider0 and
-no public source capture. Draft496's clipped-anchor range still needs the
+helper and new absent Batch04 output roots. Batch04 is specifically issued. Its one three-wheel stage passed0/.236185s;
+original controller/root/installer joined and are absent. Stage/root are consumed
+and disabled. Fresh private READ296e6f79 and exact four-literal helperce08029d
+were bound before the sole proof, which passed0/3.287489s. Original124405/124415
+joined and are absent, all953/full69 assets/origins/keepers match, and exact
+Core member enters the13-file App map. Final handoffb144e8b4 was delivered to
+Bohr and Sch for proof consumption, separate fresh EXEC and final release; no
+App has run at this checkpoint. Same built Core d846/Toad3182/native8814 wheels,
+provider0 and no public source capture. Draft496's clipped-anchor range still needs the
 actual later App phase. After working acceptance, merge491/496 and deliver the
 coherent local runtime; public installation and broader latency verification
 remain outstanding.
