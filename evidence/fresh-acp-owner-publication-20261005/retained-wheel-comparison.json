@@ -1,0 +1,127 @@
+{
+  "current_source_sha256": "e7ae96b2846c4bf7f88d663c53e7fd6b52e85c8f286afb2c3a04fde3a24a0cd6",
+  "retained_core_wheels_checked": [
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c3-goal-selection675-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "5630c4c4f0e7b3be5443d98f40b17a8df3147b3711eb15e6b7713952e3142e65"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-input-drain655-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "5630c4c4f0e7b3be5443d98f40b17a8df3147b3711eb15e6b7713952e3142e65"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "5630c4c4f0e7b3be5443d98f40b17a8df3147b3711eb15e6b7713952e3142e65"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/captured-original614-wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "b4cf7aec98e2ab174cbec4a1699331626372c3d0ce9a18e3451e0997502a9c7d"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/cold-context595-wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "1b38935397c4a451e390440c3194eb21860b7abdd294dd12a75bdf437a55ea4a"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/cold-native606-wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "b4cf7aec98e2ab174cbec4a1699331626372c3d0ce9a18e3451e0997502a9c7d"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/compaction-native-launch586-wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "1b38935397c4a451e390440c3194eb21860b7abdd294dd12a75bdf437a55ea4a"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/f4-core-final-wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "5630c4c4f0e7b3be5443d98f40b17a8df3147b3711eb15e6b7713952e3142e65"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/f4-core-installed-20261004/wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "5630c4c4f0e7b3be5443d98f40b17a8df3147b3711eb15e6b7713952e3142e65"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/f4-core421-receiver-wheels-20261004/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "5630c4c4f0e7b3be5443d98f40b17a8df3147b3711eb15e6b7713952e3142e65"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/input-drain611-wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "b4cf7aec98e2ab174cbec4a1699331626372c3d0ce9a18e3451e0997502a9c7d"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/joined-terminal-custody597-wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "1b38935397c4a451e390440c3194eb21860b7abdd294dd12a75bdf437a55ea4a"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/known-runtime593-wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "1b38935397c4a451e390440c3194eb21860b7abdd294dd12a75bdf437a55ea4a"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/merged-core633-1a520528-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "5630c4c4f0e7b3be5443d98f40b17a8df3147b3711eb15e6b7713952e3142e65"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/native-ingress638-wheels-20261004/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "5630c4c4f0e7b3be5443d98f40b17a8df3147b3711eb15e6b7713952e3142e65"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/native-source640-wheels-20261004/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "5630c4c4f0e7b3be5443d98f40b17a8df3147b3711eb15e6b7713952e3142e65"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/original-batch616-wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "b4cf7aec98e2ab174cbec4a1699331626372c3d0ce9a18e3451e0997502a9c7d"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/original-settlement615-wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "b4cf7aec98e2ab174cbec4a1699331626372c3d0ce9a18e3451e0997502a9c7d"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/owned-turn-acquisition599-wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "b4cf7aec98e2ab174cbec4a1699331626372c3d0ce9a18e3451e0997502a9c7d"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/private-unix-address576-wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "1b38935397c4a451e390440c3194eb21860b7abdd294dd12a75bdf437a55ea4a"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/registry-member605-wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "b4cf7aec98e2ab174cbec4a1699331626372c3d0ce9a18e3451e0997502a9c7d"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/retained-fact578-wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "1b38935397c4a451e390440c3194eb21860b7abdd294dd12a75bdf437a55ea4a"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/retained-native581-wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "1b38935397c4a451e390440c3194eb21860b7abdd294dd12a75bdf437a55ea4a"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-rebind583-wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "1b38935397c4a451e390440c3194eb21860b7abdd294dd12a75bdf437a55ea4a"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "74a0ca6b5e7bd78632d546f7b6452f86bd684cddb6d316cb7c60160f4fc60150"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/selected-execution591-wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "1b38935397c4a451e390440c3194eb21860b7abdd294dd12a75bdf437a55ea4a"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/selected-native609-wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "b4cf7aec98e2ab174cbec4a1699331626372c3d0ce9a18e3451e0997502a9c7d"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/selected-summary587-wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "1b38935397c4a451e390440c3194eb21860b7abdd294dd12a75bdf437a55ea4a"
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/session-identity619-wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "5630c4c4f0e7b3be5443d98f40b17a8df3147b3711eb15e6b7713952e3142e65"
+    },
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/core-wheel/wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "session_lifecycle_sha256": "74a0ca6b5e7bd78632d546f7b6452f86bd684cddb6d316cb7c60160f4fc60150"
+    }
+  ],
+  "matches": 0,
+  "scope": "owned retained wheels plus selected Sch5d; no shared artifact mutation"
+}

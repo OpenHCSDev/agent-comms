@@ -1,0 +1,31 @@
+{
+  "pid": 2426880,
+  "birth": "72312811",
+  "argv": [
+    "/usr/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "-p",
+    "pytest_asyncio.plugin",
+    "-o",
+    "addopts=",
+    "-o",
+    "cache_dir=/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks03-20261005/pytest-cache",
+    "--basetemp",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks03-20261005/pytest",
+    "-q",
+    "--junitxml",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks03-20261005/result.xml",
+    "tests/test_acp_private_nk_delivery.py::test_acp_new_session_owner_consumes_private_selected_source"
+  ],
+  "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+  "source_head": "3e109632e95dc15972d53d459dc5e19a99b16732",
+  "environment": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONPATH": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src:/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests:/home/ts/.cache/uv/archive-v0/mNatOBGB9uuf-bXB:/home/ts/wt/nra-skill-publish-20261002/.artifacts/family-flattened-collector-20261004/wheels/nominal_refactor_audit-0.1.0-py3-none-any.whl",
+    "PI_COMPACTION_TEST_PACKAGE": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks03-20261005"
+  },
+  "scope": "One changed original failed model-control consumer; all nominal SelectedSession/NativeSessionIdentity calls migrated; two passing declaration controls not repeated"
+}

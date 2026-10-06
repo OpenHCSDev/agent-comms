@@ -1,0 +1,118 @@
+{
+  "status": "Pre-assembly source/claim/artifact check",
+  "operator": "Original Sch",
+  "PR": 685,
+  "source_head": "7b7a06c350c7031e2756223bd5a517a72d9e9932",
+  "canonical_bootstrap_sha256": "b9af81dbe003fde1c4d80dbd77fa7ae08f4a1c017deb8a94f8520452da47de27",
+  "stock_version": "0.85.1",
+  "artifact_candidates": [
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-00c2c11feaaf6e53",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-044646789787e3d3",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-086d511f2026b10d",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-0b306dac5a8b9b60",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2bfb6ba8fd3b3b3b",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-2ea0a4d4ff2e3628",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-51bff517be67ae98",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7074a4574b12ccfe",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7c2a2e644420c349",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-89b56aea0bb128c4",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-915c78ab702bd8ea",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-9f12ddf4e22d6d7a",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-ad533a9f08581561",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-d5efa0d56e7ad396",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-de16647979cbad28",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-ea043387f66a6031",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    },
+    {
+      "deployment": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-f3dd185eb4b1394e",
+      "bootstrap_sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475",
+      "matches": false
+    }
+  ],
+  "matching_deployment": null,
+  "assembly_source_delta_vs_original7a_owner": [
+    "src/agent_comms/pi_project_bootstrap.mjs"
+  ],
+  "resource_check": {
+    "available_ram_gib": 5.8,
+    "home_free_gib": 5.3,
+    "root_free_gib": 5.2,
+    "swap_used_gib": 12.9,
+    "mode": "single serial assembly and normal cached wheel; no cap or fleet"
+  },
+  "builder_ownership": "Parent assigns sole Sch685; open684 and682 are qualifier source branches; original7a builderWT clean b30b; no prepare-pi-native/prepare-copied-pi process found",
+  "future_execution_authority": null
+}

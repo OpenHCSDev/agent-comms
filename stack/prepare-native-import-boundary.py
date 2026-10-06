@@ -148,7 +148,7 @@ def materialize(source: Path, target: Path) -> None:
     )
 
 
-def main(package: Path) -> None:
+def main(package: Path, dependency_package: Path | None = None) -> None:
     os.umask(0o077)
     stack = Path(__file__).resolve().parent
     extension = stack.parent / "extensions/pi-mcp-client"
@@ -162,6 +162,45 @@ def main(package: Path) -> None:
     environment.pop("NODE_PATH", None)
     environment.pop("NODE_COMPILE_CACHE", None)
     environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
+    if dependency_package is not None:
+        # Reuse only a whole-package committed input, never an arbitrary npm
+        # directory. The existing owner checks its current native tree pin.
+        dependency_package = dependency_package.resolve(strict=True)
+        subprocess.run(
+            [sys.executable, str(stack.parent / "src/agent_comms/native_package.py"),
+             str(dependency_package)], check=True,
+        )
+        staging = dependency_package / "agent-comms-extensions/pi-mcp-client"
+        for name in ("package.json", "package-lock.json", "index.mjs", "README.md"):
+            if (extension / name).read_bytes() != (staging / name).read_bytes():
+                raise SystemExit(f"Committed MCP source differs: {name}")
+        for name in ("src", "bin"):
+            selected = sorted(p.relative_to(extension) for p in (extension / name).rglob("*") if p.is_file())
+            committed = sorted(p.relative_to(staging) for p in (staging / name).rglob("*") if p.is_file())
+            if selected != committed or any(
+                (extension / path).read_bytes() != (staging / path).read_bytes()
+                for path in selected
+            ):
+                raise SystemExit(f"Committed MCP source differs: {name}")
+        destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        materialize(staging, destination)
+    else:
+        prepare_mcp_dependencies(extension, destination, environment)
+    for source, target in (
+        ("native-import-fence.mjs", "agent-comms-import-fence.mjs"),
+        ("native-import-manifest.json", "agent-comms-imports.json"),
+        ("native-compaction-commit-child.mjs", "agent-comms-compaction-commit-child.mjs"),
+    ):
+        shutil.copyfile(stack / source, package / "dist" / target)
+    for name in ("selected_claimed_write.mjs", "channel_coding_tools.mjs"):
+        shutil.copyfile(stack.parent / "src/agent_comms" / name, package / "dist" / name)
+    subprocess.run(
+        ["node", str(stack / "prepare-native-global-extensions.mjs"), str(package)],
+        env=environment, check=True, timeout=60,
+    )
+
+
+def prepare_mcp_dependencies(extension: Path, destination: Path, environment: dict[str, str]) -> None:
     with tempfile.TemporaryDirectory(prefix="pr95-mcp-deps-", dir="/var/tmp") as scratch:
         staging = Path(scratch)
         for name in ("package.json", "package-lock.json"):
@@ -190,20 +229,9 @@ def main(package: Path) -> None:
             shutil.copytree(extension / name, staging / name, symlinks=True)
         destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         materialize(staging, destination)
-    for source, target in (
-        ("native-import-fence.mjs", "agent-comms-import-fence.mjs"),
-        ("native-import-manifest.json", "agent-comms-imports.json"),
-        ("native-compaction-commit-child.mjs", "agent-comms-compaction-commit-child.mjs"),
-    ):
-        shutil.copyfile(stack / source, package / "dist" / target)
-    for name in ("selected_claimed_write.mjs", "channel_coding_tools.mjs"):
-        shutil.copyfile(stack.parent / "src/agent_comms" / name, package / "dist" / name)
-    subprocess.run(
-        ["node", str(stack / "prepare-native-global-extensions.mjs"), str(package)],
-        env=environment, check=True, timeout=60,
-    )
 
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]).resolve(strict=True))
+    main(Path(sys.argv[1]).resolve(strict=True),
+         Path(sys.argv[2]) if len(sys.argv) == 3 else None)

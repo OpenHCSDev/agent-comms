@@ -1,0 +1,246 @@
+{
+  "base": "d41d725fd5400aab74c891dd3700e7071853b2ff",
+  "collector": "Original audit.findings.Package/audit.repository.Repository from NRA skill source; no copied parser/scanner",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 324,
+      "unparsed": []
+    },
+    {
+      "root": "tests",
+      "parsed": 373,
+      "unparsed": []
+    },
+    {
+      "root": "tools",
+      "parsed": 54,
+      "unparsed": []
+    }
+  ],
+  "call_sites": [
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 160,
+      "call": "edit.document.restore_stopped(source, names)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 151,
+      "call": "self.comms.threads.claim_thread(self.thread_name_for(cwd), tags=frozenset({'acp'}), worktree=cwd, pid=owner_pid, start_at_latest=True, model=self.agent_args.model, thinking_level=self.agent_args.thinking, auto_title_pending=True)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 253,
+      "call": "self.bind_owned(thread, thread.name)"
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 279,
+      "call": "self.bind_owned(thread, session_id)"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 186,
+      "call": "self.registry.restore_stopped(source, selected)"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 151,
+      "call": "agent.sessions.bind_owned(owner, owner.name)"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 65,
+      "call": "comms.threads.claim_thread(agent.sessions.thread_name_for(str(project)), tags=frozenset({'acp'}), worktree=str(project), start_at_latest=True, model=arguments.model, thinking_level=arguments.thinking, auto_title_pending=True)"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 73,
+      "call": "comms.threads.restore_stopped(comms.registry.snapshot(), (original.name,))"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 74,
+      "call": "comms.owners.acquire_thread(original.name, owner_pid=os.getpid())"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 78,
+      "call": "agent.sessions.bind_owned(thread, thread.name)"
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "line": 84,
+      "call": "self.attach_saved_owner(agent, project=project, session=session)"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 246,
+      "call": "comms.threads.restore_stopped(comms.registry.snapshot(), (session,))"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 247,
+      "call": "comms.owners.acquire_thread(session, owner_pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 250,
+      "call": "owner.sessions.bind_owned(thread, session)"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 589,
+      "call": "comms.threads.claim_thread('sender', tags=frozenset(), worktree=str(native.project))"
+    },
+    {
+      "path": "tests/test_channel_input_batch.py",
+      "line": 83,
+      "call": "comms.threads.claim_thread('peer', tags=frozenset(), worktree=str(native.project))"
+    },
+    {
+      "path": "tests/test_channels.py",
+      "line": 208,
+      "call": "comms.threads.claim_thread('claimed', tags=frozenset({'reserved'}), worktree=str(tmp_path))"
+    },
+    {
+      "path": "tests/test_concurrency.py",
+      "line": 43,
+      "call": "wire(root).threads.claim_thread('project', tags=frozenset({'acp'}), worktree='/tmp/project')"
+    },
+    {
+      "path": "tests/test_envelope_bus_integration.py",
+      "line": 303,
+      "call": "comms.threads.claim_thread('alice', tags=frozenset({'team'}), worktree=str(worktree))"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 86,
+      "call": "comms.threads.claim_thread('foreign', tags=frozenset(), worktree=str(comms.root))"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 87,
+      "call": "comms.threads.claim_thread('another', tags=frozenset(), worktree=str(comms.root))"
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "line": 196,
+      "call": "comms.threads.claim_thread('peer', tags=frozenset(), worktree=str(comms.root))"
+    },
+    {
+      "path": "tests/test_operations.py",
+      "line": 177,
+      "call": "wired.threads.claim_thread('viewer', tags=frozenset({'acp'}), worktree='/tmp/project', start_at_latest=True)"
+    },
+    {
+      "path": "tests/test_registration_inheritance.py",
+      "line": 88,
+      "call": "comms.threads.claim_thread('owner', tags=frozenset(), worktree=str(tmp_path))"
+    },
+    {
+      "path": "tests/test_registration_inheritance.py",
+      "line": 89,
+      "call": "comms.threads.claim_thread('owner', tags=frozenset(), worktree=str(tmp_path))"
+    },
+    {
+      "path": "tests/test_registration_process_identity.py",
+      "line": 17,
+      "call": "comms.threads.claim_thread('owner', tags=frozenset(), worktree=str(tmp_path), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_registration_process_identity.py",
+      "line": 32,
+      "call": "restored.restore_stopped(comms.registry.snapshot(), (owner.name,))"
+    },
+    {
+      "path": "tests/test_registration_process_identity.py",
+      "line": 66,
+      "call": "comms.threads.claim_thread('owner', tags=frozenset(), worktree=str(tmp_path), pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "line": 160,
+      "call": "agent.sessions.bind_owned(comms.registry.require('retained'), 'retained')"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 91,
+      "call": "new.registry.restore_stopped(old.registry.snapshot(), (thread.name,))"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 47,
+      "call": "current.registry.restore_stopped(source, ('live', 'missing'))"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 59,
+      "call": "current.registry.restore_stopped(source, ('live', 'missing'))"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 82,
+      "call": "current.registry.restore_stopped(source, ('good', conflicting.name))"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 171,
+      "call": "current.threads.restore_stopped(source, (missing.name,))"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 208,
+      "call": "current.threads.restore_stopped(old.registry.snapshot(), ('missing',))"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 162,
+      "call": "current.registry.restore_stopped(source, (missing.name,))"
+    },
+    {
+      "path": "tests/test_roster_restoration.py",
+      "line": 201,
+      "call": "current.threads.restore_stopped(source, (missing.name,))"
+    },
+    {
+      "path": "tests/test_runtime_owned_session_admission.py",
+      "line": 59,
+      "call": "owner.sessions.bind_owned(retired, 'retired-acp-session')"
+    },
+    {
+      "path": "tests/test_runtime_owned_session_admission.py",
+      "line": 69,
+      "call": "owner.sessions.bind_owned(thread, 'original-acp-session')"
+    },
+    {
+      "path": "tests/test_same_owner_native_fork.py",
+      "line": 166,
+      "call": "comms.owners.acquire_thread(session, owner_pid=os.getpid())"
+    },
+    {
+      "path": "tests/test_thread_order.py",
+      "line": 28,
+      "call": "comms.owners.acquire_thread('alpha', owner_pid=os.getpid())"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 245,
+      "call": "service.threads.restore_stopped(service.registry.snapshot(), (thread.name,))"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 246,
+      "call": "service.owners.acquire_thread(thread.name, owner_pid=os.getpid())"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 59,
+      "call": "service.owners.acquire_thread('phase-alpha', owner_pid=os.getpid())"
+    }
+  ],
+  "decision": "SessionLifecycle.declare_thread is the original fresh ACP producer. Declare without PID, publish via existing ThreadManagement.restore_stopped membership owner, then OwnerLifecycle.acquire_thread; bind_owned remains caller. NativeBackendFixture.attach_saved_owner delegates to same declaration, then only attaches original saved source.",
+  "storage": "RegistryThread incarnation/admission remains Registration/RegistryDocument; coordinator committed participants remain ThreadManagement.restore_stopped; process acquisition remains OwnerLifecycle; active turn/UNKNOWN remain original InputDrain/OwnedTurn.",
+  "limits": "Attribute-name candidates read semantically; external dynamic consumers beyond tracked roots unresolved. External MCP open_observer is unchanged and genuine. No production import or behavioral proof."
+}

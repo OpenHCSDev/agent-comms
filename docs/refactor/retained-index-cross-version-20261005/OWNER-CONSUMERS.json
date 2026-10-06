@@ -1,0 +1,685 @@
+{
+  "method": "Original refactor-audit Package.load; bounded related declaration/call/resource sites read semantically, no application imports or tests",
+  "counts": [
+    {
+      "revision": "72062939239b0f07707406309305a056a23f925f",
+      "root": "src/agent_comms",
+      "parsed": 286,
+      "omissions": []
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "root": "src/agent_comms",
+      "parsed": 324,
+      "omissions": []
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "root": "tools/cutover",
+      "parsed": 52,
+      "omissions": []
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "root": "tools/cutover",
+      "parsed": 52,
+      "omissions": []
+    }
+  ],
+  "sites": [
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/cutover_child.py",
+      "line": 25,
+      "resource": "stopped.wire.descriptor"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/cutover_child.py",
+      "line": 27,
+      "resource": "stopped.wire.descriptor"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 99,
+      "declaration": "require_selection"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 105,
+      "declaration": "after_stopped"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 123,
+      "declaration": "require_selection"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 129,
+      "declaration": "after_stopped"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 106,
+      "call": "self.require_selection(lifecycle.registry.snapshot(), ())"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 124,
+      "call": "super().require_selection(snapshot, owners)"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 130,
+      "call": "super().after_stopped(lifecycle)"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/install_retained_index.py",
+      "line": 12,
+      "declaration": "require_retained_writer"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/install_retained_index.py",
+      "line": 30,
+      "call": "require_retained_writer(root, descriptor, root_id)"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/install_retained_routing.py",
+      "line": 24,
+      "call": "require_retained_writer(root, descriptor, root_id)"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 56,
+      "call": "require_retained_writer(root, descriptor, root_id)"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 603,
+      "call": "SelectedCommitReference.from_intent(intent).require_source(attempt.source_json)"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/old_thread_client_probe.py",
+      "line": 42,
+      "call": "service.registry.store.locked()"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 227,
+      "declaration": "require_selection"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 281,
+      "declaration": "after_stopped"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 375,
+      "call": "operation.require_selection(snapshot, owners)"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 323,
+      "declaration": "require_selection"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 360,
+      "declaration": "after_stopped"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 335,
+      "call": "self.task_carry.require_selection(snapshot, owners)"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 469,
+      "call": "operation.require_selection(snapshot, owners)"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 391,
+      "call": "self.task_carry.after_stopped(lifecycle)"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/restart_retained_routing.py",
+      "line": 23,
+      "call": "RetainedRoutingCutover(arguments.original_python, arguments.root_id, arguments.native_package, arguments.receipt)"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 22,
+      "declaration": "RetainedIndexCutover"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 38,
+      "declaration": "require_selection"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 54,
+      "declaration": "after_stopped"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_index_installed_pilot.py",
+      "line": 38,
+      "call": "RetainedIndexCutover(old_python, seed['root_id'], Path(os.environ['AC_NATIVE_COPIED_PACKAGE']))"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_index_installed_pilot.py",
+      "line": 32,
+      "call": "service.bus.log.locked()"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_index_writer.py",
+      "line": 23,
+      "call": "log.locked()"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_index_writer.py",
+      "line": 40,
+      "resource": "custody.descriptor"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_index_writer.py",
+      "line": 41,
+      "resource": "custody.descriptor"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_routing_cutover.py",
+      "line": 12,
+      "declaration": "RetainedRoutingCutover"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_routing_cutover.py",
+      "line": 21,
+      "declaration": "require_selection"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_routing_cutover.py",
+      "line": 22,
+      "call": "super().require_selection(snapshot, owners)"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_routing_installed_pilot.py",
+      "line": 58,
+      "call": "RetainedRoutingCutover(old_python, seed['root_id'], package, stage / 'carry-receipt.json')"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_routing_writer.py",
+      "line": 21,
+      "call": "service.bus.log.locked()"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 30,
+      "resource": "self.descriptor"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 36,
+      "resource": "self.descriptor"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 31,
+      "resource": "self.descriptor"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_task_source_carry.py",
+      "line": 29,
+      "declaration": "require_selection"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_task_source_carry.py",
+      "line": 52,
+      "declaration": "after_stopped"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_task_writer.py",
+      "line": 19,
+      "call": "bus.locked()"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_task_writer.py",
+      "line": 26,
+      "resource": "custody.descriptor"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_task_writer.py",
+      "line": 30,
+      "resource": "custody.descriptor"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/retained_task_writer.py",
+      "line": 46,
+      "resource": "custody.descriptor"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 45,
+      "declaration": "require_selection"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 63,
+      "call": "lifecycle.registry.store.locked()"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 63,
+      "call": "lifecycle.releases.locked()"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 104,
+      "resource": "stopped.wire.descriptor"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 106,
+      "resource": "stopped.wire.descriptor"
+    },
+    {
+      "revision": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+      "path": "tools/cutover/validate_retained_routing.py",
+      "line": 15,
+      "call": "require_retained_writer(root, descriptor, root_id)"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/cutover_child.py",
+      "line": 25,
+      "resource": "stopped.wire.descriptor"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/cutover_child.py",
+      "line": 27,
+      "resource": "stopped.wire.descriptor"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 99,
+      "declaration": "require_selection"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 105,
+      "declaration": "after_stopped"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 123,
+      "declaration": "require_selection"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 129,
+      "declaration": "after_stopped"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 106,
+      "call": "self.require_selection(lifecycle.registry.snapshot(), ())"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 124,
+      "call": "super().require_selection(snapshot, owners)"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 130,
+      "call": "super().after_stopped(lifecycle)"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/install_retained_index.py",
+      "line": 12,
+      "declaration": "require_retained_writer"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/install_retained_index.py",
+      "line": 30,
+      "call": "require_retained_writer(root, descriptor, root_id)"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/install_retained_routing.py",
+      "line": 24,
+      "call": "require_retained_writer(root, descriptor, root_id)"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 56,
+      "call": "require_retained_writer(root, descriptor, root_id)"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 603,
+      "call": "SelectedCommitReference.from_intent(intent).require_source(attempt.source_json)"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/old_thread_client_probe.py",
+      "line": 42,
+      "call": "service.registry.store.locked()"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 227,
+      "declaration": "require_selection"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 281,
+      "declaration": "after_stopped"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 375,
+      "call": "operation.require_selection(snapshot, owners)"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 323,
+      "declaration": "require_selection"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 360,
+      "declaration": "after_stopped"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 335,
+      "call": "self.task_carry.require_selection(snapshot, owners)"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 469,
+      "call": "operation.require_selection(snapshot, owners)"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 391,
+      "call": "self.task_carry.after_stopped(lifecycle)"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/restart_retained_routing.py",
+      "line": 23,
+      "call": "RetainedRoutingCutover(arguments.original_python, arguments.root_id, arguments.native_package, arguments.receipt)"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 22,
+      "declaration": "RetainedIndexCutover"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 38,
+      "declaration": "require_selection"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 44,
+      "declaration": "require_source"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 58,
+      "declaration": "after_stopped"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 64,
+      "declaration": "quiet_install"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 42,
+      "call": "self.require_source()"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 62,
+      "call": "self.quiet_install(lifecycle.root)"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_index_installed_pilot.py",
+      "line": 41,
+      "call": "RetainedIndexCutover(old_python, seed['root_id'], Path(os.environ['AC_NATIVE_COPIED_PACKAGE']))"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_index_installed_pilot.py",
+      "line": 46,
+      "call": "cutover.require_source()"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_index_installed_pilot.py",
+      "line": 53,
+      "call": "AssignedTranscriptSource(root, original_sender, log)"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_index_installed_pilot.py",
+      "line": 48,
+      "call": "cutover.quiet_install(root)"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_index_installed_pilot.py",
+      "line": 35,
+      "call": "log.locked()"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_index_writer.py",
+      "line": 27,
+      "call": "log.locked()"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_routing_cutover.py",
+      "line": 12,
+      "declaration": "RetainedRoutingCutover"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_routing_cutover.py",
+      "line": 21,
+      "declaration": "require_selection"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_routing_cutover.py",
+      "line": 22,
+      "call": "super().require_selection(snapshot, owners)"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_routing_installed_pilot.py",
+      "line": 58,
+      "call": "RetainedRoutingCutover(old_python, seed['root_id'], package, stage / 'carry-receipt.json')"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_routing_writer.py",
+      "line": 21,
+      "call": "service.bus.log.locked()"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 30,
+      "resource": "self.descriptor"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 36,
+      "resource": "self.descriptor"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 31,
+      "resource": "self.descriptor"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_task_source_carry.py",
+      "line": 29,
+      "declaration": "require_selection"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_task_source_carry.py",
+      "line": 52,
+      "declaration": "after_stopped"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_task_writer.py",
+      "line": 19,
+      "call": "bus.locked()"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_task_writer.py",
+      "line": 26,
+      "resource": "custody.descriptor"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_task_writer.py",
+      "line": 30,
+      "resource": "custody.descriptor"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/retained_task_writer.py",
+      "line": 46,
+      "resource": "custody.descriptor"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 45,
+      "declaration": "require_selection"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 63,
+      "call": "lifecycle.registry.store.locked()"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 63,
+      "call": "lifecycle.releases.locked()"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 104,
+      "resource": "stopped.wire.descriptor"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 106,
+      "resource": "stopped.wire.descriptor"
+    },
+    {
+      "revision": "1378a065ccba5553664c972dc3cc3c0d5d6daabb",
+      "path": "tools/cutover/validate_retained_routing.py",
+      "line": 15,
+      "call": "require_retained_writer(root, descriptor, root_id)"
+    }
+  ]
+}

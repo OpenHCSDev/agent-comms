@@ -39,6 +39,10 @@ class RetainedIndexCutover(StoppedOwnerInstallation):
         audience = {thread.name for thread in OwnerRestartRequest().threads(snapshot)}
         if {thread.name for thread in owners} != audience:
             raise RelationViolationError('Index cutover requires every managed restart owner.')
+        self.require_source()
+
+    def require_source(self) -> None:
+        """Preflight the original writer for both acquired batch and stopped fixture."""
         if not self.original_python.is_absolute() or not self.original_python.is_file():
             raise RelationViolationError('Original installed writer interpreter is required.')
         WireRootIdText.from_text(self.wire_root_id)
@@ -55,11 +59,20 @@ class RetainedIndexCutover(StoppedOwnerInstallation):
         # Existing central batch holds wire, and has verified every exact
         # original process exited. The old child acquires bus; its new child
         # inherits the ORIGINAL opened lock, never reentering old schema.
+        self.quiet_install(lifecycle.root)
+
+    def quiet_install(self, root: Path) -> None:
+        """Install while the caller retains original wire custody and joined owners.
+
+        This does not select, stop, decode or launch owners. The acquired batch
+        and the newly authored, joined seed share this original writer operation.
+        Failures propagate without restoring an incompatible old checkpoint.
+        """
         environment = dict(os.environ)
         environment.pop('PYTHONPATH', None)
         subprocess.run([
             str(self.original_python), str(Path(__file__).with_name(self.writer_script)),
-            str(lifecycle.root), sys.executable,
+            str(root), sys.executable,
             str(Path(__file__).with_name(self.installer_script)), self.wire_root_id,
             *self.operation_arguments,
         ], env=environment, check=True)
