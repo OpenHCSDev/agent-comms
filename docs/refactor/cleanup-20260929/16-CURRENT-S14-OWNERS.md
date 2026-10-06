@@ -4,7 +4,7 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original objective remains incomplete. CI is deferred as a merge gate.
 
-### Consumer repairs integrated; fresh qualification preparing — 2026-10-06
+### Consumer repairs integrated; second paired results — 2026-10-06
 
 Parent normally merged Heis's complete published consumer repair into Toad478.
 Both loaded cursor checks and configured readiness now take the display cursor
@@ -19,13 +19,38 @@ The corrected loaded final tuple is integrated in
 Fresh configured02 and loaded02 purposes are issued separately. Their single
 stages and installed proofs passed. Configured's exported Core `InstalledSource`
 is the actual full-proof member and is included in its 13-file App map; its
-proof is recorded as consumed. Loaded's joined proof and resolved controller
-were delivered to Bohr and Sch for the same-purpose final binding. Neither App
-nor configured source capture has run. Separate fresh execution receipts and
-Bohr's final releases remain necessary; no stage or proof is to be repeated.
+proof is recorded as consumed. Both original Apps subsequently ran once under
+their separate final releases and are terminal. No stage or proof was repeated.
 The original 2100/1800 outer bounds and inner checks remain unchanged, with
 configured provider processing separate from loaded's ten prospective localhost
 requests over two authored journals.
+
+Configured02 privately forked and painted the actual 42.7MB source and completed
+saved-channel opening and return. The original 20-second peer executing/busy
+wait then failed. Its real source witness and separate source READ return are
+recorded; the private whole return and one original three-package restoration
+are complete. Bohr independently closed this holder after checking its original
+floor, origins, recorded process absence and fresh private census. Heis found
+the private blank peer declaration points to a public parent absent from the
+private registry, and owns the complete producer/caller correction. The source
+finding does not establish the sole cause or whole configured acceptance.
+
+Loaded02 completed the four-view cohort, native answer paint and nine warm
+returns with zero raw page rereads. It reached sixteen views, then session-13
+failed the body-retention check with a missing body weak reference. Four actual
+localhost requests were recorded without provider errors; the sixteen,
+thirty-two and sixty-four cohorts remain unqualified. The one original
+four-wheel restoration and explicit whole READ/EXEC return are complete;
+Bohr independently closed the holder after checking the actual return, original
+floor and fresh private census. Sch closes the matching returned artifact
+receipts separately. Its compact
+result is integrated at
+[RESULT.md](../../../evidence/loaded-history-consumer-repaired-20261006/RESULT.md).
+Heis owns the separate native body/preparation/retirement lifetime trace.
+Parent identified a source counterexample where native retirement removes a
+Markdown child after capturing its parent's paint; this is not proof of the
+runtime failure's cause. Neither failure releases a retry or new loan. Raw
+results and journals remain held.
 
 Parent compared the retained historical MCP Core wheel with the selected
 current Core wheel. Native command/permission leaf code is unchanged, but
