@@ -4,6 +4,14 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Duplicate qualifier PR retired — 2026-10-06
+
+Parent verified that693 contains the entire published682 branch and closed682
+as superseded. Source, original allow acceptance and all failures/fixtures remain
+retained. The three affected cases continue in693 under their issued purpose;
+there is no claim of full readiness. Sch's fresh READ was relayed to Mendel;
+Bohr must bind the original sole proof release before execution.
+
 ### Restart ownership fix merged on the fork — 2026-10-06
 
 Parent completed source review, moved689 from its already-merged routing base
