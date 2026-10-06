@@ -4,6 +4,42 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Goal-report source joined and mounted allow qualified — 2026-10-06
+
+Parent normally joined original689 d433189b at49cfcf34 without conflicts. All
+fourteen changed Python modules compile without imports; merged source, tools and
+tests are byte equal to the original checkpoint. Existing GoalHistoryStore owns
+full declared read-only acquisition, and GoalReportMemberRetirement validates
+registry/release carriers against committed same-incarnation journal history
+before the strict target postimage. Raw retirement projection helpers are deleted.
+Original current/P focused controls and their first negatives are retained; the
+changed-owner refusal control now checks original cause, partial custody and
+explicit abandon. No passed control was repeated by Parent. Real stopped-batch,
+OFD, install, launch and recovery acceptance remain separate. Einstein continues
+actual3931 same-format handoff/publisher recovery through the existing owners;
+Parent has no competing edit on that family. Toad478's selected ce24 source pin
+is not silently rebound by this later source join.
+
+Original3808 mounted native allow passed47.833s through real Pi/ACP/MCP and Toad
+permission, ledger and outbound assertions against its authored localhost
+provider. No-controller failed27.677s at attachment_settled.wait5 after prompt
+return; revoke/disconnect did not run under maxfail. Batch failed80.078310096,
+operator joined81.130681273. Owner wholecb8b6259 binds218 raw references and163
+fixture files; all sixteen recorded identities are absent and the original
+normal four-wheel floor restoration passed once in0.417255679s. READ e7f829 and
+EXEC9f522 were explicitly returned; independent holder/artifact closures remain
+Bohr/Sch responsibilities. The full four-case family is not qualified. Original
+Audit reaches the managed terminal while the Toad observer log stops at a receipt;
+callback assertion interruption is a source inference, not a recorded exception.
+Mendel owns complete reset/binding/presentation tracing before a proven consumer
+correction. No deadline increase, production authority exemption or retry follows.
+
+Heis published warm04 rendered-resource proposal742a2044 in a separate concurrent
+source checkout, retaining a216 product/root equality to61bf and unchanged strict
+warm control. Parent relayed it to Bohr for fresh eligible assessment; floor,
+purpose and new authorities are unbound. Prior warm03 is fully closed, all raw
+journals remain held, and configured continuous consumer work remains active.
+
 ### Paired source pin aligned — 2026-10-06
 
 Parent Toad478 now explicitly selects Corece24e9fd in pyproject and all three
@@ -19,7 +55,7 @@ combined installed/live acceptance still needs an actual matched future pair.
 
 Current3808 separate EXEC9f522 and Bohr releasea53e85 are issued for original
 Mendel's sole four-case purpose. Its historical bee/4b/b2e/16c9 cohort does not use
-or inherit this Parent pin. Result remains pending, with same original bounds and
+or inherit this Parent pin. That attempt is now terminal as recorded above, with same original bounds and
 normal whole floor/authority return required at terminal. No new Parent launch or
 replay follows this source alignment. Heis and Einstein retain their independent
 source closure and next specific qualification boundaries.
