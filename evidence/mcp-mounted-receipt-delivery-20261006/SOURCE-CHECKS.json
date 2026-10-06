@@ -1,0 +1,81 @@
+{
+  "scope": "source compilation and AST equality only; no import/collection/application/native/test execution",
+  "source_before_sha256": "e010e078b9bd6e377b3edca4387869c46f74c04052dd0e08b0037df5dce3ccda",
+  "source_after_sha256": "64ac8f5389fe2539ef92fda7266a0638161e0c7b1946888f51a6061777b33a29",
+  "unchanged_top_level_functions": [
+    "_node_run",
+    "_qualify_origin",
+    "_prepare",
+    "_deny_via_simulated_user_pty",
+    "_mock_model",
+    "_observer"
+  ],
+  "all_original_native_case_assertions_AST_equal": true,
+  "receipt_seen_set_sites": [
+    {
+      "scope": "_mock_model",
+      "line": 375
+    },
+    {
+      "scope": "test_real_pi_mcp_acp_link.Attachment.session_update",
+      "line": 505
+    },
+    {
+      "scope": "test_real_pi_mcp_acp_link",
+      "line": 666
+    }
+  ],
+  "receipt_release_authority": "Attachment.session_update after awaited original mounted observer; remaining set sites are teardown unblock only",
+  "frozen_helpers": [
+    {
+      "name": "metadata_producer",
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/mcp_observation_fixture.py",
+      "sha256": "7a16afdb7ed4d95b943627ab70a6e7a6f505ad2b16af0bdba07678090a49ad29",
+      "unchanged": true
+    },
+    {
+      "name": "typed_consumer",
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/typed_comms_command_pilot.py",
+      "sha256": "e783896329e4616a44e8dac320916eb6302293cbf496b5b222d1f8c6453345a3",
+      "unchanged": true
+    },
+    {
+      "name": "canonical_owner",
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/delivery_owner_fixture.py",
+      "sha256": "b03ab1801372c8d45e6cdbf91ebd2e7013ffeec9485e392e45d0479606caae5f",
+      "unchanged": true
+    },
+    {
+      "name": "core_pytest_fixture",
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/conftest.py",
+      "sha256": "ced0353a6dcf25e847a2e023d705358841bc10f869a8d5f988f03f43b7f415a4",
+      "unchanged": true
+    },
+    {
+      "name": "toad_app_resource",
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/runtime_fixture.py",
+      "sha256": "987399f81781f57e5cca89dc0e5214c59663d97a01bcb5bad18f35d7f8eb686f",
+      "unchanged": true
+    },
+    {
+      "name": "CSS",
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/src/toad/toad.tcss",
+      "sha256": "8569c3275b198cb1f1e30e4ebb804b48fb61d33585fb3277b3a39a37c4e08636",
+      "unchanged": true
+    },
+    {
+      "name": "core_control",
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_mcp_acceptance.py",
+      "sha256": "64ac8f5389fe2539ef92fda7266a0638161e0c7b1946888f51a6061777b33a29",
+      "unchanged": false
+    },
+    {
+      "name": "toad_adapter",
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/native_permission_ui.py",
+      "sha256": "8e9d11da1538b82f24595e5db6285d99f6ff1dc970d46f55030e0a026857536b",
+      "unchanged": true
+    }
+  ],
+  "production_delta_from_source_checkpoint": [],
+  "selected_historical_resources_not_current_main_equal": true
+}

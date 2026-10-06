@@ -1,0 +1,237 @@
+{
+  "state": "SOURCE-ONLY future affected qualification; holder/grant/stage/proof/native READ/native EXEC/release UNBOUND; no launch authority",
+  "changed_control": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_mcp_acceptance.py",
+    "sha256": "64ac8f5389fe2539ef92fda7266a0638161e0c7b1946888f51a6061777b33a29",
+    "bytes": 31662
+  },
+  "source_checkpoint_base": "da6b2663bb71b4941ecb862c6aa81f4191b7b44e",
+  "related_owner_receipt": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/mcp-mounted-receipt-delivery-20261006/RAW-SOURCE-RELATION.json",
+    "sha256": "bfde8a5bd38198f63bb7e50597d3a3ba8ed2a520974eb7ca92a11c7861a14f27",
+    "bytes": 17908
+  },
+  "source_checks": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/mcp-mounted-receipt-delivery-20261006/SOURCE-CHECKS.json",
+    "sha256": "875d7ec78e5efa7dad884f75faa20f54e53c0a08d04abdad45abe015f1bd0ddf",
+    "bytes": 3069
+  },
+  "accepted_allow_keeper": {
+    "path": "/home/ts/.cache/agent-scratch/m687n03/n/test_real_pi_mcp_acp_link_allo0/evidence.json",
+    "sha256": "27b59b98ec1136a1fe33d73f33abe1ec175d7c18cd0502e04ac51d9465b14102",
+    "bytes": 246
+  },
+  "accepted_allow_original_seconds": 47.833,
+  "accepted_allow_repeat": false,
+  "case_scope": [
+    "no_controller",
+    "revoke_midturn",
+    "disconnect"
+  ],
+  "command": {
+    "argv": [
+      "{ISSUED_ELIGIBLE_NONLIVE_PREFIX}/bin/python",
+      "-B",
+      "-c",
+      "import sys\nsys.path.append('/usr/lib/python3.14/site-packages')\nimport pytest\nraise SystemExit(pytest.main(sys.argv[1:]))\n",
+      "-p",
+      "pytest_asyncio.plugin",
+      "-q",
+      "-o",
+      "addopts=",
+      "--maxfail=1",
+      "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_mcp_acceptance.py::test_real_pi_mcp_acp_link[no_controller]",
+      "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_mcp_acceptance.py::test_real_pi_mcp_acp_link[revoke_midturn]",
+      "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_mcp_acceptance.py::test_real_pi_mcp_acp_link[disconnect]",
+      "--basetemp=/home/ts/.cache/agent-scratch/m682r01/n",
+      "--junitxml=/home/ts/.cache/agent-scratch/m682r01/native.xml"
+    ],
+    "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+    "environment": {
+      "set": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "TOAD_TEST_ATTEMPT": "mendel-mcp-mounted-receipt-remaining-three-20261006",
+        "AC_MCP_TOAD_ADAPTER": "/home/ts/wt/toad-original-reply-handling-20261002/tests/native_permission_ui.py",
+        "AC_MCP_RETIRE_SURFACE": "1",
+        "AC_MCP_PERMISSION_ANSWER": "allow",
+        "AC_MCP_NATIVE_BIN": "{ISSUED_ELIGIBLE_NONLIVE_PREFIX}/bin/pi-comms-native",
+        "PI_COMPACTION_TEST_PACKAGE": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent"
+      },
+      "unset": [
+        "AGENT_COMMS_ROOT",
+        "AGENT_COMMS_THREAD",
+        "PI_AGENT_ID",
+        "PI_CODING_AGENT_DIR",
+        "PI_SESSION_FILE",
+        "NODE_OPTIONS",
+        "NODE_PATH",
+        "NODE_COMPILE_CACHE",
+        "AGENT_COMMS_NATIVE_ORIGIN",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "PYTHONSTARTUP",
+        "PYTHONUSERBASE",
+        "VIRTUAL_ENV",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy"
+      ],
+      "original_mock_model": "minimal child HOME/dummy offline key/exact bound loopback origin established per case by original control; no configured auth/external provider.",
+      "proxy_relation": "Original committed guard refuses inherited proxy variables at every default-fetch call. Clear six declared proxy selectors for authored direct-loopback positives; no proxy negative runtime claim or guard change."
+    },
+    "owned_output": "/home/ts/.cache/agent-scratch/m682r01",
+    "runtime_outputs": [
+      "/home/ts/.cache/agent-scratch/m682r01/controller.json",
+      "/home/ts/.cache/agent-scratch/m682r01/child.json",
+      "/home/ts/.cache/agent-scratch/m682r01/stdout.log",
+      "/home/ts/.cache/agent-scratch/m682r01/stderr.log",
+      "/home/ts/.cache/agent-scratch/m682r01/terminal.json",
+      "/home/ts/.cache/agent-scratch/m682r01/native.xml",
+      "/home/ts/.cache/agent-scratch/m682r01/n"
+    ]
+  },
+  "retained_package_sources": [
+    {
+      "module": "agent_comms",
+      "package": "agent-comms",
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-successor-wheel-20261005/wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "sha256": "bee0813b18f84df00595113eeb32283ef0051cdc5acf0315afcbc21247c7d6c6",
+      "bytes": 906687,
+      "head": "3e109632e95dc15972d53d459dc5e19a99b16732",
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "source_root": "src/agent_comms",
+      "assets": 355
+    },
+    {
+      "module": "toad",
+      "package": "batrachian-toad",
+      "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/viewport-worker-custody-20261005/wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "sha256": "b2e420e5b2eed1aaa96d815b2abf38f990272a047417c2ca5082c01d9149a151",
+      "bytes": 2251159,
+      "head": "289f1c6cd7667abf985ddba265d6469a95e3ea48",
+      "repo": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "source_root": "src/toad",
+      "assets": 319
+    },
+    {
+      "module": "textual",
+      "package": "textual",
+      "path": "/home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native67-filewheel-20261005/textual-8.2.8-py3-none-any.whl",
+      "sha256": "16c9f5e7a1aca9f7a339fdb859c1743bbc0ba8f17327ba3debd4b13959ca927d",
+      "bytes": 768752,
+      "head": "d7337ee084f6dcda42cbd8a41c7417e87d60ae78",
+      "repo": "/home/ts/wt/textual-native-subtree-strips-20261002",
+      "source_root": "src/textual",
+      "assets": 266
+    },
+    {
+      "module": "refactor_audit",
+      "package": "nominal-refactor-audit",
+      "path": "/home/ts/wt/nra-skill-publish-20261002/.artifacts/family-flattened-collector-20261004/wheels/nominal_refactor_audit-0.1.0-py3-none-any.whl",
+      "sha256": "8d489731728ebf9f7e0f90ef2b14e7e3b5d2f90ed82bd8b1482d735f82869886",
+      "bytes": 23532,
+      "head": "9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10",
+      "repo": "/home/ts/wt/nra-skill-publish-20261002",
+      "source_root": "skills/refactor-audit/scripts/audit",
+      "assets": 10
+    },
+    {
+      "module": "textual_diff_view",
+      "package": "textual-diff-view",
+      "path": "/home/ts/.cache/uv/sdists-v9/git/6a8a377ce2150d3f/8fa7d4d0db993ea3/textual_diff_view-0.1.5-py3-none-any.whl",
+      "sha256": "be7089c8f282e07e893b0254a0859e0f1b243a7ba591749f2053fa1fb775ad36",
+      "bytes": 25753,
+      "head": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+      "repo": "/home/ts/wt/textual-diff-native-geometry-20261001",
+      "source_root": "src/textual_diff_view",
+      "assets": 3
+    }
+  ],
+  "native": {
+    "package": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent",
+    "manifest": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+    "tree": "63f18710cb9329be6ade27bac3b4dd822e2b36f013756fa8e6717b8073a4592c"
+  },
+  "unchanged_controller_helper": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/native334-controller.py",
+    "sha256": "5d59599bed564bc94520b87db3d4e20496078bb23f241a7f2f9428bc6963f01c",
+    "state": "Original helper bytes unchanged; future attempt UNRUN. Exact holder/interpreter/assessment/floor bindings require fresh Bohr issue; no old authority.",
+    "argv_template": [
+      "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+      "-B",
+      "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/native334-controller.py",
+      "ACTUAL_BOHR_ISSUED_PATH_UNBOUND",
+      "ACTUAL_BOHR_ISSUED_SHA256_UNBOUND"
+    ]
+  },
+  "unchanged_proof_helper": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/native334-proof-lifecycle-read.py",
+    "sha256": "8c8f8a49a84aa2b0ad6fec0e7b71cb566e20fcef89da28c9a135d7ce944c6117",
+    "state": "Original helper bytes unchanged; future attempt UNRUN. Exact holder/interpreter/assessment/floor bindings require fresh Bohr issue; no old authority.",
+    "argv_template": [
+      "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+      "-B",
+      "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/native334-proof-lifecycle-read.py",
+      "ACTUAL_BOHR_ISSUED_PATH_UNBOUND",
+      "ACTUAL_BOHR_ISSUED_SHA256_UNBOUND"
+    ],
+    "supersedes_UNRUN": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/native334-proof.py",
+      "sha256": "133e069e36d9f3e418395d08c132dc7e03b52dc11cc2cb0e0301ef10c53a11f7"
+    }
+  },
+  "unchanged_source_helpers": {
+    "metadata_producer": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/mcp_observation_fixture.py",
+      "sha256": "7a16afdb7ed4d95b943627ab70a6e7a6f505ad2b16af0bdba07678090a49ad29",
+      "published_head": "afc657ef60e5994a16c6d19412ccacfe9f0d36ea"
+    },
+    "typed_consumer": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/typed_comms_command_pilot.py",
+      "sha256": "e783896329e4616a44e8dac320916eb6302293cbf496b5b222d1f8c6453345a3"
+    },
+    "canonical_owner": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/delivery_owner_fixture.py",
+      "sha256": "b03ab1801372c8d45e6cdbf91ebd2e7013ffeec9485e392e45d0479606caae5f"
+    },
+    "core_pytest_fixture": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/conftest.py",
+      "sha256": "ced0353a6dcf25e847a2e023d705358841bc10f869a8d5f988f03f43b7f415a4"
+    },
+    "toad_app_resource": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/runtime_fixture.py",
+      "sha256": "987399f81781f57e5cca89dc0e5214c59663d97a01bcb5bad18f35d7f8eb686f"
+    },
+    "CSS": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/src/toad/toad.tcss",
+      "sha256": "8569c3275b198cb1f1e30e4ebb804b48fb61d33585fb3277b3a39a37c4e08636"
+    },
+    "toad_adapter": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/native_permission_ui.py",
+      "sha256": "8e9d11da1538b82f24595e5db6285d99f6ff1dc970d46f55030e0a026857536b"
+    }
+  },
+  "required_new_authority": [
+    "actual eligible holder floor and borrower disposition",
+    "specific immutable package/operator purpose",
+    "NEW matching 4b READ and same-purpose proof release",
+    "actual installed source/DTO/FullTrust proof",
+    "NEW matching EXEC and same-purpose affected-case release"
+  ],
+  "bounds": "Original40s waits/12s receipt-model/15s node-PTY/3s PTY-cleanup/model join/10s permission unchanged; no bound raised/waiver/new product timer. Runner body compile-only, not imported/collected/run.",
+  "first_failure": "maxfail1; first FAIL/UNKNOWN stop; no retry, replay or deadline increase",
+  "whole_floor_return": "actual new issued floor and exact retained restore wheels/RAW origins/protected/PREFIX/nodes; joined original handles/groups/sockets; fresh census; explicit new READ/EXEC return",
+  "source_artifact_relation": "Normal joined source includes main432 forced APPEND_SYSTEM and notification production changes; frozen bee3e/b2e/16c9 remains a historical selected runtime, not full current-main equality. This checkpoint changes only qualifier test consumer source; no wheel/native build requested.",
+  "no_standalone_guard_repeat": true,
+  "no_runtime_operations_performed": true,
+  "scope_limits": [
+    "only new authored private localhost cases under future issue",
+    "no configured paid provider/model, original saved inputs, public source/client or existing UNKNOWN replay",
+    "accepted allow retained at original scope; combined coverage across distinct attempts does not become a single successful four-case run"
+  ]
+}
