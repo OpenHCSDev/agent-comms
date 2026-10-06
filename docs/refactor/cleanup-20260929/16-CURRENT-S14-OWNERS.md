@@ -7,27 +7,28 @@ The original objective remains incomplete. CI is deferred as a merge gate.
 
 ### Next installed checkpoint
 
-Batch03 is closed. Initial Shift/Ctrl exact selection and unchanged mode passed;
-the first menu read failed before later batch operations. The corrected helper
-waits for native mount completion before reading menu/dialog children. All124
-assertions and original15/20/600 bounds remain unchanged; no backend or wheel
-change.
+Batch04 is CLOSED after its one App progressed through mounted menu/read/pin
+checks, then failed at select_rows157. The final selected tuple was unrecorded;
+my initial suggestion of another fixture-order bug was premature. Ctrl toggles
+and appends in click order; Shift derives projection order. No missing member,
+ordering defect or backend cause is proved at this later boundary.
 
-Fresh returned485 Batch04 assessment is verified, including immutable preimage,
-full69 origins, clear private census and exact original three-package return.
-Draft491 b1f1caf55 publishes `PROPOSED-BATCH04-OPERANDS.json` with the corrected
-helper and new absent Batch04 output roots. Batch04 is specifically issued. Its one three-wheel stage passed0/.236185s;
-original controller/root/installer joined and are absent. Stage/root are consumed
-and disabled. Fresh private READ296e6f79 and exact four-literal helperce08029d
-were bound before the sole proof, which passed0/3.287489s. Original124405/124415
-joined and are absent, all953/full69 assets/origins/keepers match, and exact
-Core member enters the13-file App map. Final handoffb144e8b4 was delivered to
-Bohr and Sch for proof consumption, separate fresh EXEC and final release; no
-App has run at this checkpoint. Same built Core d846/Toad3182/native8814 wheels,
-provider0 and no public source capture. Draft496's clipped-anchor range still needs the
-actual later App phase. After working acceptance, merge491/496 and deliver the
-coherent local runtime; public installation and broader latency verification
-remain outstanding.
+One original three-package restore passed0/.253810486; exact1467/953/full69
+origins/keepers/PREFIX,10 absent original identities and clear207-process census
+are verified. Wholec2b28452 retains85raw/50fixtures/two journals and explicitly
+returns private READ/EXEC; holder independently CLOSED, artifact issuer closure
+separate. Clipped60-row and later native batch phases remain unqualified.
+
+Draft491 now records original canonical state/identity/projection/native
+admission at every boundary through select_rows and all eight consumers. All124
+assertion predicates/actions/15/20/600 unchanged; production/wheels unchanged.
+Complete Package1735 modules parses0omissions;45 related modules/138 sites read.
+Source compilation/diff pass without imports; diagnostic App is unrun.
+Fresh readonly returned485 Batch05 assessment is verified and bound in published
+PROPOSED-BATCH05-OPERANDS.json at59ae8751. Same built wheels, new absent outputs,
+provider0/public source excluded. Delivered for fresh specific stage-only issue;
+no access from preparation. After affected acceptance, merge491/496 and complete
+local delivery. Broader continuous/performance and public runtime remain open.
 
 ### Current priority: sidebar and scrolling responsiveness
 
