@@ -327,25 +327,28 @@ class ReviewedRetainedSummaryCohort:
             if temporary.exists() or temporary.is_symlink():
                 raise RuntimeError('Original publication attempt requires review')
 
-    def publish(self, directory: int):
+    def publish(self, directory: int, links_directory: int | None = None):
         self.require_publication_originals()
         self.publish_route(directory)
-        self.publish_links()
+        self.publish_links(links_directory)
 
     def publish_route(self, directory: int):
         target_route = replace(self.original_route, native_package=self.native)
         _publish_active_route_locked(target_route, active_route_path(), directory,
                                      expected=self.original_route)
 
-    def publish_links(self):
+    def publish_links(self, directory: int | None = None):
         for command in self.commands:
-            link = LINKS / command
-            if link.readlink() != self.current_prefix / 'bin' / command:
+            link = LINKS / command if directory is None else command
+            if Path(os.readlink(link, dir_fd=directory)) != self.current_prefix / 'bin' / command:
                 raise RuntimeError('Default changed during publication; remain stopped')
-            temporary = LINKS / (command + '.retained-summary-publish')
-            temporary.symlink_to(self.target / 'bin' / command)
-            temporary.replace(link)
-        fsync_directory(LINKS)
+            temporary = LINKS / (command + '.retained-summary-publish') if directory is None else command + '.retained-summary-publish'
+            os.symlink(self.target / 'bin' / command, temporary, dir_fd=directory)
+            os.replace(temporary, link, src_dir_fd=directory, dst_dir_fd=directory)
+        if directory is None:
+            fsync_directory(LINKS)
+        else:
+            os.fsync(directory)
         if read_active_route() != replace(self.original_route, native_package=self.native):
             raise RuntimeError('Target route readback differs')
 
@@ -355,6 +358,7 @@ class ReviewedFrontendCohort(ReviewedRetainedSummaryCohort):
     """Publish only the UI when every imported backend byte stays unchanged."""
 
     current_source_proof: ReviewedArtifact
+    backend_source_proof: ReviewedArtifact
     commands: ClassVar[tuple[str, ...]] = ('toad',)
 
     def require_runtime(self):
@@ -370,8 +374,14 @@ class ReviewedFrontendCohort(ReviewedRetainedSummaryCohort):
         if self.original_route.native_package != self.native:
             raise RuntimeError('Frontend publication cannot change the native route')
         target.require_frontend_successor(original)
+        # The frontend can advance repeatedly while backend owners keep their
+        # original installation. Those are independent publication identities.
+        self.backend_source_proof.require_original()
+        backend = FieldCodec.decode(InstalledSourceProof,
+                                    json.loads(self.backend_source_proof.path.read_text()))
+        target.require_frontend_successor(backend)
         for command in COMMANDS:
-            if command not in self.commands and (LINKS / command).readlink() != self.current_prefix / 'bin' / command:
+            if command not in self.commands and (LINKS / command).readlink() != backend.prefix / 'bin' / command:
                 raise RuntimeError('Original backend default changed')
 
     def publish_route(self, directory: int):
@@ -402,21 +412,25 @@ class ReviewedFrontendCohort(ReviewedRetainedSummaryCohort):
                 os.fsync(opened.fileno())
             fsync_directory(receipt.parent)
             try:
-                self.publish(directory)
+                self.publish(directory, directory)
                 _atomic_write_text(receipt, json.dumps({'phase': 'frontend-published-live-ui-pending',
                     'cohort': FieldCodec.encode(self), 'finished': time.time()}, indent=2)+'\n', fsync_parent=True)
             except BaseException as cause:
                 # Recovery owns only the link this operation could change.
-                link = LINKS / 'toad'
-                if link.readlink() == self.target / 'bin/toad':
-                    temporary = LINKS / 'toad.retained-summary-publish'
-                    if temporary.exists() or temporary.is_symlink():
+                link = 'toad'
+                if Path(os.readlink(link, dir_fd=directory)) == self.target / 'bin/toad':
+                    temporary = 'toad.retained-summary-publish'
+                    try:
+                        os.stat(temporary, dir_fd=directory, follow_symlinks=False)
+                    except FileNotFoundError:
+                        pass
+                    else:
                         raise RuntimeError('Frontend recovery has uncertain temporary link')
-                    temporary.symlink_to(self.current_prefix / 'bin/toad')
-                    temporary.replace(link)
-                    fsync_directory(LINKS)
+                    os.symlink(self.current_prefix / 'bin/toad', temporary, dir_fd=directory)
+                    os.replace(temporary, link, src_dir_fd=directory, dst_dir_fd=directory)
+                    os.fsync(directory)
                 phase = ('frontend-failed-original-link-restored'
-                         if link.readlink() == self.current_prefix / 'bin/toad'
+                         if Path(os.readlink(link, dir_fd=directory)) == self.current_prefix / 'bin/toad'
                          else 'frontend-failed-link-unknown')
                 _atomic_write_text(receipt, json.dumps({'phase': phase,
                     'cohort': FieldCodec.encode(self), 'error': repr(cause),
