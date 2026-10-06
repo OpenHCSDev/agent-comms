@@ -5257,3 +5257,16 @@ compositor refresh p95 3.29 ms/max27.03 ms, and writer completion p95 2.88 ms.
 These are captured work durations only. The failed gesture path and lack of task
 stacks prevent an input responsiveness, emulator paint, FPS or smoothness claim.
 The paired public installation and retained original histories remain unchanged.
+
+
+### Real-App input repair merged; physical04 preparation delivered
+
+- [x] Native74 merged at17817952. Four actual run_async controls passed, including routed pointer order and task cleanup. Original source negatives are retained; no physical03 sole-cause claim.
+- [x] Toad492 merged at2f111cbb, pinning that native source. Original 99-package lock relation is unchanged except the native reference.
+- [x] Normal new Textual/Toad wheels checked against selected Git assets and complete RECORDs. Core d846 is reused without rebuild. Toad package bytes equal the previous wheel while the Git pin inputs changed.
+- [x] Fresh physical04 operands published d4c2656c on the retained clean qualification branch. All71 file descriptors and39 fixed helpers match. Bohr received the exact tuple for fresh specific issue; the returned485 assessment and literal original three-package restore are bound.
+- [ ] Physical04 stage/proof/private and source authority, one actual isolated-st run and footage review. No purpose or operation is inferred from preparation.
+- [ ] Installed selected-target batch outcomes, separately prepared in Draft491.
+- [ ] Reviewed paired public delivery and actual fresh attachment.
+
+The physical04 command retains the original600/240 bounds, two new private saved forks and zero submitted inputs. Physical03 remains CLOSED with its failed gestures and footage retained. Current public installation is unchanged. The new proposal is evidence/real-app-pump-physical-20261006/FINAL-PHYSICAL-OPERANDS.json in the fixed Parent selected-target worktree.
