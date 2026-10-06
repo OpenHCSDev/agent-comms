@@ -1,8 +1,26 @@
-## Current delivery — 2026-10-05
+## Current delivery — 2026-10-06
 
 This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
-The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
+The original objective remains incomplete. CI is deferred as a merge gate.
+
+### Both repaired-pair stages issued — 2026-10-06
+
+Bohr fresh checks passed and both original owners received stage-only purposes:
+[Heis configured485 grant](/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/485-Heis481-configured-reader-pair-package-App-issued-grant.json)
+and [Mendel loaded334 grant](/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel-loaded-current-reader-pair-package-App-issued-grant.json).
+Configured binds2100 overall with original readiness20; loaded binds1800 with
+original20/10/25 phase checks and corrected handoff references. Each permits root
+preparation and one normal three-wheel stage. Both immutable grants match the
+[batched issue evidence](/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/configured485-loaded334-stage-only-issue-handoff.json).
+Stage attempts are0 at this readback; proof, source capture and App remain held.
+Sch owns separate fresh4b READ receipts, followed by existing proof/EXEC releases.
+Original floors, PUBLIC475, uncertain inputs and held journals remain preserved.
+
+Parent checked Bohr's actual turn: his floor/borrower verification completed
+successfully and grant writing progressed. The earlier blocked declaration from
+missing files was premature. Missing outputs alone do not establish a stalled
+owner; verify actual activity and concrete blockers before declaring an impasse.
 
 ### Final duplicate warm PR reconciled — 2026-10-06
 
