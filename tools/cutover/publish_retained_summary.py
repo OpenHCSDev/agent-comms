@@ -225,8 +225,10 @@ class InstalledSourceProof:
         if not self.native_full_trust or self.source_overlay or self.dependency_bypass:
             raise RuntimeError('Package/source/native trust is incomplete')
 
-    def require_frontend_successor(self, original: InstalledSourceProof):
-        """Preserve every installed package resource outside the Toad package."""
+    def require_frontend_successor(
+        self, original: InstalledSourceProof, modules: tuple[str, ...] = ('toad',),
+    ):
+        """Preserve resources outside the publication owner's frontend supply."""
         for proof in (original, self):
             if (proof.native_package, proof.native_manifest, proof.native_tree) != (
                     original.native_package, original.native_manifest, original.native_tree):
@@ -235,9 +237,12 @@ class InstalledSourceProof:
                 raise RuntimeError('Frontend publication requires original trusted packages')
         before = {source.module: source for source in original.sources}
         after = {source.module: source for source in self.sources}
-        if before.keys() != after.keys() or 'toad' not in before:
+        frontend_modules = frozenset(modules)
+        if (before.keys() != after.keys() or 'toad' not in frontend_modules
+                or not frontend_modules <= before.keys()
+                or len(frontend_modules) != len(modules)):
             raise RuntimeError('Frontend source membership changed')
-        for module in before.keys() - {'toad'}:
+        for module in before.keys() - frontend_modules:
             if before[module].head != after[module].head:
                 raise RuntimeError(f'Frontend publication changed backend source: {module}')
         # Compare the actual installed resource trees, including dependencies
@@ -249,17 +254,19 @@ class InstalledSourceProof:
                 source.require_original(proof.archive_artifacts)
         old_site = Path(before['toad'].location).parent
         new_site = Path(after['toad'].location).parent
-        old_frontend = before['toad'].distribution()
-        new_frontend = after['toad'].distribution()
-        if old_frontend.metadata['Name'] != new_frontend.metadata['Name']:
+        old_frontend = tuple(before[module].distribution() for module in modules)
+        new_frontend = tuple(after[module].distribution() for module in modules)
+        frontend_names = frozenset(distribution.metadata['Name'] for distribution in old_frontend)
+        if (frontend_names != frozenset(distribution.metadata['Name'] for distribution in new_frontend)
+                or len(frontend_names) != len(modules)):
             raise RuntimeError('Frontend distribution identity changed')
-        frontend_name = old_frontend.metadata['Name']
-        if (tuple(package for package in original.packages if package[0] != frontend_name) !=
-                tuple(package for package in self.packages if package[0] != frontend_name)
+        if (tuple(package for package in original.packages if package[0] not in frontend_names) !=
+                tuple(package for package in self.packages if package[0] not in frontend_names)
                 or original.sdk != self.sdk):
             raise RuntimeError('Frontend publication cannot change backend dependencies')
         def resources(site, frontend):
-            frontend_files = {Path(path) for path in frontend.files or ()}
+            frontend_files = {Path(path) for distribution in frontend
+                              for path in distribution.files or ()}
             return {path.relative_to(site): path for path in site.rglob('*')
                     if path.is_file() and '__pycache__' not in path.parts
                     and path.relative_to(site) not in frontend_files}
@@ -360,6 +367,7 @@ class ReviewedFrontendCohort(ReviewedRetainedSummaryCohort):
     current_source_proof: ReviewedArtifact
     backend_source_proof: ReviewedArtifact
     commands: ClassVar[tuple[str, ...]] = ('toad',)
+    frontend_modules: ClassVar[tuple[str, ...]] = ('toad',)
 
     def require_runtime(self):
         # This operation neither changes nor acquires the native package.
@@ -373,13 +381,13 @@ class ReviewedFrontendCohort(ReviewedRetainedSummaryCohort):
             raise RuntimeError('Original published proof names another installation')
         if self.original_route.native_package != self.native:
             raise RuntimeError('Frontend publication cannot change the native route')
-        target.require_frontend_successor(original)
+        target.require_frontend_successor(original, self.frontend_modules)
         # The frontend can advance repeatedly while backend owners keep their
         # original installation. Those are independent publication identities.
         self.backend_source_proof.require_original()
         backend = FieldCodec.decode(InstalledSourceProof,
                                     json.loads(self.backend_source_proof.path.read_text()))
-        target.require_frontend_successor(backend)
+        target.require_frontend_successor(backend, self.frontend_modules)
         for command in COMMANDS:
             if command not in self.commands and (LINKS / command).readlink() != backend.prefix / 'bin' / command:
                 raise RuntimeError('Original backend default changed')
@@ -438,6 +446,13 @@ class ReviewedFrontendCohort(ReviewedRetainedSummaryCohort):
                 raise
         finally:
             os.close(directory)
+
+
+@dataclass(frozen=True)
+class ReviewedTextualFrontendCohort(ReviewedFrontendCohort):
+    """Publish the Toad UI with its renderer; backend owners retain their bytes."""
+
+    frontend_modules: ClassVar[tuple[str, ...]] = ('toad', 'textual')
 
 
 @dataclass(frozen=True)
