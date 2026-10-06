@@ -1,0 +1,110 @@
+F
+=================================== FAILURES ===================================
+_______________________ test_real_pi_mcp_acp_link[allow] _______________________
+
+case = 'allow'
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fa5ffef1480>
+
+    @pytest.mark.parametrize("case", ["allow", "no_controller", "revoke_midturn", "disconnect"])
+    async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
+        binary = os.environ.get("AC_MCP_NATIVE_BIN")
+        if not binary:
+            pytest.skip("Set AC_MCP_NATIVE_BIN to an explicitly prepared native Pi launcher")
+        assert binary == "pi" or (Path(binary).is_absolute() and os.access(binary, os.X_OK))
+        native_package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+        package, node, agent, project, digest, starts, calls, env = _prepare(
+            tmp_path, native_package
+        )
+        receipt_seen, second_request, release_final = (threading.Event() for _ in range(3))
+        if case != "revoke_midturn":
+            release_final.set()
+        attachment_settled = asyncio.Event()
+        attachment_turn = None
+        updates, permissions = [], []
+        entered, release = asyncio.Event(), asyncio.Event()
+        task = proxy = owner = None
+        (tmp_path / "launch.json").write_text(
+            json.dumps(
+                {
+                    "launcher": binary,
+                    "nativePackage": env["PI_COMPACTION_TEST_PACKAGE"],
+                    "package": str(package),
+                    "case": case,
+                }
+            )
+        )
+>       async with _observer(case, tmp_path) as observer:
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_mcp_acceptance.py:431: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+tests/test_mcp_acceptance.py:399: in _observer
+    async with module.open_observer(case, root) as observer:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+../toad-original-reply-handling-20261002/tests/native_permission_ui.py:167: in open_observer
+    await exercise_boundaries(agent, view, pilot)
+../toad-original-reply-handling-20261002/tests/mcp_observation_fixture.py:90: in exercise_boundaries
+    async with turn_source(source_root, session_id) as producer:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+../toad-original-reply-handling-20261002/tests/mcp_observation_fixture.py:62: in turn_source
+    thread = await Coordination.run_worker(declare)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/coordinator.py:34: in run_worker
+    return await join_retirement(pending)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/child_process.py:820: in join_retirement
+    await asyncio.shield(task)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def declare():
+>       thread = producer.sessions.declare_thread(str(project), os.getpid())
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: SessionLifecycle.declare_thread() takes 2 positional arguments but 3 were given
+
+../toad-original-reply-handling-20261002/tests/mcp_observation_fixture.py:54: TypeError
+------------------------------ Captured log call -------------------------------
+ERROR    asyncio:base_events.py:1875 UnregisteredThreadError exception in shielded future
+future: <Task finished name='preparation-thread' coro=<to_thread() done, defined at /home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:12> exception=UnregisteredThreadError("Thread 'project' is not registered.")>
+Traceback (most recent call last):
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/registry_provenance.py", line 31, in require
+    return self.threads[canonical]
+           ~~~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'project'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/toad/target_commands.py", line 43, in available_actions
+    actions = CliCommand.target_catalog(self.comms, self.subject, self.channel, project=str(self.project))
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/cli_commands.py", line 284, in target_catalog
+    thread = snapshot.require(target)
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/registry_provenance.py", line 33, in require
+    raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
+agent_comms.errors.UnregisteredThreadError: Thread 'project' is not registered.
+=========================== short test summary info ============================
+FAILED tests/test_mcp_acceptance.py::test_real_pi_mcp_acp_link[allow] - TypeE...
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed in 8.85s

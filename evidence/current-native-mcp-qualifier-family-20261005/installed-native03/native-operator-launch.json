@@ -1,0 +1,18 @@
+{
+  "controller": {
+    "pid": 2534989,
+    "start_time": 72490067
+  },
+  "operator": {
+    "pid": 2534977,
+    "start_time": 72489970
+  },
+  "time_monotonic": 724900.679649278,
+  "argv": [
+    "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+    "-B",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/native334-controller.py",
+    "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel687-fresh-ACP-native-fourcase-issued-grant.json",
+    "25cee9a6cb928f5f41d68f1d2032b0f591d564f8955abc50e5e48e1c56dd52d5"
+  ]
+}
