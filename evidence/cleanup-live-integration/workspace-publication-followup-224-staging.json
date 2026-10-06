@@ -1,0 +1,299 @@
+{
+  "activation": {
+    "state": "staged-exact-package-trusted-not-activated",
+    "stage": "/home/ts/.local/share/agent-comms/runtime-workspace-publication-followup-20260930",
+    "pins": {
+      "agent-comms": "72062939239b0f07707406309305a056a23f925f",
+      "textual": "65053c5a2df12249ef1c4193beeff7023c1f75d7",
+      "batrachian-toad": "e583dc79e5a03e30882687b88facee23623d4fbd"
+    },
+    "sdk": "0.12.1",
+    "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent",
+    "all_68_requirements_checked": true,
+    "default_launchers_unchanged": true,
+    "pending": "physical original41MB End and held-scroll comparison; previous6e physical failure preserved"
+  },
+  "dependencies": [
+    {
+      "name": "agent-client-protocol",
+      "version": "0.12.1"
+    },
+    {
+      "name": "agent-comms",
+      "commit": "72062939239b0f07707406309305a056a23f925f"
+    },
+    {
+      "name": "aiohappyeyeballs",
+      "version": "2.7.1"
+    },
+    {
+      "name": "aiohttp",
+      "version": "3.14.3"
+    },
+    {
+      "name": "aiohttp-jinja2",
+      "version": "1.6"
+    },
+    {
+      "name": "aiosignal",
+      "version": "1.4.0"
+    },
+    {
+      "name": "aiosqlite",
+      "version": "0.22.1"
+    },
+    {
+      "name": "annotated-types",
+      "version": "0.8.0"
+    },
+    {
+      "name": "anyio",
+      "version": "4.14.2"
+    },
+    {
+      "name": "attrs",
+      "version": "26.1.0"
+    },
+    {
+      "name": "bashlex",
+      "version": "0.18"
+    },
+    {
+      "name": "certifi",
+      "version": "2026.7.22"
+    },
+    {
+      "name": "click",
+      "version": "8.4.0"
+    },
+    {
+      "name": "format-currency",
+      "version": "0.0.10"
+    },
+    {
+      "name": "frozenlist",
+      "version": "1.8.0"
+    },
+    {
+      "name": "h11",
+      "version": "0.16.0"
+    },
+    {
+      "name": "httpcore",
+      "version": "1.0.9"
+    },
+    {
+      "name": "httpx",
+      "version": "0.28.1"
+    },
+    {
+      "name": "idna",
+      "version": "3.20"
+    },
+    {
+      "name": "jeepney",
+      "version": "0.9.0"
+    },
+    {
+      "name": "jinja2",
+      "version": "3.1.6"
+    },
+    {
+      "name": "linkify-it-py",
+      "version": "2.2.0"
+    },
+    {
+      "name": "loguru",
+      "version": "0.6.0"
+    },
+    {
+      "name": "markdown-it-py",
+      "version": "4.2.0"
+    },
+    {
+      "name": "markupsafe",
+      "version": "3.0.3"
+    },
+    {
+      "name": "mdit-py-plugins",
+      "version": "0.6.1"
+    },
+    {
+      "name": "mdurl",
+      "version": "0.1.2"
+    },
+    {
+      "name": "metaclass-registry",
+      "version": "0.2.1"
+    },
+    {
+      "name": "multidict",
+      "version": "6.9.1"
+    },
+    {
+      "name": "notify-py",
+      "version": "0.3.43"
+    },
+    {
+      "name": "packaging",
+      "version": "26.2"
+    },
+    {
+      "name": "pathspec",
+      "version": "1.1.1"
+    },
+    {
+      "name": "platformdirs",
+      "version": "4.9.6"
+    },
+    {
+      "name": "propcache",
+      "version": "0.5.4"
+    },
+    {
+      "name": "psutil",
+      "version": "7.2.2"
+    },
+    {
+      "name": "pydantic",
+      "version": "2.13.5"
+    },
+    {
+      "name": "pydantic-core",
+      "version": "2.46.5"
+    },
+    {
+      "name": "pygments",
+      "version": "2.21.0"
+    },
+    {
+      "name": "pyperclip",
+      "version": "1.11.0"
+    },
+    {
+      "name": "rich",
+      "version": "15.0.0"
+    },
+    {
+      "name": "setproctitle",
+      "version": "1.3.7"
+    },
+    {
+      "name": "textual",
+      "commit": "65053c5a2df12249ef1c4193beeff7023c1f75d7"
+    },
+    {
+      "name": "textual-diff-view",
+      "version": "0.1.5"
+    },
+    {
+      "name": "textual-serve",
+      "version": "1.1.3"
+    },
+    {
+      "name": "textual-speedups",
+      "version": "0.2.1"
+    },
+    {
+      "name": "tree-sitter",
+      "version": "0.26.0"
+    },
+    {
+      "name": "tree-sitter-bash",
+      "version": "0.25.1"
+    },
+    {
+      "name": "tree-sitter-css",
+      "version": "0.25.0"
+    },
+    {
+      "name": "tree-sitter-go",
+      "version": "0.25.0"
+    },
+    {
+      "name": "tree-sitter-html",
+      "version": "0.23.2"
+    },
+    {
+      "name": "tree-sitter-java",
+      "version": "0.23.5"
+    },
+    {
+      "name": "tree-sitter-javascript",
+      "version": "0.25.0"
+    },
+    {
+      "name": "tree-sitter-json",
+      "version": "0.24.8"
+    },
+    {
+      "name": "tree-sitter-markdown",
+      "version": "0.5.1"
+    },
+    {
+      "name": "tree-sitter-python",
+      "version": "0.25.0"
+    },
+    {
+      "name": "tree-sitter-regex",
+      "version": "0.25.0"
+    },
+    {
+      "name": "tree-sitter-rust",
+      "version": "0.24.2"
+    },
+    {
+      "name": "tree-sitter-sql",
+      "version": "0.3.11"
+    },
+    {
+      "name": "tree-sitter-toml",
+      "version": "0.7.0"
+    },
+    {
+      "name": "tree-sitter-xml",
+      "version": "0.7.0"
+    },
+    {
+      "name": "tree-sitter-yaml",
+      "version": "0.7.2"
+    },
+    {
+      "name": "typeguard",
+      "version": "4.5.2"
+    },
+    {
+      "name": "typing-extensions",
+      "version": "4.15.0"
+    },
+    {
+      "name": "typing-inspection",
+      "version": "0.4.4"
+    },
+    {
+      "name": "watchdog",
+      "version": "6.0.0"
+    },
+    {
+      "name": "xdg-base-dirs",
+      "version": "6.0.3"
+    },
+    {
+      "name": "yarl",
+      "version": "1.25.1"
+    },
+    {
+      "name": "batrachian-toad",
+      "commit": "e583dc79e5a03e30882687b88facee23623d4fbd"
+    }
+  ],
+  "installed_modules": {
+    "agent_comms": "/home/ts/.local/share/agent-comms/runtime-workspace-publication-followup-20260930/lib/python3.14/site-packages/agent_comms/__init__.py",
+    "toad": "/home/ts/.local/share/agent-comms/runtime-workspace-publication-followup-20260930/lib/python3.14/site-packages/toad/__init__.py",
+    "textual": "/home/ts/.local/share/agent-comms/runtime-workspace-publication-followup-20260930/lib/python3.14/site-packages/textual/__init__.py"
+  },
+  "previous_stage_unchanged": true,
+  "provider_calls": 0,
+  "owner_restarts": 0,
+  "physical_acceptance": "pending Heisenberg224"
+}

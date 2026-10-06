@@ -1,0 +1,33 @@
+{
+  "state": "SCOPED_PASS; actual default native ACP channel and pregrant cancel; public saved/channel physical history separately reviewed",
+  "default_interpreter": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/runtime-openhcs-recovery-cohort-20261001/bin/python",
+  "original_receipt": "/home/ts/wt/ac476-default01/receipt.json",
+  "original_receipt_sha256": "bd19778c55a4cc9d4c913db7241935cff2cf81d177733b43403e1dbe5f8de060",
+  "elapsed_seconds": 18.528437719971407,
+  "localhost_provider_posts": 2,
+  "native_original_count": 2,
+  "cancellation": {
+    "cancelled_input": "79c316527fc7f09cc052719eec78570a",
+    "localhost_posts_at_joined_cancel": 0,
+    "writer_wait_observed": true
+  },
+  "acp_fact_counts": {
+    "CoordinationChangedUpdate": 1,
+    "CursorAdvancedUpdate": 2,
+    "GoalChangedUpdate": 2,
+    "InputDeliveryChangedUpdate": 2,
+    "QueueChangedUpdate": 1,
+    "TranscriptSnapshotUpdate": 1,
+    "TurnChangedUpdate": 2
+  },
+  "all_owned_workers_retired": true,
+  "public_mutations": 0,
+  "paid_provider_calls": 0,
+  "original_replays": 0,
+  "scope_limits": [
+    "Controlled localhost provider, not configured-provider quality or latency",
+    "Original public channel history physically reviewed separately",
+    "Cold PR159 paint delay remains Toad275",
+    "Queue candidate receiving61 passed separately; not public default"
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "state": "SCOPED-CURRENT-PAIR-UI-ACCEPTED-AWAITING-DEFAULT-PUBLICATION",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930",
+  "pins": {
+    "agent-comms": "6feb634ba184d94d763028406152fff07027cccc",
+    "batrachian-toad": "ade1496216bab216fbc8f52b69ab7eaec376f030",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "frozen_packages": 68,
+  "source_proof": {
+    "agent-comms": {
+      "pin": "6feb634ba184d94d763028406152fff07027cccc",
+      "python_files_equal": 291,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930/lib/python3.14/site-packages/agent_comms",
+      "source": "exact merged Git tree"
+    },
+    "batrachian-toad": {
+      "pin": "ade1496216bab216fbc8f52b69ab7eaec376f030",
+      "python_files_equal": 273,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930/lib/python3.14/site-packages/toad",
+      "source": "exact merged Git tree"
+    }
+  },
+  "runtime_preflight_pass": true,
+  "native_full_trust": true,
+  "metadata_published_from_same_staging_receipt": true,
+  "owned_probe_cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 4065358,
+        "start_ticks": 28031327,
+        "returncode": 0
+      }
+    ]
+  },
+  "builds": 1,
+  "public_default_changes": 0,
+  "public_owner_restarts": 0,
+  "paid_calls": 0,
+  "native_inputs": 0,
+  "accepted_scope": "Packaging/source provenance/import/trust admission only; Scoped body-readiness source and physical83.714s16checks accepted on candidateCoreba938; current liveCore6feb affectedUI gate REQUIRED before activation. Sourceproduction/config equals reviewed35083/mergedade149. Core6feb/native593b unchanged. Parent owns UI-only defaults and Einstein ordinarydefault check; no overallCPU claim.",
+  "remaining_scope": "No full eleven-API installed claim or whole latency/performance closure. UI-only default publication and ordinarydefault acceptance owned by parent/Einstein. No backendrestart/route/TS/schema change; totalCPU target remains open.",
+  "current_pair_ui_acceptance": {
+    "receipt": "/home/ts/.cache/agent-scratch/body-readiness-stage-20260930/current-pair-capture/receipt.json",
+    "sha256": "3b39120073578fd859d4ebb861420b04078fab666b7e7289428987cac13f19c3",
+    "duration_seconds": 83.91924403299345,
+    "native_checks": {
+      "original_saved_history_loaded": true,
+      "peer_saved_history_loaded": true,
+      "history_scroll_extent": true,
+      "scroll_keys_focus_history": true,
+      "held_page_up_admitted_older_source": true,
+      "held_page_down_admitted_newer_source": true,
+      "reverse_page_up_admitted_older_source": true,
+      "draft_typed": true,
+      "peer_selected": true,
+      "source_retained": true,
+      "editor_retained": true,
+      "history_window_retained": true,
+      "draft_retained": true,
+      "reader_position_retained": true,
+      "ready_body_resources_retained": true,
+      "undo_restored_original_draft": true
+    },
+    "originals": [
+      {
+        "thread": "nra-architecture",
+        "owner": {
+          "pid": 3697925,
+          "start_time": 26677204
+        },
+        "journal": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl",
+        "bytes": 41270257,
+        "sha256": "888b79c4afea78a87c8e591928dbc015eeaaa3123e82477c56d40f3739bcf10c"
+      },
+      {
+        "thread": "nra-domain-mapping",
+        "owner": {
+          "pid": 3697958,
+          "start_time": 26677478
+        },
+        "journal": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-22T22-37-11-574Z_01a0cb44-1415-76ac-b5a0-26d3eb905f55.jsonl",
+        "bytes": 13212421,
+        "sha256": "197905b1c1ead0a6ae7bea70c8d2975c2b7312c1c58524ead5b1fcacc70a4799"
+      }
+    ],
+    "parent_personally_viewed": [
+      "phase-a-return.png",
+      "phase-idle-done.png"
+    ],
+    "limits": "Body-readiness and original resource/draft/reader preservation; no whole CPU, all footer-state or sub125ms raster readiness claim."
+  }
+}

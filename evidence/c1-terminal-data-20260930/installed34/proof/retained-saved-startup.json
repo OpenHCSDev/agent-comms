@@ -1,0 +1,29 @@
+{
+  "requests": 0,
+  "original_ansi_readable": true,
+  "source": {
+    "path": "/home/ts/wt/toad-workspace-growing-end-continuity-20260930/.artifacts/private-warm-scroll-236-01/native-forks/sessions/--home-ts-wt-toad-workspace-growing-end-continuity-20260930-.artifacts-private-warm-scroll-236-01-project--/2026-09-30T12-41-27-530Z_01a0f255-8aeb-754e-9e82-dc119cf460b0.jsonl",
+    "bytes": 41270331,
+    "sha256": "fc5a6209efae51c1cb82833b1e296ebeeefe9e28b180f5a02d70a2d0928084e0",
+    "original_source_and_owner_unchanged": true
+  },
+  "histories": [
+    {
+      "resource_id": 139832392001616,
+      "through": {
+        "session_file": "/home/ts/wt/g458j/u03/fixture/application/native-forks/sessions/--home-ts-wt-g458j-u03-fixture-application-project--/2026-10-01T03-28-48-327Z_01a0f581-eec8-7437-bcb0-698868022651.jsonl",
+        "offset": 41270450,
+        "receipts": {
+          "root": "/home/ts/wt/g458j/u03/fixture/private-root/wire",
+          "recipient": {
+            "name": "beta",
+            "created_at": 1790825325.6659524
+          },
+          "sequence": 0
+        },
+        "outcomes": null
+      },
+      "pages": 1
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "phase": "verified-capture-archive-originals-retired",
+  "time_ns": 1790823952591181405,
+  "removed_paths": [
+    "/home/ts/.cache/agent-scratch/comms-default-all-merged-startup-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-actual",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-click",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-context",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-corrected",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-cursor",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-final",
+    "/home/ts/.cache/agent-scratch/comms-default-goal-observation-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-managed-tool-bus-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-native-budget-progress-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-owner-cli-config-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-private-launch-caller-startup-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-sidebar-native-custody-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-viewport-buffer-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-viewport-native-cost-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-viewport-native-residency-20260930/capture",
+    "/home/ts/.cache/agent-scratch/toad-provider-login-physical-20260930/capture",
+    "/home/ts/.cache/agent-scratch/toad-provider-login-physical-20260930-02/capture"
+  ],
+  "entries": 764,
+  "original_allocated_bytes": 194465792,
+  "archive_allocated_bytes": 45031424,
+  "net_attributable_reclaimed_bytes": 149434368,
+  "before_archive_free_bytes": 26447941632,
+  "before_unlink_free_bytes": 26401980416,
+  "after_free_bytes": 26596446208,
+  "actual_unlink_df_delta_bytes": 194465792,
+  "actual_whole_operation_df_delta_bytes": 148504576,
+  "archive": "/home/ts/wt/comms-c1-terminal-data-20260930/.artifacts/storage-cleanup-20261001/retired-terminal-captures.tar.gz",
+  "archive_sha256": "077a153940c5a4236c2b4c6a7b74b1c66b41de8335f9a5a51c6c3801665c7b48",
+  "manifest": "/home/ts/wt/comms-c1-terminal-data-20260930/.artifacts/storage-cleanup-20261001/terminal-capture-manifest.json",
+  "verification": "all-member-hash-mode-exact-mtime-and-original-identity",
+  "preserved": "parent source/scripts/receipts, isolated state DBs, login-agent; all native journals/UNKNOWN in place",
+  "process_scan_limitations": [
+    {
+      "pid": 1786010,
+      "type": "PermissionError",
+      "comm": "systemd",
+      "stat_state": "S"
+    },
+    {
+      "pid": 1786012,
+      "type": "PermissionError",
+      "comm": "(sd-pam)",
+      "stat_state": "S"
+    }
+  ],
+  "route_sha256": "ea0bf1c06564cac1b4e7d55ac0a18540566f129b4a3c91dc4985a9b1771ca579",
+  "concurrent_disk_writers": true
+}

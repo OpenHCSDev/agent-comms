@@ -1,0 +1,76 @@
+{
+  "observed_ns": 301058680116857,
+  "original_frame": {
+    "observed_ns": 301058680116857,
+    "width": 160,
+    "height": 44,
+    "ansi": "\u001b[2;32H\u001b[49m \u001b[0m\u001b[39;49m\u2819 immediate-fork\u001b[0m\u001b[1;32;49m Indexing\u2026\u001b[0m\u001b[49m \u001b[0m\u001b[2;60H",
+    "driver": "LinuxDriver",
+    "headless": false,
+    "session_id": "immediate-fork",
+    "submissions": [],
+    "queue": [],
+    "mounted_starts": [],
+    "queue_region": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "chat_region": [
+      64,
+      3,
+      90,
+      32
+    ]
+  },
+  "original_turn_state": {
+    "active": null,
+    "finished_turn_id": "1824c2dc30c746a3835a31205a6b4bd1"
+  },
+  "canonical_registry_owner": {
+    "name": "immediate-fork",
+    "tags": [
+      "fork-added"
+    ],
+    "worktree": "/home/ts/wt/g458j/u03/fixture/application/project",
+    "parent": "beta",
+    "task": "",
+    "process_identity": {
+      "pid": 441130,
+      "start_time": 30100040
+    },
+    "session_file": "/home/ts/wt/g458j/u03/fixture/application/pi/sessions/--home-ts-wt-g458j-u03-fixture-application-project--/2026-10-01T03-29-18-921Z_01a0f582-664a-7132-91cb-6f9cc8dace6f.jsonl",
+    "model": "selected-offline/fixture",
+    "thinking_level": "off",
+    "goal": null,
+    "created_at": 1790825360.0081048,
+    "previous_worktrees": [],
+    "auto_title_pending": false,
+    "title": null,
+    "role": "agent",
+    "active_turn": null,
+    "channel_scope_generation": 0,
+    "turn_generation": 3,
+    "last_finished_turn_id": "1824c2dc30c746a3835a31205a6b4bd1"
+  },
+  "presentation_summary": "Ready",
+  "presentation_busy": false,
+  "presentation_binding": {
+    "kind": "live",
+    "owner": {
+      "incarnation": {
+        "name": "immediate-fork",
+        "created_at": 1790825360.0081048
+      },
+      "generation": 5
+    },
+    "process": {
+      "pid": 441130,
+      "start_time": 30100040
+    }
+  },
+  "session_details_title": "Session details \u00b7 Ready \u00b7 Saved history available",
+  "after_original_fifth_cancel_completion": true,
+  "original_emitted_ansi_no_forced_repaint": true
+}

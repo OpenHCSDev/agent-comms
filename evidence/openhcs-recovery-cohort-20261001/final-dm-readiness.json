@@ -1,0 +1,29 @@
+{
+  "assessment": "PASS scoped final-cohort physical DM readiness; not full history or post-carry channel acceptance",
+  "pins": {
+    "agent_comms": "cac7bdf337d9e4dba888ce7c2093ddcc55802bc3",
+    "toad": "7572b7b7856b1ac99f7bda5dac760c87c586a73d",
+    "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "physical_image": "/home/ts/.cache/agent-scratch/kepler-channel-recovery-final-cohort-20261001-physical01/capture/phase-receiver-open.png",
+  "physical_image_sha256": "9b08ab17011d5cf3767d64e4d642684a79eefe1779f3fe454113b7f522c7466b",
+  "parent_personally_reviewed": true,
+  "observed": "Fresh PR159 receiver Details Needs attention / Inbox unavailable matches original sidebar",
+  "originals_unchanged": true,
+  "runtime_unchanged": true,
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": []
+  },
+  "source_review": "/home/ts/.cache/agent-scratch/kepler-channel-recovery-final-cohort-20261001-physical01/combined-cohort-physical-review.json",
+  "source_review_sha256": "9539efb9cf70c3f99fa137aa0df5a5d2bb6482596a47754f5d5115da935837bd",
+  "publication_conditions": [
+    "Final combined private archive Saved/native-history/End/IRC acceptance",
+    "Final combined installed native admission/cancellation/independent reply acceptance",
+    "Reviewed same-batch one-use index and provenance carry with preimages",
+    "Fresh no-client and idle original-owner guards",
+    "Post-publication actual default channel/receiver verification"
+  ]
+}

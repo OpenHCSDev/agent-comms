@@ -1,0 +1,45 @@
+{
+  "source_provenance": {
+    "agent-comms": {
+      "version": "0.1.0",
+      "direct_url": {
+        "url": "https://github.com/OpenHCSDev/agent-comms.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "700722ea88ca23c1404eda164aaff3c6f4de7268",
+          "requested_revision": "700722ea88ca23c1404eda164aaff3c6f4de7268"
+        }
+      }
+    },
+    "batrachian-toad": {
+      "version": "0.6.20",
+      "direct_url": {
+        "url": "https://github.com/OpenHCSDev/toad.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "517f2ea303e8cf73f1039a9f882ebc670441a93e",
+          "requested_revision": "517f2ea303e8cf73f1039a9f882ebc670441a93e"
+        }
+      }
+    },
+    "textual": {
+      "version": "8.2.8",
+      "direct_url": {
+        "url": "https://github.com/OpenHCSDev/textual.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "412b5a2b5da8875dc2f3dc5be2365abddce0537b",
+          "requested_revision": "412b5a2b5da8875dc2f3dc5be2365abddce0537b"
+        }
+      }
+    }
+  },
+  "sdk": "0.12.1",
+  "native_full_trust": true,
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-b68dfdced9148b50/node_modules/@earendil-works/pi-coding-agent",
+  "native_cli": "/home/ts/.local/share/agent-comms/native-current-b68dfdced9148b50/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+  "manifest_sha256": "b68dfdced9148b50e753e94f8a6660bc8d108d100667f6b32c368eaa31469dba",
+  "incoming_signature": "(text: 'str' = '', *, routing: 'TurnRouting | None' = None, source: 'MessageReference', timestamp: 'float | None' = None, route: 'MessageRoute') -> None",
+  "sent_signature": "(text: 'str' = '', *, routing: 'TurnRouting | None' = None, source: 'MessageReference', timestamp: 'float | None' = None) -> None",
+  "defaults_changed": false
+}

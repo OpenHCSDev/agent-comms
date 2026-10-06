@@ -1,0 +1,12 @@
+{
+  "source": "/home/ts/wt/comms-native-compaction-progress-20260929/stack/.pi-native-b68dfdced9148b50",
+  "target": "/home/ts/.local/share/agent-comms/native-current-b68dfdced9148b50",
+  "state": "copied-native-trust-verified-not-activated",
+  "native_manifest_sha256": "b68dfdced9148b50e753e94f8a6660bc8d108d100667f6b32c368eaa31469dba",
+  "native_tree_sha256": "614a956de3870ea47d6e217da6ae9b3b1a952d2214d90187b17351625110ff7a",
+  "verification": {
+    "entrypoint": "runtime-canonical-backend-cohort-20260930/bin/python -m agent_comms.native_package",
+    "exit_code": 0,
+    "scope": "full copied native package tree against installed repository commitment"
+  }
+}

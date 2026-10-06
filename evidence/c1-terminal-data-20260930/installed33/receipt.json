@@ -1,0 +1,201 @@
+{
+  "verdict": "PASS affected continuous native/ACP/LinuxDriver fork/queue/first-input/reply/cancel and strict original queue/chat ANSI scope",
+  "core": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+  "toad": "15601a4f785fd6ee3e53e12b3a971ae1186f4482",
+  "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+  "driver": "98a0eac445bf446ff4a33c65d0121cda836214d4",
+  "exit_code": 0,
+  "elapsed_seconds": 85.53802990500117,
+  "stage": "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001",
+  "runtime_activation_unchanged": true,
+  "manual_replay": false,
+  "old_u01_preserved": true,
+  "old_u02_preserved": true,
+  "public_mutations": 0,
+  "paid_calls": 0,
+  "gate": "existing actual native+ACP+LinuxDriver firstfork/five original preDelivery/oncechat/cancel; raw source proof review pending",
+  "actual_model": "selected-offline/fixture; sole controlled localhost configured provider; thinking off",
+  "provider_posts": 5,
+  "native_original_inputs": 5,
+  "physical_enter_preStarted_proofs": [
+    {
+      "input_id": "0d5196f5788c43f1a6bb4457ec2eba04",
+      "text": "VISIBILITY_CANCEL_STARTED",
+      "observed_ns": 292896879965722,
+      "physical_enter": true,
+      "native_started": false
+    },
+    {
+      "input_id": "3001ec0aad5a4861968be8ff0ba48096",
+      "text": "VISIBILITY_QUEUED_FOLLOWUP",
+      "observed_ns": 292888962244637,
+      "physical_enter": true,
+      "native_started": false
+    },
+    {
+      "input_id": "ae25fd1502894e6a87c0e878fe8cb8ca",
+      "text": "VISIBILITY_BUSY_TURN",
+      "observed_ns": 292877712034763,
+      "physical_enter": true,
+      "native_started": false
+    },
+    {
+      "input_id": "c5fa40432de74a65bcef278d6c673ed1",
+      "text": "FIRST_FORK_NEW_INPUT",
+      "observed_ns": 292869549613358,
+      "physical_enter": true,
+      "native_started": false
+    },
+    {
+      "input_id": "f2fe822cd1ab427abb7c3327311aa5cb",
+      "text": "FORK_PARENT_SEED",
+      "observed_ns": 292845754546968,
+      "physical_enter": true,
+      "native_started": false
+    }
+  ],
+  "continuous_controls": {
+    "source_head": "15601a4f785fd6ee3e53e12b3a971ae1186f4482",
+    "actual_canonical_fork": true,
+    "physical_open_before_rpc_socket": true,
+    "empty_task": true,
+    "automatic_child_provider_requests": 0,
+    "inherited_tags_in_dialog": [
+      "team"
+    ],
+    "parent_tags_after_fork": [
+      "team"
+    ],
+    "child_tags": [
+      "fork-added"
+    ],
+    "physical_added_channel_disclosure": true,
+    "pending_after_old_five_second_expiry": true,
+    "same_owner_process_through_first_reply": true,
+    "first_new_message_physical_enter": true,
+    "new_child_response_painted_once": true,
+    "one_logical_tab": true,
+    "new_child_response_resources": 1,
+    "new_child_response_paint_count": 1,
+    "title_without_at_placeholder": "immediate-fork",
+    "provider_inputs": 2
+  },
+  "preseed_menu": {
+    "target": "beta",
+    "channel": "#team",
+    "row_region": [
+      2,
+      11,
+      57,
+      2
+    ],
+    "screen_point": [
+      2,
+      11
+    ],
+    "native_hit_is_original_row": true,
+    "native_hit_type": "ThreadRow",
+    "group_expanded": true,
+    "provider_posts_before_seed": 0,
+    "native_inputs_sent": 0,
+    "same_installed_app": true,
+    "physical_driver": "LinuxDriver",
+    "headless": false,
+    "menu_opened": true,
+    "pointer_after_click": [
+      2,
+      11
+    ],
+    "declared_menu_escape_closed": true
+  },
+  "original_native_queue_cancel": [
+    {
+      "phase": "accepted_pending",
+      "input_id": "3001ec0aad5a4861968be8ff0ba48096",
+      "queue": {
+        "kind": "available",
+        "items": [
+          {
+            "input_id": "3001ec0aad5a4861968be8ff0ba48096",
+            "text": "VISIBILITY_QUEUED_FOLLOWUP"
+          }
+        ],
+        "restored": []
+      }
+    },
+    {
+      "phase": "native_started",
+      "input_id": "3001ec0aad5a4861968be8ff0ba48096",
+      "native_id": "a4f0787f6ee65dc39225d4edb649aec4"
+    },
+    {
+      "phase": "cancelled_after_native_start",
+      "delivery": {
+        "inputs": [],
+        "historicalCount": 0,
+        "dismissedHistoricalCount": 0,
+        "historicalInputs": [],
+        "currentScope": "owner_queue"
+      }
+    }
+  ],
+  "original_terminal_review": {
+    "frames": 2390,
+    "drivers": [
+      "LinuxDriver"
+    ],
+    "headless": [
+      false
+    ],
+    "native_painted_request_ids": [
+      "0d5196f5788c43f1a6bb4457ec2eba04",
+      "3001ec0aad5a4861968be8ff0ba48096",
+      "ae25fd1502894e6a87c0e878fe8cb8ca",
+      "c5fa40432de74a65bcef278d6c673ed1",
+      "f2fe822cd1ab427abb7c3327311aa5cb"
+    ],
+    "before_delivery_paint_ns": {
+      "f2fe822cd1ab427abb7c3327311aa5cb": 292845754546968,
+      "c5fa40432de74a65bcef278d6c673ed1": 292869549613358,
+      "ae25fd1502894e6a87c0e878fe8cb8ca": 292877712034763,
+      "3001ec0aad5a4861968be8ff0ba48096": 292888962244637,
+      "0d5196f5788c43f1a6bb4457ec2eba04": 292896879965722
+    },
+    "source_to_first_paint_ns": {
+      "f2fe822cd1ab427abb7c3327311aa5cb": 0,
+      "c5fa40432de74a65bcef278d6c673ed1": 0,
+      "ae25fd1502894e6a87c0e878fe8cb8ca": 0,
+      "3001ec0aad5a4861968be8ff0ba48096": 0,
+      "0d5196f5788c43f1a6bb4457ec2eba04": 0
+    },
+    "scope": "original selected queue and native chat viewport; excludes status captions"
+  },
+  "failure_instant_capture": "armed at original single-frame callback; not triggered; negative capture-body execution not claimed",
+  "actual_frame_driver": "LinuxDriver",
+  "headless": false,
+  "remaining_owned_processes": [],
+  "manual_signals": 0,
+  "production_changed_lines": 0,
+  "production_deleted_lines": 0,
+  "source_to_first_paint_qualification": "observer-frame join only; zero values do not establish wall delivery/firstpaint latency",
+  "status_caption_scope": {
+    "strict_review_includes_status_captions": false,
+    "last_emitted_cancel_frame": "Session details Thinking\u00b7Cancelling",
+    "original_control_canonical_cancel_settled": true,
+    "stationary_ready_paint_wait_performed": false,
+    "permanent_staleness_claim": false,
+    "named_followup_owner": "Arendt original phase publication; exact observation sent directly"
+  },
+  "still_not_claimed": [
+    "public/default installed readiness",
+    "full UX/performance",
+    "BUS independent gate",
+    "stationary postcancel status Ready paint"
+  ],
+  "all_original_failed_gates_preserved": [
+    "g458f",
+    "g458g",
+    "g458h"
+  ],
+  "next_step": "Parent review and independent Sch BUS gate; parent-only public cutover; one affected ordinary default-entrypoint check after publication"
+}

@@ -1,0 +1,24 @@
+{
+  "state": "merged-source-integrated-not-default-installed",
+  "integration_head": "ac53d4fcbd19f2b176e1ba835438ad656da17466",
+  "main_merge": "000a31c562b6d048e26e288b24fcd3f1ac64f803",
+  "reviewed_head": "1f327fd01c6d46090113394c482136b8b49b4849",
+  "prs": {
+    "436": "merged",
+    "430": "merged same head"
+  },
+  "source_and_stack_identical_to_main": true,
+  "focused_native_acceptance": "evidence/ordinary-turn-publication/run02.json; original final, Bash progress/final and provider503,3cases/33.42s/native614/exit0; source-import actual native boundary",
+  "resource_acceptance": "preserved canonical-lifecycle-real05.json; actual installed lifecycle89.168s, four distinct Started inputs,0replays",
+  "merge_conflicts": 0,
+  "default_core": "72062939239b0f07707406309305a056a23f925f",
+  "default_native": "4ab910061590d1e0",
+  "pending": [
+    "Arendt certified outside-src old720 durable routing carry with actual old-format fixture",
+    "Sch215 full installed hot handling,31s idle,A/B/A,cold-reopen gate",
+    "matched normal paired install and actual default entrypoint after canonical quiet cutover"
+  ],
+  "frozen_messaging_stage_unchanged": "Core41/Toade59/Text650/nativee36",
+  "original_inputs_replayed": 0,
+  "live_owner_signals": 0
+}

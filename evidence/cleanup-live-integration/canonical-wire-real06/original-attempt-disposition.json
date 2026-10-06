@@ -1,0 +1,53 @@
+{
+  "watchdog_exit_code": 137,
+  "originals": [
+    {
+      "seq": 1,
+      "message_id": "811956778224"
+    },
+    {
+      "seq": 2,
+      "message_id": "c136d11a5590"
+    }
+  ],
+  "original_native_reply": {
+    "assignment_id": "cohort-v1:4370a41873ce057002d5a68831c866bf72cac4e6e2d2ebc4b3106e53b55d381d",
+    "recipient_lookup": "f2d1b106976d40521899875ce49ce13b",
+    "native_input_id": "afbb66cc0a7bed222740a5b9d4274df9",
+    "execution_id": "wirev1754258bdbf341dc0c3872fb80871a7681d78409c2799e3c183a237810f03c616",
+    "native_entry_id": "945beb5f",
+    "native_session_file": "/var/tmp/comms-real-wire-twt0ihzt/wire/native-sessions/f2d1b106976d40521899875ce49ce13b/2026-09-30T06-38-03-181Z_01a0f108-d5ac-77bb-9bc1-f879eb98147c.jsonl"
+  },
+  "canonical_feedback_after_watchdog": {
+    "(2, 'c136d11a5590')": [
+      {
+        "recipient_identity": {
+          "recipient_lookup": "ca7e9f4c75fb9853d9348edc129879cb",
+          "canonical_thread": "alpha"
+        },
+        "state": "Checked \u2014 no response",
+        "detail": "The agent checked this message and chose not to respond.",
+        "priority": 2,
+        "busy": false,
+        "message": null,
+        "displayed_to": []
+      }
+    ],
+    "(1, '811956778224')": [
+      {
+        "recipient_identity": {
+          "recipient_lookup": "f2d1b106976d40521899875ce49ce13b",
+          "canonical_thread": "beta"
+        },
+        "state": "Responded",
+        "detail": "The response workflow completed.",
+        "priority": 2,
+        "busy": false,
+        "message": null,
+        "displayed_to": []
+      }
+    ]
+  },
+  "original_inputs_replayed": 0,
+  "partial_phase": "original native publication; one reply body/header checks and SVG captured; subsequent handling/31s/A-B-A/cold reopen unproven"
+}

@@ -1,0 +1,73 @@
+{
+  "state": "DEFAULT_INSTALLED_AND_ACTUAL_ENTRYPOINT_STARTUP_VISUALLY_VERIFIED",
+  "scope": "Core499/501 compaction budget/progress; Toad288/290/293 Textual20 link/history/source lifetime; not whole backlog or performance/batching",
+  "prefix": "/home/ts/wt/toad-critical-compaction501-release-20261001/.artifacts/runtime-critical-compaction501-20261001",
+  "core": "0f63cfb0e8bbf77b32dc803b81481428fa38cd99",
+  "toad": "c97255e80fd8a32dff312a44c24cddc01b12d29e",
+  "textual": "e36d7ee4b8b1945ebf90fcb840753a68fe2ae16d",
+  "native_manifest": "5184ffa6d842fe232b370e40f9ee532696e9f83b789ab009e047c9f164026c68",
+  "retained_owners": 19,
+  "settings_readback": "originals equal except renewed process identity",
+  "protected_byte_invariants": 38,
+  "compaction_journal": {
+    "classification": "runtime/preserve",
+    "original_files": [
+      {
+        "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/compaction-commits.sqlite3",
+        "sha256": "2ea6b4113ac272be23221347fb9690d830eb20dd6893d0cf95320756b11b9561",
+        "revision": {
+          "identity": {
+            "device": 2083,
+            "inode": 3996791
+          },
+          "size": 446464,
+          "mtime_ns": 1790901036518347256,
+          "ctime_ns": 1790901036518347256
+        }
+      }
+    ],
+    "retired": [],
+    "copied_bytes": 0
+  },
+  "default_command": [
+    "/home/ts/bin/toad-comms",
+    "openhcs-helper"
+  ],
+  "default_runtime_selection": "PATH agent-comms-acp",
+  "default_launcher": "/home/ts/.agent-comms/stack/bin/toad-comms",
+  "default_before_png": "/home/ts/.cache/agent-scratch/parent-critical501-default-ui-20261002/before.png",
+  "default_before_png_sha256": "a82038aef2330716e4d56b64bcf6b8f484c2ebb5818f4dcf0467f3f12f248d1d",
+  "default_before_view": {
+    "_coordination_root": null,
+    "_comms_thread": "openhcs-helper",
+    "_agent_session_id": "openhcs-helper",
+    "_agent_session_title": "openhcs-helper",
+    "owner_mode": null,
+    "me": null,
+    "target": null,
+    "kind": null,
+    "recovery_root": null,
+    "_reactive_project_path": "/home/ts/code/projects/openhcs"
+  },
+  "default_startup_observation": "parent personally viewed retained openhcs-helper history, exact name, Ready; original diagnostic history stays visible",
+  "recording_completed": false,
+  "recording_error": "TimeoutExpired: Command '('/home/ts/wt/toad-critical-compaction501-release-20261001/.artifacts/runtime-critical-compaction501-20261001/bin/python', '-c', \"import os,sys\\nfd=int(sys.argv[1]); error_fd=int(sys.argv[2]); go=os.read(fd,1); os.close(fd)\\nif go != b'G': sys.exit(126)\\nos.set_inheritable(error_fd, False)\\ntry: os.execvpe(sys.argv[3], sys.argv[3:], os.environ)\\nexcept OSError as error:\\n    os.write(error_fd, str(error.errno).encode()); os._exit(126)\\n\", '9', '12', 'xdotool', 'sleep', '4')' timed out after 3.707223899953533 seconds",
+  "recording_limit": "caller omitted explicit Observe journey, default Scroll ran beyond finite observation budget; no full scroll/performance claim or hide of failure",
+  "capture_cleanup": {
+    "remaining": [],
+    "errors": []
+  },
+  "default_owner_preserved": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "mode": "existing_thread",
+    "name": "openhcs-helper",
+    "identity": {
+      "pid": 2766118,
+      "start_time": 37964309
+    },
+    "original_owner_alive": true
+  },
+  "provider_prompts": 0,
+  "original_input_replays": 0,
+  "full_goal_complete": false
+}

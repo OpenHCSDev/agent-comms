@@ -1,0 +1,75 @@
+{
+  "state": "Actual configured default326 channel probe and peer follow-through complete for10running owners",
+  "source_message": {
+    "seq": 385,
+    "id": "1ec243f17eac",
+    "from": "user",
+    "to": "#openhcs",
+    "ts": 1790945946.952061,
+    "type": "info",
+    "text": "testing after the new install; please reply tersely if you receive this",
+    "sender_role": "user"
+  },
+  "commit_seconds": 1.086529016494751,
+  "initial_accept_seconds": 2.7819089889526367,
+  "reply_count": 10,
+  "reply_seconds": [
+    {
+      "sender": "openhcs-audit-merged-models",
+      "seconds": 38.04966902732849
+    },
+    {
+      "sender": "compaction499-live-architecture-memory",
+      "seconds": 38.13523244857788
+    },
+    {
+      "sender": "openhcs-audit-merged-runtime",
+      "seconds": 38.261882066726685
+    },
+    {
+      "sender": "openhcs-architecture-memory",
+      "seconds": 38.3882155418396
+    },
+    {
+      "sender": "compaction501-live-architecture-memory",
+      "seconds": 38.78430247306824
+    },
+    {
+      "sender": "openhcs-pr159-viewer-bind-owner",
+      "seconds": 38.91970658302307
+    },
+    {
+      "sender": "openhcs-audit-open-prs",
+      "seconds": 48.6018500328064
+    },
+    {
+      "sender": "openhcs-audit-merged-boundaries",
+      "seconds": 48.72761845588684
+    },
+    {
+      "sender": "openhcs-helper",
+      "seconds": 48.81201648712158
+    },
+    {
+      "sender": "openhcs-helper2",
+      "seconds": 49.25322508811951
+    }
+  ],
+  "original_claims": {
+    "triage_pending": 2,
+    "completed": 10
+  },
+  "peer_claims": {
+    "triage_pending": 20,
+    "ignored": 90
+  },
+  "external_pending": [
+    "Linnaeus",
+    "openhcs-headless-bootstrap-worker"
+  ],
+  "new_alerts": [],
+  "observed_at": 1790946166.6623094,
+  "original372_replayed": false,
+  "raw_receipts_modified": false,
+  "limits": "One fresh real configured channel input; does not prove lower total turn latency or smooth UI. Two stopped external participants pending. Native532 not installed."
+}

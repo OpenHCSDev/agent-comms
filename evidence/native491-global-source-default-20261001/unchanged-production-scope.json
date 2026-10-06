@@ -1,0 +1,11 @@
+{
+  "native_files": 19188,
+  "native_changed_files": [
+    "dist/agent-comms-imports.json",
+    "agent-comms-extensions/global-project-sync/index.mjs"
+  ],
+  "project_code_same_after_source_comment_and_symbol_normalization": true,
+  "core_python_source_changes": [],
+  "affected_new_journey": "mandatory automatic global discovery + saved native startup before route publication",
+  "reused_unaffected_journeys": "earlier triage and managed retained input gates are retained evidence; no fresh run claimed"
+}

@@ -1,0 +1,27 @@
+{
+  "state": "ACCEPTED_SCOPED_NATIVE_SELECTED_COMPACTION_COMMIT; not whole C49 pass",
+  "original_receipt": "/home/ts/wt/comms-turn-context-phase1-20261001/evidence/turn-context-phase1-20261001/installed-final49-receipt.json",
+  "original_receipt_sha256": "25880b32402362a6dbc57c44f8318679a4c446598d50278ff3fce381dd7599b6",
+  "original_whole_run_state": "FAILED_NO_REPLAY",
+  "original_whole_failure": "fixture passed creation/resume-only owner_store to later ClearGoalAction; canonical check_grant refused before apply",
+  "selected_manual_commit": "9e59162dd9bd465da0b7358896e31438",
+  "selected_operation": "ee934c5c1f604f5693677d617cb60ec6",
+  "native_compaction_entry": "becefa9b",
+  "summary_utf8_bytes": 1292,
+  "native_summary_sha256": "9eb36c45034a2daa3085e52c376ca6cbab61db8807ed71d0bfb80dcc1aa64c19",
+  "native_file_sha256": "832f52b72c94cf2d3c417b08dc6016348ac263715e892901e6b94dfffa4e2924",
+  "old_core": "0ea6dccbd39b1f8656e2fc2ad983046244d9312d",
+  "target_core": "4345bfc8aac0e4717450d4f79e6fe53e331f3ccf",
+  "changed_product_files": [
+    "src/agent_comms/acp_extension.py",
+    "src/agent_comms/runtime_requests.py",
+    "src/agent_comms/session_lifecycle.py"
+  ],
+  "compaction_retained_source_native_unchanged": true,
+  "native_manifest": "0064a96bb79c21c13317a37f44173bd0acfb63d628e9f9b31cd3a374c2c25ae1",
+  "paid_provider_calls": 0,
+  "replays": 0,
+  "receiver_private_original_absent": true,
+  "receiver_public_facts_neutral": true,
+  "does_not_close_full_S2_or_S4": true
+}

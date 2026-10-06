@@ -162,9 +162,54 @@
   "cleanup_process_references": [],
   "visual_disposition": "Text/coordinates and original compositor assertions support publication/geometry; black-on-black SVG/PNG does not establish physically readable colored UI. Physical color visibility unproven. Kepler owns recorder environment normalization; no altered artifact passed off as original.",
   "remaining_limits": [
-    "No physically readable colored frame claim from black-on-black exports.",
+    "Original black hot SVG exports are limited; fresh SDK-forked saved native source physical st/Xvfb visibility passed. No retrospective original hot-colored-frame claim.",
     "No source/resource reconstruction of original failed u05 missing/duplicate/offscreen count; preserved UNKNOWN.",
     "B/A/B reply_seconds include native generation and are not render-only tab latency.",
     "Independent joint-native strict physical firstchild duplicate failure remains owned; no global Ready."
-  ]
+  ],
+  "physical_saved_source_qualification": {
+    "scope": "Provider-free fresh private SDK-forked original native saved-source physical visibility only; not original hot-frame replay",
+    "prefix": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930",
+    "pins": {
+      "Core": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+      "Toad": "85d45b512cac88bdf5dd8870f41e53768ab3c009",
+      "Textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+      "SDK": "0.12.1",
+      "native": "593b978a717ae8f6ab4300a1a107b615c8ced52e767ef4cad0596f827041a218"
+    },
+    "physical_after_personally_viewed": true,
+    "visible_answers": [
+      "CONTROLLED_RETURN_0",
+      "CONTROLLED_RETURN_2"
+    ],
+    "each_visible_answer_body_and_agent_header_once": true,
+    "ready_label_visible": true,
+    "new_fixture": "/home/ts/wt/g460b/v03",
+    "native_fork": {
+      "session_id": "01a0f4f0-4bc1-7307-9727-e7aa50abdd31",
+      "session_file": "/home/ts/wt/g460b/v03/pi/sessions/--home-ts-wt-g460b-v03-project--/2026-10-01T00-49-43-873Z_01a0f4f0-4bc1-7307-9727-e7aa50abdd31.jsonl"
+    },
+    "all_original_native_message_rows_and_ids_preserved_in_fork": true,
+    "native_input_count": 0,
+    "execution_count": 0,
+    "new_bus_bytes": 0,
+    "acp_prompt_calls": 0,
+    "configured_provider": "selected-offline/fixture; no inputs started",
+    "original_registry_bus_native_hashes_unchanged": true,
+    "recorder_exit_code": 0,
+    "recording_duration_seconds": 17.26856991200475,
+    "runtime_unchanged": true,
+    "recorder_remaining_owned_pids": [],
+    "recorder_cleanup_errors": [],
+    "fresh_fixture_process_refs": [],
+    "original_native_manager_required_cwd_proof_preserved": true,
+    "failures_preserved": [
+      "physical-v01: plain copy declared wrongcwd",
+      "physical-v02: SDKfork correct header but recorder launchcwd different"
+    ],
+    "no_original_artifact_recolored": true,
+    "no_original_failed_input_replayed": true,
+    "whole_release_ready": false,
+    "remaining_limit": "Original u06 headless black exports remain limited; this proves fresh retained-source installed physical visibility. Independent firstfork duplicate-frame failure remains owned by Heisenberg."
+  }
 }

@@ -1,0 +1,158 @@
+{
+  "time_ns": 1790823947707164299,
+  "candidates": [
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-default-all-merged-startup-20260930",
+      "allocated_unique_inode_bytes": 7757824,
+      "single_link_file_bytes": 7757824,
+      "multiply_linked_files": 0,
+      "semantic_data_files": [
+        "/home/ts/.cache/agent-scratch/comms-default-all-merged-startup-20260930/capture/events.jsonl",
+        "/home/ts/.cache/agent-scratch/comms-default-all-merged-startup-20260930/state/toad/toad.db"
+      ]
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930",
+      "allocated_unique_inode_bytes": 32886784,
+      "single_link_file_bytes": 32886784,
+      "multiply_linked_files": 0,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-default-goal-observation-20260930",
+      "allocated_unique_inode_bytes": 13705216,
+      "single_link_file_bytes": 13705216,
+      "multiply_linked_files": 0,
+      "semantic_data_files": [
+        "/home/ts/.cache/agent-scratch/comms-default-goal-observation-20260930/capture/events.jsonl",
+        "/home/ts/.cache/agent-scratch/comms-default-goal-observation-20260930/state/toad/toad.db"
+      ]
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-default-managed-tool-bus-20260930",
+      "allocated_unique_inode_bytes": 10461184,
+      "single_link_file_bytes": 10461184,
+      "multiply_linked_files": 0,
+      "semantic_data_files": [
+        "/home/ts/.cache/agent-scratch/comms-default-managed-tool-bus-20260930/capture/events.jsonl",
+        "/home/ts/.cache/agent-scratch/comms-default-managed-tool-bus-20260930/state/toad/toad.db"
+      ]
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-default-native-budget-progress-20260930",
+      "allocated_unique_inode_bytes": 7606272,
+      "single_link_file_bytes": 7606272,
+      "multiply_linked_files": 0,
+      "semantic_data_files": [
+        "/home/ts/.cache/agent-scratch/comms-default-native-budget-progress-20260930/capture/events.jsonl",
+        "/home/ts/.cache/agent-scratch/comms-default-native-budget-progress-20260930/state/toad/toad.db"
+      ]
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-default-owner-cli-config-20260930",
+      "allocated_unique_inode_bytes": 34467840,
+      "single_link_file_bytes": 34467840,
+      "multiply_linked_files": 0,
+      "semantic_data_files": [
+        "/home/ts/.cache/agent-scratch/comms-default-owner-cli-config-20260930/capture/events.jsonl",
+        "/home/ts/.cache/agent-scratch/comms-default-owner-cli-config-20260930/state/toad/toad.db"
+      ]
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-default-private-launch-caller-startup-20260930",
+      "allocated_unique_inode_bytes": 7610368,
+      "single_link_file_bytes": 7610368,
+      "multiply_linked_files": 0,
+      "semantic_data_files": [
+        "/home/ts/.cache/agent-scratch/comms-default-private-launch-caller-startup-20260930/capture/events.jsonl",
+        "/home/ts/.cache/agent-scratch/comms-default-private-launch-caller-startup-20260930/state/toad/toad.db"
+      ]
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-default-sidebar-native-custody-20260930",
+      "allocated_unique_inode_bytes": 7753728,
+      "single_link_file_bytes": 7753728,
+      "multiply_linked_files": 0,
+      "semantic_data_files": [
+        "/home/ts/.cache/agent-scratch/comms-default-sidebar-native-custody-20260930/capture/events.jsonl",
+        "/home/ts/.cache/agent-scratch/comms-default-sidebar-native-custody-20260930/state/toad/toad.db"
+      ]
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-default-viewport-buffer-20260930",
+      "allocated_unique_inode_bytes": 41021440,
+      "single_link_file_bytes": 41021440,
+      "multiply_linked_files": 0,
+      "semantic_data_files": [
+        "/home/ts/.cache/agent-scratch/comms-default-viewport-buffer-20260930/capture/events.jsonl",
+        "/home/ts/.cache/agent-scratch/comms-default-viewport-buffer-20260930/state/toad/toad.db"
+      ]
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-default-viewport-native-cost-20260930",
+      "allocated_unique_inode_bytes": 7614464,
+      "single_link_file_bytes": 7614464,
+      "multiply_linked_files": 0,
+      "semantic_data_files": [
+        "/home/ts/.cache/agent-scratch/comms-default-viewport-native-cost-20260930/capture/events.jsonl",
+        "/home/ts/.cache/agent-scratch/comms-default-viewport-native-cost-20260930/state/toad/toad.db"
+      ]
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-default-viewport-native-residency-20260930",
+      "allocated_unique_inode_bytes": 7598080,
+      "single_link_file_bytes": 7598080,
+      "multiply_linked_files": 0,
+      "semantic_data_files": [
+        "/home/ts/.cache/agent-scratch/comms-default-viewport-native-residency-20260930/capture/events.jsonl",
+        "/home/ts/.cache/agent-scratch/comms-default-viewport-native-residency-20260930/state/toad/toad.db"
+      ]
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/toad-provider-login-physical-20260930",
+      "allocated_unique_inode_bytes": 5246976,
+      "single_link_file_bytes": 5246976,
+      "multiply_linked_files": 0,
+      "semantic_data_files": [
+        "/home/ts/.cache/agent-scratch/toad-provider-login-physical-20260930/capture/events.jsonl",
+        "/home/ts/.cache/agent-scratch/toad-provider-login-physical-20260930/state/toad/toad.db"
+      ]
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/toad-provider-login-physical-20260930-02",
+      "allocated_unique_inode_bytes": 13606912,
+      "single_link_file_bytes": 13606912,
+      "multiply_linked_files": 0,
+      "semantic_data_files": [
+        "/home/ts/.cache/agent-scratch/toad-provider-login-physical-20260930-02/capture/events.jsonl",
+        "/home/ts/.cache/agent-scratch/toad-provider-login-physical-20260930-02/state/toad/toad.db"
+      ]
+    }
+  ],
+  "process_refs": [],
+  "process_scan_errors": [
+    {
+      "pid": 1786010,
+      "type": "PermissionError",
+      "comm": "systemd",
+      "stat_state": "S"
+    },
+    {
+      "pid": 1786012,
+      "type": "PermissionError",
+      "comm": "(sd-pam)",
+      "stat_state": "S"
+    }
+  ],
+  "launcher_refs": [],
+  "metadata_refs": [],
+  "donor_refs": [],
+  "route_sha256": "ea0bf1c06564cac1b4e7d55ac0a18540566f129b4a3c91dc4985a9b1771ca579",
+  "route_root_keys": [
+    "/home/ts/.agent-comms",
+    "/var/tmp/agent-comms-live-20260927-wzjtqhza"
+  ],
+  "donor_scan_exit": 1,
+  "donor_scan_error": "",
+  "safe_to_remove": false
+}

@@ -1,0 +1,15 @@
+{
+  "default_core_source": "d0773b22523e44428f10f0d9f1f961fd3fce8cac",
+  "core491_merge": "eae8818e256701ed18e9015bd873b912ee2839d8",
+  "toad_source": "457461c9cd585df8c232061c2c7ff7b48b2afc05",
+  "toad281_merge": "37e7867bc646aac686837687c1ca9c775503c71b",
+  "runtime": "/home/ts/wt/toad-receiving-native491-20261001/.artifacts/runtime-native491-20261001",
+  "native": "/home/ts/wt/comms-native17d-source-repair-20261001/stack/.pi-native-c4d4b5a2cbc2abc0/node_modules/@earendil-works/pi-coding-agent",
+  "publication_phase": "retained-batch-launched-configurations-verified-public-ui-pending",
+  "owners_restarted": 17,
+  "publication_elapsed_seconds": 45.84543013572693,
+  "protected_original_files_under_stopped_custody": 34,
+  "original_test_retried": false,
+  "shared_source_sha256": "a9519fa9c11dcc44eb34805e927b5c51478398cf64e8e3c8135fc41040ca6e21",
+  "default_ui_verification": "Actual default toad-comms openhcs-helper, isolated display8062, retained history and Ready visually reviewed before/after; runtime and original owner unchanged; all test children retired. No provider input or scrolling performance claim."
+}

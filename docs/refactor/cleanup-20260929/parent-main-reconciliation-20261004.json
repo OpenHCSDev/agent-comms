@@ -1,0 +1,972 @@
+{
+  "base": "9195325146f70886d7d879edbfcae74b12bd63c8",
+  "resolved_tree": "1e34e8341a3a59dfef2225718020114c625ae6af",
+  "mechanism": "original audit.findings.Package/audit.repository.Repository",
+  "coverage": {
+    "main": {
+      "src/agent_comms": {
+        "parsed": 311,
+        "omitted": []
+      },
+      "tests": {
+        "parsed": 365,
+        "omitted": []
+      },
+      "tools": {
+        "parsed": 53,
+        "omitted": []
+      }
+    },
+    "resolved": {
+      "src/agent_comms": {
+        "parsed": 311,
+        "omitted": []
+      },
+      "tests": {
+        "parsed": 366,
+        "omitted": []
+      },
+      "tools": {
+        "parsed": 54,
+        "omitted": []
+      }
+    }
+  },
+  "related_functions": {
+    "main": {
+      "src/agent_comms/owner_launch.py": [
+        {
+          "declaration": "src/agent_comms/owner_launch.py::capture",
+          "lines": 27,
+          "calls": [
+            "Path",
+            "RelationViolationError",
+            "cls",
+            "current",
+            "dict",
+            "fsdecode",
+            "get",
+            "items",
+            "owner_identity",
+            "read_bytes",
+            "require",
+            "require_owner_process",
+            "require_process",
+            "split"
+          ],
+          "key_reads": {}
+        }
+      ],
+      "src/agent_comms/owner_restart.py": [
+        {
+          "declaration": "src/agent_comms/owner_restart.py::restart",
+          "lines": 28,
+          "calls": [
+            "OwnerBusyRefusal",
+            "RelationViolationError",
+            "_store_lock",
+            "append",
+            "assert_open_unlocked",
+            "capture",
+            "cls",
+            "complete",
+            "environment",
+            "fence",
+            "getpid",
+            "require_active",
+            "require_executable",
+            "require_idle",
+            "require_native",
+            "require_process",
+            "require_selection",
+            "snapshot",
+            "threads",
+            "tuple"
+          ],
+          "key_reads": {}
+        }
+      ],
+      "src/agent_comms/store_files.py": [
+        {
+          "declaration": "src/agent_comms/store_files.py::_held_store_source",
+          "lines": 16,
+          "calls": [
+            "RelationViolationError",
+            "S_ISREG",
+            "StoreLock",
+            "ValueError",
+            "WireLog",
+            "exists",
+            "fileno",
+            "lstat",
+            "release_store_lock",
+            "type",
+            "verify_before_read_unlocked"
+          ],
+          "key_reads": {}
+        }
+      ],
+      "src/agent_comms/wire_log.py": [
+        {
+          "declaration": "src/agent_comms/wire_log.py::locked",
+          "lines": 6,
+          "calls": [
+            "_store_lock"
+          ],
+          "key_reads": {}
+        }
+      ],
+      "tools/cutover/native_schema_carry.py": [
+        {
+          "declaration": "tools/cutover/native_schema_carry.py::publisher",
+          "lines": 4,
+          "calls": [
+            "replace_original"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/native_schema_carry.py::publisher",
+          "lines": 10,
+          "calls": [
+            "ValueError",
+            "_locked_directory",
+            "_publish",
+            "_read_snapshot",
+            "enter_context",
+            "read_bytes"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/native_schema_carry.py::install",
+          "lines": 11,
+          "calls": [
+            "ExitStack",
+            "RuntimeNativeFiles",
+            "ValueError",
+            "acquire",
+            "any",
+            "enter_context",
+            "install_prepared",
+            "require_candidate",
+            "set"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/native_schema_carry.py::install_prepared",
+          "lines": 7,
+          "calls": [
+            "ExitStack",
+            "publish_prepared",
+            "publisher"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/native_schema_carry.py::publish_prepared",
+          "lines": 38,
+          "calls": [
+            "ExitStack",
+            "ValueError",
+            "any",
+            "digest",
+            "dumps",
+            "encode",
+            "enter_context",
+            "evidence",
+            "fsync_directory",
+            "lstat",
+            "mkdir",
+            "prepare_replacement",
+            "require",
+            "require_original",
+            "retain_file",
+            "str",
+            "write_original"
+          ],
+          "key_reads": {}
+        }
+      ],
+      "tools/cutover/publish_retained_summary.py": [
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::publish",
+          "lines": 43,
+          "calls": [
+            "Comms",
+            "OwnerRestartRequest",
+            "PublishRetainedSummary",
+            "RestartEnvironment",
+            "RuntimeError",
+            "active_route_path",
+            "capture",
+            "close",
+            "dump",
+            "encode",
+            "exists",
+            "fdopen",
+            "fileno",
+            "flock",
+            "flush",
+            "fsync",
+            "fsync_directory",
+            "is_symlink",
+            "lstat",
+            "mkdir",
+            "open",
+            "require",
+            "require_idle",
+            "require_original",
+            "require_selection",
+            "restart_owners",
+            "snapshot",
+            "str",
+            "threads",
+            "time",
+            "tuple",
+            "with_suffix"
+          ],
+          "key_reads": {
+            "os.environ": [
+              "PATH"
+            ]
+          }
+        },
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::require_original",
+          "lines": 3,
+          "calls": [
+            "RuntimeError",
+            "digest"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::require_original",
+          "lines": 2,
+          "calls": [],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::require_original",
+          "lines": 3,
+          "calls": [
+            "RuntimeError"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::require_original",
+          "lines": 13,
+          "calls": [
+            "RuntimeError",
+            "dict",
+            "get",
+            "partition",
+            "require_original"
+          ],
+          "key_reads": {
+            "hashes": [
+              "sha256"
+            ]
+          }
+        },
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::require_original",
+          "lines": 9,
+          "calls": [
+            "Path",
+            "RuntimeError",
+            "len",
+            "require_original",
+            "tuple",
+            "unquote",
+            "urlsplit"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::require_original",
+          "lines": 4,
+          "calls": [
+            "RuntimeError",
+            "require_original"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::require_original",
+          "lines": 28,
+          "calls": [
+            "RuntimeError",
+            "decode",
+            "intersection",
+            "is_absolute",
+            "is_file",
+            "len",
+            "loads",
+            "read_text",
+            "require_activation",
+            "require_original",
+            "require_publication_originals",
+            "str",
+            "verify_native_package"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::publish",
+          "lines": 15,
+          "calls": [
+            "RuntimeError",
+            "_publish_active_route_locked",
+            "active_route_path",
+            "fsync_directory",
+            "read_active_route",
+            "readlink",
+            "replace",
+            "require_publication_originals",
+            "symlink_to"
+          ],
+          "key_reads": {}
+        }
+      ],
+      "tools/cutover/retained_index_writer.py": [
+        {
+          "declaration": "tools/cutover/retained_index_writer.py::main",
+          "lines": 27,
+          "calls": [
+            "Comms",
+            "Path",
+            "RelationViolationError",
+            "_private_marker_unlocked",
+            "bus_digest",
+            "declared_schema_digest",
+            "dict",
+            "locked",
+            "pop",
+            "read_metadata_unlocked",
+            "replace",
+            "run",
+            "str",
+            "strip",
+            "unlink",
+            "with_name",
+            "write_metadata_unlocked"
+          ],
+          "key_reads": {}
+        }
+      ]
+    },
+    "resolved": {
+      "src/agent_comms/owner_launch.py": [
+        {
+          "declaration": "src/agent_comms/owner_launch.py::capture",
+          "lines": 27,
+          "calls": [
+            "Path",
+            "RelationViolationError",
+            "cls",
+            "current",
+            "dict",
+            "fsdecode",
+            "get",
+            "items",
+            "owner_identity",
+            "read_bytes",
+            "require",
+            "require_owner_process",
+            "require_process",
+            "split"
+          ],
+          "key_reads": {}
+        }
+      ],
+      "src/agent_comms/owner_restart.py": [
+        {
+          "declaration": "src/agent_comms/owner_restart.py::restart",
+          "lines": 28,
+          "calls": [
+            "OwnerBusyRefusal",
+            "RelationViolationError",
+            "_store_lock",
+            "append",
+            "assert_open_unlocked",
+            "capture",
+            "cls",
+            "complete",
+            "environment",
+            "fence",
+            "getpid",
+            "require_active",
+            "require_executable",
+            "require_idle",
+            "require_native",
+            "require_process",
+            "require_selection",
+            "snapshot",
+            "threads",
+            "tuple"
+          ],
+          "key_reads": {}
+        }
+      ],
+      "src/agent_comms/store_files.py": [
+        {
+          "declaration": "src/agent_comms/store_files.py::_held_store_source",
+          "lines": 16,
+          "calls": [
+            "RelationViolationError",
+            "S_ISREG",
+            "StoreLock",
+            "ValueError",
+            "WireLog",
+            "exists",
+            "fileno",
+            "lstat",
+            "release_store_lock",
+            "type",
+            "verify_before_read_unlocked"
+          ],
+          "key_reads": {}
+        }
+      ],
+      "src/agent_comms/wire_log.py": [
+        {
+          "declaration": "src/agent_comms/wire_log.py::locked",
+          "lines": 6,
+          "calls": [
+            "_store_lock"
+          ],
+          "key_reads": {}
+        }
+      ],
+      "tools/cutover/global_extension_activation.py": [
+        {
+          "declaration": "tools/cutover/global_extension_activation.py::install",
+          "lines": 6,
+          "calls": [
+            "RuntimeError",
+            "_atomic_write_text",
+            "digest",
+            "installation_mode",
+            "read_text",
+            "require_original"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/global_extension_activation.py::require_selection",
+          "lines": 5,
+          "calls": [
+            "RuntimeError",
+            "exists",
+            "is_symlink",
+            "require_original"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/global_extension_activation.py::after_stopped",
+          "lines": 9,
+          "calls": [
+            "fsync_directory",
+            "install",
+            "mkdir",
+            "require_selection",
+            "retain_original",
+            "snapshot"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/global_extension_activation.py::require_selection",
+          "lines": 5,
+          "calls": [
+            "RuntimeError",
+            "exists",
+            "is_symlink",
+            "require_original",
+            "require_selection",
+            "super"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/global_extension_activation.py::after_stopped",
+          "lines": 7,
+          "calls": [
+            "after_stopped",
+            "open",
+            "require_original",
+            "run",
+            "str",
+            "super"
+          ],
+          "key_reads": {}
+        }
+      ],
+      "tools/cutover/native_schema_carry.py": [
+        {
+          "declaration": "tools/cutover/native_schema_carry.py::publisher",
+          "lines": 4,
+          "calls": [
+            "replace_original"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/native_schema_carry.py::publisher",
+          "lines": 10,
+          "calls": [
+            "ValueError",
+            "_locked_directory",
+            "_publish",
+            "_read_snapshot",
+            "enter_context",
+            "read_bytes"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/native_schema_carry.py::install",
+          "lines": 11,
+          "calls": [
+            "ExitStack",
+            "RuntimeNativeFiles",
+            "ValueError",
+            "acquire",
+            "any",
+            "enter_context",
+            "install_prepared",
+            "require_candidate",
+            "set"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/native_schema_carry.py::install_prepared",
+          "lines": 7,
+          "calls": [
+            "ExitStack",
+            "publish_prepared",
+            "publisher"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/native_schema_carry.py::publish_prepared",
+          "lines": 38,
+          "calls": [
+            "ExitStack",
+            "ValueError",
+            "any",
+            "digest",
+            "dumps",
+            "encode",
+            "enter_context",
+            "evidence",
+            "fsync_directory",
+            "lstat",
+            "mkdir",
+            "prepare_replacement",
+            "require",
+            "require_original",
+            "retain_file",
+            "str",
+            "write_original"
+          ],
+          "key_reads": {}
+        }
+      ],
+      "tools/cutover/publish_retained_summary.py": [
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::publish",
+          "lines": 42,
+          "calls": [
+            "Comms",
+            "OwnerRestartRequest",
+            "PublishRetainedSummary",
+            "RestartEnvironment",
+            "RuntimeError",
+            "active_route_path",
+            "capture",
+            "close",
+            "dump",
+            "encode",
+            "exists",
+            "fdopen",
+            "fileno",
+            "flock",
+            "flush",
+            "fsync",
+            "fsync_directory",
+            "is_symlink",
+            "lstat",
+            "mkdir",
+            "open",
+            "require",
+            "require_idle",
+            "require_original",
+            "require_selection",
+            "restart_owners",
+            "snapshot",
+            "str",
+            "threads",
+            "time",
+            "tuple",
+            "with_suffix"
+          ],
+          "key_reads": {
+            "os.environ": [
+              "PATH"
+            ]
+          }
+        },
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::require_original",
+          "lines": 3,
+          "calls": [
+            "RuntimeError",
+            "digest"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::require_original",
+          "lines": 2,
+          "calls": [],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::require_original",
+          "lines": 3,
+          "calls": [
+            "RuntimeError"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::require_original",
+          "lines": 13,
+          "calls": [
+            "RuntimeError",
+            "dict",
+            "get",
+            "partition",
+            "require_original"
+          ],
+          "key_reads": {
+            "hashes": [
+              "sha256"
+            ]
+          }
+        },
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::require_original",
+          "lines": 9,
+          "calls": [
+            "Path",
+            "RuntimeError",
+            "len",
+            "require_original",
+            "tuple",
+            "unquote",
+            "urlsplit"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::require_original",
+          "lines": 4,
+          "calls": [
+            "RuntimeError",
+            "require_original"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::require_original",
+          "lines": 26,
+          "calls": [
+            "RuntimeError",
+            "decode",
+            "intersection",
+            "len",
+            "loads",
+            "read_text",
+            "require_activation",
+            "require_original",
+            "require_publication_originals",
+            "str",
+            "verify_native_package"
+          ],
+          "key_reads": {}
+        },
+        {
+          "declaration": "tools/cutover/publish_retained_summary.py::publish",
+          "lines": 15,
+          "calls": [
+            "RuntimeError",
+            "_publish_active_route_locked",
+            "active_route_path",
+            "fsync_directory",
+            "read_active_route",
+            "readlink",
+            "replace",
+            "require_publication_originals",
+            "symlink_to"
+          ],
+          "key_reads": {}
+        }
+      ],
+      "tools/cutover/retained_index_writer.py": [
+        {
+          "declaration": "tools/cutover/retained_index_writer.py::main",
+          "lines": 28,
+          "calls": [
+            "Path",
+            "RelationViolationError",
+            "WireLog",
+            "_private_marker_unlocked",
+            "bus_digest",
+            "declared_schema_digest",
+            "dict",
+            "locked",
+            "pop",
+            "read_metadata_unlocked",
+            "replace",
+            "run",
+            "str",
+            "strip",
+            "unlink",
+            "with_name",
+            "write_metadata_unlocked"
+          ],
+          "key_reads": {}
+        }
+      ]
+    }
+  },
+  "dynamic_limit": "FunctionFacts records syntax and callee names, not runtime receiver identity; owner relationships separately read in source.",
+  "resolutions": {
+    "native_schema_carry": "Exact current main. CarriedNativeStore.publisher owns each publication; RetainedRuntimeFile.prepare_replacement stages on the original filesystem. Older parent all-store sidecar algorithm deleted from this union.",
+    "native_evidence_fixture": "Exact current main. Existing OUTPUT.parent owns short declared fixture paths; older parent mkdtemp override superseded.",
+    "retained_index_writer": "WireLog directly supplies original lock and metadata; Comms construction removed. Current StoreLock.descriptor passed to unchanged installer, original bytes/marker checks retained.",
+    "publication_launch": "No cohort-level source_interpreter copy. RetainedOwnerLaunch.capture reads each original process interpreter/environment; unchanged owner restart does its fresh acquisition before fencing.",
+    "instructions": "Current user reuse-worktree text retained; parent source-first/semantic scrutiny and coherent-change wording retained; F0 required Debt and latest main instruction bytes retained."
+  },
+  "verification": {
+    "source_controls01": "PRE-FIXTURE missing system metaclass_registry; raw log retained; no fixture/public/native/provider started",
+    "log": ".artifacts/parent-main-reconciliation-20261004/reset-controls01.log",
+    "log_sha256": "e4efaceed63fa0d12de49f58afe1092e587cb505d2dc12f221920ed6b1930581",
+    "installed_dependencies02": {
+      "receipt": ".artifacts/parent-main-reconciliation-20261004/reset-controls02/receipt.json",
+      "receipt_sha256": "5a3e2491b8b9565c40611f3bc6a7b4aa6710f4dd6babdf6675c10d5c9bc249cc",
+      "log": ".artifacts/parent-main-reconciliation-20261004/reset-controls02.log",
+      "log_sha256": "687c931ad027d2c355c7aa297101422e9d81d42b7b51baa7bd619c68bb3a62e0",
+      "result": {
+        "state": "private-file-custody-controls-passed",
+        "checks": [
+          "authentic SQLite journal plus three named companions retained before removal; original UNKNOWN/native/proof bytes unchanged; descriptors closed",
+          "wrong-mode: refuses before any original removal; descriptors closed",
+          "hardlink: refuses before any original removal; descriptors closed",
+          "symlink: refuses before any original removal; descriptors closed",
+          "orphan: refuses before any original removal; descriptors closed",
+          "existing preimages refuse reuse of the original attempt",
+          "reviewed cohort uses original FieldCodec/PathText roundtrip; no format alias or raw fallback"
+        ],
+        "runtime_reset": {
+          "classification": "runtime/reset",
+          "original_files": [
+            {
+              "path": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/parent-main-reconciliation-20261004/reset-controls02/complete/compaction-commits.sqlite3",
+              "sha256": "fa96e00d473e92456fe81b16d0ea45444e8d1582325e8377ef9d9583fd6ecce4",
+              "size": 65536,
+              "mode": 33152,
+              "uid": 1000,
+              "gid": 1000,
+              "revision": {
+                "identity": {
+                  "device": 2084,
+                  "inode": 11930875
+                },
+                "size": 65536,
+                "mtime_ns": 1791107782598892628,
+                "ctime_ns": 1791107782598892628
+              }
+            },
+            {
+              "path": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/parent-main-reconciliation-20261004/reset-controls02/complete/compaction-commits.sqlite3-journal",
+              "sha256": "bffb2a683f75c315898be249ea9e549ac9ad270d6de3a50636a0be46348fa492",
+              "size": 35,
+              "mode": 33152,
+              "uid": 1000,
+              "gid": 1000,
+              "revision": {
+                "identity": {
+                  "device": 2084,
+                  "inode": 11930876
+                },
+                "size": 35,
+                "mtime_ns": 1791107782602782691,
+                "ctime_ns": 1791107782602782691
+              }
+            },
+            {
+              "path": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/parent-main-reconciliation-20261004/reset-controls02/complete/compaction-commits.sqlite3-wal",
+              "sha256": "fe3b9b6294a238020f4a779c83207669261dc05f20255fb196a188ec85003dda",
+              "size": 31,
+              "mode": 33152,
+              "uid": 1000,
+              "gid": 1000,
+              "revision": {
+                "identity": {
+                  "device": 2084,
+                  "inode": 11930877
+                },
+                "size": 31,
+                "mtime_ns": 1791107782604217548,
+                "ctime_ns": 1791107782604217548
+              }
+            },
+            {
+              "path": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/parent-main-reconciliation-20261004/reset-controls02/complete/compaction-commits.sqlite3-shm",
+              "sha256": "c78fa2d00c804c57d204589ab5daa88c1a3891f19f4d61809f77f6962eede370",
+              "size": 31,
+              "mode": 33152,
+              "uid": 1000,
+              "gid": 1000,
+              "revision": {
+                "identity": {
+                  "device": 2084,
+                  "inode": 11930878
+                },
+                "size": 31,
+                "mtime_ns": 1791107782605656543,
+                "ctime_ns": 1791107782605656543
+              }
+            }
+          ],
+          "retired": [
+            "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/parent-main-reconciliation-20261004/reset-controls02/complete/compaction-commits.sqlite3",
+            "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/parent-main-reconciliation-20261004/reset-controls02/complete/compaction-commits.sqlite3-journal",
+            "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/parent-main-reconciliation-20261004/reset-controls02/complete/compaction-commits.sqlite3-wal",
+            "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/parent-main-reconciliation-20261004/reset-controls02/complete/compaction-commits.sqlite3-shm"
+          ],
+          "original_revisions": [
+            {
+              "identity": {
+                "device": 2084,
+                "inode": 11930875
+              },
+              "size": 65536,
+              "mtime_ns": 1791107782598892628,
+              "ctime_ns": 1791107782598892628
+            },
+            {
+              "identity": {
+                "device": 2084,
+                "inode": 11930876
+              },
+              "size": 35,
+              "mtime_ns": 1791107782602782691,
+              "ctime_ns": 1791107782602782691
+            },
+            {
+              "identity": {
+                "device": 2084,
+                "inode": 11930877
+              },
+              "size": 31,
+              "mtime_ns": 1791107782604217548,
+              "ctime_ns": 1791107782604217548
+            },
+            {
+              "identity": {
+                "device": 2084,
+                "inode": 11930878
+              },
+              "size": 31,
+              "mtime_ns": 1791107782605656543,
+              "ctime_ns": 1791107782605656543
+            }
+          ]
+        },
+        "protected_originals": {
+          "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/parent-main-reconciliation-20261004/reset-controls02/complete/input_dispositions.json": "29892be1eaebfd8ac630ffb434761cb8cb62741d8f94092d97544e63a8e76c03",
+          "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/parent-main-reconciliation-20261004/reset-controls02/complete/native.jsonl": "14f308ab5a4691283d7631f87b173d36aa62aafea9e4bab26ba4b5be6468f374",
+          "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/parent-main-reconciliation-20261004/reset-controls02/complete/native.jsonl.input-proof": "cb0711be76b5e57a4c1491329119ba3e4dfa69a358749cc0be360dd4a5e901e5"
+        },
+        "public_actions": 0,
+        "provider_calls": 0,
+        "owner_starts": 0,
+        "prompt_count": 0,
+        "strength": "runtime resource controls; not whole cutover or public UI acceptance"
+      },
+      "scope": "Original installed historical3b dependency ABI and private file-custody/reset/FieldCodec controls; not main919 installed or public cutover acceptance"
+    }
+  },
+  "current_main_union": {
+    "main": "c29425b9b6233625d51735319bf868c80c7c9187",
+    "merge": "14c654c2c2bf890897e785372ff57f1241d6973f",
+    "mechanism": "original audit.findings.Package/audit.repository.Repository",
+    "coverage": {
+      "main": {
+        "src/agent_comms": {
+          "parsed": 311,
+          "omitted": []
+        },
+        "tests": {
+          "parsed": 365,
+          "omitted": []
+        },
+        "tools": {
+          "parsed": 53,
+          "omitted": []
+        }
+      },
+      "parent": {
+        "src/agent_comms": {
+          "parsed": 311,
+          "omitted": []
+        },
+        "tests": {
+          "parsed": 366,
+          "omitted": []
+        },
+        "tools": {
+          "parsed": 54,
+          "omitted": []
+        }
+      }
+    },
+    "production_stack_metadata_delta": [],
+    "remaining_tool_family": {
+      "tests/tools/channel_recovery_physical_journey.py": {
+        "sha256": "5332803027e05203c8fd5b7c8bc40d5a82b0cdba4693c8b8ce6424e012470a3d",
+        "byte_equal_previous_qualified_source": true
+      },
+      "tools/cutover/global_extension_activation.py": {
+        "sha256": "3ecc6f94766f5db8bed564ca737b37dee363f5f64de780e60b8474b495da4efc",
+        "byte_equal_previous_qualified_source": true
+      },
+      "tools/cutover/publish_retained_summary.py": {
+        "sha256": "8356254221da4435eb58078355df6c7677238008b29c918ca1ff61f911037efb",
+        "byte_equal_previous_qualified_source": true
+      },
+      "tools/cutover/retained_index_writer.py": {
+        "sha256": "7b5ea337d2bc7e30933914c9f819a0015f283b076f8db699d1a6a35095c542d4",
+        "byte_equal_previous_qualified_source": true
+      },
+      "tools/cutover/retained_summary_reset_controls.py": {
+        "sha256": "9eacb251632d155f6db1c58999f311614781d566f10374d8b62698342b02a56a",
+        "byte_equal_previous_qualified_source": true
+      }
+    },
+    "original_reset_controls_repeated": false,
+    "source_relationship": "RetainedOwnerLaunch.capture observes each original process interpreter and validates process/incarnation/configuration before claims. ReviewedRetainedSummaryCohort no longer stores or reapplies a copied source interpreter. OwnerRestartRequest optional source_interpreter remains an explicit caller selection constraint, not the removed cohort observation.",
+    "scope": "Normal current-main integration; previous seven private reset controls retain their original scope. No installed package/public publisher/guard retry or full live cutover acceptance."
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "assessment": "partial; public receiver details mismatch remains unresolved",
+  "duration_seconds": 32.72837314597564,
+  "command": [
+    "/home/ts/bin/toad-comms",
+    "openhcs-architecture-memory"
+  ],
+  "terminal": [
+    "st",
+    "-e",
+    "/home/ts/bin/toad-comms",
+    "openhcs-architecture-memory"
+  ],
+  "candidate": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001-04/bin",
+  "capture_target": "existing_thread",
+  "original_owner_preserved": true,
+  "originals_unchanged": true,
+  "cleanup_errors": [],
+  "remaining_owned_pids": [],
+  "video_full_decode_exit": 0,
+  "physical_observations": [
+    "Channel opening and return show Waiting for recovery for three original failed receivers.",
+    "The opened pr159 receiver sidebar shows Inbox unavailable, while session details shows Ready and Saved history not loaded.",
+    "This read-only recording sends no prompt and does not recover or replay original inputs."
+  ],
+  "owner": "Arendt / Core476",
+  "raw_receipt": "/home/ts/.cache/agent-scratch/parent-channel-recovery-476-20261001-physical01/capture/receipt.json",
+  "raw_receipt_sha256": "89eb602a03669907d9349b99d3fe6d3cca366785f6aac10651ff6c2bc403c6c2",
+  "video_frames": "1983"
+}

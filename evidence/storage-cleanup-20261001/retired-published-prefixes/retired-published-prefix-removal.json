@@ -1,0 +1,48 @@
+{
+  "status": "completed",
+  "time_ns": 1790827397042317825,
+  "removed_paths": [
+    "/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930",
+    "/home/ts/.local/share/agent-comms/runtime-owner-cli-config-20260930",
+    "/home/ts/.local/share/agent-comms/runtime-all-merged-20260930",
+    "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930",
+    "/home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930"
+  ],
+  "attributable_unlinked_blocks_bytes": 147693568,
+  "directory_blocks_bytes": 8450048,
+  "shared_blocks_not_claimed_bytes": 120709120,
+  "metadata_archive": "/home/ts/wt/comms-c1-terminal-data-20260930/.artifacts/storage-cleanup-20261001/retired-published-prefix-metadata.tar.gz",
+  "metadata_archive_sha256": "c1e50ec09a45742d265c33899955ab71d9e509ee6af0b57f8303aea29e17fe03",
+  "metadata_entries_verified": 2530,
+  "metadata_archive_allocated_bytes": 1470464,
+  "before_home_available_bytes": 24029593600,
+  "protected_before": {
+    "route": "ea0bf1c06564cac1b4e7d55ac0a18540566f129b4a3c91dc4985a9b1771ca579",
+    "live_activation": "f03e2370464094408d2a8cd3eb90966d55f8dcb6c75829e90cd86ab34ecfb043",
+    "default_targets": {
+      "toad": "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/bin/toad",
+      "agent-comms": "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/bin/agent-comms",
+      "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/bin/agent-comms-acp",
+      "toad-comms": "/home/ts/.agent-comms/stack/bin/toad-comms"
+    }
+  },
+  "process_census_qualification": "All accessible application/native consumers inspected; two systemd/sd-pam services deny proc descriptor/environment access. lsof inode-alias positives resolved to current live mappings; their live inode links remain.",
+  "historical_references": "Recorded completed staging/operator/capture scripts retained; Heisenberg confirmed no current254/472 dependencies. Sch current gate uses live prefix. Recent negative atomic-page-handoff/native-publication-joined prefixes retained.",
+  "source_worktrees_native_history_unknown_deleted": false,
+  "finished_ns": 1790827397378792554,
+  "after_home_available_bytes": 24177283072,
+  "protected_after": {
+    "route": "ea0bf1c06564cac1b4e7d55ac0a18540566f129b4a3c91dc4985a9b1771ca579",
+    "live_activation": "f03e2370464094408d2a8cd3eb90966d55f8dcb6c75829e90cd86ab34ecfb043",
+    "default_targets": {
+      "toad": "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/bin/toad",
+      "agent-comms": "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/bin/agent-comms",
+      "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/bin/agent-comms-acp",
+      "toad-comms": "/home/ts/.agent-comms/stack/bin/toad-comms"
+    }
+  },
+  "live_route_activation_default_targets_unchanged": true,
+  "actual_df_delta_bytes": 147689472,
+  "net_attributable_recovery_bytes": 146223104,
+  "df_qualification": "Actual df delta is concurrent-system observation; hardlink-aware block accounting minus retained metadata archive is attributable recovery."
+}

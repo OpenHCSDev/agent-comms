@@ -1,0 +1,156 @@
+--- a/tests/canonical_wire_conversation_installed_pilot.py
++++ b/tests/canonical_wire_conversation_installed_pilot.py
+@@ -22,6 +22,7 @@
+ from agent_comms.threads import Thread
+ from agent_comms.comms import wire
+ from agent_comms.field_codec import FieldCodec
++from agent_comms.coordinator import Coordination
+ from agent_comms.native_runtime_input import NativeRuntimeInput
+ from agent_comms.transcript_events import WireTextTranscript, UserTranscript
+ from agent_comms.coordination_tables.assignments import WakeAssignment
+@@ -68,13 +69,21 @@
+     receipt['phase'] = phase
+     (evidence / 'progress.json').write_text(json.dumps(receipt, indent=2))
+     print('CONTROLLED_JOURNEY_PHASE', phase, flush=True)
+-
+-
+-class WindowApp(ToadApp):
++    if phase in ('same_open_31s_complete', 'physical_return_0_original_source',
++                 'physical_return_1_original_source', 'physical_return_2_original_source'):
++        import subprocess
++        subprocess.run(['import', '-display', os.environ['DISPLAY'], '-window', 'root',
++                        str(evidence / f'physical-{phase}.png')], check=True, timeout=5)
++
++
++from admitted_frames import AdmittedFrames
++
++
++class WindowApp(AdmittedFrames, ToadApp):
+     CSS_PATH = FixtureApp.CSS_PATH
+ 
+ 
+-class EvidenceApp(FixtureApp):
++class EvidenceApp(AdmittedFrames, FixtureApp):
+     @asynccontextmanager
+     async def run_test(self, **kwargs):
+         service = wire(os.environ['AGENT_COMMS_ROOT'])
+@@ -410,7 +419,14 @@
+             native_reply_proof = original_native_reply_proof(comms, original, response)
+             evidence.joinpath('original-native-reply-proof.json').write_text(
+                 json.dumps(native_reply_proof, indent=2))
+-            await until(pilot, lambda: not comms.registry.require('beta').executing)
++            # The original execution owns its settlement. Five unrelated
++            # ambient triages may still own later turns in this same thread.
++            with Coordination(str(comms.root / 'coordination.sqlite3')) as store:
++                await until(pilot, lambda: store.snapshots.get(
++                    native_reply_proof['execution_id']).completed_response())
++                original_terminal = store.snapshots.get(native_reply_proof['execution_id'])
++                receipt['original_terminal'] = FieldCodec.encode(original_terminal)
++            record_phase(receipt, evidence, 'original_terminal_before_paint')
+             # Additional real channel inputs may legitimately move this reply
+             # off the tail. Navigate its original body before requiring paint.
+             with app._context():
+@@ -472,6 +488,14 @@
+                 assert sum(body.source == response.body for body in recipient.contents.query(AgentResponse)) == 1
+                 assert all(window._exception is None for window in (app, sender_app, irc_app))
+             record_phase(receipt, evidence, 'same_open_31s_complete')
++            def beta_idle():
++                observed = comms.registry.require('beta')
++                receipt['after_31s_beta'] = FieldCodec.encode(observed)
++                return not observed.executing
++            try:
++                await until(pilot, beta_idle)
++            finally:
++                record_phase(receipt, evidence, 'after_31s_idle_witness')
+             beta_screen = app.selected_session
+             with app._context():
+                 await ThreadTarget('alpha').open(NavigationContext(app, app.selected_mode, app.project_dir, user))
+@@ -488,7 +512,54 @@
+                     view.prompt.prompt_text_area.focus()
+                     await pilot.press('enter')
+                 record_phase(receipt, evidence, f'physical_return_{index}_input')
+-                await until(pilot, lambda: sum(body.source == token for body in view.contents.query(AgentResponse)) == 1, 30)
++                try:
++                    await until(pilot, lambda: sum(body.source == token for body in view.contents.query(AgentResponse)) == 1, 30)
++                except BaseException:
++                    import traceback
++                    (evidence / f'physical-return-{index}-original-failure.txt').write_text(
++                        traceback.format_exc())
++                    # Capture the original failing window before shutdown can
++                    # discard its resource and source-operation evidence.
++                    with app._context():
++                        from toad.widgets.transcript_history import TranscriptFragmentView
++                        registered = tuple(view.window.histories)
++                        worker = view.transcript.worker
++                        capture = {
++                            'token': token,
++                            'registry_thread': FieldCodec.encode(comms.registry.require(view.agent.session_id)),
++                            'load_admission': repr(view.agent.session.load_admission),
++                            'displayed_cursor': FieldCodec.encode(view.transcript.displayed_cursor),
++                            'app_exception': repr(app._exception),
++                            'checkpoint_worker': None if worker is None else {
++                                'state': str(worker.state), 'error': repr(worker.error)},
++                            'response_resources': [
++                                {'resource_id': id(body), 'source': body.source,
++                                 'attached': body.is_attached, 'region': str(body.region),
++                                 'in_viewport': body.region.overlaps(view.window.region),
++                                 'visible': body in app.screen._compositor.visible_widgets,
++                                 'ancestors': [{'type': type(parent).__name__, 'resource_id': id(parent)}
++                                               for parent in body.ancestors]}
++                                for body in view.contents.query(AgentResponse)],
++                            'history_resources': [
++                                {'resource_id': id(history), 'registered': history in registered,
++                                 'source_state': type(history.state).__name__,
++                                 'cursor': FieldCodec.encode(history.committed_cursor),
++                                 'events': [FieldCodec.encode(event) for event in history.coverage_events]}
++                                for history in view.contents.query(TranscriptHistory)],
++                            'fragment_resources': [
++                                {'resource_id': id(fragment), 'body_ready': fragment.body_ready,
++                                 'region': str(fragment.region),
++                                 'events': [FieldCodec.encode(event) for event in fragment.fragment.events]}
++                                for fragment in view.contents.query(TranscriptFragmentView)],
++                        }
++                        frame = view.window.region
++                        capture['viewport_frame'] = '\n'.join(
++                            strip.crop(frame.x, frame.right).text
++                            for strip in app.screen._compositor.render_strips()[frame.y:frame.bottom])
++                        (evidence / f'physical-return-{index}-failure-census.json').write_text(
++                            json.dumps(capture, indent=2))
++                        app.save_screenshot(str(evidence / f'physical-return-{index}-failure.svg'))
++                    raise
+                 await until(pilot, lambda: not comms.registry.require(view.agent.session_id).executing)
+                 receipt['physical_return_immediate_send'].append({
+                     'thread': view.agent.session_id, 'reply_seconds': time.monotonic() - began})
+@@ -532,5 +603,5 @@
+         asyncio.run(readonly_cold_main())
+     else:
+         asyncio.run(main(app_type=EvidenceApp, prepare_state=prepare, acceptance=acceptance, provider_reply=reply,
+-                     provider_request_budget=18,
++                     provider_request_budget=18, headless=False,
+                      fixture_stage=Path(os.environ['AC_CONTROLLED_FIXTURE_STAGE'])))
+--- a/tests/l0a_native_installed_pilot.py
++++ b/tests/l0a_native_installed_pilot.py
+@@ -111,8 +111,8 @@
+     verify_native_package(package)
+     if fixture_stage is not None:
+         fixture_stage = Path(fixture_stage)
+-        fixture_stage.mkdir(mode=0o700, parents=True, exist_ok=False)
+-        (fixture_stage / "private-root").mkdir(mode=0o700)
++        fixture_stage.mkdir(mode=0o700, parents=True, exist_ok=True)
++        (fixture_stage / "private-root").mkdir(mode=0o700, exist_ok=True)
+         (fixture_stage / "application").mkdir(mode=0o700)
+     requests, failures = [], []
+     entered, release, hold_next = (
+@@ -248,7 +248,11 @@
+             )
+         )
+         comms = Comms(Path(wire_dir) / "wire")
+-        root_id = comms.messaging.initialize_private_initial_protocol()
++        from agent_comms.private_nk_entrypoint import PrivateNkLaunch
++        launch = PrivateNkLaunch.from_environment(comms.root, os.environ)
++        assert launch is not None
++        launch.validate()
++        root_id = launch.wire_root_id
+         comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+         comms.registry.declare(
+             Thread(

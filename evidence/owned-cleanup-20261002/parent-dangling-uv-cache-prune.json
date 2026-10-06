@@ -1,0 +1,11 @@
+{
+  "owner": "parent integration432",
+  "purpose": "prune dangling build/source cache entries through their own manager",
+  "manager": "uv cache prune --offline --no-config, normal in-use checks, no force",
+  "returncode": 0,
+  "stdout": "",
+  "stderr": "Pruning cache at: /home/ts/.cache/uv\nNo unused entries found\n",
+  "before_available_bytes": 9896148992,
+  "after_available_bytes": 9896148992,
+  "observed_available_change_bytes": 0
+}

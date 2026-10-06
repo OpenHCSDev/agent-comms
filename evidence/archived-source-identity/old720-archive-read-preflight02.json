@@ -1,0 +1,288 @@
+{
+  "interpreter": "/home/ts/.local/share/agent-comms/runtime-canonical-native-checkpoint-20260929/bin/python",
+  "direct_url": {
+    "url": "https://github.com/OpenHCSDev/agent-comms.git",
+    "vcs_info": {
+      "vcs": "git",
+      "commit_id": "72062939239b0f07707406309305a056a23f925f",
+      "requested_revision": "72062939239b0f07707406309305a056a23f925f"
+    }
+  },
+  "manifest_sha256": "04e8e078c27e92659b732efdcaa9f476b17435c7c84e7f171533cf1bf3cc6548",
+  "registry_decoder_used": false,
+  "public_reset_or_publication": false,
+  "sources": [
+    {
+      "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+      "before": {
+        "bus.jsonl": {
+          "sha256": "940e2444dfa703a2b1a9910097c01756303e19877a16945dbe26f38367e01ef1",
+          "bytes": 7513177,
+          "revision": [
+            4390474,
+            7513177,
+            1790659560882218866,
+            1790659584523685903
+          ]
+        },
+        "registry.json": {
+          "sha256": "cd2a20900794c7e8e8e9b0de20193456d42ea7085eb7acfc4a9255965fc68e30",
+          "bytes": 265444,
+          "revision": [
+            4390495,
+            265444,
+            1790626566463410747,
+            1790659584614292422
+          ]
+        },
+        "bus_meta.json": {
+          "sha256": "dce0d1acd4a1812f037f4beddffd5b87709a3ab82f49768aeeb5c7aa9282d9c3",
+          "bytes": 834,
+          "revision": [
+            4390502,
+            834,
+            1790659585679405589,
+            1790659585679708741
+          ]
+        },
+        "private_bus_checkpoint.sqlite3": {
+          "sha256": "795e41896b4fb0100c48324f31e140b827810400384cf2748728437cca27e290",
+          "bytes": 28672,
+          "revision": [
+            4390501,
+            28672,
+            1790659585665708465,
+            1790659585673708623
+          ]
+        },
+        ".bus.jsonl.lock": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0,
+          "revision": [
+            4390499,
+            0,
+            1790553370289099480,
+            1790659584614656342
+          ]
+        }
+      },
+      "lock_entered": true,
+      "root_id": "b8ff29c8e11f47f1a59b568650e580a3",
+      "last_seq": 12544,
+      "saved": {
+        "root_id": "b8ff29c8e11f47f1a59b568650e580a3",
+        "revision": [
+          2083,
+          4390474,
+          7513177,
+          1790659560882218866,
+          1790659584523685903
+        ],
+        "through_seq": 12544,
+        "digest": "60c3c47c88c4e21aa3bde7e3f63341f394ed7705cd2ee0a93b882790b0788332",
+        "tail": "8d1025ece70ac1dc0d66828328b2747fc75a6c672fbc356ea0cdb18cb1336e06",
+        "latest_source_seq": 0
+      },
+      "seal_type": "FinalSeal",
+      "current_bus_revision": [
+        2083,
+        4390474,
+        7513177,
+        1790659560882218866,
+        1790659584523685903
+      ],
+      "opened_descriptor_matches_named_lock": true,
+      "passed": true,
+      "after": {
+        "bus.jsonl": {
+          "sha256": "940e2444dfa703a2b1a9910097c01756303e19877a16945dbe26f38367e01ef1",
+          "bytes": 7513177,
+          "revision": [
+            4390474,
+            7513177,
+            1790659560882218866,
+            1790659584523685903
+          ]
+        },
+        "registry.json": {
+          "sha256": "cd2a20900794c7e8e8e9b0de20193456d42ea7085eb7acfc4a9255965fc68e30",
+          "bytes": 265444,
+          "revision": [
+            4390495,
+            265444,
+            1790626566463410747,
+            1790659584614292422
+          ]
+        },
+        "bus_meta.json": {
+          "sha256": "dce0d1acd4a1812f037f4beddffd5b87709a3ab82f49768aeeb5c7aa9282d9c3",
+          "bytes": 834,
+          "revision": [
+            4390502,
+            834,
+            1790659585679405589,
+            1790659585679708741
+          ]
+        },
+        "private_bus_checkpoint.sqlite3": {
+          "sha256": "795e41896b4fb0100c48324f31e140b827810400384cf2748728437cca27e290",
+          "bytes": 28672,
+          "revision": [
+            4390501,
+            28672,
+            1790659585665708465,
+            1790659585673708623
+          ]
+        },
+        ".bus.jsonl.lock": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0,
+          "revision": [
+            4390499,
+            0,
+            1790553370289099480,
+            1790659584614656342
+          ]
+        }
+      },
+      "original_bytes_and_revisions_unchanged": true,
+      "seconds": 0.03247532696695998
+    },
+    {
+      "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-a7v0vr4w",
+      "before": {
+        "bus.jsonl": {
+          "sha256": "2a841e0858aaad523e36ae1b9983c63eb542b3c3f6b0e8746f4f638fc01c6d76",
+          "bytes": 27674,
+          "revision": [
+            4390508,
+            27674,
+            1790659562811256973,
+            1790659586556293035
+          ]
+        },
+        "registry.json": {
+          "sha256": "bd2b2c850288ec25d3322615d9626d2c28d22a77c2c7137ca31c262ad72d4264",
+          "bytes": 15257,
+          "revision": [
+            4390524,
+            15257,
+            1790626575585426896,
+            1790659586557397519
+          ]
+        },
+        "bus_meta.json": {
+          "sha256": "ca47ef3889961e912314b34f4a6836b12b97a0f8a68d2dda18cfe026209e34e6",
+          "bytes": 823,
+          "revision": [
+            4390531,
+            823,
+            1790659586627727470,
+            1790659586628727490
+          ]
+        },
+        "private_bus_checkpoint.sqlite3": {
+          "sha256": "4888ee3d442865ffd27976f9bbb258ab7511afd2d6481f1f9a14b11f314b933c",
+          "bytes": 28672,
+          "revision": [
+            4390530,
+            28672,
+            1790659586622727371,
+            1790659586625727431
+          ]
+        },
+        ".bus.jsonl.lock": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0,
+          "revision": [
+            4390528,
+            0,
+            1790553370251098770,
+            1790659586557662902
+          ]
+        }
+      },
+      "lock_entered": true,
+      "root_id": "aaed93d6297f4c15bccc68c211066c7e",
+      "last_seq": 20,
+      "saved": {
+        "root_id": "aaed93d6297f4c15bccc68c211066c7e",
+        "revision": [
+          2083,
+          4390508,
+          27674,
+          1790659562811256973,
+          1790659586556293035
+        ],
+        "through_seq": 20,
+        "digest": "e7470979ed0e7654d2137c8d9c7a6bb3b93477e140e799bfde3e9813986ddff3",
+        "tail": "4bbbc580437d254c2896cc9a40271c4b031477e34bcdfd1c82a4fdb2fb25782c",
+        "latest_source_seq": 0
+      },
+      "seal_type": "FinalSeal",
+      "current_bus_revision": [
+        2083,
+        4390508,
+        27674,
+        1790659562811256973,
+        1790659586556293035
+      ],
+      "opened_descriptor_matches_named_lock": true,
+      "passed": true,
+      "after": {
+        "bus.jsonl": {
+          "sha256": "2a841e0858aaad523e36ae1b9983c63eb542b3c3f6b0e8746f4f638fc01c6d76",
+          "bytes": 27674,
+          "revision": [
+            4390508,
+            27674,
+            1790659562811256973,
+            1790659586556293035
+          ]
+        },
+        "registry.json": {
+          "sha256": "bd2b2c850288ec25d3322615d9626d2c28d22a77c2c7137ca31c262ad72d4264",
+          "bytes": 15257,
+          "revision": [
+            4390524,
+            15257,
+            1790626575585426896,
+            1790659586557397519
+          ]
+        },
+        "bus_meta.json": {
+          "sha256": "ca47ef3889961e912314b34f4a6836b12b97a0f8a68d2dda18cfe026209e34e6",
+          "bytes": 823,
+          "revision": [
+            4390531,
+            823,
+            1790659586627727470,
+            1790659586628727490
+          ]
+        },
+        "private_bus_checkpoint.sqlite3": {
+          "sha256": "4888ee3d442865ffd27976f9bbb258ab7511afd2d6481f1f9a14b11f314b933c",
+          "bytes": 28672,
+          "revision": [
+            4390530,
+            28672,
+            1790659586622727371,
+            1790659586625727431
+          ]
+        },
+        ".bus.jsonl.lock": {
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0,
+          "revision": [
+            4390528,
+            0,
+            1790553370251098770,
+            1790659586557662902
+          ]
+        }
+      },
+      "original_bytes_and_revisions_unchanged": true,
+      "seconds": 0.003507493995130062
+    }
+  ]
+}

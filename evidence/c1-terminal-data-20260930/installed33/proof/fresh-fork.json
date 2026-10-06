@@ -1,0 +1,26 @@
+{
+  "source_head": "15601a4f785fd6ee3e53e12b3a971ae1186f4482",
+  "actual_canonical_fork": true,
+  "physical_open_before_rpc_socket": true,
+  "empty_task": true,
+  "automatic_child_provider_requests": 0,
+  "inherited_tags_in_dialog": [
+    "team"
+  ],
+  "parent_tags_after_fork": [
+    "team"
+  ],
+  "child_tags": [
+    "fork-added"
+  ],
+  "physical_added_channel_disclosure": true,
+  "pending_after_old_five_second_expiry": true,
+  "same_owner_process_through_first_reply": true,
+  "first_new_message_physical_enter": true,
+  "new_child_response_painted_once": true,
+  "one_logical_tab": true,
+  "new_child_response_resources": 1,
+  "new_child_response_paint_count": 1,
+  "title_without_at_placeholder": "immediate-fork",
+  "provider_inputs": 2
+}

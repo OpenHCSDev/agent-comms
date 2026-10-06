@@ -1,0 +1,17 @@
+{
+  "owner": "parent integration432",
+  "purpose": "clear unused disposable package and cached Git source copies; original Git projects and installed environments preserved",
+  "manager": "uv cache clean --offline --no-config, normal in-use checks, no force",
+  "review": {
+    "cached_git_checkouts": 297,
+    "tracked_dirty_checkouts": 0,
+    "live_process_cache_references": 0,
+    "paired_packages_noneditable": true
+  },
+  "returncode": 0,
+  "stdout": "",
+  "stderr": "Clearing cache at: /home/ts/.cache/uv\nRemoved 67493 files (1.5GiB)\n",
+  "before_available_bytes": 16376381440,
+  "after_available_bytes": 18066612224,
+  "observed_available_change_bytes": 1690230784
+}

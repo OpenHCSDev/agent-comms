@@ -1,0 +1,20 @@
+{
+  "state": "reviewed default physical saved-history attachment passed; broader performance remains open",
+  "capture_path": "/home/ts/.cache/agent-scratch/parent-public-admission484-default-20261001-01/capture",
+  "receipt_sha256": "2a7688f133abb1abe9dd8b7d87cd420be5ec9047b40fb6457e40c166accd7f0d",
+  "duration_seconds": 18.664354773995,
+  "display": ":6587",
+  "default_runtime_unchanged": true,
+  "reviewed_image": "after.png",
+  "architecture_saved_history_visible": true,
+  "architecture_status_ready": true,
+  "observed_inbound_user_channel_message_visible": true,
+  "loading_error_visible": false,
+  "scope": "stationary opening of original saved thread in actual default Toad; not tab-return/scrolling performance or new message submission",
+  "our_provider_calls": 0,
+  "our_public_inputs": 0,
+  "owned_processes_remaining": [],
+  "cleanup_errors": [],
+  "desktop_focus_or_mouse_changed": false,
+  "full_usability_claim": false
+}

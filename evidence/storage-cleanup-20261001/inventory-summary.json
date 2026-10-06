@@ -1,0 +1,128 @@
+{
+  "wt_total_allocated_bytes": 30869028864,
+  "scratch_total_allocated_bytes": 3568599040,
+  "largest_wt": [
+    {
+      "path": "/home/ts/wt/recovered-skill-validation-20260930",
+      "allocated_bytes": 1801129984
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929",
+      "allocated_bytes": 951459840
+    },
+    {
+      "path": "/home/ts/wt/comms-native-request-wait-observation-20260930",
+      "allocated_bytes": 761200640
+    },
+    {
+      "path": "/home/ts/wt/toad-workspace-growing-end-continuity-20260930",
+      "allocated_bytes": 659636224
+    },
+    {
+      "path": "/home/ts/wt/comms-native-compaction-progress-20260929",
+      "allocated_bytes": 542904320
+    },
+    {
+      "path": "/home/ts/wt/basicpy-project-dependency-20260930",
+      "allocated_bytes": 418394112
+    },
+    {
+      "path": "/home/ts/wt/basicpy-python314-20260929",
+      "allocated_bytes": 418283520
+    },
+    {
+      "path": "/home/ts/wt/basicpy-parent-numeric-20260930",
+      "allocated_bytes": 418250752
+    },
+    {
+      "path": "/home/ts/wt/comms-acp-saved-session-startup-20260928",
+      "allocated_bytes": 403857408
+    },
+    {
+      "path": "/home/ts/wt/openhcs-context-bounding-20260929",
+      "allocated_bytes": 371425280
+    },
+    {
+      "path": "/home/ts/wt/comms-persistent-selected-pr112-20260927",
+      "allocated_bytes": 365621248
+    },
+    {
+      "path": "/home/ts/wt/toad-cleanup-tc2-sdk-20260929",
+      "allocated_bytes": 356376576
+    },
+    {
+      "path": "/home/ts/wt/comms-native-input-custody-s14-20260930",
+      "allocated_bytes": 341053440
+    },
+    {
+      "path": "/home/ts/wt/openhcs-paired-field-csv-314-20260930",
+      "allocated_bytes": 336666624
+    },
+    {
+      "path": "/home/ts/wt/openhcs-viewer-reset-parent-integration-20260930",
+      "allocated_bytes": 320372736
+    }
+  ],
+  "largest_scratch": [
+    {
+      "path": "/home/ts/.cache/agent-scratch/compaction-output-accounting-20260929",
+      "allocated_bytes": 269242368
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-native-admission-contention-20260929",
+      "allocated_bytes": 186040320
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-native-generation-policy-20260930",
+      "allocated_bytes": 182599680
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/original-turn-custody-20260929",
+      "allocated_bytes": 181805056
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/toad-restored-inbound-chronology-20260929",
+      "allocated_bytes": 163700736
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/toad-video-tools-mendel-20260929",
+      "allocated_bytes": 126038016
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-native-tracked-lifecycle-wait-20260929",
+      "allocated_bytes": 111009792
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-shared-compaction-scheduling-20260930",
+      "allocated_bytes": 102596608
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/sr468",
+      "allocated_bytes": 78983168
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/toad-body-readiness-253-20260930-attempt01",
+      "allocated_bytes": 75022336
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/toad-body-cost-245-20260930-attempt01",
+      "allocated_bytes": 74862592
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/body-readiness-stage-20260930",
+      "allocated_bytes": 74604544
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/toad-history-projection-242-20260930-attempt01",
+      "allocated_bytes": 74592256
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/kepler-all-merged-ui-20260930-attempt02",
+      "allocated_bytes": 74350592
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/toad-native-residency-248-20260930-attempt01",
+      "allocated_bytes": 74113024
+    }
+  ]
+}
