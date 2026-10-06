@@ -292,7 +292,16 @@ enumerated1477 Core/Toad src/tests/tools modules without omissions; cleanup,
 bind_owned and other AST are unchanged. Compilation passed, without another
 runtime attempt or build. Parent relayed this source handoff to originalSch.
 The retained bee wheel is unchanged; corrected four-case behavior remains
-unqualified. Parent traced the permission observer's agent assignment through
+unqualified. Mendel published corrected-observer tuple1c9c1025 atc81c9016,
+with only the one-argument Toad fixture correction and unchanged bee/proof/
+controller family. Bohr freshly issued d6ce7ed8 on334 after exact CURRENT447
+floor and borrower verification. The sole stage passed0.294s; all three
+original stage identities joined and are absent. New matching4b READ797c0296
+is bound. Current lifecycle1f710d7f releases only the sole8c8f proof; stage is
+consumed and native controller/EXEC remain held until actual final proof and
+separate authority/release. Routing686 remains unissued while this actual
+exclusive purpose owns334; its effective floor tupleb52ed4da/commands145cd9b5
+is retained without reservation or partial source grant. Parent traced the permission observer's agent assignment through
 watch_agent/bind_agent, original presentation detach custody and prepare-time
 reattachment; no missing binding was found and no speculative patch was made.
 
@@ -317,10 +326,26 @@ then released the sole proof at39fc9dc9. It passed0 in3.622s, with no timeout or
 error and both original proof identities absent. Parent matched final handoff
 1b71c560 and all19 raw/proof references by hash and byte length. The receipt
 binds953 installed members/full69 truthful origins/protected originals and7a
-FullTrust; it is not mounted warm/eviction acceptance. Controller58ad029b is
-unrun and preserves the original three template substitutions. Separate NEW
-matching EXEC and Bohr's same-purpose App release remain required before the
-sole mounted attempt. No App, native input or public decoder has run.
+FullTrust; it is not mounted warm/eviction acceptance. Controller58ad029b preserves the original three template substitutions.
+Bohr released the sole warm02 App under97886e40 with separate NEW7a EXECb1d5.
+The original controller2611168 and child2611169 ran once and joined: warm
+exit1 after31.687s, controller exit1 after32.594s, without timeout, drain errors
+or remaining owned groups. The strict history/displayed-cursor assertion157
+failed after canonical acquisition and generic settled returned. All warm and
+eviction verified branches remain zero; exactly two localhost requests were
+recorded, with no request errors. Cause beyond that assertion is unproved.
+Heis restored only original CURRENT471 ToAdb2e and Text16c9 once in0.171s and
+returned whole02082b47. Parent matched its hash/length and65 nested file
+descriptors with no mismatch. Bohr independently closed only4bfd atf1b75524:
+all1467 records,953 installed ZIP assets,69 RAW origins,2253 other67 records,
+266 protected/bootstrap2/PREFIX match; the fresh census has zero owned refs
+and gaps. All11 recorded identities are absent. READb792/EXECb1d5 returns and
+Sch0312f closure are bound; all permission flags are false. Both journals and
+65 fixture files remain held unchanged. Heis continues the source relationship
+trace; canonical child presence and active pager registration are distinct,
+and source-page validation owns parked-pager resumption. This is source
+evidence, not a proven runtime cause or warm/eviction qualification. No new
+App purpose, replay, build or public decoder follows from closure.
 Original c22/7b534 templates, current source849b,150s/20s and two-authored-input
 warm/eviction obligations remain unchanged; no Core stage or new build follows.
 
