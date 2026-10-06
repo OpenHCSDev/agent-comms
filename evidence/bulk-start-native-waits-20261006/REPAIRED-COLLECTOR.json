@@ -1,0 +1,36 @@
+{
+  "status": "SOURCE_ONLY; no new attempt, grant or runtime authority",
+  "cause": "The collector decoded the asynchronously published Python metadata before collecting native threads. The existing exporter creates the file with O_EXCL then writes it on a daemon thread; SIGTRAP freezes that thread too. JSON decoding failed, bypassing the native collection loop.",
+  "change": "The repaired collector captures native stacks/registers/waits first, persists them before resuming, and correlates the final completed capture JSON after original inferior exit. Correlation errors cannot erase native evidence.",
+  "producer_relationship": "capture.persist writes metadata JSON, pickle, then final capture JSON with payload_bytes. The default mounted capture branch used by choose returns after starting persist; it does not await publication.",
+  "preserved": "The old collector, prepared tuple and consumed attempt remain byte-identical; no App or capture helper changes.",
+  "repaired_collector": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/bulk-start-native-waits-20261006/native-waits-completed-capture.gdb",
+  "future_binding_change": "A separately reviewed diagnostic must select this new script path/hash and include native/python-capture-correlation.json in its owned outputs. No old purpose is rebound.",
+  "evidence": {
+    "/home/ts/.cache/agent-scratch/sidebar-bulk-start-native-waits-20261006/native/native-waits.json": {
+      "sha256": "603e1f041f0ee1a3813deaeb5fb3fddd9372b21afaf6b1f3890d485b0d76fbdd",
+      "bytes": 2990
+    },
+    "/home/ts/.cache/agent-scratch/sidebar-bulk-start-native-waits-20261006/f/start-connections/start-completion-failure-metadata.json": {
+      "sha256": "9b851ef3a6b35cf3787c25680245d8069db638e9680594a1e778999f5d281cee",
+      "bytes": 310049
+    },
+    "/home/ts/.cache/agent-scratch/sidebar-bulk-start-native-waits-20261006/f/start-connections/start-completion-failure.json": {
+      "sha256": "a4b62aebf700d64ef54cee229b312ff7f13eb70c60029b98bb64fab96e98648a",
+      "bytes": 310075
+    },
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/bulk-start-native-waits-20261006/native-waits.gdb": {
+      "sha256": "1c846c1966026860b54589ad30dee6fe813c0e56c0e4c02160e36b481129885c",
+      "bytes": 6228
+    },
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/bulk-start-native-waits-20261006/native-waits-completed-capture.gdb": {
+      "sha256": "12f251b0f680fa248d587df06d2afa3f7d79c849d577804ab171115ccd0efe90",
+      "bytes": 7442
+    },
+    "/home/ts/wt/toad-sidebar-context-pointer-20261006/tools/performance/capture_state.py": {
+      "sha256": "b855622114236ef14461826a0f1b79cdff2182332e177e29c9e353ae5e3c5884",
+      "bytes": 36499
+    }
+  },
+  "verification": "Embedded Python compiled only; actual completed capture JSON decoded and matched the recorded inferior PID and payload byte count. No debugger/App/test/build was launched."
+}
