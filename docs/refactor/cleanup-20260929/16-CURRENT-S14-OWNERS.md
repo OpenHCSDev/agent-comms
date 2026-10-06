@@ -4,6 +4,41 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Canonical handoff and affected consumers integrated — 2026-10-06
+
+Parent normally merged original689 fe32f518, clean configured producer692
+b331bd8e and mounted receipt consumer693 24bd65f7. Five changed Python files
+match their original owner checkpoints byte for byte and compile without imports;
+diff checking passes. SOURCE-INTEGRATION.json retains that evidence. Existing
+passing source controls were not repeated.
+
+RetiredOwnerLaunch now owns the canonical original3931 owner/admission/launch
+handoff and its stopped validation; the competing live selection methods are
+deleted. Original process capture reads the source interpreter and environment
+from that process, with birth and registry relation checks. Current/P source
+controls and canonical declaration equality support this source closure; actual
+stopped-batch/OFD/installed recovery remains unqualified.
+
+The configured producer now declares auto_wake=False and forwards an explicit
+True through original CommsAgent and InputDrain.ensure_live_drain after owned
+binding. Existing compaction/S4 defaults stay false. This resolves the previously
+reported keyword binding defect in source. Heis published configured Toad479
+8dc69db1 separately, with its future operands bound to this new producer; no
+configured provider journey has run. Its proposed worst-PID socket is65 bytes.
+
+The existing MCP fixture releases its localhost response only after the subscribed
+Attachment awaits the mounted observer and decodes the genuine receipt; passive
+Audit no longer owns that operational event. Allow47.833 remains accepted.
+No-controller remains failed, and revoke/disconnect remain unrun. The source
+ordering gap is established; the exact earlier callback failure remains inference.
+Mendel proposes only those three affected cases under future fresh custody.
+
+Warm04 stage is consumed once and its new matching READ16d70 is bound. Heis's
+exclusive proof helper1eb3/source bindingb404 is prepared, not invoked. Parent
+relayed those exact operands to Bohr for original same-purpose release. Receipt
+and relay do not authorize proof or App execution. Warm/eviction and configured
+continuous acceptance remain unfinished; held histories and old failures persist.
+
 ### Configured producer/consumer binding defect assigned — 2026-10-06
 
 Parent source review found configured_main in Heis's active consumer passes
