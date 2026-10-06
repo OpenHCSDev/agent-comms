@@ -1,0 +1,254 @@
+{
+  "state": "Source-only proposal. No stage, declaration/root READ, publisher, native or recovery operation authorized or performed.",
+  "original_source_git": "3931f16feb8bcb2dbcc3041446ca342dea665024",
+  "selected_pair": {
+    "core": {
+      "source_head": "ddcdc422c7fe01453edb2469bcfa8303d771db67",
+      "wheel": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/current-paired-core-20261006/wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "sha256": "6b426d7ea31f4a6e30db2c2fdbd4eaa4d1be6dcea9aba3c6e599f7c063987b6b",
+      "bytes": 910730,
+      "package_assets": 355,
+      "record_rows": 360,
+      "git_local_zip_equal": true,
+      "no_package_extras": true,
+      "complete_RECORD": true,
+      "native_manifest_sha256": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+      "installed": false
+    },
+    "toad": {
+      "source_head": "afae409d1cdf34e0a0fa06c8fb02dfba740ad229",
+      "core_source_pin": "ddcdc422c7fe01453edb2469bcfa8303d771db67",
+      "wheel": "/home/ts/wt/toad-current-installed-integration-20261006/.artifacts/current-paired-toad-reader-20261006/wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "sha256": "410c3ab0eee04e628d16fbbd11c591d7d7676f5c714ce82b273cfb0ad89acd8c",
+      "bytes": 2251240,
+      "package_assets": 319,
+      "record_rows": 324,
+      "git_local_zip_equal": true,
+      "no_package_extras": true,
+      "complete_RECORD": true,
+      "changed_package_members_from_retained_pair": [
+        "toad/widgets/history_anchor.py"
+      ],
+      "installed": false,
+      "runtime_acceptance": "UNRUN; reader repair source/artifact only"
+    },
+    "native_package_selection": "Exact existing 4b manifest; FullTrust/READ/EXEC must be fresh purpose-bound, not inherited",
+    "textual_source_pin": "a2dd8a9a37825a828df0d8f651ca57d92db69e5f",
+    "builds_per_project": 1,
+    "installed": false,
+    "runtime_acceptance": "UNRUN; no prefix/grant/source custody inferred",
+    "preserved": "Original allow and routing positives, held failed inputs/journals and frozen old artifacts remain unchanged",
+    "next_owner": "Original Heis final configured operands and Original Bohr actual eligible floor/purpose; Sch fresh matching READ/EXEC afterwards",
+    "textual": {
+      "source_head": "a2dd8a9a37825a828df0d8f651ca57d92db69e5f",
+      "wheel": "/home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native70-71-filewheel-20261005/textual-8.2.8-py3-none-any.whl",
+      "sha256": "bc47c59ea7db78a9a443c5f5e3f10836660957f21bb998d2ffa3ae8e4a2ddbe3",
+      "bytes": 768804,
+      "package_assets": 266,
+      "build_record": {
+        "path": "/home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native70-71-filewheel-20261005/build-receipt.json",
+        "sha256": "0d2688b3096cbfabfeedc9e19b0c38f1589c26ad27b83cbd76b9c93568adc499",
+        "bytes": 1999
+      },
+      "selection": "Unchanged retained Text71 wheel; existing build record reused, no new verification run."
+    }
+  },
+  "paired_build_record": {
+    "path": "/home/ts/wt/comms-cleanup-live-integration-20260929/evidence/current-paired-artifacts-20261006/PAIRED-ARTIFACTS.json",
+    "sha256": "a4b458a9ad2f121f26c0554cf8cb9494f2eba9706be98f3e8c195ab944dacdc8",
+    "bytes": 1854
+  },
+  "core_build_proof": {
+    "path": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/current-paired-core-20261006/wheel-source-relation.json",
+    "sha256": "ef146377965f6c2e2ede6a446990745366dfe63e24ae111958fa0111e29069ba",
+    "bytes": 562
+  },
+  "toad_build_proof": {
+    "path": "/home/ts/wt/toad-current-installed-integration-20261006/.artifacts/current-paired-toad-reader-20261006/wheel-source-relation.json",
+    "sha256": "74fcebdd6b08499904796422f95f3fe772e09c1dee1006f32e3a236546ce6863",
+    "bytes": 709
+  },
+  "canonical_manifest": {
+    "path": "/home/ts/wt/comms-original-owner-admission-20261006/docs/refactor/retained-routing-provenance-20261005/same-format3931-publication/CANONICAL-SOURCE-MANIFEST.json",
+    "sha256": "240fbccd8ef061b037aafcc228caff3cf73ba491426e5b64b2111c2f5cfe9c55",
+    "bytes": 13796
+  },
+  "source_dependencies": {
+    "path": "/home/ts/wt/comms-original-owner-admission-20261006/docs/refactor/retained-routing-provenance-20261005/same-format3931-publication/SOURCE-DEPENDENCIES.json",
+    "sha256": "2a9c6ac7d45cb98b31e7f5647d2495aa6f2904dc631d0285d82e23c9b0d7e847",
+    "bytes": 7361
+  },
+  "operators": {
+    "integration_and_once_publisher": "OriginalParent",
+    "proposed_canonical_and_cohort_preparation": "OriginalSch under a future specific scope; handoff pending",
+    "same_format_method_and_recovery_source": "OriginalEinstein",
+    "eligible_floor_and_private_closure": "OriginalBohr",
+    "configured_journey": "OriginalHeis independently"
+  },
+  "cwd": "/home/ts/wt/comms-original-owner-admission-20261006",
+  "environment": {
+    "PYTHONPATH": "ABSENT",
+    "PYTHONHOME": "ABSENT",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "proposed_output": "/home/ts/wt/comms-original-owner-admission-20261006/.artifacts/same-format3931-publication-20261006",
+  "output_created": false,
+  "canonical_destination": "/home/ts/wt/comms-original-owner-admission-20261006/.artifacts/same-format3931-publication-20261006/canonical-source-ddcdc422/tools/cutover",
+  "original_root_source_constant": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "root_observed": false,
+  "commands": {
+    "canonical_prepare_argv_template": [
+      "TARGET_PYTHON_UNBOUND",
+      "-I",
+      "-B",
+      "-c",
+      "import sys,json,hashlib,subprocess,os\nfrom pathlib import Path\nmanifest=json.loads(Path(sys.argv[1]).read_text());destination=Path(sys.argv[2]);repository=sys.argv[3]\nassert manifest['original_core_git']=='ddcdc422c7fe01453edb2469bcfa8303d771db67'\ndestination.mkdir(mode=0o700,parents=True,exist_ok=False)\nfor row in manifest['members']:\n data=subprocess.check_output(['git','-C',repository,'show',manifest['original_core_git']+':'+row['source']])\n assert hashlib.sha256(data).hexdigest()==row['sha256'] and len(data)==row['bytes']\n path=destination/Path(row['source']).name\n with path.open('xb') as opened:opened.write(data)\n os.chmod(path,int(row['git_mode'][-3:],8))\n assert hashlib.sha256(path.read_bytes()).hexdigest()==row['sha256'] and (path.stat().st_mode&0o777)==int(row['git_mode'][-3:],8)\nassert len(list(destination.iterdir()))==len(manifest['members'])\nprint('Selected canonical source copy/readback PASS; no public write')\n",
+      "/home/ts/wt/comms-original-owner-admission-20261006/docs/refactor/retained-routing-provenance-20261005/same-format3931-publication/CANONICAL-SOURCE-MANIFEST.json",
+      "/home/ts/wt/comms-original-owner-admission-20261006/.artifacts/same-format3931-publication-20261006/canonical-source-ddcdc422/tools/cutover",
+      "/home/ts/wt/comms-original-owner-admission-20261006"
+    ],
+    "cohort_prepare_argv_template": [
+      "TARGET_PYTHON_UNBOUND",
+      "-I",
+      "-B",
+      "-c",
+      "import sys, json, subprocess, os, hashlib\nfrom pathlib import Path\nsys.path.insert(0, sys.argv[1])\nfrom agent_comms.field_codec import FieldCodec\nfrom agent_comms.comms import Comms\nfrom agent_comms.owner_launch import RetainedOwnerLaunch\nfrom agent_comms.owner_restart import OwnerRestartRequest\nfrom agent_comms.active_route import read_active_route\nfrom publish_retained_summary import ROOT, ReviewedArtifact, ReviewedRetainedSummaryCohort, InstalledSourceProof, CohortActivation\nfrom native_schema_carry import NativeSchemaDeclaration\nfrom checkpoint_schema import declared_schema_digest\nfrom runtime_installation import PreserveRuntimeInstallation\nbase = Path(sys.argv[2])\ninputs = json.loads((base / 'qualification-input.json').read_text())\nassert not (base / 'publication-receipt.json').exists() and (not (base / 'publication-receipt.originals').exists())\nproof_path = base / 'source-proof.json'\nactivation_path = base / 'candidate-activation.json'\nproof = FieldCodec.decode(InstalledSourceProof, json.loads(proof_path.read_text()))\nactivation = FieldCodec.decode(CohortActivation, json.loads(activation_path.read_text()))\nproof.require_activation(activation)\nassert sys.executable == str(proof.prefix / 'bin/python')\nservice = Comms(ROOT, private_initial_writes=False, private_claim_writes=False)\nsnapshot = service.registry.snapshot()\nlaunches = tuple((RetainedOwnerLaunch.capture(t, snapshot) for t in OwnerRestartRequest().threads(snapshot)))\nassert launches\ninterpreters = {x.interpreter for x in launches}\nassert len(interpreters) == 1\nsource_python = Path(next(iter(interpreters)))\nassert source_python == Path(inputs['current_prefix']) / 'bin/python'\nchild = \"import sys,json;sys.path.insert(0,sys.argv[1]);from agent_comms.field_codec import FieldCodec;from native_schema_carry import NativeSchemaDeclaration;from checkpoint_schema import declared_schema_digest;print(json.dumps({'native':FieldCodec.encode(NativeSchemaDeclaration.observe()),'checkpoint':declared_schema_digest()}))\"\nenv = dict(os.environ)\nenv.pop('PYTHONPATH', None)\nenv.pop('PYTHONHOME', None)\npacket = json.loads(subprocess.check_output([str(source_python), '-I', '-B', '-c', child, sys.argv[1]], env=env, text=True))\noriginal = FieldCodec.decode(NativeSchemaDeclaration, packet['native'])\ntarget = NativeSchemaDeclaration.observe()\noriginal.require_carry_target(target)\nassert original == target and packet['checkpoint'] == declared_schema_digest(), 'Actual declaration/checkpoint differs: return source/target to original NativeSchemaCarryPlan owner; no inferred reset/carry'\nartifact = lambda p: ReviewedArtifact(p, hashlib.sha256(p.read_bytes()).hexdigest())\ngates = tuple((FieldCodec.decode(ReviewedArtifact, r) for r in inputs['actual_gates']))\ncohort = ReviewedRetainedSummaryCohort(proof.prefix, Path(inputs['current_prefix']), read_active_route(), proof.native_package, artifact(activation_path), artifact(proof_path), gates)\ncohort.require_original()\nruntime = PreserveRuntimeInstallation(original.goal)\nvalues = [('original-declaration.json', FieldCodec.encode(original)), ('target-declaration.json', FieldCodec.encode(target)), ('checkpoint-relation.json', {'source': packet['checkpoint'], 'target': declared_schema_digest(), 'source_python_owner': 'RetainedOwnerLaunch'}), ('review-plan.json', FieldCodec.encode(cohort)), ('runtime-installation.json', FieldCodec.encode(runtime))]\nfor name, value in values:\n    with (base / name).open('x') as f:\n        json.dump(value, f, indent=2)\n        f.write('\\n')\nprint('Original typed whole cohort and PreserveRuntimeInstallation prepared; public writes0')",
+      "/home/ts/wt/comms-original-owner-admission-20261006/.artifacts/same-format3931-publication-20261006/canonical-source-ddcdc422/tools/cutover",
+      "/home/ts/wt/comms-original-owner-admission-20261006/.artifacts/same-format3931-publication-20261006"
+    ],
+    "parent_once_execute_argv_template": [
+      "TARGET_PYTHON_UNBOUND",
+      "-I",
+      "-B",
+      "-c",
+      "import sys,runpy\nfrom pathlib import Path\ncanonical,base=map(Path,sys.argv[1:])\nsys.path.insert(0,str(canonical))\nsys.argv=[str(canonical/'execute_retained_summary_foundation.py'),'--review-plan',str(base/'review-plan.json'),'--receipt',str(base/'publication-receipt.json'),'--runtime-installation',str(base/'runtime-installation.json'),'--execute']\nrunpy.run_path(sys.argv[0],run_name='__main__')\n",
+      "/home/ts/wt/comms-original-owner-admission-20261006/.artifacts/same-format3931-publication-20261006/canonical-source-ddcdc422/tools/cutover",
+      "/home/ts/wt/comms-original-owner-admission-20261006/.artifacts/same-format3931-publication-20261006"
+    ]
+  },
+  "template_substitution": "TARGET_PYTHON_UNBOUND must be replaced with the actual explicitly issued target/bin/python before any phase release. It is not an executable command now.",
+  "preparation_source": {
+    "path": "/home/ts/wt/toad-prompt-action-owner-20261002/evidence/merged466-worker-functional-receiving-20261005/PROPOSED-RECEIVING-COMMAND-PLAN.json",
+    "sha256": "11590b39079f648f485d084d66b1c97113a28f67831224880a52bab0ca6dce66",
+    "bytes": 19803
+  },
+  "preparation_deltas": [
+    "Selected canonical source comes from exactddcdc Git, with its derived50-file membership instead of obsolete51-file count.",
+    "Capture complete OwnerRestartRequest audience; no old hardcoded19-owner count.",
+    "Writer emits a single newline.",
+    "All paths derive from the new output and bound target; old once outputs remain untouched."
+  ],
+  "source_acquisition": "RetainedOwnerLaunch.capture original process command/environment. Source interpreter is captured at use and compared to reviewed current_prefix. Optional source_interpreter is a refusal constraint, not a default needed by the publisher.",
+  "native_source_declaration": {
+    "source_head": "3931f16feb8bcb2dbcc3041446ca342dea665024",
+    "forced_git_input": "stack/pi-native.sha256",
+    "wheel_member": "agent_comms/_native/pi-native.sha256",
+    "manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+    "tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d"
+  },
+  "native_target_declaration": {
+    "source_head": "ddcdc422c7fe01453edb2469bcfa8303d771db67",
+    "forced_git_input": "stack/pi-native.sha256",
+    "wheel_member": "agent_comms/_native/pi-native.sha256",
+    "manifest": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+    "tree": "63f18710cb9329be6ade27bac3b4dd822e2b36f013756fa8e6717b8073a4592c",
+    "package": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent"
+  },
+  "native_relation": "Original3931 source7a and selected target4b differ. Fresh scope must bind source recovery and target proof/launch resources truthfully. Source declaration READ is not artifactEXEC; no old receipt inheritance.",
+  "cohort_fields": [
+    "target",
+    "current_prefix",
+    "original_route",
+    "native",
+    "activation",
+    "source_proof",
+    "actual_gates"
+  ],
+  "cohort_input": "Existing typed InstalledSourceProof/CohortActivation and distinct ReviewedArtifact gates. Fresh actual installed proof, route/defaults and qualification-input required; none claimed from source builds.",
+  "runtime": "PreserveRuntimeInstallation(original.goal) only if actual original NativeSchemaDeclaration and checkpoint equality pass inside released preparation. Refuse mismatch without reset, inferred carry or guessed schema.",
+  "task_member": "PreserveOwnerRuntime()",
+  "publisher_flow": [
+    "execute_retained_summary_foundation strict-decodes reviewed cohort/runtime",
+    "PublishRetainedSummary captures original full audience and recovery files before signals",
+    "AdmittedOwnerBatch selection/process/environment capture -> fence -> FencedOwnerBatch retirement and truthful partial disposition",
+    "StoppedOwnerInstallation.complete after_stopped -> bind_target_launch -> SAME stopped.launch",
+    "PublishRetainedSummary checks settings and target interpreter after launch"
+  ],
+  "recovery": {
+    "entry": "PublishRetainedSummary.failed -> restore_unchanged -> recover -> restore_stopped_batch",
+    "argv_derivation": [
+      "stopped.handoff.owners[0].launch.interpreter",
+      "/home/ts/wt/comms-original-owner-admission-20261006/.artifacts/same-format3931-publication-20261006/canonical-source-ddcdc422/tools/cutover/restore_stopped_owners.py",
+      "str(stopped.wire_descriptor)"
+    ],
+    "environment": "stopped.handoff.owners[0].launch.environment",
+    "stdin": "FieldCodec.encode(stopped.handoff); private pipe only, no saved launch credentials",
+    "pass_fds": "(stopped.wire_descriptor,) SAME original OFD",
+    "original_decoder": "Original3931 installed FieldCodec/OwnerRestartHandoff; StoppedOwnerBatch.accept(int) validates inherited OFD and owns original StoreLock. No current code reads wire_descriptor from an original3931 batch.",
+    "proof_before_restore": [
+      "Original publication route/defaults unchanged",
+      "Recovery file membership/digests/package/interpreter unchanged",
+      "Original stopped settings unchanged",
+      "Every launch interpreter matches the acquired source child",
+      "Every owner/admission/process/stopped witness and OFD root/device/inode/UID/flock validated before launch"
+    ],
+    "failure_disposition": "Original cause preserved. Partial retirement never enters complete-batch recovery; changed/uncertain bytes, route, witness or target launch refuse unchanged-source restore. Existing failed/leave_stopped/failure.abandon retain truthful stopped/changed disposition without re-signal/retry/replacement."
+  },
+  "unbound": {
+    "actual_target_prefix": null,
+    "fresh_floor_preimage_archive_and_return_argv": null,
+    "fresh_specific_grant": null,
+    "actual_original3931_installed_source_capture": null,
+    "fresh_native_resource_authorities": null,
+    "source-proof.json": null,
+    "candidate-activation.json": null,
+    "qualification-input.json_current_prefix_and_actual_gates": null,
+    "actual_declarations_and_checkpoint": null,
+    "typed_review-plan.json": null,
+    "typed_runtime-installation.json": null,
+    "parent_fresh_admission_and_once_release": null,
+    "post_publication_readback_and_affected_journey_operands": null
+  },
+  "separate": "Amended720P report retirement/GoalReportMemberRetirement/restart_original_thread_format are excluded. Merged routing and its closed purposes are not repeated. Wholecentralbatch physical3931 recovery remains unqualified.",
+  "source_sanity": {
+    "json_roundtrip": true,
+    "embedded_command_compile_only": 3,
+    "operative_file_compile_without_imports": 17,
+    "newline_codepoints": [
+      10
+    ],
+    "imports_tests_builds_operations": 0
+  },
+  "selection_update": {
+    "previous_proposal": {
+      "path": "/home/ts/wt/comms-original-owner-admission-20261006/docs/refactor/retained-routing-provenance-20261005/same-format3931-publication/PROPOSED-OPERANDS.json",
+      "sha256": "71213f2eab1a9b6746828b1859dfe98fcbecdfb5ff70b04064870c903c4696a0",
+      "bytes": 16956
+    },
+    "preserved_previous_toad": {
+      "source_head": "c2b4c3e828322b9e4803a8d29f38ad6ddc27065a",
+      "core_source_pin": "ddcdc422c7fe01453edb2469bcfa8303d771db67",
+      "wheel": "/home/ts/wt/toad-current-installed-integration-20261006/.artifacts/current-paired-toad-20261006/wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "sha256": "bfbde5ba4026e5fb6c30cbaf58cc4b97bcc8ae5c0f528379db77b3c9f859289d",
+      "bytes": 2251133,
+      "package_assets": 319,
+      "record_rows": 324,
+      "git_local_zip_equal": true,
+      "no_package_extras": true,
+      "complete_RECORD": true,
+      "metadata_dependency": "agent-comms[acp]; exact fork pin owned by Git build inputs",
+      "installed": false
+    },
+    "new_toad_build_receipt": {
+      "path": "/home/ts/wt/toad-current-installed-integration-20261006/.artifacts/current-paired-toad-reader-20261006/build-receipt.json",
+      "sha256": "1947216b86a84ccdf29ea1b42595e59edbcf7f596bf413301751da62abce9ea9",
+      "bytes": 1139
+    },
+    "reason": "Reviewed reader480 repair changes only history_anchor.py; use the already-built successor for future publication.",
+    "core_integration_notice": "Parent merged688 into main7ef9723e and reports code/build inputs unchanged versus selectedddcdc. Core determining source remainsddcdc and retained6b426 wheel is unchanged.",
+    "effective_selection": "This append-only proposal replaces only the future Toad selection and its proof, and makes the unchanged Textbc47 operand explicit. The old proposal and bfb wheel remain preserved.",
+    "commands_and_recovery_unchanged": true,
+    "native_resources_unchanged": "Source7a recovery and target4b remain distinct. No authority inherited or activated.",
+    "operation": "Source selection only; no build, import, test, installed proof, prefix, root, native or public operation."
+  }
+}
