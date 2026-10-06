@@ -23,7 +23,13 @@ The original objective remains incomplete. CI is deferred as a merge gate.
   and sidebar are independent resources in the same working-set budget.
   Four-tab source App returns passed, including two identical warm panel graphs
   and exact project-reader restoration after eviction. Draft489 retains an
-  earlier intermittent disclosure failure; installed latency remains unverified.
+  earlier intermittent disclosure failure. The source race is now repaired by
+  synchronous RelationshipRows intent, deleting its delayed message/handler.
+  Toad489 and native73 are merged; native left/right drag/slider capture passed.
+  Current three-wheel candidate is built and all940 changed-package assets plus
+  complete RECORDs match Git. Paired pins Toad490 are merged. Actual installed and
+  physical latency remain unverified. Fresh Bohr returned485 assessment is delivered;
+  no prefix or public App has been changed.
   No repeat physical operation or source/provider input is authorized by that
   source investigation.
 
@@ -5125,3 +5131,32 @@ and runtime9873 are bound; proof/App still require the actual new READ and
 proof/release. The immediately preceding6d265 return governs this continuation,
 not the older09bc descriptive record. No build, native execution, provider input
 or performance wait is required for this mounted worker check.
+
+## Current sidebar latency candidate, 2026-10-06
+
+Owned build output: /home/ts/wt/toad-sidebar-selected-targets-20261006/.artifacts/sidebar-latency-pair-20261006.
+BUILD-SOURCES.json / WHEEL-READBACK.json bind Core d8467b730 (696+697),
+Toad33dfcf15 (merged489 plus two-pin integration) and native1a12a186 (merged73).
+All355+319+266 changed-package assets and complete RECORD hashes/sizes match
+Git archives. Original Diff/NRA remain selected separately; no rebuilt-native
+Pi package, prefix stage or provider/source input was executed.
+The system Python missing Poetry backend refusal is retained. Cached declared
+backend built native once; all original build commands and raw are retained.
+Current owned source archive directories/tars are build scratch, not borrower
+inputs; release after the candidate is sealed. Wheels and receipts remain.
+Bohr fresh readonly485 request accepted on turn01a110a3-b354-7eb1-b711-9cf03891aa63
+through the existing daemon because the advertised MCP38151 transport is dead.
+Actual purpose and authorities remain unissued, pending concrete current floor
+and restore binding. Existing physical02/source/raw/journals remain unchanged.
+
+Fresh returned485 contract: /home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/485-Parent-sidebar-latency-physical-eligible-contract-readback.json.
+The final matched physical tuple now binds its actual preimage/floor/69 origins,
+clear private references and literal original three-wheel return.
+Publication: /home/ts/wt/toad-sidebar-selected-targets-20261006/evidence/sidebar-latency-physical-20261006/FINAL-PHYSICAL-OPERANDS.json.
+Fixed original physical/helper source root remains the Parent right-sidebar WT;
+all current helper hashes are bound. New physical03/pslp03 outputs are absent.
+Scope remains one isolated st, two new saved SDK forks, zero submitted inputs,
+600 outer/240 recording. Original source witness and private whole return remain
+separate. Specific purpose/native/source authorities are still unissued.
+Actual installed multiselect/backend outcomes require their own affected path
+acceptance; physical gesture footage is not batch backend acceptance.
