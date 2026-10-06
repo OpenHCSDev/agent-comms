@@ -1,0 +1,10 @@
+...F                                                                     [100%]
+=================================== FAILURES ===================================
+_ test_unannotated_c3_override_masks_handler_and_instance_binding_remains_live _
+tests/test_agent_events.py:88: in test_unannotated_c3_override_masks_handler_and_instance_binding_remains_live
+    value = Value()
+            ^^^^^^^
+E   TypeError: Can't instantiate abstract class Value without an implementation for abstract method '__init__'
+=========================== short test summary info ============================
+FAILED tests/test_agent_events.py::test_unannotated_c3_override_masks_handler_and_instance_binding_remains_live
+1 failed, 3 passed in 0.84s

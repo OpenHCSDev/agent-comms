@@ -1,0 +1,119 @@
+{
+  "scope": "Changed declaration-owned handler supply, existing authored source App; not installed/live pixels",
+  "app_exit": 0,
+  "app_stderr_bytes": 0,
+  "app": {
+    "boundary": "completed headless _display; not terminal pixels",
+    "tabs": 10,
+    "pointer": true,
+    "active_widgets": 508,
+    "toggle_first_paint": {
+      "#channels-sidebar": {
+        "median_ms": 36.0,
+        "p95_ms": 40.9,
+        "max_ms": 92.0
+      },
+      "#thread-sidebar": {
+        "median_ms": 36.5,
+        "p95_ms": 44.2,
+        "max_ms": 62.2
+      }
+    }
+  },
+  "most_matched_prior_app": {
+    "boundary": "completed headless _display; not terminal pixels",
+    "tabs": 10,
+    "pointer": true,
+    "active_widgets": 508,
+    "toggle_first_paint": {
+      "#channels-sidebar": {
+        "median_ms": 41.8,
+        "p95_ms": 63.7,
+        "max_ms": 166.3
+      },
+      "#thread-sidebar": {
+        "median_ms": 47.4,
+        "p95_ms": 52.5,
+        "max_ms": 91.5
+      }
+    }
+  },
+  "profiles": {
+    "channels": {
+      "original": [
+        {
+          "source": "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/mro_dispatch.py",
+          "calls": 53,
+          "own_ms": 20.009726,
+          "inclusive_ms": 34.41004900000001
+        }
+      ],
+      "native79": [
+        {
+          "source": "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/mro_dispatch.py",
+          "calls": 53,
+          "own_ms": 24.818428,
+          "inclusive_ms": 42.76637
+        }
+      ],
+      "changed": [
+        {
+          "source": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/src/agent_comms/mro_dispatch.py",
+          "calls": 53,
+          "own_ms": 0.15854600000000002,
+          "inclusive_ms": 0.165639
+        }
+      ]
+    },
+    "thread": {
+      "original": [
+        {
+          "source": "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/mro_dispatch.py",
+          "calls": 36,
+          "own_ms": 12.491321000000001,
+          "inclusive_ms": 21.298276
+        }
+      ],
+      "native79": [
+        {
+          "source": "/home/ts/wt/comms-cleanup-live-integration-20260929/src/agent_comms/mro_dispatch.py",
+          "calls": 36,
+          "own_ms": 13.078549,
+          "inclusive_ms": 22.227366000000004
+        }
+      ],
+      "changed": [
+        {
+          "source": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/src/agent_comms/mro_dispatch.py",
+          "calls": 36,
+          "own_ms": 0.10458100000000001,
+          "inclusive_ms": 0.108086
+        }
+      ]
+    }
+  },
+  "checks": "3 existing ordering/replacement variants PASS; added masking/binding control PASS separately after authored abstract-constructor refusal. No accepted controls repeated. Startup dependency refusals retained.",
+  "core_baseline": "d8467b730 product sources byte-equal to574098293; actual run changes only src/agent_comms/mro_dispatch.py",
+  "source_roots": {
+    "core": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/src",
+    "toad": "437e987f2",
+    "native": "95c0b14db (native79)"
+  },
+  "environment": "Existing ordinary Toad Python3.14 App dependency environment, no writes/install. Source controls append existing system pytest dependencies after App dependencies; serial addopts override. NO_COLOR removed for App.",
+  "unqualified": "Installed/live performance, full App journey and arbitrary late external class/marker mutation. No native/ACP/provider/study verification or package authority acquired.",
+  "raw_sha256": {
+    "/home/ts/.cache/agent-scratch/tab-sidebar-native-app-20261006/toggle-channels.pstats": "62677e584d201d63342784575c10fa63a2017d6ce85d3d16d8811302c1c20bf0",
+    "/home/ts/.cache/agent-scratch/native-sidebar-invalidation-20261006/toggle-channels.pstats": "d165e9aec8ea0fd26d8d3cdb0fccdf19924599f64de4039bf26685137205a03e",
+    "/home/ts/.cache/agent-scratch/declared-handler-supply-20261006/toggle-channels.pstats": "daffa67f43df3819af7a44d56387b5173c3ffa8bbf3051384b73744828744d23",
+    "/home/ts/.cache/agent-scratch/tab-sidebar-native-app-20261006/toggle-thread.pstats": "631271560a14978c886afbd94602dd885eb25489c5ad06e9196b868dafac6ce1",
+    "/home/ts/.cache/agent-scratch/native-sidebar-invalidation-20261006/toggle-thread.pstats": "a94dbded3baa0b5ce704230d524e1c7f93ac11733ecc82964ee911f3614d9288",
+    "/home/ts/.cache/agent-scratch/declared-handler-supply-20261006/toggle-thread.pstats": "bb0078dfe90967a91d5ae536147e3f5ecc19ef44e940bfd7b98c3c1212af29f4",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/declaration-owned-handler-supply-20261006/declaration-controls-authored-constructor-refusal.log": "ffb6032c98c0e4f40e3218ebfdd7ab7033c72414692b2c1e44547b7553c128f4",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/declaration-owned-handler-supply-20261006/declaration-controls-system-dependency-refusal.log": "c173aa5dc530d43b852e365a38140282126d23dd2ea7b465b170e847dc33cb6a",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/declaration-owned-handler-supply-20261006/override-binding-control.log": "fedceb118a93f8e9bed4f5b262246c28f6bfdace0d13713f5045fa2fb6554486",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/declaration-owned-handler-supply-20261006/declaration-controls-app-environment-refusal.log": "c6314d02e81cb376a8334a1dbfb5269b3ba065a94cf30da5d8f5ea9c7421e354",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/declaration-owned-handler-supply-20261006/declaration-controls-original-startup-refusal.log": "5caeb3a7f556ae66fa1ed4dc55751da886d38412e0d9d22d1adbab229156cffa",
+    "/home/ts/.cache/agent-scratch/declared-handler-supply-20261006/app.stdout.log": "88fbf1a73695fb8f6651f5995fe715712926c94d8d0bab268463bcf1cd1c17c7",
+    "/home/ts/.cache/agent-scratch/declared-handler-supply-20261006/app.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
