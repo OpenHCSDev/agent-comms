@@ -4,6 +4,20 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Repaired artifact and actual affected native run — 2026-10-06
+
+One separate Toad successor wheel now contains joined reader480. All319 source
+assets and324 RECORD rows validate; only history_anchor.py differs from the
+frozen configured wheel. Core and Textual are unchanged. Build/raw/source
+relation is published in Parent478 evidence/current-paired-reader-artifact-20261006.
+Heis and Bohr received it for explicit final configured selection; neither
+installation nor runtime qualification is claimed from the build.
+
+Mendel received fresh EXEC and Bohr same-purpose release. The original controller
+and test child are now running with matching recorded birth identities. Only
+no_controller/revoke_midturn/disconnect are included; allow/guard are excluded.
+Result and original whole return remain pending. No second launch or retry.
+
 ### Reader integration and configured installation next — 2026-10-06
 
 Warm04 holder and artifact authorities are independently closed. Two warm
