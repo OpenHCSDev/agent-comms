@@ -23,8 +23,20 @@ The original objective remains incomplete. CI is deferred as a merge gate.
   No installed prefix or live link changed. Bohr received the artifacts for a
   fresh existing-holder contract; Parent is preparing the original physical
   recorder's sidebar/wheel/reversal/End and saved-return paths independently.
-- Current GitHub queries find no open Core or Toad PRs. This clears the open-PR
-  integration queue, not the remaining installed workflow/refactor acceptance.
+- The prior integration queue had no open Core/Toad PRs at the fresh query.
+  Parent then published Toad485 (a39b5bcd), a physical-control checkpoint only:
+  original sidebar motion is promoted unchanged into a shared capability and
+  composed with saved-history wheels, context Tree motion and right hide/reopen.
+  Production/pins/wheels are unchanged; no second fixture or recorder.
+- Bohr's fresh returned485 contract confirms its original floor/69 origins and
+  exact three-package return, private refs/gaps clear, with actual new wheel
+  Git/RECORD relations. Parent binds that assessment/preimage in
+  evidence/sidebar-wheel-installed-20261006/FINAL-PHYSICAL-OPERANDS.json,
+  at the fixed sidebar WT. One real read-only source owner supplies two private
+  SDK saved forks; isolated st/native targets/raw frames remain original. The
+  concrete whole600/recording240 safety bounds preserve original history20 and
+  navigation2 checks. Specific issue/proof/source/native releases and runtime
+  remain unissued at this checkpoint; the final tuple is sent for fresh issue.
 - Actual visible pointer App: right median50.4ms/p9558.5ms/max112.9ms; left
   median54.5ms/p9571.6ms/max185.5ms, empty stderr. Earlier429/424ms measurements
   selected a hidden zero-size sidebar and are invalid visible-toggle results,
