@@ -54,6 +54,13 @@ The original objective remains incomplete. CI is deferred as a merge gate.
   explicit private/source returns and clear census. Raw and both journals remain
   held. Right/context and saved-return acceptance is incomplete; performance
   review and fresh affected qualification remain, with no rerun authorized here.
+  The corrected physical02 tuple is now separately issued stage-only. Its one
+  three-wheel stage passed0.230s and all original stage processes joined/are
+  absent. The recorder scrolls the outer right panel before the visible tree;
+  useful-paint passes original --fit-window for a usable isolated message area.
+  Same built wheels,600/240/20/2 bounds; proof/source capture/App are held pending
+  actual matching receipts and same-purpose releases. Completed old motion
+  review preserves source-bound body/writer evidence without latency acceptance.
 - Actual visible pointer App: right median50.4ms/p9558.5ms/max112.9ms; left
   median54.5ms/p9571.6ms/max185.5ms, empty stderr. Earlier429/424ms measurements
   selected a hidden zero-size sidebar and are invalid visible-toggle results,
