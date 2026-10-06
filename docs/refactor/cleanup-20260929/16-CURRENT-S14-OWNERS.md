@@ -4,6 +4,20 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Restart ownership fix merged on the fork — 2026-10-06
+
+Parent completed source review, moved689 from its already-merged routing base
+to main, and normally merged the exact canonical handoff checkpoint. Fork main
+merge5a24c133 is actual merged state. Parent's subsequent normal join had zero
+file delta; retained Core build bytes and selected Toad pin remain unchanged.
+No rebuild followed. Physical stopped-batch/OFD/recovery acceptance is still
+pending; source merge does not claim local installation.
+
+Mendel's staging for the three affected MCP cases passed. Parent relayed the
+joined receipt and proof operands to Sch for fresh matching READ. Bohr already
+has those operands. Original proof and runtime releases remain their dependency;
+accepted allow and guard are excluded and the configured pair is separate.
+
 ### Current acceptance work — 2026-10-06
 
 The new matched pair is built and retained; installed acceptance is pending.
