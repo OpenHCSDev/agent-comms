@@ -20,8 +20,8 @@ The original objective remains incomplete. CI is deferred as a merge gate.
   and all319 Toad/266 native source members match. Core remains the explicitly
   reviewed ddcdc/6b426 artifact; no latest-Core equality claim. Exact build and
   readback are under Parent's current-ui-publication-pair-20261006 artifact root.
-  The nonlive returned485 prefix is now staged under its specific issue;
-  the live link remains unchanged. Parent's original physical recorder composes
+  The one physical purpose has run, restored the original floor and independently
+  closed; the live link remains unchanged. Parent's original physical recorder composes
   sidebar/wheel/reversal/End and saved-return paths in one journey.
 - The prior integration queue had no open Core/Toad PRs at the fresh query.
   Parent then published Toad485 (a39b5bcd), a physical-control checkpoint only:
@@ -42,8 +42,18 @@ The original objective remains incomplete. CI is deferred as a merge gate.
   passed in 3.300 seconds: all953 assets/full69/origins and original keepers match,
   original FullTrust passed, and both proof processes joined and are absent.
   Final handoff includes the exact typed Core member and thirteen-file App map.
-  Source capture and physical App await fresh execution/source receipts and final
-  release; no installed performance claim.
+  The subsequent sole physical App captured a real42.7MB source into two private
+  saved forks, reached left-sidebar and transcript wheel/reversal/End phases, then
+  refused a missing visible ContextTree target at138.79s. The saved frame shows
+  the right sidebar open with its earlier panels filling the small viewport; the
+  initial closed-sidebar explanation was wrong and is append-only corrected.
+  The existing recorder now wheels the native outer SidebarViewport before
+  targeting the tree. Strict target and saved-return checks remain; backend and
+  wheels are unchanged. Original three-package restoration passed once, full
+  floor/origins matched, and Bohr independently CLOSED the purpose after the
+  explicit private/source returns and clear census. Raw and both journals remain
+  held. Right/context and saved-return acceptance is incomplete; performance
+  review and fresh affected qualification remain, with no rerun authorized here.
 - Actual visible pointer App: right median50.4ms/p9558.5ms/max112.9ms; left
   median54.5ms/p9571.6ms/max185.5ms, empty stderr. Earlier429/424ms measurements
   selected a hidden zero-size sidebar and are invalid visible-toggle results,
