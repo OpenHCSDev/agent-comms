@@ -4,6 +4,22 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Clean producer692 merged on the fork — 2026-10-06
+
+Parent reviewed and normally merged the clean three-file producer692 at exact
+b331bd8e through GitHub main58fdd060, then normally joined main into688 with zero
+file delta. Only the existing producer's optional wake selection and its evidence
+changed; compaction/S4 defaults remain false. This is a real main merge, not
+configured runtime acceptance. Canonical689 remains a source draft based on the
+original routing branch;693 includes its existing qualifier family. Both are
+reviewed/integrated in Parent688, without relabelling their installed scope.
+
+Matched wheels were retained once before this source-equivalent main join.
+Core6b426d7e and Toadbfbde5ba build inputs and package assets remain unchanged;
+no rebuild follows the merge. Warm04 now has its distinct Bohr App release,
+not a result or configured-source authority. Original physical/runtime custody
+and terminal returns remain with its original Heis/Sch/Bohr owners.
+
 ### Matched current wheels retained once — 2026-10-06
 
 Parent normally joined configured Toad479 into478 and selected published Core
