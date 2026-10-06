@@ -40,6 +40,25 @@ Installed clipped60-row/range and later native batch acceptance,
 physical latency, continuous configured/loaded journeys and public cutover remain
 open. The full original objective remains active.
 
+### Current delivery checklist
+
+- [x] Original Core262/270/272 and Toad120/121/123/124 are merged; superseded271/53/116/122 are reconciled. Original scope/deletion evidence is retained below.
+- [x] Core696 batch commands and697 notification ownership, Toad486–491 selection/sidebar consumers, and native73–77 working source are merged. These source integrations do not establish public installation.
+- [x] Physical05 verified eleven saved-history/tab/draft/Undo checks with real42.7MB source and two private forks. Original restoration and explicit returns are independently closed.
+- [x] Batch06 verified initial Shift and mixed Ctrl selection. Its menu click failed; the one restoration and whole return are independently closed, with raw/twojournals held.
+- [ ] PR496 supplies canonical un-clipped Shift ranges and native Click menu activation. Focused real native menu activation passed; full installed mixed actions/clipped60-row/native batch acceptance remains. Corrected Toad713113 is built; unchanged Coreb55/nativea59 are retained. Final Batch07 tuple binds the fresh returned485 assessment; specific staging issue is requested, not yet received.
+- [ ] Physical latency and response-burst acceptance remain incomplete. Original sidebar handler/writer timings are measured but not input-to-photon or a live-build comparison. Left overflow was not exercised by the two-row physical fixture. Parent owns the next affected installed/physical acceptance.
+- [ ] Native76 removes the competing full-map geometry requirement and is merged; actual installed latency improvement remains unproved. Arendt owns native geometry/callback semantics; Parent owns matching App acceptance.
+- [ ] Continuous configured/loaded journeys remain incomplete at their exact recorded scopes. Original consumer repairs and partial successes are preserved below; no whole-journey acceptance is inferred.
+- [ ] Complete remaining original/refactor deletion closure, coherent reviewed public pair, original safe publication/cutover and fresh live feature/attachment/response verification. The user's installed build is unchanged. Preserve durable wire/goals/decisions/native sessions and uncertain inputs.
+
+The full original integration/refactor objective remains active. This checklist
+states current delivery; older phase snapshots below do not authorize replay.
+
+### Historical sidebar checkpoints retained from earlier summaries
+
+The following earlier checklist is preserved as dated evidence, not current status.
+
 ### Current priority: sidebar and scrolling responsiveness
 
 - [x] Core696 batch declarations, Core697 notification ownership and Toad486–490 sidebar/selection fixes are merged. Native73 pointer FIFO, native74 real sender-task lifetime, native75 callback execution ownership and their Toad pins are merged. Toad494 capture entry/error receipts are merged. Historical source and negative results below remain evidence, not current phase authority.
@@ -52,10 +71,6 @@ open. The full original objective remains active.
 - [ ] The user's live installation remains unchanged. Installed batch acceptance, final coherent pair/cutover and actual live attachment/feature/response-latency verification remain. Original durable history, native sessions, journals and UNKNOWN inputs must be preserved. The selected Core wheel is verified against actual current Core main d846 and already contains Core697 notification indexing; notification_assignment.py and presentation.py are byteequal in Git and ZIP. The earlier assumption that this fix was newer than the selected Core was wrong. No additional Core rebuild is required for that fix.
 - [ ] Configured and loaded continuous journeys remain incomplete at their recorded scopes. Their closed failures, partial successes and owned consumer repairs are retained below; neither a source repair nor the physical navigation pass supplies whole configured/loaded acceptance.
 
-The full original integration/refactor objective remains active. This checklist
-states current delivery; older phase snapshots below do not authorize replay.
-
-### Historical sidebar checkpoints retained from earlier summaries
 
 - Core696 and Toad488 are merged together. Ctrl/Shift thread/channel selection,
   retained right-click batch, original backend dialogs/read/archive and actual
