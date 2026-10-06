@@ -4,6 +4,32 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Fresh declaration source merged and routing stages issued — 2026-10-06
+
+Parent reviewed exact68719bb027f and merged30e46665 into main. Only the
+session_lifecycle production owner changes: declare publishes committed private
+membership through existing restore_stopped, then owning/attached lifecycle
+hooks resolve local acquisition or defer to original load admission. All direct
+Core consumers and shared SelectedSession/NativeSessionIdentity test wrappers
+were reviewed; three focused source checks are qualified. The integration
+branch normally joined main without a source delta. No installed acceptance,
+resource rebind, rebuild or native rerun follows this merge.
+
+The corrected observer d6ce is independently CLOSED7570cf14 after whole44b6d1
+and exact floor return. Original ACP Reserved/NotSent detail identifies refusal
+of the external launcher before native package/SDK acquisition. Mendel and Sch
+own the existing tuple correction to holder bin/pi-comms-native with the same
+PrivateNkLaunch4b; whole four-case behavior remains unqualified. The original
+guard positive and every failed/UNKNOWN input remain preserved.
+
+Bohr now issued paired routing stages85afc941/55ccf6a1 together on fresh540/334
+floors for Einstein's frozenb52ed4/145cd9 tuple. Only sourcec3e and targetc44+0fb
+stages and owned output preparation are released. Pure proof, SDK SessionManager
+create1/append2, mounted historical selection and worker retirement still require
+their later bindings and releases. Both normal floor returns remain mandatory;
+there is no current native agent, ACP/provider input or central-batch authority.
+Warm03 former485 is separate stage-only3d9a0cd1; PUBLIC475 stays protected.
+
 ### Configured continuous producer source followthrough — 2026-10-06
 
 Parent read the current original l0a native fixture, saved-state user journey,
