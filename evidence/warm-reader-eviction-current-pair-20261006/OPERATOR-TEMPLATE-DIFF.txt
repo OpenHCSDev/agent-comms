@@ -1,0 +1,21 @@
+--- /home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/loaded-history-current-pair-20261006/loaded334-controller.py
++++ /home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/warm-reader-eviction-current-pair-20261006/warm334-controller.py
+@@ -1 +1 @@
+-"""One issued loaded-history control through original BoundedRun/AttachedChild."""
++"""One issued warm/eviction control through original BoundedRun/AttachedChild."""
+@@ -56 +56 @@
+-    str(prefix/'bin/python'), '-B', proposal['exact_control']['path'], '--loaded-histories-only')
++    str(prefix/'bin/python'), '-B', proposal['exact_control']['path'], '--warm-admission-only')
+@@ -123 +123 @@
+-                'qualification': 'Original loaded-histories receipt and raw evidence determine reached scope; no exit-only qualification.',
++                'qualification': 'Original warm/eviction receipt and raw evidence determine reached scope; no exit-only qualification.',
+--- /home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/loaded-history-current-pair-20261006/loaded334-proof.py
++++ /home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/warm-reader-eviction-current-pair-20261006/warm334-proof.py
+@@ -1 +1 @@
+-"""Loaded-history installed proof through original InstalledSource and native trust owners."""
++"""Warm/eviction installed proof through original InstalledSource and native trust owners."""
+@@ -137,2 +137,2 @@
+-proof = InstalledSourceProof('PASS package/source/origin and original native FullTrust; loaded-history control held',prefix,tuple(sources),native,str(native/'dist/cli.js'),manifest,tree,True,metadata.version('agent-client-protocol'),69,tuple(packages),sha(output/'retained-wheel-install.txt'),len(keepers['protected_originals']),True,False,False,False,False,(), 'Loaded4/16/32/64 behavior remains unrun. FullTrust does not grant native execution.',artifacts)
+-dto = CohortActivation(prefix,{source.module:source.head for source in sources if source.module!='textual_diff_view'},proof.sdk,heads['textual_diff_view'],native,'Own private loaded-history DTO; original PREFIX activation immutable',proof_path,{name:str(prefix/'bin'/name) for name in ('python','toad','agent-comms','agent-comms-acp','agent-comms-agent','pi-comms-native')},proof.native_cli,manifest,tree,'Original4b FullTrust/source proof only; actual native execution requires separate new SchEXEC and Bohrrelease.')
++proof = InstalledSourceProof('PASS package/source/origin and original native FullTrust; warm/eviction control held',prefix,tuple(sources),native,str(native/'dist/cli.js'),manifest,tree,True,metadata.version('agent-client-protocol'),69,tuple(packages),sha(output/'retained-wheel-install.txt'),len(keepers['protected_originals']),True,False,False,False,False,(), 'Warm/eviction behavior remains unrun. FullTrust does not grant native execution.',artifacts)
++dto = CohortActivation(prefix,{source.module:source.head for source in sources if source.module!='textual_diff_view'},proof.sdk,heads['textual_diff_view'],native,'Own private warm/eviction DTO; original PREFIX activation immutable',proof_path,{name:str(prefix/'bin'/name) for name in ('python','toad','agent-comms','agent-comms-acp','agent-comms-agent','pi-comms-native')},proof.native_cli,manifest,tree,'Original4b FullTrust/source proof only; actual native execution requires separate new SchEXEC and Bohrrelease.')

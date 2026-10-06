@@ -1,0 +1,218 @@
+{
+  "state": "Source/operator preparation only; fresh holder assessment UNBOUND",
+  "source_owner": "OriginalHeis; direct unchanged helper-root clearance received for this warm preparation",
+  "handoff": {
+    "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/evidence/configured-loaded-consumer-repair-20261006/LOADED-CONSUMER-HANDOFF.json",
+    "sha256": "18e56fc7622859ebd422ae735d9eef4087cb069a460a9589b5426267e1a0b3bd",
+    "bytes": 6185
+  },
+  "actual_selected_helpers": {
+    "carry_history_provenance": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/carry_history_provenance.py",
+      "sha256": "44735bcdd6424af4203ac75e509f8a80cf41641882b249610ccadd0215c527b2",
+      "bytes": 4308
+    },
+    "cutover_child": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/cutover_child.py",
+      "sha256": "69a63c30a27ce6971d31e9669ff8c86b06579612c796f044126f629917e51966",
+      "bytes": 1207
+    },
+    "native_schema_carry": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "sha256": "08d5b673910f96634ad017eb7e8224cb440e5b5cfea7c07d597b3ddf0f209c2b",
+      "bytes": 43894
+    },
+    "original_owner_capture": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/original_owner_capture.py",
+      "sha256": "0505975196d438b2721d48efde97e777f124a34ea1fe6f05dd50751a29f2932f",
+      "bytes": 3846
+    },
+    "owner_read_projection": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/owner_read_projection.py",
+      "sha256": "c719ec35fa61942ee76b6aa8b87e1155e66235eb1d696736bd9597b1fa2caba7",
+      "bytes": 4645
+    },
+    "publish_openhcs_recovery": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "sha256": "27516db16a4bec25bb37fb394e1c7bc04c567eb0a780fb1e0ed62235ca0ed9ff",
+      "bytes": 21793
+    },
+    "publish_retained_summary": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "sha256": "025babf120563228d99920617d34f2e4142307d38e049405d4af49b2ecd7a960",
+      "bytes": 24056
+    },
+    "read_original_owner": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/read_original_owner.py",
+      "sha256": "c963d51ec834e7caef5a0a10b704773546f548cf967e5e8716e147db0a2557d9",
+      "bytes": 1057
+    },
+    "retained_summary_reset": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/retained_summary_reset.py",
+      "sha256": "86d28cc9f9c74c9156ee258d061168a17003ab94f6c9ba1fdaac2dd01eb8dd12",
+      "bytes": 8554
+    },
+    "routing_carry": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_carry.py",
+      "sha256": "44509029e1fb4c975f8bb5b6c14cd8ecb1e2c9697f24374883b02f26360a3b4c",
+      "bytes": 11939
+    },
+    "routing_recovery": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_recovery.py",
+      "sha256": "af599ee91746123ed33606691973ef3a2a0e77e2d994cd158a1c5ddef2c2aafc",
+      "bytes": 2347
+    },
+    "runtime_installation": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/runtime_installation.py",
+      "sha256": "77841672b6d9d99e3cb4c724706ffdad7eefd604aab583743f2e4b341156224c",
+      "bytes": 3393
+    },
+    "thread_format_retirement": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/thread_format_retirement.py",
+      "sha256": "e31ca7198a19f0c7f92f65663adc82d3e10cd9194278951a77a936332ce25737",
+      "bytes": 3873
+    },
+    "l0a_native_installed_pilot": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/l0a_native_installed_pilot.py",
+      "sha256": "af0fb2d285ce9dddf728650809ab206b706000ed1d003e520d382b483b04e61a",
+      "bytes": 37666
+    },
+    "native_session_retention_pilot": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/native_session_retention_pilot.py",
+      "sha256": "b78fbe7375515965050ef7eebda89604edc9546204fb85d2e95d6332e5208c63",
+      "bytes": 34617
+    },
+    "runtime_fixture": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/runtime_fixture.py",
+      "sha256": "c34f37f450a02f09d344352466431744892a0c788953212da5ac434d912e3315",
+      "bytes": 18978
+    },
+    "saved_state_user_journey_pilot": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/saved_state_user_journey_pilot.py",
+      "sha256": "808025d777fe53499b25659c581a7f2945c42390b04cf5c7fcc2256850bebb4b",
+      "bytes": 46866
+    },
+    "thread_navigation_installed_journey": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/thread_navigation_installed_journey.py",
+      "sha256": "a23fbcb8578986949712cacc8d7b1af01b97808de225c9dbdf970177c4a6f4d2",
+      "bytes": 10668
+    },
+    "viewport_recent_tabs_pilot": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/viewport_recent_tabs_pilot.py",
+      "sha256": "2ea128c76d469c15e8e4633922110ccfaf200f86e2131eeb0d942129284ce030",
+      "bytes": 18068
+    },
+    "compaction_source_successor_installed_journey": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tests/compaction_source_successor_installed_journey.py",
+      "sha256": "b086d7a5e5a3792e0b3ff19088b6b88cb9286dd76c9323d764d2dbb82920d0cf",
+      "bytes": 13064
+    },
+    "manual_live_turn_status": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/manual_live_turn_status.py",
+      "sha256": "f333da956fcc9e367f993853aa3daabbaea8d4278feed24eaa644d51c74e48fa",
+      "bytes": 7122
+    },
+    "readonly_saved_reader_pilot": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/readonly_saved_reader_pilot.py",
+      "sha256": "63c36b3cde89cf899995508cf73c4b193e385826e56a2f79e640349f6cc06c0e",
+      "bytes": 19357
+    },
+    "canonical_wire_conversation_installed_pilot": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/canonical_wire_conversation_installed_pilot.py",
+      "sha256": "b8b4c67ea8bbdb2062d64b275de3cc5cce31d62471350eeca4441de105d10843",
+      "bytes": 31836
+    }
+  },
+  "control": {
+    "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/native_session_retention_pilot.py",
+    "sha256": "b78fbe7375515965050ef7eebda89604edc9546204fb85d2e95d6332e5208c63",
+    "bytes": 34617
+  },
+  "mode": "--warm-admission-only",
+  "original_proof": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/loaded-history-current-pair-20261006/loaded334-proof.py",
+    "sha256": "1712a84472de6d1b0f7be1c41450205620c032889edb0169fbf1ab04d9a4d8e3",
+    "bytes": 11647
+  },
+  "effective_proof": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/warm-reader-eviction-current-pair-20261006/warm334-proof.py",
+    "sha256": "cd72d05b6ae3a02162ee4789b5fdc19f2d74f284355cc92583fa47ad072e7061",
+    "bytes": 11641
+  },
+  "original_controller": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/loaded-history-current-pair-20261006/loaded334-controller.py",
+    "sha256": "b7907c2b12816453ac3e61c566e9082b241269ab08bb5211eed492ba6384bca9",
+    "bytes": 6105
+  },
+  "effective_controller": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/warm-reader-eviction-current-pair-20261006/warm334-controller.py",
+    "sha256": "31c41bb80003ec3b9e05d506cbb19d95ad8c10913f24b9325acac93b68ac1626",
+    "bytes": 6099
+  },
+  "template_delta": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/warm-reader-eviction-current-pair-20261006/OPERATOR-TEMPLATE-DIFF.txt",
+    "sha256": "68e5d0a8eb469bfbcd94954bbdb673a7d9f94a62b837770a81d2c943990d4844",
+    "bytes": 3364
+  },
+  "controller_AST_equal_after_only_mode_and_receipt_description_substitution": true,
+  "proof_AST_equal_after_only_four_scope_description_substitutions": true,
+  "source_parse_omissions": 0,
+  "changed_operator_compile_omissions": 0,
+  "imports_tests_runtime_operations": 0,
+  "selected_artifact_source_check": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/loaded-history-current-pair-20261006/SELECTED-ARTIFACT-SOURCE-CHECK.json",
+    "sha256": "a79511bbf729ed56b7221471b32efc5f1e48d1511119f3154dfb9635c34e67f6",
+    "bytes": 2746
+  },
+  "production_or_helper_edits": 0,
+  "native_body_reads": 0,
+  "installed_prefix_access": 0,
+  "warm_obligations": {
+    "mode": "--warm-admission-only",
+    "native_journals": 2,
+    "new_authored_localhost_inputs": 2,
+    "requests_relation": "Existing prepare(long_history=True) authors alpha and beta once each. Existing warm acceptance sends no further input and asserts len(requests)==2 plus both journal hashes unchanged.",
+    "producer_http_maximum_default_unchanged": 12,
+    "mandatory_acceptance": [
+      "actual departed warm return with original native source/pages/fragments/rendered resources and raw_page_read_delta=0",
+      "genuine presentation eviction retaining admitted reader page ranges and reconstruction on return",
+      "original Document and Undo objects/text",
+      "original non-tail reader y and follows_tail",
+      "native Ctrl+Z followed by original editor.redo restores exact text",
+      "actual mounted source/paint accounting and original admission/trim policy"
+    ],
+    "required_receipt": {
+      "completed": true,
+      "branches_verified.warm_identity_raw_read_returns": ">0",
+      "branches_verified.eviction_editor_reader_returns": ">0",
+      "native_inputs": 2,
+      "history_scaling_4_16_32_64": "UNRUN"
+    },
+    "not_claimed": [
+      "loaded4/16/32/64 acceptance",
+      "configured40MB source",
+      "configured/public-source operation",
+      "real paid provider workflow",
+      "physical terminal FPS",
+      "MCP or standalone accepted guard replay"
+    ]
+  },
+  "bounds": {
+    "outer_seconds": 150,
+    "until_seconds": 20,
+    "seed_each_prompt_seconds": 20,
+    "source": "Original warm-mode 150s BoundedRun outer and unchanged 20s source/readiness waits; no loaded1800 inheritance or helper timer edits.",
+    "first_failure_unknown_stop": true,
+    "no_retry": true,
+    "no_phase_filter_or_deadline_increase": true
+  },
+  "dynamic_limit": "AST and source reads establish declaration relationships only. Actual native/page/paint/eviction behavior remains UNRUN for this new warm operation; configured and other dormant modes are excluded.",
+  "fresh_assessment": null,
+  "source_trace": {
+    "mode_dispatch": "native_session_retention_pilot.__main__ selects existing warm_admission_acceptance and prepare(long_history=True)",
+    "journals_inputs": "thread_navigation_installed_journey.prepare uses original l0a native fixture, authors alpha/beta once each; warm callback adds no inputs",
+    "warm_reader": "ReaderCheckpoint.capture/verify/page_reads consumes original pages, fragment views, rendered resources, Document/Undo and reader position",
+    "eviction": "warm_admission_acceptance captures page admissions before NativePresentation.evict, consumes parked ReaderPosition and original reconstructed source",
+    "lifetimes": "l0a.main owns native fixture/private route and retained teardown; BoundedRun/AttachedChild own control bound/drains/outcome/retirement"
+  }
+}
