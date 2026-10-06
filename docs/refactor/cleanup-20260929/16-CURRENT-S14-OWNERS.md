@@ -4,6 +4,29 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Integrated source preflight and remaining release consumer — 2026-10-06
+
+Parent ran two unchanged real-process preflight controls against integration:
+stale stored process birth does not authorize a signal, and a busy member refuses
+the entire selected batch before any stop. Both passed in1.86s with original
+ParentedProcess cleanup. This uses system Python/pytest and cached declared ACP
+0.12.1 dependency, source import paths, no environment/install or borrowed prefix,
+and no native package/provider input. Raw stdout/stderr/XML and exact command are
+in evidence/parent-owner-admission-source-preflight-20261006/RESULT.json. Plugin
+autoload was disabled; the preserved asyncio_mode warning affects no selected
+async test. Two inaccessible same-UID processes prevent a complete borrower
+claim, so the small authored pytest fixture root remains tracked in owned scratch;
+no fabricated process births or privileged census scope is reported.
+
+Source review also found an unmigrated affected control in
+ test_owner_release_restart.test_changed_owner_after_release_refuses_escalation_and_replacement:
+it still expects bare RelationViolationError although the corrected fenced phase
+transfers that original cause inside StoppedOwnerFailure. OriginalEinstein owns
+migration of current/P release consumers to preserve refusal/no forced signal,
+truthful custody and explicit abandon before teardown. Parent did not execute the
+known mismatched control or weaken its assertions. Real stopped-batch/native/OFD
+recovery acceptance remains separate from these two passing preflight controls.
+
 ### Admission source joined and producer PR scope resolved — 2026-10-06
 
 Parent normally merged exact68911afe77a into Core688 without conflicts. All

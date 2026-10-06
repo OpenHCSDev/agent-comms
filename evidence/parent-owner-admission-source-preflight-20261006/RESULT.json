@@ -1,0 +1,62 @@
+{
+  "source": "f6bc60ec010c46ed50120c16d30826da31e511f3",
+  "scope": "Two unchanged real sleeping-Python-child source preflight controls; not stopped-batch/OFD recovery, native launch, installed qualification, provider, UI or full central batch.",
+  "argv": [
+    "/usr/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-o",
+    "addopts=",
+    "-q",
+    "tests/test_owner_process.py::test_stale_stored_birth_does_not_signal_real_process",
+    "tests/test_owner_process.py::test_restart_preflights_all_owners_before_signalling",
+    "--basetemp=/home/ts/.cache/agent-scratch/parent689-source-process-20261006/n",
+    "--junitxml=/home/ts/.cache/agent-scratch/parent689-source-process-20261006/pytest.xml"
+  ],
+  "cwd": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+  "selected_environment": {
+    "PYTHONPATH": "/home/ts/wt/comms-cleanup-live-integration-20260929/src:/home/ts/.cache/uv/archive-v0/mNatOBGB9uuf-bXB",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+  },
+  "returncode": 0,
+  "passed": 2,
+  "pytest_seconds": 1.86,
+  "warnings": [
+    "asyncio_mode unknown because plugin autoload explicitly disabled; no async controls selected"
+  ],
+  "raw": [
+    {
+      "path": "stdout.log",
+      "sha256": "26904ff40ecb899f9042eb09541a07c200ed9d51e8de7846363bbefb5ae12291",
+      "bytes": 537
+    },
+    {
+      "path": "stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "pytest.xml",
+      "sha256": "fdc053b81a96fb4f7a018c10ff15a5791b3cee8cfd98cba7799266246311992c",
+      "bytes": 487
+    }
+  ],
+  "resource_refresh": {
+    "ram_available_gib": 10.8,
+    "home_free_gib": 7.5,
+    "root_free_gib": 5.0,
+    "swap_used_gib": 14.4,
+    "scope": "one serial two-child source batch, no arbitrary cap or environment/install"
+  },
+  "cleanup": {
+    "same_uid_scratch_refs": [],
+    "permission_gaps": [
+      "1786010",
+      "1786012"
+    ],
+    "birth_limit": "Original tests retain and retire child handles internally; separate birth receipts were not captured. No invented PID or privileged whole-host borrower claim."
+  }
+}
