@@ -542,11 +542,12 @@ async def test_explicit_selected_first_source_is_fenced_before_fake_raw_send(
     witnessed = []
 
     async def selected_runner(*args, **kwargs):
-        selected = kwargs["fresh_selected"]
+        session = kwargs["session"]
+        selected = session.creation
         assert selected is not None and selected.selected_thinking_level == "high"
         selected.verify_prewrite()  # Before any fake raw prompt reservation/write.
         witnessed.append(_fresh_selected_revision(selected))
-        assert kwargs["session_file"] == selected.path
+        assert session.path == selected.path
         return await runner(*args, **kwargs)
 
     monkeypatch.setattr(TrackedTurnSession, "execute", selected_runner)
@@ -583,13 +584,13 @@ async def test_selected_startup_changed_after_state_denies_before_fake_raw_byte(
 
     async def racing_runner(*args, **kwargs):
         admission = kwargs["prompt_send_boundary"]
-        selected = kwargs["fresh_selected"]
+        selected = kwargs["session"].creation
         assert selected is not None
         seen.append(selected.path)
 
-        def changed_before_admission(file, revision):
-            assert file == selected.path and revision == selected.verify_selected_startup()
-            with file.open("a") as stream:
+        def changed_before_admission(identity, revision):
+            assert Path(identity.session_file) == selected.path and revision == selected.verify_selected_startup()
+            with Path(identity.session_file).open("a") as stream:
                 stream.write(
                     json.dumps(
                         {
@@ -601,7 +602,7 @@ async def test_selected_startup_changed_after_state_denies_before_fake_raw_byte(
                     )
                     + "\n"
                 )
-            return admission(file, revision)
+            return admission(identity, revision)
 
         kwargs["prompt_send_boundary"] = changed_before_admission
         return await runner(*args, **kwargs)

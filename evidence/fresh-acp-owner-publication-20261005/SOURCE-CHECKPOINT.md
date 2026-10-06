@@ -23,3 +23,7 @@ The failed9b input, raw logs, guard-only positive and whole return remain frozen
 ## Affected acceptance proposal
 
 After source coherence and fresh custody grants: verify genuine fresh ACP new_session publishes its participant before the first turn and completes the real MCP permission path with current lease-derived updates, original ledger, loopback model and joined cleanup. Qualify only affected remaining cases at their original bounds; preserve the separate reached guard positive. No ordinary18, OS/profile, saved UI attachment, acceptedSDK controls or paid-provider repeats.
+
+## Existing selected-runner consumer correction
+
+Parent found two remaining wrappers around the existing `_fake_model`: selected_runner and racing_runner still read retired fresh_selected/session_file keywords, and the race callback treated NativeSessionIdentity as a Path. Both now derive creation/path from the original SelectedSession; the callback derives its file from identity.session_file and forwards the same identity/revision to admission. Prewrite/startup fencing, mutation-before-admission, no-fake-send and no-private-raw-input assertions remain. Only these two enclosing control bodies change; all other module ASTs are equal. Compilation and diff check pass. These wrappers are source-corrected, not newly behavior-qualified; their historical trust stubs remain explicitly unqualified. No three already-qualified ACP controls or SDK cases repeat. src/stack/.pi/pyproject remain byte-equal to wheel build3e109632; bee0813b stays the one retained successor wheel.
