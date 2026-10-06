@@ -280,10 +280,21 @@ verified the actual terminal and both original controller/child absent, then
 sent the concrete cross-repository caller to Mendel and original closure owners.
 Mendel returned whole2c1f23e9 after one normal four-wheel restore0.405s; Parent
 matched all76 raw references by hash and length. READ8bcfff/EXECcf475 are
-explicitly returned. Independent Bohr floor/census/lifecycle closure is still
-separate; no replay follows. Mendel owns the source-only fixture migration,
-keeping existing cleanup and bind_owned and enumerating the complete Core/Toad
-src/tests/tools call family before freeze. The retained bee wheel is unchanged.
+explicitly returned. Bohr independently closed only this purpose at34592fe3,
+with floor996c2b16 and fresh census0111946d: actual1468/945/full69 RAW origins,
+428 protected/1883 other records/five environment nodes/PREFIX are restored,
+with zero private/output/4b references and no gaps. Parent matched the actual
+closed lifecycle and independent floor readback hashes and byte lengths.
+Sch closed only matching READ/EXEC atfc224769; no replay or next loan follows.
+Mendel published the sole one-argument fixture migration at Toad472afc657ef,
+with Core682cbbcceff carrying independent closure. The original NRA Package
+enumerated1477 Core/Toad src/tests/tools modules without omissions; cleanup,
+bind_owned and other AST are unchanged. Compilation passed, without another
+runtime attempt or build. Parent relayed this source handoff to originalSch.
+The retained bee wheel is unchanged; corrected four-case behavior remains
+unqualified. Parent traced the permission observer's agent assignment through
+watch_agent/bind_agent, original presentation detach custody and prepare-time
+reattachment; no missing binding was found and no speculative patch was made.
 
 
 Warm02 source correction96079 waits for canonical history/displayed cursor at
@@ -299,9 +310,17 @@ required before a new mounted attempt; no rebuild or automatic retry follows.
 Heis published append-only finalwarm02 e66c6280 at1b5f8da3, binding the fresh
 former485 contract and exact new outputs. Bohr freshly issued4bfd394a with
 lifecycle282bee2a after current1467/953/full69 floor/refs verification. Parent
-read/hash-matched both actual issue records. Only own-root preparation and one
-61bf+bc47 stage are authorized; proof, native READ/EXEC and App remain held.
-Heis and Sch already have this exact issue through their original routes.
+read/hash-matched both actual issue records. Heis staged only61bf+bc47 once:
+PASS0/.170s, both original stage identities joined and absent. Bohr bound NEW
+matching7a READb7923eaa and the original c22 helper's four literal substitutions,
+then released the sole proof at39fc9dc9. It passed0 in3.622s, with no timeout or
+error and both original proof identities absent. Parent matched final handoff
+1b71c560 and all19 raw/proof references by hash and byte length. The receipt
+binds953 installed members/full69 truthful origins/protected originals and7a
+FullTrust; it is not mounted warm/eviction acceptance. Controller58ad029b is
+unrun and preserves the original three template substitutions. Separate NEW
+matching EXEC and Bohr's same-purpose App release remain required before the
+sole mounted attempt. No App, native input or public decoder has run.
 Original c22/7b534 templates, current source849b,150s/20s and two-authored-input
 warm/eviction obligations remain unchanged; no Core stage or new build follows.
 
@@ -403,11 +422,17 @@ d08c1a49. Parent independently matched every355+319 Git/local/ZIP asset,
 360+324 complete RECORD digest/size rows, metadata and original build inputs.
 Toad's declared Core pin is b973 in original pyproject/uv inputs; its wheel
 METADATA correctly carries the ordinary dependency rather than a uv Git pin.
-Prospective paired mounted operands name authentic old720 source540 and candidate
-target334, but actual334 remains exclusively in freshACP25ce. No paired holder
-purpose or SDK execution authority follows from this artifact review. The
-original fresh floor/restore/authority binding remains necessary before stage;
-no artifact rebuild or additional source review gate is introduced.
+Prospective paired mounted operands151d39be name authentic old720 source540 and
+candidate target334. FreshACP25ce has now actually returned and independently
+closed34592fe3; its historical active custody no longer blocks assessment.
+Bohr is reconciling the two current floors read-only, without reservation or
+access authority. The routing target must stage both Corec44 and Toad0fb;
+accepted684's unchanged-target disposition cannot authorize this changed pair.
+The proposed one90s mounted historical journey and one old-source SDK seed
+require fresh paired purposes, exact restore ownership and new matching4b
+READ/SDK execution authority. No whole540 TAR gate, artifact rebuild, provider
+input or accepted684 replay is introduced. Genuine centralbatch remains a
+separate unqualified relationship.
 The separate genuine720 central-batch bootstrap has an earlier source blocker:
 phased_owner_kernel loads only owner_restart/owner_cutover, but owner_restart
 imports owner_launch, absent from the authentic720 Git tree. Thread.execution
