@@ -4,6 +4,27 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Current acceptance work — 2026-10-06
+
+The new matched pair is built and retained; installed acceptance is pending.
+Heis received the artifacts and is preparing its configured run. The clean
+configured producer is merged on the fork. Bohr issued staging for Mendel's
+three remaining MCP cases; proof and runtime need their existing releases.
+Accepted allow and guard are excluded. This historical cohort is separate.
+
+Warm04 proved two retained returns preserved exact rendered identity with zero
+page reads. Genuine eviction was reached, then reader-position restoration
+failed. The whole return records both authorities returned, one normal package
+restoration, all recorded private processes gone and private references clear.
+The original journals/raw remain held. Parent read that qualification and relayed
+the whole return to Bohr and Sch for their existing independent closure. Heis
+owns the reader-position source repair; there is no rerun or new loan.
+
+Communication uses ordinary results and next actions. Exact custody records
+stay in the existing evidence, with routine acknowledgments batched. The
+standing reminder is in the existing Core AGENTS.md; Toad has no such tracked
+file, so no second instruction store was created.
+
 ### Clean producer692 merged on the fork — 2026-10-06
 
 Parent reviewed and normally merged the clean three-file producer692 at exact
