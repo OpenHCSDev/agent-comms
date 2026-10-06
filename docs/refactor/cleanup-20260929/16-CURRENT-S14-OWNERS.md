@@ -20,9 +20,9 @@ The original objective remains incomplete. CI is deferred as a merge gate.
   and all319 Toad/266 native source members match. Core remains the explicitly
   reviewed ddcdc/6b426 artifact; no latest-Core equality claim. Exact build and
   readback are under Parent's current-ui-publication-pair-20261006 artifact root.
-  No installed prefix or live link changed. Bohr received the artifacts for a
-  fresh existing-holder contract; Parent is preparing the original physical
-  recorder's sidebar/wheel/reversal/End and saved-return paths independently.
+  The nonlive returned485 prefix is now staged under its specific issue;
+  the live link remains unchanged. Parent's original physical recorder composes
+  sidebar/wheel/reversal/End and saved-return paths in one journey.
 - The prior integration queue had no open Core/Toad PRs at the fresh query.
   Parent then published Toad485 (a39b5bcd), a physical-control checkpoint only:
   original sidebar motion is promoted unchanged into a shared capability and
@@ -35,8 +35,12 @@ The original objective remains incomplete. CI is deferred as a merge gate.
   at the fixed sidebar WT. One real read-only source owner supplies two private
   SDK saved forks; isolated st/native targets/raw frames remain original. The
   concrete whole600/recording240 safety bounds preserve original history20 and
-  navigation2 checks. Specific issue/proof/source/native releases and runtime
-  remain unissued at this checkpoint; the final tuple is sent for fresh issue.
+  navigation2 checks. The exact three-wheel stage passed once in 0.223 seconds;
+  controller, root preparation and installer joined and are directly absent.
+  Fresh private READ is verified. The original proof/controller are materialized
+  with only their four/three issued literals; ten proof outputs remain absent.
+  Joined stage and exact binding are delivered to Bohr for the sole proof release.
+  Source capture and physical App remain held; no installed performance claim.
 - Actual visible pointer App: right median50.4ms/p9558.5ms/max112.9ms; left
   median54.5ms/p9571.6ms/max185.5ms, empty stderr. Earlier429/424ms measurements
   selected a hidden zero-size sidebar and are invalid visible-toggle results,
