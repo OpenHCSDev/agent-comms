@@ -151,6 +151,9 @@ warm control's mounted-history/displayed-cursor precondition, before either
 warm-return or eviction restoration checks. These behaviors remain unqualified.
 Heis owns exact cleanup/floor return and subsequent source cause tracing; no
 product defect or automatic retry is inferred from this assertion.
+Bohr recorded App1 consumed at1eedbc45 and disabled all execution flags.
+Only original joins, CURRENT471 two-wheel restore and whole floor/authority
+return remain; independent closure is still pending the operator handback.
 No public decoder,
 configured fork, loaded cohort, accepted07/466 replay or new build is included.
 Normal return is actual CURRENT471 ToAdb2e+Text16c9 once; all original floor,
@@ -312,6 +315,15 @@ Parent reviewed these source bodies and the preserved three-batch receipt:
 11 distinct selected controls have passing results, not one-shot full green.
 Mounted and cross-version notifications remain unqualified. Mendel's fresh ACP
 membership seam is separate. No accepted684 qualifier is replayed.
+Parent read the existing installed routing pilot: its render function manually
+mounts TranscriptHistory(page), bypassing HistoricalSessions selection and the
+changed handling callback. Einstein now owns migration of that original pilot
+to actual mounted historical selection/notification/retirement consumers.
+Source-only callback checks cannot supply that installed evidence. Final frozen
+paired source/artifact/seed/authority operands follow this complete consumer
+migration. One necessary cached Core and one Toad build are authorized only
+after source freeze and absence of a matching artifact; no new native assembly,
+dependency environment, accepted684 replay or unfinished687/476 fold follows.
 
 Core681 fork-source delivery is actually merged38a0533e at frozen3dc11331.
 Its nine authored source checks support recorded inheritance, not independent
