@@ -5298,3 +5298,7 @@ The authentic42.7MB source/two SDK forks/witness were returned separately. One n
 
 - [x] Textual75 merged at c1e71864143e1bd832ea904fc1fd37fa128fba7d after reviewing the complete changed owner and its real-App checks. Screen admits callbacks after publication; the original sender message pump now executes them. The foreign-task invocation and repeated per-callback preparation were deleted. Five focused checks passed, including unrelated paint during a suspended sender callback and original held-root admission.
 - [ ] Paired installation and physical sidebar/scroll acceptance remain open. This merge does not change the installed packages or establish Physical04 causality. The missing capture DTO/error remains Parent's separate trace; frozen run, journals, wheels and whole return are unchanged.
+
+- [x] Toad493 pairs the merged Textual75 execution owner through the existing dependency pin. Only native revision changes in pyproject.toml/uv.lock; all other records are exact, both TOML files parse and uv lock --check resolves the same 99 packages. No developer environment sync or public installation occurred.
+- [x] Physical04 holder lifecycle independently records closed_at and disabled execution after one control and one restoration. Its capture failure/visible saved paint and held evidence are preserved.
+- [ ] Fresh paired installed/physical acceptance and public delivery remain open; the existing capture completion trace is still unresolved.
