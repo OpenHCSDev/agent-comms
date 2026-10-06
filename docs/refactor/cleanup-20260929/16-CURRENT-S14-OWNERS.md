@@ -4,6 +4,26 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Original carry scope reviewed — 2026-10-06
+
+Parent reviewed the original RuntimeInstallation and native/schema carry
+declarations before treating them as a cross-version registry transition.
+RuntimeNativeFiles selects declared coordination, prompt-binding and compaction
+SQLite resources; its separate goal capability covers the goal-private ledger.
+It does not acquire or rewrite registry Thread declarations. RoutingCarryPlan
+authenticates the whole registry excluding only active_turn.routing and replaces
+that routing representation. Its non-routing registry equality intentionally
+retains the old Thread fields. Neither owner supplies a current full registry
+postimage for old720's removed last_goal_report_turn field.
+
+Einstein received this concrete candidate review for admission-method689. The
+method's strict target-format refusal remains necessary; authentic registry
+format transition is a separate unresolved source relationship, not something
+native schema carry or stopped routing acceptance proves. Einstein's amended
+producer/current admission implementation is active in a separate checkout,
+preserving the frozen routing operands. No compatibility decoder, field strip,
+registry rewrite or runtime operation was performed in this review.
+
 ### Fresh declaration source merged and routing stages issued — 2026-10-06
 
 Parent reviewed exact68719bb027f and merged30e46665 into main. Only the
