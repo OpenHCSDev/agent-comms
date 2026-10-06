@@ -1,0 +1,83 @@
+{
+  "scope": "Source preparation only; no helper execution/application imports/installed/native/root access",
+  "effective_proposal_sha256": "b52ed4da43829756df78967caf9a23083009659c12986905fd21a453e8175d9d",
+  "commands_sha256": "145cd9b5326d460db63f8a0486bbcb1215a6c0d774603de35d2dea82d5fe1ec8",
+  "parse_compile_files": 13,
+  "omissions": 0,
+  "helpers": [
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/checkpoint_schema.py",
+      "sha256": "0d32c74d741572f9f5a242eb34750f7c3353ee88a480957d59380afb1147adee",
+      "parse_compile": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_index_cutover.py",
+      "sha256": "43321c362d4a5c610aa0743872a3457f60363cda0c0b8913247db56cd28e44b6",
+      "parse_compile": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_index_writer.py",
+      "sha256": "12b95a6de335bffd741163f66daa183209690d1cf9f514efb3a891e3d0a8674f",
+      "parse_compile": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/seed_retained_index_fixture.py",
+      "sha256": "d89b7561882c0a0a69700f24eda02e4ad8dca939582f1155a50f8bc1d88745f4",
+      "parse_compile": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/routing_carry.py",
+      "sha256": "44509029e1fb4c975f8bb5b6c14cd8ecb1e2c9697f24374883b02f26360a3b4c",
+      "parse_compile": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_routing_cutover.py",
+      "sha256": "ee3d88899c1f6113620b9cb063fbb5a5001a3fd3b64c80e99937e45a1d46dc56",
+      "parse_compile": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_routing_writer.py",
+      "sha256": "5664d4d07bc54cfd441416403851bbf1da4fb3e41dbedaad9a657f1ca7268e1e",
+      "parse_compile": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/validate_retained_routing.py",
+      "sha256": "d144e501120982e21ace4ea513cd2f2e3f9c720889ea5762f275feadb7638d96",
+      "parse_compile": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/install_retained_routing.py",
+      "sha256": "446e5db6ac836e798ad796b6e10042a59c93bcc72a8b7bbbfd0b35709e832f03",
+      "parse_compile": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/seed_retained_routing_fixture.py",
+      "sha256": "1f0aaeaee108ebdd8989897c8eb865c51e2b1fb217af81611cb05b1e66befea7",
+      "parse_compile": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/tools/cutover/retained_routing_installed_pilot.py",
+      "sha256": "105718544517db7b5fd9d1e91c2d4abb4d7d6735877e84ecde2e808acf30f7aa",
+      "parse_compile": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-routing-provenance-20261005/paired-routing-installed-proof.py",
+      "sha256": "157adc278b7451cccb944a354d45ae658a971cbd6d3c6f80cd9f1a2fab92f388",
+      "parse_compile": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-routing-provenance-20261005/paired-routing-installed-controller.py",
+      "sha256": "c225298929137286ad34f7042d47214e2867b5239856ff71321a39530040ad07",
+      "parse_compile": true
+    }
+  ],
+  "immutable_original151d": true,
+  "control_tail_equal": true,
+  "literal_stage_restore_commands_equal": true,
+  "supplied_preimage_source_target_sections_match": true,
+  "RAWorigin_descriptors_source9_target67": true,
+  "product_pin_forced_resources_BYTEZERO_b973": true,
+  "installed_scope": "UNRUN",
+  "grants": "UNISSUED",
+  "newbuilds": 0
+}

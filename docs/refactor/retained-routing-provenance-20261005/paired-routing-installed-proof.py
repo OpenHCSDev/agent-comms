@@ -78,8 +78,8 @@ assert not target_lifecycle['native_EXEC_authorized'] and not source_lifecycle['
 assert not os.environ.get('PYTHONPATH') and not os.environ.get('PYTHONHOME')
 for row in p['tools']:
     assert digest(row['path']) == row['sha256']
-source_floor = read(p['source']['floor_preimage']['path'], p['source']['floor_preimage']['sha256'])
-target_floor = read(p['target']['floor_preimage']['path'], p['target']['floor_preimage']['sha256'])
+source_floor = read(p['source']['floor_preimage']['path'], p['source']['floor_preimage']['sha256'])[p['source']['floor_preimage']['section']]
+target_floor = read(p['target']['floor_preimage']['path'], p['target']['floor_preimage']['sha256'])[p['target']['floor_preimage']['section']]
 source_site = Path(p['source']['site_packages'])
 target_site = Path(p['target']['site_packages'])
 source_members, old_bins = package(p['source']['wheel'], source_site, 'agent_comms', 297)
@@ -96,7 +96,10 @@ for row in source_floor['original_records']:
     changed = path.is_relative_to(source_site / 'agent_comms') or path.is_relative_to(source_site / 'agent_comms-0.1.0.dist-info')
     if not changed and path not in {source_prefix / 'bin' / name for name in old_bins | set(p['source']['restored_Core_console_scripts'])}:
         original(row)
-for row in target_floor['original_old_preimage_records_current_bytes']:
+for name, row in source_floor['original_keepers'].items():
+    path = Path(source_floor['original_keeper_base']) / name
+    assert digest(path) == row['sha256'] and path.stat().st_size == row['bytes'], path
+for row in target_floor['original_records']:
     path = Path(row['path'])
     changed = any(path.is_relative_to(target_site / module) or path.is_relative_to(target_site / distinfo)
                   for module, distinfo in p['target']['replaced_packages'])
@@ -104,6 +107,8 @@ for row in target_floor['original_old_preimage_records_current_bytes']:
         original(row)
 for name, row in target_floor['protected_originals'].items():
     original({'path': name, 'kind': 'file', **row})
+for row in target_floor['unchanged_other66_unique_records'] + target_floor['additional_original_environment_nodes']:
+    original(row)
 versions = {}
 for label, site, expected in [('source', source_site, p['source']['normal_distributions']), ('target', target_site, p['target']['normal_distributions'])]:
     distributions = {d.metadata['Name'].lower().replace('_', '-'): d for d in metadata.distributions(path=[str(site)])}
@@ -127,7 +132,10 @@ for declaration in p['target']['staged_packages']:
 for label, site in [('source', source_site), ('target', target_site)]:
     for distribution, expected in p[label]['unchanged_direct_urls'].items():
         actual = next(d for d in metadata.distributions(path=[str(site)]) if d.metadata['Name'] == distribution).read_text('direct_url.json')
-        assert actual == expected
+        if expected is None:
+            assert actual is None, distribution
+        else:
+            assert actual is not None and hashlib.sha256(actual.encode()).hexdigest() == expected['sha256'], distribution
 result = {'scope': 'Exact newly-built old720297 and current355+319 installed files; no application/native import',
           'source_commit': p['source']['commit'], 'source_assets': 297,
           'target_Core_commit': p['target']['Core_commit'], 'target_Toad_commit': p['target']['Toad_commit'],
