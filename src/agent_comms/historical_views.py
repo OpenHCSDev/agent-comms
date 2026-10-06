@@ -181,6 +181,25 @@ class HistorySource:
         source.validate()
         return source
 
+    def notification_references(self, archive: HistoryArchive, references):
+        """Borrow this attached namespace's frozen deliveries and durable receipts."""
+        from functools import partial
+
+        from .presentation import MessageNotification
+
+        def require_selected():
+            if self.require(archive, self.key) != self:
+                raise ValueError("Historical source changed; refresh history")
+
+        require_selected()
+        root = Path(self.root)
+        result = MessageNotification.read_references(
+            WireLog(root / "bus.jsonl"), references,
+            partial(MessageNotification.recorded_delivery_window, root, self.provenance),
+        )
+        require_selected()
+        return result
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class HistoricalMessage(Message):

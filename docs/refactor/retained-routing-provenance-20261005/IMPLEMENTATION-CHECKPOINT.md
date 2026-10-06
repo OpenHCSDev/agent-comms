@@ -122,15 +122,49 @@ nested dictionary schema plus unsupported non-string-key refusal; and the full
 ACP sample roundtrip with an actual FileRevision observation. Only these affected
 declaration and fixture sites were checked again after their concrete repairs.
 
-A separate historical consumer remains concrete: unchanged
-`HistoricalSessions.publish_handling` creates a read-only Comms on the archived
-root and asks `MessageNotification.delivery_window`, which still acquires a live
-Registration snapshot there. This source batch fixes initial/adjacent transcript
-page witnesses; it does not qualify old-registry notification acquisition. The
-existing recorded namespace and original notification/assignment reader are the
-next source seam to coordinate, preserving ordinary strict coordination-schema
-refusal and keeping recorded evidence out of live activity/admission. No patch
-or fake notification/lifecycle evidence was folded into this checkpoint.
+## Recorded notification source closure
+
+Heis cleared `HistoricalSessions.publish_handling` and its handling-generation/
+retirement family. Parent approved the original-owner shared projection. The
+consumer now borrows `HistorySource.notification_references` with the selected
+archive. This validates attachment, namespace and original snapshot before and
+after reading. Archived Comms construction, live registry decoding, manual
+HistoricalMessage projection and the competing window loop are deleted.
+
+`MessageNotification.read_references` owns bounded original delivery acquisition;
+`project_delivery_window` owns the one assignment/read-ledger projection.
+Ordinary live acquisition still uses the original Registration/AgentActivity and
+process/turn observations. The existing RecipientActivity family has a recorded
+member: pending states retain their durable declaration, and an engaged assignment
+reports recorded response selection without claiming a running turn or completion.
+No recorded observation can acquire live readiness or a CLI inbox acknowledgement.
+Strict NotificationAssignment schema refusal and absent receipt behavior remain.
+No assignment tables are created or copied by notification acquisition.
+
+The archive's sparse ledger is new: HistoryArchive does not copy the source read
+ledger. Its existing HistoricalDisplay.acknowledge verifies the current HUMAN
+viewer and exact captured incarnation before writing. ReadLedger shares exact
+bus/conversation/recipient membership projection with live reading; recorded paint
+requires the captured canonical name and birth, never today's same-name owner.
+No role roster, live process or activity is reconstructed from provenance.
+
+`NOTIFICATION-OWNER-CONSUMERS-{BEFORE,AFTER}.json` records the existing parser's
+Core324/Toad288 zero-omission source census and deleted authority paths.
+`NOTIFICATION-SOURCE-ACCEPTANCE.json` retains three batch boundaries: 11 distinct
+selected controls have PASS results, not a single green initial batch. The first
+failed authored HUMAN audience was correctly empty under the real producer; the
+fixture now uses an actual original AGENT delivery and an actual destination HUMAN
+reader at the captured incarnation. Toad callback imports initially lacked the
+fork Textual API, then aiosqlite. Existing cached declared development dependencies
+and the byte-equal pinned Textual source resolved those import boundaries without
+installation or an environment. The final five callback controls and live CLI /
+recorded declared-family codec check passed together (6 PASS/4.04s).
+
+The callback controls exercise source acquisition and publication/retirement
+boundaries with authored references and observed generation/screen/body retirement.
+They do not mount or render an App. Genuine old720 routing/native-page and
+cross-version notification/installed UI acceptance remain unqualified; the accepted
+684 index path, shared NativeBackendFixture687 and live central batch stay separate.
 
 Next installed qualification requires a new exact source/wheel pair and fresh
 purpose. The routing seed uses real `SessionManager` through Node, so it needs

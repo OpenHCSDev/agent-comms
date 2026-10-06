@@ -45,6 +45,35 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
     def after_inbox_read(self, notification, source, reads, document, snapshot):
         return notification
 
+    def displayed_recipient(self, notification, source, reads, document, snapshot):
+        return reads.displayed_recipient(
+            source.message, notification.recipient_identity, snapshot, document=document
+        )
+
+    def selected_response(self, notification: MessageNotification, updated_at_ms: int) -> MessageNotification:
+        if not self.turn_started_by(updated_at_ms):
+            return replace(notification, state="Paused", busy=False, priority=3,
+                detail="A response was selected, but no matching active turn is running. "
+                       "Outcome is unconfirmed; do not automatically retry.")
+        return notification
+
+
+@dataclass(frozen=True)
+class RecordedRecipientActivity(RecipientActivity):
+    """Durable history supplies no current process, readiness or inbox check."""
+
+    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
+        return notification
+
+    def selected_response(self, notification: MessageNotification, updated_at_ms: int) -> MessageNotification:
+        return replace(notification, state="Response selected", busy=False, priority=3,
+            detail="The recorded assignment selected a response; completion is not recorded.")
+
+    def displayed_recipient(self, notification, source, reads, document, snapshot):
+        return reads.historical_displayed_recipient(
+            source.message, notification.recipient_identity, snapshot, document=document
+        )
+
 
 @dataclass(frozen=True)
 class ExternalRecipientActivity(RecipientActivity):
