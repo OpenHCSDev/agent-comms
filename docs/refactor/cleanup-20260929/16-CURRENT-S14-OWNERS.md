@@ -263,10 +263,25 @@ whole joined stagec5be8ff0 and resolved proof operandsfb5fc3c1; the owner record
 all three original stage identities absent and both child groups joined.
 Current lifecycle56600d94 consumes stage1 and disables staging. Bohr bound NEW
 matching4b READ8bcfff47 and released the sole original8c8f installed proof;
-proof attempts remain0 at this read. Native EXEC, four-case control and public
-source operations remain false. Original closed9b authority is not inherited.
-Actual installed proof/DTO/FullTrust, separate NEW EXEC and same-purpose release
-still precede any four-case launch; no runtime acceptance is claimed.
+the sole proof subsequently passed0 in7.097s. Parent matched all19 original
+whole-join176c4e8d references by hash and byte length and verified both recorded
+proof identities absent. Source58879e57, DTOe89e9c7b and4b FullTrust291b7adb
+bind actual953 Git/ZIP/installed assets and full69 truthful origins, with
+protected records unchanged. Native EXEC, four-case control and public source
+operations remain held for separate NEW EXEC and same-purpose controller
+release. The unchanged5d595 controller is resolved ina0b59560; no four-case
+behavior is qualified by the proof. Closed9b authority is not inherited.
+
+Warm02 source correction96079 waits for canonical history/displayed cursor at
+its two loaded admission sites; all29 assertions and original deadlines remain
+unchanged. Bohr's fresh contract063ddc05 confirms eligible former485 CURRENT471
+1467/953/full69/2253 other67/266/bootstrap2 floor, with zero holder/new-output
+borrowers. Parent matched that contract and all four current readback hashes,
+then delivered it to Heis to bind the append-only final proof/controller/output
+and restore tuple. This assessment issues no purpose or access. Warm02 uses
+the same retained61bf wheel and two authored localhost requests; original89e
+failure and journals remain held. Fresh grant/READ/proof/EXEC/release are still
+required before a new mounted attempt; no rebuild or automatic retry follows.
 
 Parent reviewed final scoped Ready68584b47b5a, matched all17 named final
 references and verified no source/build change from frozen5c689. Exact685 was
