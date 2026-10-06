@@ -4,6 +4,43 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Installed historical routing pass and admission review — 2026-10-06
+
+Einstein's single paired85af/55cc controller passed in25.731419895s under
+originalc225 and SDK-only425920 authority. Parent read and hashed whole handback
+db56e724 and all43 linked raw receipts with zero mismatches; all seven recorded
+process identities are absent. The original receipt records alpha-beta-alpha
+HistoricalSessions selection, nine recorded page captures, native answer and
+original request painted once, and both selection/screen notification workers
+cancelled after completed original reads returned with zero stale publications.
+App preparation, workers and default executor joined. This qualifies that
+installed authored cross-version historical routing/display scope. It does not
+qualify live central batch, native agent, ACP/provider input or configured journey.
+
+Both original floors were normally restored once: source5405f510/347/10RAW/133
+and target3341468/945/69RAW/428+1883+5nodes/PREFIX. Owner READ/SDKEXEC and package
+claims are explicitly returned; Bohr's independent paired closure and Sch's
+artifact closure are pending. No future holder purpose follows this handback.
+
+Parent reviewed implemented689 e05794fc and amended720 P bb5acfcd. The existing
+OwnerLifecycle now owns exact integer restart wire acquisition, stopped launch
+witnesses use OwnerRestartSelection, and runtime phase injection is deleted.
+A concrete remaining gap was sent to originalEinstein: FencedOwnerBatch.complete
+stops selected owners before constructing retained StoppedOwnerBatch custody.
+A later stop guard or post-stop witness refusal can leave earlier owners retired
+without the phase's explicit failure/disposition object. Einstein owns this
+partial-retirement closure; no Parent competing source patch or runtime operation.
+Strict old registry format refusal and authentic goal-history preservation remain
+separate unfinished relationships. Frozen routing tools and its accepted run stay
+unchanged.
+
+Warm03's sole source/FullTrust proof passed6.426664225s; Heis handoff8e52eb3a was
+relayed to Sch through the working Parent transport. Separate fresh EXEC and Bohr
+App release remain required. The configured continuous producer extension belongs
+to Heis in separate source worktrees, deriving the selected private project from
+original ForkSessionRequest.cwd rather than adding an alias or field. No configured
+provider/input or App authority follows the source coordination.
+
 ### MCP observer control source merged — 2026-10-06
 
 Parent reviewed Toad472 exactafc657ef, all three changed controls and their
