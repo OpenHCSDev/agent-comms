@@ -1,0 +1,144 @@
+{
+  "original3931": "3931f16feb8bcb2dbcc3041446ca342dea665024",
+  "scope": "AST declaration field/decorator/base relation only; no original runtime decoder, root, OFD or launch executed",
+  "relations": {
+    "RetiredOwnerLaunch": {
+      "path": "src/agent_comms/owner_restart.py",
+      "original3931": {
+        "decorators": [
+          "Call(func=Name(id='dataclass', ctx=Load()), keywords=[keyword(arg='frozen', value=Constant(value=True))])"
+        ],
+        "bases": [],
+        "fields": [
+          "AnnAssign(target=Name(id='owner', ctx=Store()), annotation=Name(id='OwnerIdentity', ctx=Load()), simple=1)",
+          "AnnAssign(target=Name(id='admission', ctx=Store()), annotation=Name(id='AdmissionIdentity', ctx=Load()), simple=1)",
+          "AnnAssign(target=Name(id='launch', ctx=Store()), annotation=Name(id='RetainedOwnerLaunch', ctx=Load()), simple=1)"
+        ]
+      },
+      "current_equal": true,
+      "amended720_equal": true
+    },
+    "OwnerRestartHandoff": {
+      "path": "src/agent_comms/owner_restart.py",
+      "original3931": {
+        "decorators": [
+          "Call(func=Name(id='dataclass', ctx=Load()), keywords=[keyword(arg='frozen', value=Constant(value=True))])"
+        ],
+        "bases": [],
+        "fields": [
+          "AnnAssign(target=Name(id='root', ctx=Store()), annotation=Name(id='str', ctx=Load()), simple=1)",
+          "AnnAssign(target=Name(id='owners', ctx=Store()), annotation=Subscript(value=Name(id='tuple', ctx=Load()), slice=Tuple(elts=[Name(id='RetiredOwnerLaunch', ctx=Load()), Constant(value=Ellipsis)], ctx=Load()), ctx=Load()), simple=1)",
+          "AnnAssign(target=Name(id='runtime', ctx=Store()), annotation=Name(id='RestartEnvironment', ctx=Load()), simple=1)",
+          "AnnAssign(target=Name(id='agent_bin', ctx=Store()), annotation=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Constant(value=None)), simple=1)",
+          "AnnAssign(target=Name(id='agent_args', ctx=Store()), annotation=BinOp(left=Subscript(value=Name(id='tuple', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Constant(value=Ellipsis)], ctx=Load()), ctx=Load()), op=BitOr(), right=Constant(value=None)), simple=1)"
+        ]
+      },
+      "current_equal": true,
+      "amended720_equal": true
+    },
+    "OwnerIdentity": {
+      "path": "src/agent_comms/thread_identity.py",
+      "original3931": {
+        "decorators": [
+          "Call(func=Name(id='dataclass', ctx=Load()), keywords=[keyword(arg='frozen', value=Constant(value=True)), keyword(arg='slots', value=Constant(value=True))])"
+        ],
+        "bases": [],
+        "fields": [
+          "AnnAssign(target=Name(id='incarnation', ctx=Store()), annotation=Name(id='ThreadIncarnation', ctx=Load()), simple=1)",
+          "AnnAssign(target=Name(id='generation', ctx=Store()), annotation=Name(id='int', ctx=Load()), simple=1)"
+        ]
+      },
+      "current_equal": true,
+      "amended720_equal": true
+    },
+    "AdmissionIdentity": {
+      "path": "src/agent_comms/thread_identity.py",
+      "original3931": {
+        "decorators": [
+          "Call(func=Name(id='dataclass', ctx=Load()), keywords=[keyword(arg='frozen', value=Constant(value=True)), keyword(arg='slots', value=Constant(value=True))])"
+        ],
+        "bases": [],
+        "fields": [
+          "AnnAssign(target=Name(id='incarnation', ctx=Store()), annotation=Name(id='ThreadIncarnation', ctx=Load()), simple=1)",
+          "AnnAssign(target=Name(id='admission_generation', ctx=Store()), annotation=Name(id='int', ctx=Load()), simple=1)"
+        ]
+      },
+      "current_equal": true,
+      "amended720_equal": true
+    },
+    "ThreadIncarnation": {
+      "path": "src/agent_comms/thread_identity.py",
+      "original3931": {
+        "decorators": [
+          "Call(func=Name(id='dataclass', ctx=Load()), keywords=[keyword(arg='frozen', value=Constant(value=True)), keyword(arg='slots', value=Constant(value=True))])"
+        ],
+        "bases": [],
+        "fields": [
+          "AnnAssign(target=Name(id='name', ctx=Store()), annotation=Name(id='str', ctx=Load()), simple=1)",
+          "AnnAssign(target=Name(id='created_at', ctx=Store()), annotation=Name(id='float', ctx=Load()), simple=1)"
+        ]
+      },
+      "current_equal": true,
+      "amended720_equal": true
+    },
+    "RetainedOwnerLaunch": {
+      "path": "src/agent_comms/owner_launch.py",
+      "original3931": {
+        "decorators": [
+          "Call(func=Name(id='dataclass', ctx=Load()), keywords=[keyword(arg='frozen', value=Constant(value=True)), keyword(arg='slots', value=Constant(value=True))])"
+        ],
+        "bases": [],
+        "fields": [
+          "AnnAssign(target=Name(id='process', ctx=Store()), annotation=Name(id='ProcessIdentity', ctx=Load()), simple=1)",
+          "AnnAssign(target=Name(id='interpreter', ctx=Store()), annotation=Name(id='str', ctx=Load()), simple=1)",
+          "AnnAssign(target=Name(id='environment', ctx=Store()), annotation=Subscript(value=Name(id='dict', ctx=Load()), slice=Tuple(elts=[Name(id='str', ctx=Load()), Name(id='str', ctx=Load())], ctx=Load()), ctx=Load()), value=Call(func=Name(id='field', ctx=Load()), keywords=[keyword(arg='repr', value=Constant(value=False))]), simple=1)",
+          "AnnAssign(target=Name(id='configuration', ctx=Store()), annotation=Name(id='RestartEnvironment', ctx=Load()), value=Call(func=Name(id='field', ctx=Load()), keywords=[keyword(arg='init', value=Constant(value=False))]), simple=1)"
+        ]
+      },
+      "current_equal": true,
+      "amended720_equal": true
+    },
+    "RestartEnvironment": {
+      "path": "src/agent_comms/owner_launch.py",
+      "original3931": {
+        "decorators": [
+          "Call(func=Name(id='dataclass', ctx=Load()), keywords=[keyword(arg='frozen', value=Constant(value=True))])"
+        ],
+        "bases": [],
+        "fields": [
+          "AnnAssign(target=Name(id='home', ctx=Store()), annotation=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Constant(value=None)), value=Call(func=Name(id='field', ctx=Load()), keywords=[keyword(arg='default', value=Constant(value=None)), keyword(arg='metadata', value=Dict(keys=[Constant(value='wire_omit_default'), Constant(value='wire_name')], values=[Constant(value=True), Constant(value='HOME')]))]), simple=1)",
+          "AnnAssign(target=Name(id='path', ctx=Store()), annotation=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Constant(value=None)), value=Call(func=Name(id='field', ctx=Load()), keywords=[keyword(arg='default', value=Constant(value=None)), keyword(arg='metadata', value=Dict(keys=[Constant(value='wire_omit_default'), Constant(value='wire_name'), Constant(value='runtime')], values=[Constant(value=True), Constant(value='PATH'), Constant(value=True)]))]), simple=1)",
+          "AnnAssign(target=Name(id='pythonpath', ctx=Store()), annotation=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Constant(value=None)), value=Call(func=Name(id='field', ctx=Load()), keywords=[keyword(arg='default', value=Constant(value=None)), keyword(arg='metadata', value=Dict(keys=[Constant(value='wire_omit_default'), Constant(value='wire_name'), Constant(value='runtime')], values=[Constant(value=True), Constant(value='PYTHONPATH'), Constant(value=True)]))]), simple=1)",
+          "AnnAssign(target=Name(id='virtual_env', ctx=Store()), annotation=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Constant(value=None)), value=Call(func=Name(id='field', ctx=Load()), keywords=[keyword(arg='default', value=Constant(value=None)), keyword(arg='metadata', value=Dict(keys=[Constant(value='wire_omit_default'), Constant(value='wire_name'), Constant(value='runtime')], values=[Constant(value=True), Constant(value='VIRTUAL_ENV'), Constant(value=True)]))]), simple=1)",
+          "AnnAssign(target=Name(id='config', ctx=Store()), annotation=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Constant(value=None)), value=Call(func=Name(id='field', ctx=Load()), keywords=[keyword(arg='default', value=Constant(value=None)), keyword(arg='metadata', value=Dict(keys=[Constant(value='wire_omit_default'), Constant(value='wire_name')], values=[Constant(value=True), Constant(value='XDG_CONFIG_HOME')]))]), simple=1)",
+          "AnnAssign(target=Name(id='root', ctx=Store()), annotation=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Constant(value=None)), value=Call(func=Name(id='field', ctx=Load()), keywords=[keyword(arg='default', value=Constant(value=None)), keyword(arg='metadata', value=Dict(keys=[Constant(value='wire_omit_default'), Constant(value='wire_name'), Constant(value='runtime')], values=[Constant(value=True), Constant(value='AGENT_COMMS_ROOT'), Constant(value=True)]))]), simple=1)",
+          "AnnAssign(target=Name(id='root_id', ctx=Store()), annotation=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Constant(value=None)), value=Call(func=Name(id='field', ctx=Load()), keywords=[keyword(arg='default', value=Constant(value=None)), keyword(arg='metadata', value=Dict(keys=[Constant(value='wire_omit_default'), Constant(value='wire_name'), Constant(value='runtime')], values=[Constant(value=True), Name(id='ROOT_ID_ENV', ctx=Load()), Constant(value=True)]))]), simple=1)",
+          "AnnAssign(target=Name(id='package', ctx=Store()), annotation=BinOp(left=Name(id='str', ctx=Load()), op=BitOr(), right=Constant(value=None)), value=Call(func=Name(id='field', ctx=Load()), keywords=[keyword(arg='default', value=Constant(value=None)), keyword(arg='metadata', value=Dict(keys=[Constant(value='wire_omit_default'), Constant(value='wire_name'), Constant(value='runtime')], values=[Constant(value=True), Name(id='PACKAGE_ENV', ctx=Load()), Constant(value=True)]))]), simple=1)",
+          "AnnAssign(target=Name(id='default_agent_directory', ctx=Store()), annotation=Subscript(value=Name(id='ClassVar', ctx=Load()), slice=Name(id='Path', ctx=Load()), ctx=Load()), value=Call(func=Name(id='Path', ctx=Load()), args=[Constant(value='~/.pi/agent')]), simple=1)",
+          "AnnAssign(target=Name(id='native_config', ctx=Store()), annotation=Subscript(value=Name(id='Annotated', ctx=Load()), slice=Tuple(elts=[Name(id='Path', ctx=Load()), Name(id='PathText', ctx=Load())], ctx=Load()), ctx=Load()), value=Call(func=Name(id='field', ctx=Load()), keywords=[keyword(arg='default', value=Name(id='default_agent_directory', ctx=Load())), keyword(arg='metadata', value=Dict(keys=[Constant(value='wire_name'), Constant(value='native')], values=[Constant(value='AGENT_COMMS_NATIVE_CONFIG_DIR'), Constant(value=True)]))]), simple=1)",
+          "AnnAssign(target=Name(id='agent_directory', ctx=Store()), annotation=Subscript(value=Name(id='Annotated', ctx=Load()), slice=Tuple(elts=[Name(id='Path', ctx=Load()), Name(id='PathText', ctx=Load())], ctx=Load()), ctx=Load()), value=Call(func=Name(id='field', ctx=Load()), keywords=[keyword(arg='default', value=Name(id='default_agent_directory', ctx=Load())), keyword(arg='metadata', value=Dict(keys=[Constant(value='wire_name'), Constant(value='native')], values=[Constant(value='PI_CODING_AGENT_DIR'), Constant(value=True)]))]), simple=1)",
+          "AnnAssign(target=Name(id='owner_key', ctx=Store()), annotation=Subscript(value=Name(id='ClassVar', ctx=Load()), slice=Name(id='str', ctx=Load()), ctx=Load()), value=Constant(value='AGENT_COMMS_THREAD'), simple=1)",
+          "AnnAssign(target=Name(id='binary_key', ctx=Store()), annotation=Subscript(value=Name(id='ClassVar', ctx=Load()), slice=Name(id='str', ctx=Load()), ctx=Load()), value=Constant(value='AGENT_COMMS_AGENT_BIN'), simple=1)",
+          "AnnAssign(target=Name(id='arguments_key', ctx=Store()), annotation=Subscript(value=Name(id='ClassVar', ctx=Load()), slice=Name(id='str', ctx=Load()), ctx=Load()), value=Constant(value='AGENT_COMMS_AGENT_ARGS'), simple=1)"
+        ]
+      },
+      "current_equal": true,
+      "amended720_equal": true
+    },
+    "ProcessIdentity": {
+      "path": "src/agent_comms/child_process.py",
+      "original3931": {
+        "decorators": [
+          "Call(func=Name(id='dataclass', ctx=Load()), keywords=[keyword(arg='frozen', value=Constant(value=True))])"
+        ],
+        "bases": [],
+        "fields": [
+          "AnnAssign(target=Name(id='pid', ctx=Store()), annotation=Name(id='int', ctx=Load()), simple=1)",
+          "AnnAssign(target=Name(id='start_time', ctx=Store()), annotation=Name(id='int', ctx=Load()), simple=1)"
+        ]
+      },
+      "current_equal": true,
+      "amended720_equal": true
+    }
+  }
+}

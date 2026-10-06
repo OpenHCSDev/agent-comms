@@ -1,0 +1,22 @@
+...........FFF                                                           [100%]
+=================================== FAILURES ===================================
+__ test_changed_owner_after_release_refuses_escalation_and_replacement[birth] __
+tests/test_owner_release_restart.py:142: in test_changed_owner_after_release_refuses_escalation_and_replacement
+    with pytest.raises(StoppedOwnerFailure) as caught:
+                       ^^^^^^^^^^^^^^^^^^^
+E   NameError: name 'StoppedOwnerFailure' is not defined
+_ test_changed_owner_after_release_refuses_escalation_and_replacement[admission] _
+tests/test_owner_release_restart.py:142: in test_changed_owner_after_release_refuses_escalation_and_replacement
+    with pytest.raises(StoppedOwnerFailure) as caught:
+                       ^^^^^^^^^^^^^^^^^^^
+E   NameError: name 'StoppedOwnerFailure' is not defined
+_ test_changed_owner_after_release_refuses_escalation_and_replacement[receipt] _
+tests/test_owner_release_restart.py:142: in test_changed_owner_after_release_refuses_escalation_and_replacement
+    with pytest.raises(StoppedOwnerFailure) as caught:
+                       ^^^^^^^^^^^^^^^^^^^
+E   NameError: name 'StoppedOwnerFailure' is not defined
+=========================== short test summary info ============================
+FAILED ../comms-original-owner-admission-20261006::test_changed_owner_after_release_refuses_escalation_and_replacement[birth]
+FAILED ../comms-original-owner-admission-20261006::test_changed_owner_after_release_refuses_escalation_and_replacement[admission]
+FAILED ../comms-original-owner-admission-20261006::test_changed_owner_after_release_refuses_escalation_and_replacement[receipt]
+3 failed, 11 passed in 21.19s

@@ -1,0 +1,61 @@
+{
+  "results": [
+    {
+      "label": "current",
+      "argv": [
+        "/usr/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-o",
+        "addopts=",
+        "--basetemp",
+        "/home/ts/.cache/agent-scratch/einstein-goal-report-source-controls-20261006/current",
+        "-q",
+        "--tb=short",
+        "/home/ts/wt/comms-original-owner-admission-20261006/tests/test_goal_history_read_only.py",
+        "tests/test_owner_release_restart.py::test_changed_owner_after_release_refuses_escalation_and_replacement"
+      ],
+      "cwd": "/home/ts/wt/comms-original-owner-admission-20261006",
+      "source_pythonpath": "/home/ts/wt/comms-original-owner-admission-20261006/src:/home/ts/wt/comms-original-owner-admission-20261006/tools/cutover:/home/ts/.cache/uv/archive-v0/mNatOBGB9uuf-bXB",
+      "elapsed_seconds": 12.089494401938282,
+      "returncode": 0,
+      "controller_pid": 2871017,
+      "joined": true,
+      "scope": "Authored source controls only; no installed prefix, original retained root, native SDK/provider or build",
+      "stdout_sha256": "02592e39fb27f28ba9fcda11f768d8151f1a47cf2ddfb3ec060f9d286d5502c4",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "amended720",
+      "argv": [
+        "/usr/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-o",
+        "addopts=",
+        "--basetemp",
+        "/home/ts/.cache/agent-scratch/einstein-goal-report-source-controls-20261006/amended720",
+        "-q",
+        "--tb=short",
+        "/home/ts/wt/comms-original-owner-admission-20261006/tests/test_goal_history_read_only.py",
+        "/home/ts/wt/comms-original-owner-admission-20261006/tests/test_goal_report_preservation.py",
+        "tests/test_owner_release_restart.py::test_changed_owner_after_release_refuses_escalation_and_replacement"
+      ],
+      "cwd": "/home/ts/wt/comms-amended720-owner-admission-20261006",
+      "source_pythonpath": "/home/ts/wt/comms-amended720-owner-admission-20261006/src:/home/ts/wt/comms-original-owner-admission-20261006/tools/cutover:/home/ts/.cache/uv/archive-v0/mNatOBGB9uuf-bXB",
+      "elapsed_seconds": 20.65615119296126,
+      "returncode": 1,
+      "controller_pid": 2871582,
+      "joined": true,
+      "scope": "Authored source controls only; no installed prefix, original retained root, native SDK/provider or build",
+      "stdout_sha256": "ac5fc5bedd45308e00edac86c63d8870cb601a71e22252a4552d78cb7d63c561",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "installed_qualified": false,
+  "native_execution": false
+}
