@@ -1,0 +1,16 @@
+{
+  "determining": "e8f0284a7a4951785db4d3f84af1fce2b49cda0f",
+  "changed_declarations": [
+    "configured_saved_agent"
+  ],
+  "compile": "PASS without imports",
+  "source_helper_sha256": "1242fea8726d900f3c3cf1495f6599bce1acdd4be030bd0df9bb5a52e2b64bfc",
+  "direct_participant_store_consumers": 0,
+  "fork_request_declarations": 1,
+  "original_worktree_default_reads": 1,
+  "actual_request_worktree_field": "cwd",
+  "runtime_attachment": "CommsAgent._runtime -> SessionLifecycle.runtime -> bind_owned -> RuntimeServer.start; RuntimeProxy.subscribe validates owner process; release_owned closes same runtime",
+  "checks_executed": "AST/source compilation only; no tests/App/SDK/native/provider/package/prefix/build",
+  "defaults": "Existing own run and four three_cut configured_saved_agent calls omit worktree and keep original.worktree; two authored inspector-resource replacements accept **kwargs; source529/peer529 names/tags/model/thinking/session source/yield tuple preserved",
+  "cleanup": "Both actual calling-process owners are bound in same SessionLifecycle, so original release_owned retires both on exit; no synthetic process result"
+}
