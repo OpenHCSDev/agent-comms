@@ -1,0 +1,317 @@
+{
+  "state": "SOURCE ONLY; configured App/provider/SDK UNRUN",
+  "determining_main": "48f6d69588a64ceca82e914a8d4faa81387179a0",
+  "changed_declarations": [
+    "configured_saved_agent"
+  ],
+  "producer": {
+    "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tests/compaction_source_successor_installed_journey.py",
+    "sha256": "b086d7a5e5a3792e0b3ff19088b6b88cb9286dd76c9323d764d2dbb82920d0cf",
+    "bytes": 13064
+  },
+  "before_sha256": "1242fea8726d900f3c3cf1495f6599bce1acdd4be030bd0df9bb5a52e2b64bfc",
+  "original_ownership": {
+    "runtime_attachment": "CommsAgent._runtime via SessionLifecycle.bind_owned -> RuntimeServer.start",
+    "native_fork_worktree": "One original ForkSessionRequest.cwd owns helper cwd, source529/peer529 declarations and continuation checks",
+    "membership": "ThreadManagement.restore_stopped followed by original ProcessOwners.acquire_thread; no ParticipantStore injection",
+    "inbox_execution": "Existing InputDrain.auto_wake and ensure_live_drain; fixture defaultFalse preserved, configured continuous caller opts in",
+    "shutdown": "Existing agent.shutdown finally, original source and input-proof hashes, native_children_closed"
+  },
+  "roots": [
+    {
+      "repository": "/home/ts/wt/comms-configured-continuous-producer-20261006",
+      "revision": "48f6d69588a64ceca82e914a8d4faa81387179a0",
+      "root": "src/agent_comms",
+      "modules": 324,
+      "unparsed_original": [],
+      "sites": [
+        {
+          "path": "src/agent_comms/input_drain.py",
+          "line": 199,
+          "kind": "declaration",
+          "name": "ensure_live_drain"
+        },
+        {
+          "path": "src/agent_comms/session_lifecycle.py",
+          "line": 181,
+          "kind": "declaration",
+          "name": "bind_owned"
+        },
+        {
+          "path": "src/agent_comms/session_lifecycle.py",
+          "line": 260,
+          "kind": "call",
+          "expression": "self.effects.inputs.ensure_live_drain(thread.name)"
+        },
+        {
+          "path": "src/agent_comms/session_lifecycle.py",
+          "line": 289,
+          "kind": "call",
+          "expression": "self.effects.inputs.ensure_live_drain(session_id)"
+        },
+        {
+          "path": "src/agent_comms/session_lifecycle.py",
+          "line": 259,
+          "kind": "call",
+          "expression": "self.bind_owned(thread, thread.name)"
+        },
+        {
+          "path": "src/agent_comms/session_lifecycle.py",
+          "line": 285,
+          "kind": "call",
+          "expression": "self.bind_owned(thread, session_id)"
+        },
+        {
+          "path": "src/agent_comms/turn_runner.py",
+          "line": 362,
+          "kind": "call",
+          "expression": "self.inputs.ensure_live_drain(session_id)"
+        },
+        {
+          "path": "src/agent_comms/turn_runner.py",
+          "line": 289,
+          "kind": "call",
+          "expression": "self.inputs.ensure_live_drain(session_id)"
+        }
+      ]
+    },
+    {
+      "repository": "/home/ts/wt/comms-configured-continuous-producer-20261006",
+      "revision": "48f6d69588a64ceca82e914a8d4faa81387179a0",
+      "root": "tests",
+      "modules": 374,
+      "unparsed_original": [],
+      "sites": [
+        {
+          "path": "tests/channel_drain_readiness_installed_ui.py",
+          "line": 23,
+          "kind": "import",
+          "expression": "from l0a_native_installed_pilot import main, until, response_painted"
+        },
+        {
+          "path": "tests/channel_drain_readiness_installed_ui.py",
+          "line": 67,
+          "kind": "call",
+          "expression": "response_painted(app, view, 'NATIVE_RESPONSE_1')"
+        },
+        {
+          "path": "tests/compaction_source_successor_installed_journey.py",
+          "line": 59,
+          "kind": "declaration",
+          "name": "configured_saved_agent"
+        },
+        {
+          "path": "tests/compaction_source_successor_installed_journey.py",
+          "line": 196,
+          "kind": "call",
+          "expression": "configured_saved_agent(stage, package, source_file, Receiver(), receipt, capture_source=capture_source, observe_launch=observe_launch, core_source=core_source, core_artifacts=core_artifacts)"
+        },
+        {
+          "path": "tests/compaction_source_successor_installed_journey.py",
+          "line": 153,
+          "kind": "call",
+          "expression": "agent.sessions.bind_owned(service.registry.require(name), name)"
+        },
+        {
+          "path": "tests/compaction_source_successor_installed_journey.py",
+          "line": 155,
+          "kind": "call",
+          "expression": "agent.inputs.ensure_live_drain(name)"
+        },
+        {
+          "path": "tests/native_backend_fixture.py",
+          "line": 69,
+          "kind": "call",
+          "expression": "agent.inputs.ensure_live_drain(thread.name)"
+        },
+        {
+          "path": "tests/native_backend_fixture.py",
+          "line": 68,
+          "kind": "call",
+          "expression": "agent.sessions.bind_owned(thread, thread.name)"
+        },
+        {
+          "path": "tests/native_request_wait_installed_journey.py",
+          "line": 25,
+          "kind": "import",
+          "expression": "from l0a_native_installed_pilot import until, response_painted"
+        },
+        {
+          "path": "tests/native_request_wait_installed_journey.py",
+          "line": 187,
+          "kind": "call",
+          "expression": "response_painted(app, view, f'WAIT_NATIVE_OK_{index}')"
+        },
+        {
+          "path": "tests/session_coverage_configured_journey.py",
+          "line": 20,
+          "kind": "import",
+          "expression": "from original_owner_capture import CurrentTypedCapture"
+        },
+        {
+          "path": "tests/session_coverage_configured_journey.py",
+          "line": 29,
+          "kind": "call",
+          "expression": "CurrentTypedCapture(Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'), original_python)"
+        },
+        {
+          "path": "tests/summary_prefix_configured_installed_journey.py",
+          "line": 65,
+          "kind": "import",
+          "expression": "from original_owner_capture import CurrentTypedCapture"
+        },
+        {
+          "path": "tests/summary_prefix_configured_installed_journey.py",
+          "line": 68,
+          "kind": "call",
+          "expression": "CurrentTypedCapture(Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'), original_python)"
+        },
+        {
+          "path": "tests/test_acp_input_disposition.py",
+          "line": 250,
+          "kind": "call",
+          "expression": "owner.sessions.bind_owned(thread, session)"
+        },
+        {
+          "path": "tests/test_cursor_load_recovery.py",
+          "line": 95,
+          "kind": "call",
+          "expression": "agent.inputs.ensure_live_drain(owner.name)"
+        },
+        {
+          "path": "tests/test_live_drain_failure.py",
+          "line": 48,
+          "kind": "call",
+          "expression": "agent.inputs.ensure_live_drain('beta')"
+        },
+        {
+          "path": "tests/test_live_drain_failure.py",
+          "line": 94,
+          "kind": "call",
+          "expression": "agent.inputs.ensure_live_drain('beta')"
+        },
+        {
+          "path": "tests/test_retained_manual_compaction.py",
+          "line": 160,
+          "kind": "call",
+          "expression": "agent.sessions.bind_owned(comms.registry.require('retained'), 'retained')"
+        },
+        {
+          "path": "tests/test_runtime_owned_session_admission.py",
+          "line": 59,
+          "kind": "call",
+          "expression": "owner.sessions.bind_owned(retired, 'retired-acp-session')"
+        },
+        {
+          "path": "tests/test_runtime_owned_session_admission.py",
+          "line": 69,
+          "kind": "call",
+          "expression": "owner.sessions.bind_owned(thread, 'original-acp-session')"
+        },
+        {
+          "path": "tests/test_wire_watch.py",
+          "line": 83,
+          "kind": "call",
+          "expression": "agent.inputs.ensure_live_drain('owner')"
+        },
+        {
+          "path": "tests/test_wire_watch.py",
+          "line": 139,
+          "kind": "call",
+          "expression": "agent.inputs.ensure_live_drain('owner')"
+        },
+        {
+          "path": "tests/three_cut_retention_configured_journey.py",
+          "line": 31,
+          "kind": "import",
+          "expression": "from original_owner_capture import CurrentTypedCapture"
+        },
+        {
+          "path": "tests/three_cut_retention_configured_journey.py",
+          "line": 32,
+          "kind": "import",
+          "expression": "from compaction_source_successor_installed_journey import configured_saved_agent, digest"
+        },
+        {
+          "path": "tests/three_cut_retention_configured_journey.py",
+          "line": 375,
+          "kind": "call",
+          "expression": "configured_saved_agent(seed_stage, package, source_file, receiver, seed_receipt, capture_source=capture_source, core_source=core_source, core_artifacts=core_artifacts)"
+        },
+        {
+          "path": "tests/three_cut_retention_configured_journey.py",
+          "line": 128,
+          "kind": "call",
+          "expression": "CurrentTypedCapture(Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'), original_python)"
+        },
+        {
+          "path": "tests/three_cut_retention_configured_journey.py",
+          "line": 153,
+          "kind": "call",
+          "expression": "configured_saved_agent(application_stage, package, captured_source, Receiver(), receipt, capture_source=capture_source, observe_launch=launch, core_source=core_source, core_artifacts=core_artifacts)"
+        },
+        {
+          "path": "tests/three_cut_retention_configured_journey.py",
+          "line": 167,
+          "kind": "call",
+          "expression": "CurrentTypedCapture(Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'), original_python)"
+        },
+        {
+          "path": "tests/three_cut_retention_configured_journey.py",
+          "line": 189,
+          "kind": "call",
+          "expression": "configured_saved_agent(stage, package, source, Receiver(), receipt, capture_source=capture_source, observe_launch=observe_launch, core_source=core_source, core_artifacts=core_artifacts)"
+        },
+        {
+          "path": "tests/three_cut_retention_configured_journey.py",
+          "line": 240,
+          "kind": "call",
+          "expression": "configured_saved_agent(stage, package, source_file, receiver, receipt, capture_source=capture_source, observe_launch=observe_launch, core_source=core_source, core_artifacts=core_artifacts)"
+        },
+        {
+          "path": "tests/three_cut_retention_configured_journey.py",
+          "line": 350,
+          "kind": "call",
+          "expression": "CurrentTypedCapture(Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'), original_python)"
+        },
+        {
+          "path": "tests/turn_context_installed_journey.py",
+          "line": 183,
+          "kind": "import",
+          "expression": "from original_owner_capture import CurrentTypedCapture"
+        },
+        {
+          "path": "tests/turn_context_installed_journey.py",
+          "line": 195,
+          "kind": "call",
+          "expression": "CurrentTypedCapture(options.configured_source_root, options.original_python)"
+        }
+      ]
+    },
+    {
+      "repository": "/home/ts/wt/comms-configured-continuous-producer-20261006",
+      "revision": "48f6d69588a64ceca82e914a8d4faa81387179a0",
+      "root": "tools",
+      "modules": 54,
+      "unparsed_original": [],
+      "sites": [
+        {
+          "path": "tools/cutover/original_owner_capture.py",
+          "line": 74,
+          "kind": "declaration",
+          "name": "CurrentTypedCapture"
+        }
+      ]
+    }
+  ],
+  "compile_without_import": [
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tests/compaction_source_successor_installed_journey.py",
+      "sha256": "b086d7a5e5a3792e0b3ff19088b6b88cb9286dd76c9323d764d2dbb82920d0cf",
+      "bytes": 13064,
+      "without_import": true
+    }
+  ],
+  "consumer_compatibility": "All original compaction/S4 configured_saved_agent callers omit auto_wake and retain False. Toad continuous explicitly supplies True. No production patch, source overlay, pin or frozen control change.",
+  "runtime_authority": "UNBOUND; source clearance only"
+}
