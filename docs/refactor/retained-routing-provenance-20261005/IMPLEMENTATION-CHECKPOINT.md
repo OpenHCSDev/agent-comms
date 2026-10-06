@@ -77,16 +77,60 @@ The compiler process was system Python3.14; this is syntax evidence, not a
 Python3.11 import/runtime result. Dynamic metaclass registration and strict
 codec roundtrip are not executed or claimed by compilation.
 
-The new tests use existing ordinary producer/attachment owners to exercise
-same-name/alias separation, strict identity roundtrip, live-only settlement,
-detachment and source-byte preservation. They are authored and **UNRUN**.
-Original cross-version routing/refusal/renderer controls also remain UNRUN.
+After Parent's separate source-control authorization, the affected development
+controls ran with system Python and retained cached ACP0.12.1, using own authored
+scratch and the existing Core test scheduler fixture. `SOURCE-ACCEPTANCE.json`
+retains every terminal/raw hash. There are **32 distinct selected controls with
+passing results**, across the initial batch and targeted failure resolutions;
+this is not a one-shot green full batch. The paired Toad reader and snapshot
+consumer checks passed. Dynamic live/recorded registration, strict codec
+roundtrip, original recorded acquisition/attachment, currentness/detachment,
+ordinary live paging/fork windows and the complete declared ACP sample roster
+were exercised. Original cross-version routing/refusal/renderer controls remain
+UNRUN.
 
-No build, application import, pytest, prefix access, seed, Node/SDK/native,
-provider/input, saved-data or public operation occurred. #684's shipped
-old-writer/index acceptance and all its raw evidence remain independent.
+One production declaration gap was found: `FieldCodec.value_schema` lacked
+string-keyed dictionaries, which blocked the required provenance schema request.
+It now derives their JSON object value schema from the original value annotation;
+the decoder and every strict boundary remain unchanged. The source projection
+test crosses the actual JSON serialization boundary before target decoding.
+Other failures were stale test fixtures: assistant content used strings instead
+of declared text blocks, attachment passed a name instead of its original Thread,
+raw registry mutation invalidated the source guard, the ACP roster omitted an
+existing member and supplied a string instead of FileRevision. These fixtures
+now use their current owners. The original test scheduler fixture prevents
+unrelated deferred WAL writes during source-byte assertions.
+
+The full-instance schema probe encountered recursion through the existing live
+Thread/context declaration graph. This workflow requests RegistryProvenance's
+nonrecursive schema and uses strict identity instance decoding plus the family's
+class-reference schema; it does not generate that complete live-instance schema.
+The raw recursion failure remains recorded as unqualified, with no recursive
+schema redesign or compatibility fallback introduced. The context ACP sample
+uses NextContextTurn for codec shape coverage only; it is not a recorded request
+or evidence of a sealed model input.
+
+No build, prefix access, seed, Node/SDK/native, provider/input, saved-data or
+public operation occurred. #684's shipped old-writer/index acceptance and all
+its raw evidence remain independent.
 Genuine live central batch remains separately unqualified; loading phases does
 not add old720's absent all-owner fencing capability.
+
+The final requested source batch passed three controls: the actual required
+provenance schema/projection/strict target decode and original namespace equality;
+nested dictionary schema plus unsupported non-string-key refusal; and the full
+ACP sample roundtrip with an actual FileRevision observation. Only these affected
+declaration and fixture sites were checked again after their concrete repairs.
+
+A separate historical consumer remains concrete: unchanged
+`HistoricalSessions.publish_handling` creates a read-only Comms on the archived
+root and asks `MessageNotification.delivery_window`, which still acquires a live
+Registration snapshot there. This source batch fixes initial/adjacent transcript
+page witnesses; it does not qualify old-registry notification acquisition. The
+existing recorded namespace and original notification/assignment reader are the
+next source seam to coordinate, preserving ordinary strict coordination-schema
+refusal and keeping recorded evidence out of live activity/admission. No patch
+or fake notification/lifecycle evidence was folded into this checkpoint.
 
 Next installed qualification requires a new exact source/wheel pair and fresh
 purpose. The routing seed uses real `SessionManager` through Node, so it needs

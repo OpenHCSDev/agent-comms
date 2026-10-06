@@ -112,8 +112,8 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
 def test_duplicate_and_newer_incarnations_sessions(tmp_path):
     old = setup(tmp_path / "old", 0)
     # Historical invalid-for-live alias timestamps must survive as evidence.
-    raw = json.loads((old.root / "registry.json").read_text())
-    raw["threads"]["bob"]["created_at"] = 10.0
+    # Author the recorded ambiguous namespace through the original typed store;
+    # a raw registry overwrite would invalidate its private integrity guard.
     session = tmp_path / "saved.jsonl"
     records = [
         {"type": "session", "version": 3, "id": "saved", "timestamp": "2026-09-20T00:00:00Z"},
@@ -133,8 +133,10 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
         },
     ]
     session.write_text("".join(json.dumps(r) + "\n" for r in records))
-    raw["threads"]["alice"]["session_file"] = str(session)
-    (old.root / "registry.json").write_text(json.dumps(raw))
+    with old.registry.store.editing() as edit:
+        edit.document.threads["bob"] = replace(edit.document.threads["bob"], created_at=10.0)
+        edit.document.threads["alice"] = replace(edit.document.threads["alice"], session_file=str(session))
+        edit.commit()
     routing = TurnRouting(reply=MessageRoute("alice", ("#team",)))
     old.transcripts.routes.record(str(session), ("two",), routing)
     old.transcripts.routes.record_input_display("a" * 32, "original owner question")
@@ -183,9 +185,9 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
     old, live = setup(tmp_path / "old", 1), setup(tmp_path / "live", 0)
     native = tmp_path / "recorded.jsonl"
     native.write_text(json.dumps({"type": "message", "message": {
-        "role": "assistant", "content": "original recorded answer",
+        "role": "assistant", "content": [{"type": "text", "text": "original recorded answer"}],
     }}) + "\n")
-    old.threads.attach_session("alice", str(native))
+    old.threads.attach_session(old.registry.require("alice"), str(native))
     old.registry.rename("alice", "recorded-alice")
     replacement = replace(live.registry.require("alice"), created_at=20.0)
     live.registry.unregister("alice")
@@ -200,6 +202,10 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
     assert read.identity.thread.incarnation == old.registry.require("recorded-alice").incarnation
     decoded = FieldCodec.decode(TranscriptReadIdentity, FieldCodec.encode(read.identity))
     assert decoded == read.identity
+    assert set(TranscriptReadIdentity.names()) == {"live", "recorded"}
+    assert FieldCodec.value_schema(type[TranscriptReadIdentity])["enum"] == list(TranscriptReadIdentity.names())
+    with pytest.raises(ValueError, match="Unknown"):
+        FieldCodec.decode(TranscriptReadIdentity, {**FieldCodec.encode(read.identity), "kind": "unregistered"})
     rebound = live.transcripts.bind_page_read("recorded-alice", decoded)
     assert rebound.current_identity() == decoded
     assert any(event.text == "original recorded answer" for event in rebound.read().events)
@@ -211,6 +217,33 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
     assert delivered == [(str(live.root), live.registry.require("alice"))]
     assert (old.root / "registry.json").read_bytes() == original_registry
     assert native.read_bytes() == original_native
+
+
+def test_original_recorded_projection_is_strict_and_attaches_before_destination_decode(tmp_path):
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.historical_views import HistorySource
+    from agent_comms.registry_provenance import RegistryProvenance
+    from agent_comms.errors import RelationViolationError
+    from owner_read_projection import RecordedRegistryProjection
+
+    old, live = setup(tmp_path / "old", 0), setup(tmp_path / "live", 0)
+    original = (old.root / "registry.json").read_bytes()
+    packet = json.loads(json.dumps(RecordedRegistryProjection.read(
+        old.registry, old.root, "", FieldCodec.record_schema(RegistryProvenance)
+    )))
+    observed = FieldCodec.decode(HistorySource, packet)
+    assert observed.provenance == RegistryProvenance.capture(old.registry.snapshot())
+    observed.require_original(old.root)
+    attached = live.views.attach_history(old.root, source_read=observed)
+    assert attached.provenance == observed.provenance
+    assert (Path(attached.root) / "registry.json").read_bytes() == original
+    assert (old.root / "registry.json").read_bytes() == original
+    invalid = {**packet, "provenance": {**packet["provenance"], "extra": True}}
+    with pytest.raises(ValueError):
+        FieldCodec.decode(HistorySource, invalid)
+    (old.root / "registry.json").write_bytes(original + b" ")
+    with pytest.raises(RelationViolationError, match="guard"):
+        RecordedRegistryProjection.read(old.registry, old.root, "", FieldCodec.record_schema(RegistryProvenance))
 
 
 def test_detached_recorded_witness_cannot_rebind_to_same_name_live_thread(migrated):
