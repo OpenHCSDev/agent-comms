@@ -8,7 +8,10 @@ from agent_comms import invoke_tool
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.channels import AllOfMatch, AnyOfMatch, Channel, SavedView, ViewKind, ViewPredicate
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.channel_management import ArchiveThreadsTagDisposition, DeleteThreadsTagDisposition
+from agent_comms.channel_management import (
+    ArchiveThreadsTagDisposition, DeleteThreadsTagDisposition,
+    DeleteExclusiveInactiveThreadsTagDisposition,
+)
 from agent_comms.comms import wire
 from agent_comms.display_order import ChannelSort, ThreadSort
 from agent_comms.errors import RelationViolationError
@@ -59,6 +62,76 @@ def test_tag_cohort_refuses_active_owners_before_any_registry_publication(tmp_pa
         assert comms.registry.snapshot() == original
         assert comms.channels.catalog.read() == catalog
         assert ProcessIdentity.capture(os.getpid()) == original.require('active').process_identity
+
+
+def test_exclusive_tag_deletion_uses_original_storage_and_preserves_survivors(tmp_path):
+    comms = wire(tmp_path / 'wire')
+    saved = {}
+    for name, tags, status in (
+        ('single', {'remove'}, StoppedThreadStatus()),
+        ('archived', {'remove'}, ArchivedThreadStatus()),
+        ('multi', {'remove', 'keep'}, StoppedThreadStatus()),
+        ('active', {'remove'}, RunningThreadStatus()),
+        ('untouched', {'keep'}, StoppedThreadStatus()),
+    ):
+        path = tmp_path / (name + '.jsonl')
+        path.write_text('{"original_saved_history":"' + name + '"}\n')
+        saved[name] = path.read_bytes()
+        process = ProcessIdentity.capture(os.getpid()) if name == 'active' else None
+        comms.registry.declare(Thread(name, frozenset(tags), str(tmp_path),
+                                     session_file=str(path), process_identity=process), status)
+    comms.channels.set_channel_pinned('remove', True)
+    comms.channels.set_thread_pinned('keep', 'multi', True)
+    original_active = comms.registry.require('active')
+    original_multi = comms.registry.require('multi')
+    disposition = DeleteExclusiveInactiveThreadsTagDisposition()
+    with pytest.raises(ValueError, match='only inactive'):
+        comms.channels.delete_tag('remove', disposition=disposition)
+    assert comms.registry.require('single').tags == {'remove'}
+    result = comms.channels.delete_tag('remove', disposition=disposition, confirmed=True)
+    assert result.removed_tag
+    assert {row.name for row in result.removed_threads} == {'single', 'archived'}
+    assert set(comms.registry.all_threads()) == {'multi', 'active', 'untouched'}
+    assert comms.registry.require('multi').tags == {'keep'}
+    assert comms.registry.require('multi').incarnation == original_multi.incarnation
+    active = comms.registry.require('active')
+    assert not active.tags and active.process_identity == original_active.process_identity
+    assert comms.registry.status('active').active and active.process_alive
+    catalog = comms.channels.catalog.read()
+    assert 'remove' not in catalog.all_tags(comms.registry.all_threads())
+    assert '#remove' not in catalog.preferences
+    assert catalog.pinned_threads('#keep') == {'multi'}
+    assert {name: (tmp_path / (name + '.jsonl')).read_bytes() for name in saved} == saved
+
+
+def test_exclusive_tag_deletion_never_deletes_a_stopped_owner_that_is_still_alive(tmp_path):
+    comms = wire(tmp_path / 'wire')
+    original = Thread('still-alive', frozenset({'remove'}), str(tmp_path),
+                      process_identity=ProcessIdentity.capture(os.getpid()))
+    comms.registry.declare(original, StoppedThreadStatus())
+    result = comms.channels.delete_tag('remove',
+        disposition=DeleteExclusiveInactiveThreadsTagDisposition(), confirmed=True)
+    assert not result.removed_threads
+    surviving = comms.registry.require('still-alive')
+    assert surviving.process_identity == original.process_identity and surviving.process_alive
+    assert not surviving.tags
+
+
+def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catalog(tmp_path):
+    from agent_comms.cli_commands import CliCommand
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.tools import CommsTagsTool, tool_catalog
+
+    comms = setup_wire(tmp_path)
+    action = next(action for action in CliCommand.target_catalog(comms, '#api', project=str(tmp_path))
+                  if action.declaration.declared_name == 'delete-tag')
+    disposition = DeleteExclusiveInactiveThreadsTagDisposition
+    choices = next(field.choices for field in action.editable_fields if field.name == 'disposition')
+    assert (disposition.label, FieldCodec.encode(disposition)) in choices
+    edited = action.edited({'disposition': FieldCodec.encode(disposition)})
+    assert 'only inactive' in edited.confirmation
+    tag_tool = next(tool for tool in tool_catalog() if tool['name'] == CommsTagsTool.declared_name)
+    assert FieldCodec.encode(disposition) in str(tag_tool['parameters']['properties']['disposition'])
 
 
 def test_saved_views_are_typed_persistent_and_non_routable(tmp_path):

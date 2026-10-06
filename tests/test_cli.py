@@ -221,3 +221,163 @@ class TestDeclaredTargetActions:
         code, refused = cli(tmp_path, 'target-action', '--target', 'tagged', '--operation', 'thread-tags',
                             '--arguments', '{"name":"other","tags":[]}')
         assert code == 1 and 'overridden' in refused['error']
+
+
+class TestSelectedTargetActions:
+    @staticmethod
+    def declared(root):
+        from agent_comms.comms import wire
+        from agent_comms.thread_status import StoppedThreadStatus
+        from agent_comms.threads import Thread
+
+        comms = wire(root)
+        for name, tags in (("alpha", {"team"}), ("beta", {"other"})):
+            comms.registry.declare(Thread(name, frozenset(tags), str(root)), StoppedThreadStatus())
+        return comms
+
+    def test_catalog_projects_mixed_operations_and_original_editor_fields(self, tmp_path):
+        from agent_comms.cli_commands import CliCommand
+
+        comms = self.declared(tmp_path)
+        actions = CliCommand.target_catalog(
+            comms, ("alpha", "beta", "#team"),
+            {"alpha": "#team", "beta": "#other"}, project=str(tmp_path),
+        )
+        catalog = {action.declaration.declared_name: action for action in actions}
+        assert set(catalog) == {"start", "stop", "archive", "pin-thread", "read-target"}
+        assert len(catalog["pin-thread"].bound) == 3
+        assert not catalog["pin-thread"].editable_fields
+        assert catalog["archive"].confirmation.startswith("Archive #team?")
+        with pytest.raises(ValueError, match="Archive #team"):
+            catalog["archive"].edited({}).with_confirmation(False)
+        reviewed = catalog["archive"].edited({}).with_confirmation(True)
+        assert reviewed.targets == ("alpha", "beta", "#team")
+        assert set(catalog["read-target"].encode()["parameters"]["properties"]) == {"worktree"}
+        assert all(item.editor_default == str(tmp_path)
+                   for item in catalog["read-target"].editable_fields)
+
+    def test_mixed_archive_reports_partial_results_in_selection_order(self, cli, tmp_path):
+        from agent_comms.thread_status import RunningThreadStatus
+        from agent_comms.threads import Thread
+
+        comms = self.declared(tmp_path)
+        comms.registry.declare(Thread("active", frozenset({"team"}), str(tmp_path)),
+                               RunningThreadStatus())
+        code, result = cli(tmp_path, "target-action", "--targets", "alpha", "active", "#team",
+                           "--operation", "archive", "--confirmed")
+        assert code == 1
+        assert [outcome["target"] for outcome in result["outcomes"]] == ["alpha", "active", "#team"]
+        assert result["outcomes"][0]["result"] == {"archived": "alpha"}
+        assert result["outcomes"][1]["error_type"] == "ValueError"
+        assert "no longer available" in result["outcomes"][1]["error"]
+        assert result["outcomes"][2]["result"]["archived"] is True
+        assert not comms.registry.status("alpha").visible
+        assert comms.registry.status("active").active
+        assert comms.channels.catalog.read().resolve("#team").archived
+
+    def test_confirmation_and_target_override_refuse_before_any_batch_write(self, cli, tmp_path):
+        comms = self.declared(tmp_path)
+        original = comms.registry.snapshot()
+        catalog = comms.channels.catalog.read()
+        code, failure = cli(tmp_path, "target-edit", "--targets", "alpha", "#team",
+                            "--operation", "archive", "--arguments", "{}")
+        assert code == 1 and "Archive #team" in failure["error"]
+        assert comms.registry.snapshot() == original
+        assert comms.channels.catalog.read() == catalog
+        code, failure = cli(tmp_path, "target-action", "--targets", "alpha", "#team",
+                            "--operation", "archive", "--arguments", '{"name":"beta"}', "--confirmed")
+        assert code == 1 and "overridden" in failure["error"]
+        assert comms.registry.snapshot() == original
+        assert comms.channels.catalog.read() == catalog
+
+    def test_channel_stop_deduplicates_selected_member_and_preserves_single_result(self, tmp_path):
+        from agent_comms.cli_commands import StopCliCommand, TargetBatchResult, TargetEdit
+        from agent_comms.thread_status import RunningThreadStatus
+
+        comms = self.declared(tmp_path)
+        comms.channels.update_tags("beta", add=frozenset({"team"}))
+        for name in ("alpha", "beta"):
+            comms.registry.register(comms.registry.require(name), RunningThreadStatus())
+        result = TargetEdit(StopCliCommand, ("#team", "alpha"), {}).apply(comms)
+        assert isinstance(result, TargetBatchResult) and result.successful
+        assert len(result.outcomes) == 2
+        assert {outcome.result.stopped for outcome in result.outcomes} == {"alpha", "beta"}
+        assert all(comms.registry.status(name).stopped for name in ("alpha", "beta"))
+        assert not result.reconnect_targets()
+        assert StopCliCommand.execute_target(comms, "alpha", {}).stopped == "alpha"
+
+    def test_channel_start_uses_native_visible_roster_without_launching(self, tmp_path):
+        from agent_comms.cli_commands import StartCliCommand
+        from agent_comms.thread_execution import ExternalThreadExecution
+        from agent_comms.thread_identity import ThreadRole
+        from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
+        from agent_comms.threads import Thread
+
+        comms = self.declared(tmp_path)
+        comms.registry.declare(Thread("external", frozenset({"team"}), str(tmp_path),
+                                     execution=ExternalThreadExecution), StoppedThreadStatus())
+        comms.registry.declare(Thread("archived", frozenset({"team"}), str(tmp_path)),
+                               ArchivedThreadStatus())
+        comms.registry.declare(Thread("human", frozenset({"team"}), str(tmp_path), role=ThreadRole.USER),
+                               StoppedThreadStatus())
+        commands = StartCliCommand.bindings(comms, "#team")
+        assert tuple(command.name for command in commands) == ("alpha",)
+        assert all(comms.registry.require(name).process_identity is None
+                   for name in ("alpha", "external", "archived", "human"))
+
+    def test_mixed_pins_keep_each_rows_original_channel(self, tmp_path):
+        from agent_comms.cli_commands import PinThreadCliCommand, TargetEdit
+
+        comms = self.declared(tmp_path)
+        before = {name: comms.registry.require(name).tags for name in ("alpha", "beta")}
+        result = TargetEdit(PinThreadCliCommand, ("alpha", "beta", "#team"), {},
+                            channel={"alpha": "#team", "beta": "#other"}).apply(comms)
+        assert result.successful and len(result.outcomes) == 3
+        catalog = comms.channels.catalog.read()
+        assert catalog.resolve("#team").pinned
+        assert catalog.pinned_threads("#team") == {"alpha"}
+        assert catalog.pinned_threads("#other") == {"beta"}
+        assert {name: comms.registry.require(name).tags for name in before} == before
+
+    def test_mixed_read_marks_human_views_without_advancing_executor_delivery(self, tmp_path):
+        from agent_comms.cli_commands import ReadTargetCliCommand, TargetEdit
+        from agent_comms.threads import Thread
+
+        comms = self.declared(tmp_path)
+        source = tmp_path / 'alpha.jsonl'
+        source.write_text(json.dumps({'type': 'message', 'message': {
+            'role': 'assistant', 'content': [{'type': 'text', 'text': 'Saved reply'}],
+        }}) + '\n')
+        comms.registry.declare(Thread('alpha', frozenset({'team'}), str(tmp_path),
+                                     session_file=str(source)))
+        comms.channels.update_tags('beta', add=frozenset({'team'}))
+        viewer = comms.messaging.user_identity(str(tmp_path)).name
+        comms.messaging.send('alpha', 'beta', 'Executor message')
+        comms.messaging.send('alpha', viewer, 'Human DM')
+        comms.messaging.send('alpha', '#team', 'Channel message')
+        before = comms.views.viewer_snapshot(str(tmp_path))
+        assert before.thread_unread['alpha'] == before.unread['alpha'] == 1
+        # The canonical tag change also publishes its membership notification.
+        assert before.channel_unread['#team'] == 2
+        result = TargetEdit(ReadTargetCliCommand, ('alpha', '#team'),
+                            {'worktree': str(tmp_path)}).apply(comms)
+        assert result.successful and tuple(item.result.read for item in result.outcomes) == ('alpha', '#team')
+        after = comms.views.viewer_snapshot(str(tmp_path))
+        assert after.thread_unread['alpha'] == after.unread.get('alpha', 0) == 0
+        assert after.channel_unread['#team'] == 0
+        assert comms.bus.pending_count('beta', 'alpha') == 1
+        # DeliveryScope excludes beta's own membership notice from its inbox.
+        assert comms.bus.pending_count('beta', '#team') == 1
+
+    def test_catalog_and_execution_keep_missing_and_single_only_targets_truthful(self, tmp_path):
+        from agent_comms.cli_commands import ArchiveCliCommand, CliCommand, ForkCliCommand, TargetEdit
+
+        comms = self.declared(tmp_path)
+        actions = CliCommand.target_catalog(comms, ("missing", "alpha"), project=str(tmp_path))
+        assert {action.declaration.declared_name for action in actions} >= {"archive", "read-target"}
+        result = TargetEdit(ArchiveCliCommand, ("missing", "alpha"), {}).apply(comms)
+        assert not result.successful
+        assert result.outcomes[0].target == "missing" and not result.outcomes[0].successful
+        assert result.outcomes[1].result.archived == "alpha"
+        with pytest.raises(ValueError, match="single target"):
+            TargetEdit(ForkCliCommand, ("alpha", "beta"), {}).apply(comms)
