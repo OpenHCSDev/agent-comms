@@ -1,0 +1,31 @@
+{
+  "before_head": "20236a5421d92b85a5746866365cfec7fa34e524",
+  "removed_path": "tests/tools/channel_recovery_physical_journey.py",
+  "sha256": "5332803027e05203c8fd5b7c8bc40d5a82b0cdba4693c8b8ce6424e012470a3d",
+  "package_coverage": [
+    {
+      "root": "src",
+      "parsed": 316,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 368,
+      "omissions": []
+    },
+    {
+      "root": "tools",
+      "parsed": 54,
+      "omissions": []
+    }
+  ],
+  "declarations": {
+    "tests/tools/channel_recovery_physical_journey.py::main": 84,
+    "tests/tools/channel_recovery_physical_journey.py::ChannelRecoveryJourney": 18,
+    "tests/tools/channel_recovery_physical_journey.py::originals": 16,
+    "tests/tools/channel_recovery_physical_journey.py::script": 16
+  },
+  "active_callers": "No tracked executable callers; git grep finds only self and historical parent-main reconciliation inventory.",
+  "current_owner": "Toad tests/tools/record_installed_tui.py::ChannelLifetimeJourney and tests/tools/scroll_observation.py::review_channel_lifetime",
+  "behavior_evidence": "Original public440 receipt58db45f86a5760720fe944a98c6a8443ea38b9ebc52e68fb0a8d60f27c31cc9f; all18 checks62.444762s. No new runtime acceptance claimed."
+}

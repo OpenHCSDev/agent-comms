@@ -1,0 +1,179 @@
+{
+  "scope": "Parent independent original-source and frozen-operation review; no publication/import/native process/provider or package writes",
+  "observed_at": 1791109010.7612152,
+  "pr": 431,
+  "head": "49b61f3a9e3a31de519c5f8c136df6ead16aeda9",
+  "ready_sha256": "8d0d71cadf6467d6eb9ac486ca099df923a42fe06c7d5bf6aaf7ceed08f52691",
+  "frozen_artifacts_equal": 159,
+  "sources": [
+    {
+      "module": "agent_comms",
+      "head": "9195325146f70886d7d879edbfcae74b12bd63c8",
+      "files": 339,
+      "all_git_inventory_installed_equal": true
+    },
+    {
+      "module": "toad",
+      "head": "8605373406a99af96510fd50bf5102b84c7cc291",
+      "files": 319,
+      "all_git_inventory_installed_equal": true
+    },
+    {
+      "module": "textual",
+      "head": "456c27e18688e6c829c727f766561c9eb8640803",
+      "files": 266,
+      "all_git_inventory_installed_equal": true
+    },
+    {
+      "module": "textual_diff_view",
+      "head": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+      "files": 3,
+      "all_git_inventory_installed_equal": true
+    },
+    {
+      "module": "refactor_audit",
+      "head": "9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10",
+      "files": 10,
+      "all_git_inventory_installed_equal": true
+    }
+  ],
+  "git_assets_equal": 937,
+  "forced_native_assets_equal": 3,
+  "canonical_operator_files_equal": 51,
+  "reviewed_wheels_equal": 4,
+  "protected_files_equal": 326,
+  "original_schema_relation": {
+    "whole_declared_native_schema_equal": true,
+    "product_equal": false,
+    "source_core": "d41601c16d74e9e3e4195b6527fb218b8fe14af9",
+    "target_core": "9195325146f70886d7d879edbfcae74b12bd63c8",
+    "original_checkpoint_schema": "c4ff566ee8f2c15407d486291971c9ef52efb99801150311a9f0fe40cd8ce8d2",
+    "target_checkpoint_schema": "c4ff566ee8f2c15407d486291971c9ef52efb99801150311a9f0fe40cd8ce8d2",
+    "changed_derived_checkpoint": false,
+    "runtime_carry_reset_required": false,
+    "runtime_member": "PreserveRuntimeInstallation",
+    "owner_member": "PreserveOwnerRuntime",
+    "original_stores_opened": false,
+    "native_unchanged": false,
+    "source_native_manifest": "2ea0a4d4ff2e362864c156e4b11642775b3f2a96e7f01522b346b6f6d9526936",
+    "target_native_manifest": "086d511f2026b10d2cdb09380026d9503b0461e3a9998048902fe3aee5671872"
+  },
+  "publication_receipt_absent": true,
+  "preimages_absent": true,
+  "public_effects": 0,
+  "remaining": "637 current-preview installed closure and430/Text59 joint structural App now accepted/merged. Prepare a new receiving successor from actual merged sources and retained wheels under one fresh specific existing-holder purpose. Preserve old431159/head/Ready, old428165 and421155. User client must close normally before original fresh publication guard/default acceptance; no guard retry or publisher called. Draft638/640/633 and JeV/S4/full performance remain separate.",
+  "full_cohort_require_original": "PASS",
+  "native_full_trust": "PASS",
+  "normal_package_versions_readback_equal": 69,
+  "sdk": "0.12.1",
+  "original_route_and_five_links": "PASS",
+  "merge_commit": "d783b0fc63b3958956c9bee213b786131e59275c",
+  "merged_at": "2026-10-04T10:17:27Z",
+  "exact_head_debt": {
+    "state": "SUCCESS",
+    "run": 37194659817,
+    "job": 111413913037
+  },
+  "postmerge_src_tests_tools_pyproject_lock_difference": [],
+  "fresh_original_guard": {
+    "scope": "Original source-runtime read-only prepublication idle/client guard for reviewed431; no publisher called",
+    "owners": 19,
+    "public_effects": 0,
+    "publication_receipt_absent": true,
+    "preimages_absent": true,
+    "idle": "PASS",
+    "client_guard": "REFUSED",
+    "reason": "Unretired or unclassified client: exact process ProcessIdentity(pid=1240175, start_time=56113954)"
+  },
+  "fresh_original_guard_sha256": "7962e2a776f9d345304910ac708437a15d807f0c77069d5d945f9ccbdce08013",
+  "publication_called": false,
+  "current_preview_source_risk": {
+    "observed_original": "Reader14 actual status: Unknown ContextSegment name unavailable_awareness; recorded reader itself passed",
+    "shared_production_path": [
+      "ContextRuntimeRequest.inspect",
+      "NativeContextData.with_current_contributors",
+      "TurnContext.for_inspection",
+      "MessageBus.awareness_segments",
+      "ordinary ContextInspection.native FieldCodec.decode"
+    ],
+    "classification": "shared cold declaration-loading counterexample; c603-only scope unsupported; no new public live query or failure reproduction",
+    "owner": "Einstein / Core637",
+    "corrected_source": "670f239883915730c164c720158bae85323149aa",
+    "exact_debt_run": 37199086799,
+    "exact_debt": "SUCCESS",
+    "installed_current_preview": "PASS16.280123s ordinary registered ACP/App/sidebar; Coordination/UserInput plus4 native segments; no UnavailableAwareness emission claim",
+    "frozen431_mutations": false,
+    "publication_called": false,
+    "final_source": "69e6019be9c92b3ce37f11c75de2e9a37c284690",
+    "affected_source_controls": {
+      "passed": 25,
+      "preserved_obsolete_body_assertion": 1,
+      "excluded_old_fixtures": 3,
+      "seconds": 18.75,
+      "installed": false
+    },
+    "grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Einstein637-Core-current-preview-package-execution-grant.json",
+    "final_ready": "79c9d6d32540a1f30ed82df791c4f347a5aa53f1",
+    "merge_commit": "5e3f68c5825e80ffe52ba431082a8c13a78428f9",
+    "final_exact_debt_run": 37200324517,
+    "independent344_git_wheel_installed_equal": true,
+    "whole_purpose": "CLOSED; corrected candidate held Parent;165 old428 originals/activation/reader14 preserved"
+  },
+  "temporary_package_disposition": {
+    "scope": "Parent supersedes immediate431 style22 CODE freeze solely for granted sequential430/Text59 affected private App; original159/head/Ready/activation/old proof protected",
+    "grant": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/style22-Heis430-Text59-package-execution-grant.json",
+    "owner": "Heisenberg / ToAd430 with original Kepler Text59 wheel",
+    "actual431_preimage_members": 1464,
+    "restore": "Whole exact431 actual floor after terminal; no public client signal, publisher, guard retry or new receiving acceptance",
+    "native59_wheel_sha256": "73d4ca971dd2891c2a2266a0c5c8629e3e0ff55e802456ae60d0fedfe72fdbaa",
+    "state": "CONSUMED/CLOSED",
+    "whole_actual431_restored": 1464,
+    "normal_packages_restored": 69,
+    "original159_equal": true,
+    "archive_repairs": 0,
+    "independent_borrower_readback": "Bohr218 allUID zero actual borrowers/gaps",
+    "issued_grant_sha256": "36685aeb99af00612959dc6ef1978fb664de60f15b9b4f54f6cf00287abc8b31",
+    "closed_mutable_grant_sha256": "df58b4ecf440a098cc0717f60f02d7075e2031188c6e7c1ae0aa24f6bce2441c",
+    "grant_path_lifecycle": "Issued grant path changed at close; not a frozen evidence byte equality claim"
+  },
+  "qualified_successors": {
+    "Core637": {
+      "head": "79c9d6d32540a1f30ed82df791c4f347a5aa53f1",
+      "merge": "5e3f68c5825e80ffe52ba431082a8c13a78428f9",
+      "debt": "SUCCESS37200324517",
+      "installed_seconds": 16.28012289002072
+    },
+    "Text59": {
+      "head": "1bdc18c363cbc0f938537a71aa8ba0225d03e25e",
+      "merge": "180cbd9471bd6674647590108ca2fe5a627eb24f",
+      "debt": "SUCCESS37198411879"
+    },
+    "Toad430": {
+      "head": "8c72a34ba423cdf36c73c87e0fc0605afe7ef358",
+      "merge": "d667eb201b3e37159ae8a686240e21a7b5de26bb",
+      "debt": "SUCCESS37200432775",
+      "installed_seconds": 11.64112398494035,
+      "retained_keeper_matches": 12,
+      "mutable_closed_grant_matches_issued_hash": false,
+      "final_src_tests_tools_pins_equal_installed5b": true
+    },
+    "public_delivered": false,
+    "default_terminal_accepted": false,
+    "Toad417": {
+      "head": "d25163292df7ba063199f5924b53b6b9d98cb344",
+      "merge": "57ebe1c91f587fb4337ab0548f0ada3c665582eb",
+      "debt": "SUCCESS37201728958",
+      "owned_context_files_equal_installed04b": true,
+      "named_App13_Reader14_receipt_hashes_equal": 6,
+      "scope": "Original App remount plus authenticated recorded System/search/full/copy/export/distinct child/footer; separate637 current-preview App; no new joined run"
+    },
+    "Core639": {
+      "head": "b7d2349f498e0350012276261f90249be5244561",
+      "merge": "a7830593e4994c08048ae9d5b3fa6aea45d9f6f1",
+      "debt": "SUCCESS37201540135",
+      "original_raw_hashes_matched": 19,
+      "runtime_native_tools_changed": false,
+      "scope": "Private authored SDK entry selection and correlated request admission; not configured study/wire projection"
+    }
+  }
+}
