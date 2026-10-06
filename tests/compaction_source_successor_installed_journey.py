@@ -61,6 +61,7 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
                                  capture_source=ordinary_source, observe_launch=unchanged_launch,
                                  continuation=None,
                                  worktree: Path | None = None,
+                                 auto_wake: bool = False,
                                  core_artifacts: tuple[ReviewedArtifact, ...] = ()):
     """Acquire one configured saved fork and close its original child on every exit."""
     import agent_comms
@@ -144,12 +145,14 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
     # A nested arm returns the parent root/identity after joined shutdown.
     with patch.dict(os.environ, environment, clear=True):
         agent = CommsAgent(service, agent_bin=str(binary), agent_args=list(launch.arguments or ()),
-            runtime_enabled=True, auto_wake=False, private_nk_native_package=package,
+            runtime_enabled=True, auto_wake=auto_wake, private_nk_native_package=package,
             private_nk_wire_root_id=root_id)
         agent.on_connect(receiver)
         try:
             for name in ('source529', 'peer529'):
                 await agent.sessions.bind_owned(service.registry.require(name), name)
+                if auto_wake:
+                    agent.inputs.ensure_live_drain(name)
             receipt.update(model=original.model, thinking=ThinkingLevel.optional_name(original.thinking_level),
                 source_bytes=source_file.stat().st_size, original_sha256=original_hash,
                 fork_bytes=Path(fork.session_file).stat().st_size)
