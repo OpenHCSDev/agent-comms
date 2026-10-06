@@ -4,6 +4,36 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Admission source joined and producer PR scope resolved — 2026-10-06
+
+Parent normally merged exact68911afe77a into Core688 without conflicts. All
+production/tool changes are byte equal to the original owner checkpoint, eleven
+changed Python files compile without imports, and diff checking passes. Runtime
+phase injection and stopped.wire references are absent across src/tools/tests.
+CLI and resident queue explicitly abandon failed custody; the publisher uses
+original failure/recovery dispatch, which now refuses an incomplete fenced phase
+before calling installation recovery. This is source integration, not real
+process/OFD/fence/launch/central-batch acceptance or an installed artifact rebind.
+Einstein continues the assigned goal-report acquisition/preservation family.
+The original Toad integration pin and every issued purpose retain their exact
+reviewed source; no builder or package operation follows this merge.
+
+Core69012575's commit itself contains only the configured_saved_agent method and
+three source evidence files, but its PR ancestry also includes still-unqualified
+Core682 MCP changes. Parent asked originalHeis to publish the narrow producer on a
+clean current-main source branch, preserving the original branch checkpoint, so
+normal merge cannot silently fold the MCP controls. Existing Parent source
+integration remains intact; no repeated producer tests, new acceptance gate or
+runtime authority follows this source delivery correction.
+
+Actual3808 installed-entrypoint purpose has one joined stage and its distinct
+READ e7f829. Bohr released the sole original8c8f proof under lifecycle46724;
+native EXEC/four-case launch remains held until actual final proof and separate
+new authority. No old READ/EXEC, accepted guard invocation or installed source
+union is inherited. Warm03 holder063b72 and matching Sch artifacte4df4168 are both
+closed, with an append-only Bohr artifact binding and unchanged closed lifecycle.
+Heis's original source investigation and configured consumer work remain active.
+
 ### Current closure and source review — 2026-10-06
 
 Warm03 holder purpose3d9a is independently CLOSED063b72. Parent hash-matched the
