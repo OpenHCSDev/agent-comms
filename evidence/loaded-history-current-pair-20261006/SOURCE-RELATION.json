@@ -1,8 +1,8 @@
 {
   "handoff": {
     "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/evidence/configured-continuous-source-20261006/LOADED-EXISTING-CONTROL-HANDOFF.json",
-    "sha256": "79b11f70e59bd016f4f0667353cbc3e75b3f0f3449c3300a390d8751cbc820d3",
-    "bytes": 6206
+    "sha256": "fc452d75ca84a282d168bfdb35b37c2c9fddff5786926c0382e97caf78e55410",
+    "bytes": 6821
   },
   "stable_family": {
     "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/evidence/configured-continuous-source-20261006/STABLE-CONFIGURED-HELPERS.json",

@@ -33,8 +33,8 @@
   },
   "handoff": {
     "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/evidence/configured-continuous-source-20261006/LOADED-EXISTING-CONTROL-HANDOFF.json",
-    "sha256": "79b11f70e59bd016f4f0667353cbc3e75b3f0f3449c3300a390d8751cbc820d3",
-    "bytes": 6206
+    "sha256": "fc452d75ca84a282d168bfdb35b37c2c9fddff5786926c0382e97caf78e55410",
+    "bytes": 6821
   },
   "package_sources": [
     {
@@ -205,7 +205,7 @@
   },
   "source_relation": {
     "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/loaded-history-current-pair-20261006/SOURCE-RELATION.json",
-    "sha256": "9e15641c1c17f8b8cef4d1b2c9d3d8170a52843cad59246762662fdec37619fc",
+    "sha256": "44b431a361c808927343287beba474584cf83f99433aaa8d4b9fd085265120da",
     "bytes": 61981
   },
   "wheel_source_check": {
