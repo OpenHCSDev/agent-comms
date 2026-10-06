@@ -4,6 +4,16 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original objective remains incomplete. CI is deferred as a merge gate.
 
+### Independent S4 followthrough active — 2026-10-06
+
+Original Arendt is continuing the unfinished S4 full-history condition/arm
+selection source family in her existing isolated checkout. The original recall
+result remains descriptive; full intervention/capacity/study is not certified.
+She checks current published owners before any change and coordinates shared
+configured-producer seams directly with Heis. This assignment authorizes source
+followthrough, not new SDK/provider inputs, builds, holder access or the
+unapproved30-pair/USD75 study. Frozen successes, failures and UNKNOWN stay held.
+
 ### Repaired-pair proofs passed; live publication still pending — 2026-10-06
 
 The original loaded proof passed in7.900 seconds and configured proof in5.777
