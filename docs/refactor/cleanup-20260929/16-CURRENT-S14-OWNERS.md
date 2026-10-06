@@ -5160,3 +5160,28 @@ Scope remains one isolated st, two new saved SDK forks, zero submitted inputs,
 separate. Specific purpose/native/source authorities are still unissued.
 Actual installed multiselect/backend outcomes require their own affected path
 acceptance; physical gesture footage is not batch backend acceptance.
+
+### Physical03 staging completed, 2026-10-06
+
+The physical03 purpose is now issued for the current paired wheels. Its one
+literal three-wheel stage passed in 0.244072075 seconds; root preparation and
+installer joined, and all three recorded identities are absent. Root mode is
+0700. No proof, source acquisition or App has run.
+Joined receipt:
+/home/ts/wt/toad-sidebar-selected-targets-20261006/.artifacts/sidebar-latency-physical03-20261006/485-installed-purpose/stage-whole-join.json.
+The original controller is prepared with only its three issued literals and
+compiled without imports. Bohr received the joined stage for same-purpose
+consumption; Sch received the matching fresh private READ request. Both daemon
+turn deliveries succeeded; neither receipt nor proof release is presumed.
+
+Remaining delivery checks:
+- [x] Merge the working sidebar, selection, notification and native pointer changes.
+- [x] Build and verify the coherent paired wheels against Git and complete RECORDs.
+- [x] Obtain the fresh holder/floor/return contract and perform its single stage.
+- [ ] Verify the installed source with the matching READ and sole proof release.
+- [ ] Run and review the isolated saved-history sidebar/scroll recording.
+- [ ] Verify installed multi-selection and truthful backend partial outcomes.
+- [ ] Complete original package/source returns and independent closures.
+- [ ] Deliver the reviewed pair to the actual local runtime and verify fresh attachment.
+Live PUBLIC475 packages and original saved histories remain unchanged. No
+performance improvement or completed integration goal is claimed from staging.
