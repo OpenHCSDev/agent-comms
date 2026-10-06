@@ -4,6 +4,17 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Final duplicate warm PR reconciled — 2026-10-06
+
+Parent normally joined the entire published446 head into478, retaining its five
+original failure/source evidence files. The only conflict was an import already
+expanded by configured consumers; the current imports remain. Production, all
+tests/tools and build inputs are byte-identical before/after. PR446 is closed as
+superseded, with no checkout, branch, journal or raw result deleted. Heis keeps
+configured/reader/performance ownership; Mendel keeps independent loaded acceptance.
+Core has no open PRs; Toad478 is the remaining integration PR. Its current pair
+still needs actual private acceptance and live publication before goal completion.
+
 ### Native closure complete; repaired-pair operators published — 2026-10-06
 
 Bohr independently closed693 and bound Sch matching READ/EXEC closure. All three
