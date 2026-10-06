@@ -1,0 +1,160 @@
+--- a/tests/declared_target_actions_installed_pilot.py
++++ b/tests/declared_target_actions_installed_pilot.py
+@@ -30,10 +30,23 @@
+ from saved_state_user_journey_pilot import reveal_thread_row
+ 
+ 
+-async def until(pilot, predicate):
+-    async with asyncio.timeout(15):
+-        while not predicate():
+-            await pilot.pause(.025)
++async def until(pilot, predicate, *, failure_prefix=None, native_wait=False):
++    try:
++        async with asyncio.timeout(15):
++            while not predicate():
++                await pilot.pause(.025)
++    except TimeoutError:
++        if failure_prefix is not None:
++            import runpy
++            diagnostic = native_wait and os.environ.get('TOAD_START_FAILURE_GDB') == '1'
++            capture = runpy.run_path(Path(__file__).parents[1] / 'tools/performance/capture_state.py')['capture']
++            capture(expected_pid=os.getpid(), output_prefix=failure_prefix,
++                    native_process_output=(Path(os.environ['TOAD_NATIVE_WAIT_OUTPUT']) / 'startup-processes.json')
++                    if diagnostic else None)
++            if diagnostic:
++                import signal
++                signal.raise_signal(signal.SIGTRAP)
++        raise
+ 
+ 
+ async def command(root, *arguments):
+@@ -75,22 +88,9 @@
+     menu = await open_menu(app, pilot, row)
+     assert operation in menu, tuple(menu)
+     assert await pilot.click(menu[operation])
+-    try:
+-        await until(pilot, lambda: not isinstance(app.screen, ContextMenu) and app.screen.is_mounted
+-                    and (isinstance(app.screen, CommandDialog) or not app.thread_actions.pending))
+-    except TimeoutError:
+-        # Record the original task and native scene before shutdown changes them.
+-        # The timeout still fails this attempt; no action or input is repeated.
+-        import runpy
+-        capture = runpy.run_path(Path(__file__).parents[1] / 'tools/performance/capture_state.py')['capture']
+-        capture(expected_pid=os.getpid(), output_prefix=evidence / (operation + '-completion-failure'))
+-        if operation == 'start' and os.environ.get('TOAD_START_FAILURE_GDB') == '1':
+-            # The reviewed diagnostic launches this App as GDB's inferior.
+-            # Save Python evidence first; GDB suppresses only this marker,
+-            # observes the stopped native threads, then resumes this failure.
+-            import signal
+-            signal.raise_signal(signal.SIGTRAP)
+-        raise
++    await until(pilot, lambda: not isinstance(app.screen, ContextMenu) and app.screen.is_mounted
++                and (isinstance(app.screen, CommandDialog) or not app.thread_actions.pending),
++                failure_prefix=evidence / (operation + '-completion-failure'), native_wait=operation == 'start')
+     if not isinstance(app.screen, CommandDialog):
+         assert not fields, (operation, fields)
+         return
+@@ -399,7 +399,8 @@
+             peer_source = app.session_navigation.source(peer_mode)
+             await until(pilot, lambda: peer_source.conversation.agent is not None)
+             peer = peer_source.conversation.agent
+-            await until(pilot, peer.session.settled.is_set)
++            await until(pilot, peer.session.settled.is_set,
++                        failure_prefix=evidence / 'peer-startup-failure', native_wait=True)
+             assert peer.session.connected
+             await peer.stop()
+             await app.preparation.run_thread(comms.owners.stop, 'peer')
+@@ -498,7 +499,8 @@
+         source = app.session_navigation.source(mode)
+         await until(pilot, lambda: source.conversation.agent is not None)
+         peer = source.conversation.agent
+-        await until(pilot, peer.session.settled.is_set)
++        await until(pilot, peer.session.settled.is_set,
++                        failure_prefix=evidence / 'peer-startup-failure', native_wait=True)
+         assert peer.session.connected
+         # Retire this fixture's original ACP connection before stopping its
+         # native owners, exactly as the existing single-start control does.
+@@ -583,7 +585,8 @@
+         native_source = app.session_navigation.source(native_mode)
+         await until(pilot, lambda: native_source.conversation.agent is not None)
+         peer = native_source.conversation.agent
+-        await until(pilot, peer.session.settled.is_set)
++        await until(pilot, peer.session.settled.is_set,
++                        failure_prefix=evidence / 'peer-startup-failure', native_wait=True)
+         assert peer.session.connected
+         history_mode = await app.session_navigation.history(owner_mode=actor_mode,
+             project_path=project, me='beta', target='peer', kind=DmConversation)
+--- a/tools/performance/capture_state.py
++++ b/tools/performance/capture_state.py
+@@ -2,7 +2,7 @@
+ 
+ def capture(*, expected_pid, output_prefix, wait_history_seconds=0, wait_interval=.1,
+             wait_history_thread=None, frame_trace=False, install_frame_trace=False,
+-            frames_only=False, scroll_travel_output=None):
++            frames_only=False, scroll_travel_output=None, native_process_output=None):
+     import asyncio
+     from collections import Counter
+     from dataclasses import asdict
+@@ -66,7 +66,7 @@
+                     capture(expected_pid=expected_pid, output_prefix=output_prefix,
+                             wait_history_seconds=wait_history_seconds, wait_interval=wait_interval,
+                             wait_history_thread=wait_history_thread, frame_trace=frame_trace,
+-                            frames_only=frames_only)
++                            frames_only=frames_only, native_process_output=native_process_output)
+                 except Exception:
+                     write_json(prefix + "-error.json", {"error": traceback.format_exc()})
+ 
+@@ -128,7 +128,7 @@
+                                         "visible_saved_history_written": True,
+                                     })
+                                     capture(expected_pid=expected_pid, output_prefix=output_prefix,
+-                                            frame_trace=frame_trace)
++                                            frame_trace=frame_trace, native_process_output=native_process_output)
+                                     return
+                             # One bounded diagnostic task observes native owners;
+                             # no repeated attachment, exported snapshots or model reads.
+@@ -138,7 +138,7 @@
+                     # Preserve the original resource/scene census at failure.
+                     # The error still fails the marker; no predicate is relaxed.
+                     capture(expected_pid=expected_pid, output_prefix=prefix + "-failure",
+-                            frame_trace=frame_trace)
++                            frame_trace=frame_trace, native_process_output=native_process_output)
+ 
+             asyncio.create_task(wait_and_capture(), name="toad-authorized-visible-history-wait")
+             return
+@@ -204,6 +204,35 @@
+                 "name": None if thread is None else thread.name,
+                 "stack": chain,
+             })
++        metadata["acp_startup"] = []
++        native_processes = {}
++        # Take tasks and identities from the existing AgentProcess owner. No
++        # command matching, environment export, pipe read or new process owner.
++        for conversation in (node for view in app.workspace_sessions.views.values()
++                             for node in view.query(Conversation)):
++            if conversation.agent is None:
++                continue
++            agent = conversation.agent
++            owner = agent.process
++            child = owner.process
++            startup = {"agent_object_id": id(agent), "session_id": agent.session_id,
++                       "connected": agent.session.connected,
++                       "settled": agent.session.settled.is_set(),
++                       "runner": task_state(owner.runner) if owner.runner is not None else None,
++                       "session_task": task_state(owner.session_task) if owner.session_task is not None else None,
++                       "process": None}
++            if child is not None:
++                startup["process"] = {"identity": asdict(child.identity), "returncode": child.returncode}
++                if native_process_output is not None and child.returncode is None and child.alive():
++                    for member in child.platform.group_members(child.identity):
++                        native_processes[member.pid] = {"identity": asdict(member),
++                                                       "group_owner": asdict(child.identity)}
++            metadata["acp_startup"].append(startup)
++        if native_process_output is not None:
++            # Finish this small descriptor before the marker stops the exporter.
++            # The larger view export keeps its existing asynchronous lifetime.
++            write_json(str(native_process_output), {"app_pid": os.getpid(),
++                       "capture_prefix": prefix, "processes": list(native_processes.values())})
+         metadata["retained_presentations"] = [
+             {"mode": view.id, "owner": type(owner).__name__,
+              "object_id": id(owner), "selected": view is app.selected_session,

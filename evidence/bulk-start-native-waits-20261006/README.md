@@ -45,3 +45,51 @@ Proposed Python sources and the embedded GDB Python compile. The inherited
 controller emits its existing warning about a return in finally; this diagnostic
 does not rewrite that unrelated outcome mechanism. Runtime confirmation is
 pending the fresh reviewed diagnostic purpose.
+# Peer opening: unanswered ACP initialization
+
+The returned diagnostic02 passed the first bulk Start checks: each selected
+owner started once and both were alive. Opening peer then timed out at the
+original 15-second session-settled wait. Its log contains only outgoing ACP
+initialize; neither an initialization response nor session/load was reached.
+The initialize log precedes the StreamWriter write, so it proves neither child
+consumption nor successful server dispatch. No retained stack locates the child.
+
+The relevant owner chain is AgentProcess.start -> admitted_spawn -> AttachedChild
+with StreamingChildStdio and shell command decoding -> AgentSession.initialize
+waiting for the response. AgentProcess.communicate owns stdout dispatch; its
+session failure/closed-startup paths settle the session. On the Core side,
+acp.main validates the selected private route/package before constructing
+CommsClient and entering run_agent. SessionLifecycle.initialize merely supplies
+capabilities; it does not load a thread or launch a model. A preflight, constructor,
+pipe or dispatch stall therefore remains possible; package hashing and SQLite
+deadlock are not established causes.
+
+Prepared correction, source only:
+
+- `peer-startup-failure-capture.patch` moves the existing timeout observation
+  into `until`, retaining the same predicate, 15 seconds and propagated failure.
+  Menu completion and all three peer attachment waits use that owner. Unrelated
+  waits keep their existing behavior. No startup retry or backend change.
+- The existing capture exports AgentProcess runner/session await chains and
+  actual AttachedChild identities. Under the explicit debugger diagnostic only,
+  it synchronously completes `native/startup-processes.json` from the existing
+  process-group owner before the marker. Normal capture never scans groups.
+- `native-waits-peer-startup.gdb` shares the existing native collector between
+  the App and its recorded ACP groups, including the shell/ACP distinction.
+  It checks each birth/group identity, observes native threads, attempts `py-bt`,
+  detaches those additional inferiors, then resumes the original App failure.
+  The App remains the actual ACP parent and cleanup owner. Child observations
+  are sequential; they are not a claim of one simultaneous all-process snapshot.
+
+This corrects the missing capture boundary, not the unresolved feature defect.
+Compilation passed for both patched sources and the embedded collector Python.
+No import, test, App, attach, native body read or new attempt occurred. Existing
+scripts, diagnostic02 receipts and its completed return remain unchanged.
+
+Future binding must select this patch/collector and the new synchronous descriptor
+output. Yama is currently scope 1: this collector's original GDB is the App/ACP
+ancestor; it does not authorize attaching an unrelated process. Actual attach
+permission and CPython `py-bt` availability are unqualified until that separately
+bound attempt. Missing Python symbols/helper support is recorded explicitly;
+native stacks/registers remain available independently. Any observation failure
+must leave the original failed assertion and owned cleanup intact.
