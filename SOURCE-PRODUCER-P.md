@@ -38,3 +38,7 @@ The original last_goal_report_turn field and goal-action writer remain untouched
 No carry or decoder is authorized to erase that fact. A current-format target
 still requires a separately reviewed, preserving registry postimage; native
 schema carry and routing carry do not supply it.
+
+## Partial retirement successor
+
+The shared original owner_restart phase now retains exited-process and validated-retired progress across guard/witness failure through existing StoppedOwnerFailure/cutover.failed. Incomplete fenced recovery refuses before any operation recovery/launch; explicit abandon releases acquired context. Three new authored in-memory cases pass, not a real OFD/signal/installed proof. See current689 PARTIAL-RETIREMENT-CUSTODY and preserved batch receipts. No source wheel or runtime qualification is added.
