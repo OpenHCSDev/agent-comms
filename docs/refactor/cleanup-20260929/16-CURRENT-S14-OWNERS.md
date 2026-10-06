@@ -14,15 +14,28 @@ with their histories. The configured proof exports its actual Core
 The strict parser, production files, pins and retained wheels are unchanged.
 No rebuild or fresh App run followed this source merge.
 
-The corrected loaded preparation and source relation are integrated in
-[evidence/loaded-history-consumer-repaired-20261006/PREPARED.md](../../../evidence/loaded-history-consumer-repaired-20261006/PREPARED.md).
-Bohr's fresh returned334 assessment finds the original floor/origins/restore and
-private references eligible. Mendel must bind that actual fresh preimage and
-assessment into the final mlh02 tuple before its specific issue. Configured02
-advances independently from its published corrected operand; it does not wait
-for loaded finalization. The original 2100/1800 outer bounds and inner checks
-remain unchanged, with configured provider processing separate from loaded's
-ten prospective localhost requests over two authored journals.
+The corrected loaded final tuple is integrated in
+[evidence/loaded-history-consumer-repaired-20261006/FINAL-PREPARED.md](../../../evidence/loaded-history-consumer-repaired-20261006/FINAL-PREPARED.md).
+Fresh configured02 and loaded02 purposes are issued separately. Their single
+stages and installed proofs passed. Configured's exported Core `InstalledSource`
+is the actual full-proof member and is included in its 13-file App map; its
+proof is recorded as consumed. Loaded's joined proof and resolved controller
+were delivered to Bohr and Sch for the same-purpose final binding. Neither App
+nor configured source capture has run. Separate fresh execution receipts and
+Bohr's final releases remain necessary; no stage or proof is to be repeated.
+The original 2100/1800 outer bounds and inner checks remain unchanged, with
+configured provider processing separate from loaded's ten prospective localhost
+requests over two authored journals.
+
+Parent compared the retained historical MCP Core wheel with the selected
+current Core wheel. Native command/permission leaf code is unchanged, but
+transcript read identities, historical-source acquisition, notification/read
+projection, ACP page capture, codec schema and owner restart dependencies changed.
+The historical MCP pass remains a historical-cohort result. Current loaded and
+configured journeys exercise changed history owners; they do not automatically
+qualify current-pair MCP permission/revocation/disconnect behavior. Final live
+publication still needs affected fresh attachment verification. This review
+adds no backend patch, repeated guard invocation or extra release gate.
 
 Parent observed host pressure and identified the largest memory users in
 OpenHCS analysis workspaces. No unrelated process or held evidence was removed.
