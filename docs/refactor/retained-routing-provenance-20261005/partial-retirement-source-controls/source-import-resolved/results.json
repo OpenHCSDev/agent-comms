@@ -1,0 +1,48 @@
+{
+  "results": [
+    {
+      "label": "current",
+      "argv": [
+        "/usr/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-o",
+        "addopts=",
+        "-o",
+        "pythonpath=src",
+        "-q",
+        "tests/test_owner_partial_retirement.py"
+      ],
+      "cwd": "/home/ts/wt/comms-original-owner-admission-20261006",
+      "returncode": 0,
+      "stdout_sha256": "723da7b49f865c5c16be612b377938b0f62f53ccd287966470919961a0c8dce1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "scope": "Authored in-memory source controls, pytest source import path explicit; no installed prefix or runtime overlay"
+    },
+    {
+      "label": "amended720",
+      "argv": [
+        "/usr/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-o",
+        "addopts=",
+        "-o",
+        "pythonpath=src",
+        "-q",
+        "tests/test_owner_partial_retirement.py"
+      ],
+      "cwd": "/home/ts/wt/comms-amended720-owner-admission-20261006",
+      "returncode": 0,
+      "stdout_sha256": "c69b8aca4c7fecb6b04161c76c5abcd40b2a41ecf4e5419302cadf88471a09c9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "scope": "Authored in-memory source controls, pytest source import path explicit; no installed prefix or runtime overlay"
+    }
+  ],
+  "preserved_initial_negative": "Parent folder collection failures missing explicit source import path; no control body executed",
+  "installed_qualification": false
+}

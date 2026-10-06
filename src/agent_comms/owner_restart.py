@@ -7,7 +7,7 @@ RegistryDocument to reinterpret. Production readers keep one format.
 from __future__ import annotations
 
 from contextlib import ExitStack
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import os
 import stat
 import sys
@@ -147,6 +147,11 @@ class StoppedOwnerBatch:
         """Explicitly release physical custody; never launch or retry inputs."""
         self.custody.close()
 
+    def recover(self, operation: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
+        results = operation.recover(self)
+        self.close()
+        return results
+
     def complete(self, operation: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
         try:
             results = operation.complete(self)
@@ -161,21 +166,19 @@ class StoppedOwnerBatch:
 
 
 class StoppedOwnerFailure(Exception):
-    """A failed acquired operation, not an unsignalled restart refusal."""
+    """A failed fenced/stopped phase, not an unsignalled restart refusal."""
 
-    def __init__(self, stopped: StoppedOwnerBatch, operation: OwnerCutover):
-        super().__init__('Cutover failed after retirement; stopped launch custody requires explicit disposition')
+    def __init__(self, stopped: StoppedOwnerBatch | FencedOwnerBatch, operation: OwnerCutover):
+        super().__init__('Cutover failed after fencing; retirement custody requires explicit disposition')
         self.stopped = stopped
         self.operation = operation
 
     def recover(self) -> tuple[OwnerRestartResult, ...]:
         """The original operation alone can certify recovery while RAM survives."""
-        results = self.operation.recover(self.stopped)
-        self.stopped.close()
-        return results
+        return self.stopped.recover(self.operation)
 
     def abandon(self) -> None:
-        """Explicitly leave the original batch stopped and release its resource."""
+        """Leave the exact phase as observed; never signal or launch its owners."""
         self.stopped.close()
 
 
@@ -186,23 +189,55 @@ class FencedOwnerBatch:
     launches: tuple[RetainedOwnerLaunch, ...]
     request: OwnerRestartRequest
     runtime: RestartEnvironment
+    exited_processes: tuple[RetainedOwnerLaunch, ...] = ()
+    retired: tuple[RetiredOwnerLaunch, ...] = ()
+    custody: ExitStack = field(default_factory=ExitStack, repr=False, compare=False)
+
+    @property
+    def unconfirmed(self) -> tuple[tuple[Thread, int], ...]:
+        """No stopped witness for these originals, even if OS exit was observed."""
+        names = {owner.name for owner in self.retired}
+        return tuple(item for item in self.captured if item[0].name not in names)
+
+    def close(self) -> None:
+        self.custody.close()
+
+    def recover(self, operation: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
+        # A partial fence has no all-stopped launch authority. In particular,
+        # never pass changed/still-live owners to an installation's recovery.
+        raise RelationViolationError('Fenced batch lacks a complete validated stopped handoff')
 
     def complete(self, cutover: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
-        for thread, generation in self.captured:
-            self.lifecycle._stop_process(thread, generation)
-        with ExitStack() as acquired:
-            wire = acquired.enter_context(self.lifecycle.restart_wire())
-            for thread, generation in self.captured:
-                self.lifecycle._require_same_stop_owner(thread, generation)
+        progress = self
+        try:
+            for (thread, generation), launch in zip(self.captured, self.launches, strict=True):
+                self.lifecycle._stop_process(thread, generation)
                 if thread.process_alive:
                     raise RelationViolationError('Owner survived retirement')
+                progress = replace(progress, exited_processes=progress.exited_processes + (launch,))
+                # The next original may need this same lock to release itself.
+                # Capture each retired witness, then release before its stop.
+                with self.lifecycle.restart_wire():
+                    self.lifecycle._require_same_stop_owner(thread, generation)
+                    snapshot = self.lifecycle.registry.snapshot()
+                    owner = RetiredOwnerLaunch(
+                        OwnerRestartSelection.capture_retired(snapshot, thread), launch,
+                    )
+                progress = replace(progress, retired=progress.retired + (owner,))
+            wire = self.custody.enter_context(self.lifecycle.restart_wire())
             snapshot = self.lifecycle.registry.snapshot()
-            owners = tuple(RetiredOwnerLaunch(
-                OwnerRestartSelection.capture_retired(snapshot, thread), launch,
-            ) for (thread, _), launch in zip(self.captured, self.launches, strict=True))
-            handoff = OwnerRestartHandoff(str(self.lifecycle.root), owners, self.runtime,
+            owners = progress.retired
+            progress = replace(progress, retired=())
+            for owner in owners:
+                owner.require_current(snapshot)
+                progress = replace(progress, retired=progress.retired + (owner,))
+            handoff = OwnerRestartHandoff(str(self.lifecycle.root), progress.retired, self.runtime,
                                          self.request.agent_bin, self.request.agent_args)
-            stopped = StoppedOwnerBatch(self.lifecycle, wire, handoff, acquired.pop_all())
+            stopped = StoppedOwnerBatch(self.lifecycle, wire, handoff, self.custody.pop_all())
+        except BaseException as cause:
+            failure = StoppedOwnerFailure(progress, cutover)
+            failure.__cause__ = cause
+            cutover.failed(failure)
         return stopped.complete(cutover)
 
 
