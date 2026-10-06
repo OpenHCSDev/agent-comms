@@ -25,13 +25,17 @@ Toad496 f61776f3 pins native77 in pyproject/lock. One serial cached build passed
 full Git/archive/ZIP and RECORD checks. Nativea59 is new; Toad1c14 is byte-identical
 to the retained wheel and is explicitly reused; Coreb55/d846 stays unchanged.
 SELECTED-WHEEL-READBACK.json in native77-selection-pair records selected paths.
-Batch06 binds the actual fresh returned485 floor, full69 origins, census and
-original three-package restoration. Its sole stage passed in0.246s; all three
-stage processes joined and are absent. The fresh READ and exact four-literal
-proof were bound; its sole proof passed in3.319s, all953 assets/full69 origins
-and protected files matched, and both proof processes joined and are absent.
-Stage/proof are consumed and disabled. The exact600s controller and13-file App
-map are bound; App is unrun, held for separate EXEC and final release.
+Batch06 initially passed exact Shift c,b,a and Ctrl mixed thread/channel
+selection. Mixed read-target menu Click returned false; later actions were not
+reached. The sole original restoration passed and the whole private return is
+independently CLOSED. Raw files and both journals remain held.
+
+PR496 ef600e4b3 now deletes the menu's competing MouseUp gesture decision:
+native Click owns activation; keyboard choice and outside dismissal remain.
+The source ordering defect is concrete but not proved to be the sole Batch06
+runtime cause. One serial offline Toad-only build713113 passed full319 Git/ZIP
+and324 RECORD checks; Coreb55/nativea59 remain unchanged. Fresh returned485
+assessment for Batch07 has been requested; no new purpose/access is inferred.
 Installed clipped60-row/range and later native batch acceptance,
 physical latency, continuous configured/loaded journeys and public cutover remain
 open. The full original objective remains active.
