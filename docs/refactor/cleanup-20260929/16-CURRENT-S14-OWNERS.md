@@ -4,6 +4,38 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Reader witness joined and operative handoff seam assigned — 2026-10-06
+
+Parent reviewed originalHeis a216/bd3e ReaderCheckpoint correction against
+RenderedBody.ready/paint_ready, native _render_widget, PreparedRichContent crop,
+committed history.fragment_views and DocumentViewport/visible_bodies. It requires
+visible clipped nonwhite source text and preserves exact native body/content
+identity on return; readiness/extent alone is not a paint witness. Toad478 normally
+joined bd3e at816379643 without conflicts. Only ReaderCheckpoint changes among
+helper declarations; original warm control2e2c, production and dependency pins
+remain byte unchanged. Compile without imports and diff checking pass. Heis now
+prepares a separately issued affected mounted successor, retaining historical
+61bf source/root evidence separately from the new main/pin union. There is no new
+purpose, replay, build or mounted acceptance from this source join; configured
+continuous implementation remains independently active.
+
+The actual PUBLIC4753931 source has an operative transport mismatch with689:
+RetiredOwnerLaunch encodes owner/admission/launch and StoppedOwnerBatch owns wire,
+whereas the current target decodes selection/launch and new tools require
+wire_descriptor. Original launch and source recovery both consume the handoff.
+Parent sent this complete actual3931 family seam to originalEinstein; equal stored
+registry/goal formats alone do not make the live cutover executable. Existing
+original declarations and source producers must close it without phase injection,
+raw handoff conversion, codec fallback or weakening source recovery checks. No
+PUBLIC stop/restart or new artifact operation follows this source finding.
+
+Mendel's exact3808 sole source/FullTrust proof passed8.279331265 with all19 raw
+references and joined controller/child. Parent relayed the final58879/DTO011c/
+Trust609060/controller4563 tuple to originalSch and Bohr through working transport.
+Bohr independently consumed proof1 and bound final helda67c9f; native cases remain
+held for separate new EXEC and same-purpose release. No proof or stage repeats,
+standalone accepted guard invocation, historical source rebind or public borrowing.
+
 ### Clean configured producer merged — 2026-10-06
 
 Heis published clean Core691ef5fd6be based on actualmain, retaining the superseded
