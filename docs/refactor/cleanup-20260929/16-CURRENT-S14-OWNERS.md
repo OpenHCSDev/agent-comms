@@ -4,6 +4,29 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Reader integration and configured installation next — 2026-10-06
+
+Warm04 holder and artifact authorities are independently closed. Two warm
+returns preserved rendered identity with zero reads; reader position failed
+following genuine eviction. Original journals/raw remain held. Heis reader480
+is normally joined into Parent478 and merged into that integration branch;
+changed modules compile. Runtime verification of the repair remains pending.
+The retained configured Toad wheel predates that repair and stays frozen.
+
+Mendel693 completed the installed-source proof for the remaining three MCP
+cases. Stage/proof are consumed; separate fresh EXEC and same-purpose release
+remain necessary before runtime. Accepted allow and guard are excluded.
+
+Heis effective configured operands select the retained coherent pair. Parent
+found its reused checkout no longer materializes the recorded frozen helpers;
+Heis is binding stable paths while Bohr assesses the now-returned485 floor.
+No holder reservation, new environment, rebuild or configured launch follows.
+
+Einstein same-format3931 publication/recovery source proposal is integrated.
+It uses the canonical retired handoff and original interpreter/OFD recovery;
+actual source/target declarations, floor, cohort and authority remain unbound.
+No public stop or recovery operation has run.
+
 ### Duplicate qualifier PR retired — 2026-10-06
 
 Parent verified that693 contains the entire published682 branch and closed682
