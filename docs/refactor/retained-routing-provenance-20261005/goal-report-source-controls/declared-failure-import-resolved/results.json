@@ -1,0 +1,25 @@
+{
+  "argv": [
+    "/usr/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-o",
+    "addopts=",
+    "--basetemp",
+    "/home/ts/.cache/agent-scratch/einstein-owner-release-source-import-resolved-20261006/authored",
+    "-q",
+    "--tb=short",
+    "tests/test_owner_release_restart.py::test_changed_owner_after_release_refuses_escalation_and_replacement"
+  ],
+  "cwd": "/home/ts/wt/comms-amended720-owner-admission-20261006",
+  "source_pythonpath": "/home/ts/wt/comms-amended720-owner-admission-20261006/src:/home/ts/.cache/uv/archive-v0/mNatOBGB9uuf-bXB",
+  "returncode": 0,
+  "elapsed_seconds": 10.988032351015136,
+  "pid": 2892602,
+  "joined": true,
+  "scope": "Three changed-owner refusals with original authored Python child process handles; no replacement or installed restart/native claim",
+  "stdout_sha256": "1b9fba0eb2822d3a9c293ff90809557d7bad72e023a416fa11a0e6967dfcc7d6",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

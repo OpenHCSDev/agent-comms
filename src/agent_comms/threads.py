@@ -81,6 +81,16 @@ class Thread(ThreadProvenance):
     def turn_state(self) -> TurnState:
         return TurnState(self.active_turn, self.last_finished_turn_id)
 
+    def restart_candidates(self, status):
+        return self.execution.restart_candidates(self, status)
+
+    def require_restart_owner(self, status) -> None:
+        self.execution.require_native()
+        self.role.require_executable()
+        status.require_active()
+        if not self.process_alive or self.pid == os.getpid():
+            raise RelationViolationError("Restart requires another live owner")
+
     def native_environment(self, root, snapshot, worktree: str) -> dict[str, str]:
         """Project this captured owner through the original native binding."""
         from .runtime_requests import ProjectRuntimeRequest

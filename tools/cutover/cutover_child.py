@@ -15,14 +15,13 @@ def restore_stopped_batch(stopped):
     """The acquired launch selects its original decoder and RAM/OFD transport."""
     import json
     from pathlib import Path
-    import agent_comms.owner_restart
     from agent_comms.field_codec import FieldCodec
     from agent_comms.owner_lifecycle import OwnerRestartResult
 
     source = stopped.handoff.owners[0].launch
     result = run_cutover_child([
         source.interpreter, str(Path(__file__).with_name('restore_stopped_owners.py')),
-        str(Path(agent_comms.owner_restart.__file__).parent), str(stopped.wire.descriptor),
+        str(stopped.wire_descriptor),
     ], environment=source.environment, packet=json.dumps(FieldCodec.encode(stopped.handoff)),
-        descriptors=(stopped.wire.descriptor,))
+        descriptors=(stopped.wire_descriptor,))
     return FieldCodec.decode(tuple[OwnerRestartResult, ...], json.loads(result.stdout))

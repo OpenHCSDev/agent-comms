@@ -1,0 +1,16 @@
+
+==================================== ERRORS ====================================
+___________ ERROR collecting tests/test_owner_partial_retirement.py ____________
+ImportError while importing test module '/home/ts/wt/comms-amended720-owner-admission-20261006/tests/test_owner_partial_retirement.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_owner_partial_retirement.py:15: in <module>
+    from agent_comms.child_process import ProcessIdentity
+E   ModuleNotFoundError: No module named 'agent_comms'
+=========================== short test summary info ============================
+ERROR tests/test_owner_partial_retirement.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.15s

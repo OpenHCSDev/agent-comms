@@ -6,7 +6,7 @@ import logging
 import os
 import shlex
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -143,6 +143,16 @@ class OwnerLifecycle:
         self.maintenance = MaintenanceBarrier(registry.store.path)
         self.releases = OwnerReleaseStore(root / "owner_release_receipts.json")
         self._private_nk_launch: PrivateNkLaunch | None = None
+
+    @contextmanager
+    def restart_wire(self) -> Iterator[int]:
+        """Borrow this declaration's wire lock as the inherited integer OFD.
+
+        StoreLock continues to own current durability resources. Restart phases
+        transport only its descriptor; the context retains the original lock.
+        """
+        with _store_lock(self._wire_lock_path) as lock:
+            yield lock.descriptor
 
     def pin_private_nk_launch(
         self, validated_root: Path, wire_root_id: str, native_package: Path

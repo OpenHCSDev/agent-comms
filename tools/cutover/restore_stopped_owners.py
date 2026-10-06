@@ -8,12 +8,8 @@ import json
 from pathlib import Path
 import sys
 
-from phased_owner_kernel import load_original_phase
-
-
 def main():
-    package, descriptor = sys.argv[1:]
-    load_original_phase(Path(package))
+    (descriptor,) = sys.argv[1:]
     from agent_comms.comms import wire
     from agent_comms.field_codec import FieldCodec
     from agent_comms.owner_restart import OwnerRestartHandoff, StoppedOwnerBatch

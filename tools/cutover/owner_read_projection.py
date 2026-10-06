@@ -9,7 +9,7 @@ from pathlib import Path
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.registry_document import RegistryDocument
-from agent_comms.owner_lifecycle import OwnerRestartSelection
+from agent_comms.owner_lifecycle import OwnerReleaseStore, OwnerRestartSelection
 from agent_comms.store_files import file_revision
 from agent_comms.wire_log import WireLog
 from thread_format_retirement import GoalReportMemberRetirement
@@ -33,25 +33,31 @@ class LiveOwnerReadProjection(OwnerReadProjection):
                 if request is not None else OwnerRestartSelection.capture(snapshot, name)
             )
             selection.require_current(snapshot)
-            return {'document': cls.project(document),
-                    'selection': FieldCodec.encode(selection)}
+            return dict(cls.project(root, registry.store.path, document),
+                        selection=FieldCodec.encode(selection))
 
     @classmethod
     @abstractmethod
-    def project(cls, document: RegistryDocument) -> dict:
+    def project(cls, root: Path, registry_path: Path, document: RegistryDocument) -> dict:
         """Project a document already validated by its authentic producer."""
 
 
 class RetiredGoalReportProjection(LiveOwnerReadProjection):
     @classmethod
-    def project(cls, document: RegistryDocument) -> dict:
-        return GoalReportMemberRetirement.threads(FieldCodec.encode(document))
+    def project(cls, root: Path, registry_path: Path, document: RegistryDocument) -> dict:
+        releases = OwnerReleaseStore(root / 'owner_release_receipts.json')
+        with releases.locked():
+            acquired = GoalReportMemberRetirement.acquire(
+                registry_path, document, releases._read_unlocked())
+            projected = acquired.project()
+        return {'document': projected['registry'], 'releases': projected['releases'],
+                'goal_history': projected['goal_history']}
 
 
 class CurrentThreadProjection(LiveOwnerReadProjection):
     @classmethod
-    def project(cls, document: RegistryDocument) -> dict:
-        return FieldCodec.encode(document)
+    def project(cls, root: Path, registry_path: Path, document: RegistryDocument) -> dict:
+        return {'document': FieldCodec.encode(document)}
 
 
 class RecordedRegistryProjection(OwnerReadProjection):

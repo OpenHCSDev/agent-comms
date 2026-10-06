@@ -34,11 +34,12 @@ class ThreadRetirementCutover(OwnerCutover):
         # cannot recover merely because target completion failed.
         self.leave_stopped(failure)
 
-    def validate(self, registry, releases):
-        projected = {'registry': GoalReportMemberRetirement.threads(FieldCodec.encode(registry)),
-                     'releases': GoalReportMemberRetirement.releases(FieldCodec.encode(releases))}
+    def validate(self, registry_path, registry, releases):
+        acquired = GoalReportMemberRetirement.acquire(registry_path, registry, releases)
+        projected = acquired.project()
         result = run_cutover_child([
             str(self.target_python), str(Path(__file__).with_name('validate_thread_retirement.py')),
+            str(registry_path),
         ], packet=json.dumps(projected), environment=self.target_environment)
         return projected, json.loads(result.stdout)
 
@@ -63,17 +64,24 @@ class ThreadRetirementCutover(OwnerCutover):
         with lifecycle.registry.store.locked(), lifecycle.releases.locked():
             registry = lifecycle.registry.store._read_unlocked()
             releases = lifecycle.releases._read_unlocked()
-            projected, counts = self.validate(registry, releases)
+            projected, counts = self.validate(lifecycle.registry.store.path, registry, releases)
             # Complete target decoding succeeds before any source-byte change.
             sources = ((lifecycle.registry.store, 'registry.json'),
                        (lifecycle.releases, 'owner_release_receipts.json'))
             originals = {name: store.path.read_bytes() if store.path.exists() else None
                          for store, name in sources}
             originals['active-route.json'] = self.route_path.read_bytes()
+            originals['goal_history.sqlite3'] = (lifecycle.root / 'goal_history.sqlite3').read_bytes()
             self.originals.mkdir(mode=0o700)
             for name, contents in originals.items():
                 if contents is not None:
-                    _atomic_write_text(self.originals / name, contents.decode(), fsync_parent=True)
+                    if name == 'goal_history.sqlite3':
+                        with (self.originals / name).open('xb') as journal:
+                            journal.write(contents)
+                            journal.flush()
+                            os.fsync(journal.fileno())
+                    else:
+                        _atomic_write_text(self.originals / name, contents.decode(), fsync_parent=True)
                     os.chmod(self.originals / name, 0o600)
             proof = {'originals': {name: hashlib.sha256(contents).hexdigest()
                                   if contents is not None else None
@@ -101,9 +109,9 @@ class ThreadRetirementCutover(OwnerCutover):
                   'target_route': self.target_route, 'receipt': str(self.receipt)}
         result = run_cutover_child([
             str(self.target_python), str(Path(__file__).with_name('launch_thread_retirement.py')),
-            str(stopped.wire.descriptor), str(self.route_descriptor),
+            str(stopped.wire_descriptor), str(self.route_descriptor),
         ], packet=json.dumps(packet), environment=self.target_environment,
-            descriptors=(stopped.wire.descriptor, self.route_descriptor))
+            descriptors=(stopped.wire_descriptor, self.route_descriptor))
         from agent_comms.owner_lifecycle import OwnerRestartResult
 
         return FieldCodec.decode(tuple[OwnerRestartResult, ...], json.loads(result.stdout))

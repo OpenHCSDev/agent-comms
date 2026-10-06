@@ -1,0 +1,112 @@
+{
+  "status": "SOURCE-METHOD PROPOSAL ONLY; production amendment and affected controls not implemented or run",
+  "working_branch": "plan/original-owner-admission-20261005",
+  "base": "8877cab70fe9d9ffea578eacb2e13228e87e3cac",
+  "proposal": {
+    "path": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-routing-provenance-20261005/ORIGINAL-OWNER-ADMISSION-METHOD-PROPOSAL.md",
+    "sha256": "ae01a146971532bc4487d89deb59e60f1bebe6e6295459af6265feec47311168",
+    "bytes": 16093
+  },
+  "prior_dependency_evidence": {
+    "path": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-routing-provenance-20261005/LAUNCH-ADMISSION-SOURCE-DEPENDENCIES.json",
+    "sha256": "e6f8d601a7a756676c9a9aab7e61e217221ea84e0485b94832f91343598dd67c",
+    "bytes": 446591
+  },
+  "prior_declaration_closure": {
+    "path": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-routing-provenance-20261005/LAUNCH-ADMISSION-DECLARATION-CLOSURE.md",
+    "sha256": "930d2c94d8f6d97a150662f947dbcf2310e0e08952fd4a27c26a070988f9ba8e",
+    "bytes": 4897
+  },
+  "coverage_reused": {
+    "current_modules": 324,
+    "original720_modules": 286,
+    "parse_omissions": 0,
+    "syntactic_transitive_modules": 309,
+    "absent_original_modules": 39,
+    "dynamic_resolution": "not proved; no new scan or runtime import"
+  },
+  "amended_producer": {
+    "base_Git": "72062939239b0f07707406309305a056a23f925f",
+    "new_commit": "UNCREATED P, versioned original-format source successor",
+    "new_wheel": "UNBUILT; never label c3e exact720 or historical original installed equivalence",
+    "durable_source_declarations": "Original Thread/RegistryDocument/FieldCodec; no execution field or AdmissionIdentity alias",
+    "target_old_registry": "strict refusal; no silent registry-format rewrite"
+  },
+  "frozen_routing": {
+    "effective": {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-routing-provenance-20261005/PAIRED-MOUNTED-INSTALLED-OPERANDS-EFFECTIVE-FLOORS.json",
+      "sha256": "b52ed4da43829756df78967caf9a23083009659c12986905fd21a453e8175d9d",
+      "bytes": 39371
+    },
+    "commands": {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/docs/refactor/retained-routing-provenance-20261005/PAIRED-MOUNTED-PREISSUE-COMMANDS.json",
+      "sha256": "145cd9b5326d460db63f8a0486bbcb1215a6c0d774603de35d2dea82d5fe1ec8",
+      "bytes": 5863
+    },
+    "all13_tools_unchanged": true,
+    "purposes": "UNISSUED;334 occupied by actual Mendel687 scope, no reservation or automatic next loan",
+    "central_batch_used": false
+  },
+  "complete_consumer_files": [
+    "src/agent_comms/threads.py",
+    "src/agent_comms/owner_lifecycle.py",
+    "src/agent_comms/registration.py",
+    "src/agent_comms/registry_document.py",
+    "src/agent_comms/owner_restart.py",
+    "src/agent_comms/owner_launch.py",
+    "src/agent_comms/owner_cutover.py",
+    "src/agent_comms/cli_commands.py",
+    "src/agent_comms/restart_queue.py",
+    "tools/cutover/phased_owner_kernel.py",
+    "tools/cutover/restart_original_thread_format.py",
+    "tools/cutover/launch_thread_retirement.py",
+    "tools/cutover/restore_stopped_owners.py",
+    "tools/cutover/cutover_child.py",
+    "tools/cutover/retained_index_cutover.py",
+    "tools/cutover/retained_routing_cutover.py",
+    "tools/cutover/retained_task_source_carry.py",
+    "tools/cutover/thread_retirement_cutover.py",
+    "tools/cutover/publish_retained_summary.py",
+    "tools/cutover/publish_openhcs_recovery.py",
+    "tools/cutover/global_extension_activation.py"
+  ],
+  "controls_last": [
+    {
+      "file": "tests/test_registration_transitions.py",
+      "scope": "Atomic complete audience; changed metadata/admission and busy second owner produce no committed partial fence."
+    },
+    {
+      "file": "tests/test_owner_process.py",
+      "scope": "Original lifecycle selection, exact capture, source arguments/config/credentials, same-resource stopped completion, retired-witness target launch, unchanged-source recovery/refusal."
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "scope": "Later explicitly granted live journey only; genuine admitted central batch and original publication ownership. No synthetic stopped audience or existing accepted-journey repeat."
+    },
+    {
+      "file": "tools/cutover/restart_original_thread_format.py",
+      "scope": "Use amended producer own installed phases; no target-module injection. Target declarations must already be legitimate current data before launch."
+    },
+    {
+      "file": "tools/cutover/restore_stopped_owners.py",
+      "scope": "Recovered acquired source interpreter/environment, same original wire FD, all original retired witnesses; no repeated admission/fence/install/input."
+    }
+  ],
+  "checked_peer_production_claims": {
+    "68719bb": [
+      "src/agent_comms/session_lifecycle.py"
+    ],
+    "682c81": [
+      "src/agent_comms/session_lifecycle.py"
+    ],
+    "Parent688": "integration union; no new restart-method writer"
+  },
+  "product_and_frozen_artifact_input_delta": 0,
+  "changed_controls_run": 0,
+  "application_imports": 0,
+  "builds": 0,
+  "installed_operations": 0,
+  "original_root_access": 0,
+  "native_or_provider_operations": 0,
+  "source_sanity": "proposal and original evidence relations verified; no behavioral claim"
+}

@@ -1,0 +1,44 @@
+{
+  "results": [
+    {
+      "label": "current",
+      "argv": [
+        "/usr/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-o",
+        "addopts=",
+        "-q",
+        "tests/test_owner_partial_retirement.py"
+      ],
+      "cwd": "/home/ts/wt/comms-original-owner-admission-20261006",
+      "returncode": 2,
+      "stdout_sha256": "3020144f92192567583ff6a01cd36a5af1bdee33b1fac9481da0e17dd7e0d279",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "scope": "Three authored in-memory phase/guard/witness/close controls; no root/OFD/OS signal/native/provider/installed operation"
+    },
+    {
+      "label": "amended720",
+      "argv": [
+        "/usr/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-o",
+        "addopts=",
+        "-q",
+        "tests/test_owner_partial_retirement.py"
+      ],
+      "cwd": "/home/ts/wt/comms-amended720-owner-admission-20261006",
+      "returncode": 2,
+      "stdout_sha256": "10089e721c6bacb0a4ab2cc655f3fb7cf77bfde71bf3303e0034956b6a0b2ed7",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "scope": "Three authored in-memory phase/guard/witness/close controls; no root/OFD/OS signal/native/provider/installed operation"
+    }
+  ],
+  "changed_modules_byte_equal": true,
+  "parse_compile_omissions": []
+}

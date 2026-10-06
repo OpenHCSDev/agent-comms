@@ -1,0 +1,15 @@
+# Partial retirement custody correction
+
+The earlier e057 checkpoint let a stop or post-stop witness refusal escape before StoppedOwnerBatch existed. The corrected existing FencedOwnerBatch now owns progress from the first attempted stop. It retains the whole originally captured audience/launch resources, exact physically-exited processes, and separately validated retired selection witnesses. Unconfirmed owners are derived from that original audience; an observed exit is not a stopped registry/admission witness.
+
+After each successful stop and exact OS-exit check, the lifecycle's original restart_wire context validates/captures that owner's retired witness and releases before stopping the next owner. Once all originals exit, the same phase retains final wire custody and revalidates the whole witness set. Only then is StoppedOwnerBatch constructed. A final refusal retains the verified prefix and marks the remainder unconfirmed; no complete handoff is manufactured.
+
+Every stop/guard/witness/final acquisition refusal now passes the acquired FencedOwnerBatch progress and original exception through StoppedOwnerFailure to the existing cutover.failed owner. Explicit abandon releases only acquired custody and never signals/launches. recover dispatches through the actual phase: an incomplete fenced phase refuses before invoking an installation's recover; an all-stopped phase preserves existing certified original recovery. No retry, replacement of a changed owner or competing recovery manager.
+
+One affected authored in-memory batch passed three cases on current source and three on P: first exit then second changed-generation guard refusal; physical exit then stopped-status witness refusal; both physical exits then complete-set admission witness refusal while final context remains held. These assert original cause transfer, truthful exited/retired/unconfirmed ownership, operation failure callback, recovery refusal/no launch and explicit context release. The test stop member controls synthetic process exit and the context is a sentinel, so no real signal, OFD, root, installed or central-batch qualification is claimed.
+
+The initial batch lacked an explicit source import path and failed collection without executing a control; those logs are preserved. The resolved source batch names pytest pythonpath=src and uses existing source/development dependencies, with no installed prefix overlay or runtime package loan. See partial-retirement-source-controls/source-import-resolved/results.json.
+
+Current and P owner_restart declarations remain byte equal. Original P stored Thread/registry/codec/WireLog/lock fields stay unchanged. Frozen routed acceptance and its thirteen helper paths remain untouched; its accepted mounted check is not repeated. Live registry/goal-history preservation remains a separate source obligation.
+
+Explicit amended720 P successor: `3cfe891fe78462bc9bed5798b25fa329a3528fde` on source/amended720-owner-admission-20261006. It is not exact720/c3e or a historical installed artifact.

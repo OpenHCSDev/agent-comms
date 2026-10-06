@@ -34,6 +34,7 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.turn_lease import ActiveTurn
 from thread_format_retirement import GoalReportMemberRetirement
+from seed_original_owner_capture import author_model_report
 
 
 def historical_reservation(root, input_id):
@@ -128,11 +129,13 @@ def main():
                 ('phase-beta', (), 'fixture-beta'))
     for name, arguments, credential in settings:
         thread = Thread(name, frozenset({name}), str(root),
-                        last_goal_report_turn=name+'-retired-report',
                         model='fixture-local/never-send',
                         task='Provider-free private cutover; never resume original work',
                         goal=Goal('Protected failed original', name+'-goal', state=BlockedGoal('No replay')))
         service.registry.declare(thread)
+        author_model_report(service, name,
+                            'a7cc88d777b947d99b6f28f9e0b6ef97' if name == 'phase-alpha'
+                            else 'b7cc88d777b947d99b6f28f9e0b6ef97')
     historical_source = subprocess.run(
         [sys.executable, __file__, '--historical', str(root), root_id],
         text=True, capture_output=True, check=True)
@@ -143,8 +146,10 @@ def main():
         service.owners.start(name, agent_args=arguments)
         asyncio.run(ready(root, service.registry.require(name)))
     service.registry.rename('phase-beta', 'phase-renamed')
-    retired = Thread('phase-retired', frozenset(), str(root), last_goal_report_turn='old-retired-report')
+    retired = Thread('phase-retired', frozenset(), str(root))
     service.registry.register(retired, StoppedThreadStatus(), new_owner=True)
+    author_model_report(service, retired.name, 'e7cc88d777b947d99b6f28f9e0b6ef97')
+    retired = service.registry.require(retired.name)
     service.owners.releases.update(lambda rows: {**rows, retired.name: OwnerReleaseReceipt(1, 2, retired)})
     InputDispositions(root / InputDispositions.filename).reserve_turn(
         'phase-alpha', TurnId('c7cc88d777b947d99b6f28f9e0b6ef97'), 1, 'Protected UNKNOWN; never replay')
@@ -154,11 +159,14 @@ def main():
     source = service.registry.require('phase-renamed')
     service.registry.register(replace(source, active_turn=ActiveTurn('protected-busy', source.pid)))
     assert historical_reservation(root, input_id) == historical
+    with service.registry.store.reading() as document, service.owners.releases.locked():
+        acquired = GoalReportMemberRetirement.acquire(
+            service.registry.store.path, document, service.owners.releases._read_unlocked())
+        original_threads = acquired.project()['registry']['threads']
     print(json.dumps({'root_id': root_id, 'historical_input_id': input_id,
         'historical_reservation_sha256': historical, 'owners': [FieldCodec.encode(
         service.registry.require(name).process_identity) for name in ('phase-alpha','phase-renamed')],
-        'original_threads': [GoalReportMemberRetirement.thread(FieldCodec.encode(
-            service.registry.require(name))) for name in ('phase-alpha','phase-renamed')]}), flush=True)
+        'original_threads': [original_threads[name] for name in ('phase-alpha','phase-renamed')]}), flush=True)
     for command in sys.stdin:
         if command.strip() == 'idle':
             service.registry.register(source)
