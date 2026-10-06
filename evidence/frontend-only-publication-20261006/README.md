@@ -6,7 +6,9 @@ The original shared route lease excludes a concurrent backend cutover without wa
 
 Frontend and backend published proofs retain independent identities: a later frontend update validates its current UI prefix while backend commands keep their original prefix. Link replacement and recovery use the acquired command-directory descriptor. The original high-level all-stopped publisher and stopped operation are unchanged.
 
-The renderer successor keeps this original Toad-only declaration intact.
+The renderer successor keeps the original Toad-only scope intact as
+ReviewedToadFrontendCohort. Both concrete declarations belong to the existing
+ReviewedFrontendCohort implementation through DeclaredFamily.
 ReviewedTextualFrontendCohort shares the same publication/recovery implementation,
 but declares both Toad and Textual as its frontend supply. The source proof derives
 their distribution names and file membership from the original installed RECORD
@@ -25,3 +27,12 @@ renderer change by the original Toad-only declaration. Installed App and live
 delivery results remain separate.
 
 Actual candidate comparison passed: 953 exact selected assets, all 69 versions, unchanged backend resource trees and original FieldCodec roundtrip. Installed prepared-bars App passed. Existing artifact controls passed against the actual candidate. Full original Package parsed 324 production, 378 test and 54 tool modules, zero omissions. Real private-filesystem checks passed first publication, successor validation and second publication with unchanged backend defaults, then original-link restoration after a post-replacement failure. Source-only: no public default link switch or live acceptance yet.
+
+The original FieldCodec now stores the concrete family tag. Root decoding returns
+the declared member; decoding a renderer cohort as Toad-only or decoding an
+untagged new cohort refuses. Closed historical receipts remain unchanged; no
+legacy reader or automatic scope inference was added. Actual family roundtrip,
+wrong-member/untagged refusals and renderer preflight passed. The installed
+508-widget/ten-tab sidebar App passed with empty stderr. Focus processing took
+5.56ms left and 6.97ms right across three calls; overall first-paint medians were
+38.4/38.3ms with long tails. No physical smoothness or baseline gain is claimed.

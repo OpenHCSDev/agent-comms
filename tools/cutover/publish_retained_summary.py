@@ -21,6 +21,7 @@ from urllib.parse import unquote, urlsplit
 from agent_comms.active_route import ActiveRoute, active_route_path, read_active_route, _publish_active_route_locked, guard_default_route_write
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_package import verify_native_package
 from agent_comms.owner_cutover import StoppedOwnerInstallation
@@ -361,13 +362,18 @@ class ReviewedRetainedSummaryCohort:
 
 
 @dataclass(frozen=True)
-class ReviewedFrontendCohort(ReviewedRetainedSummaryCohort):
+class ReviewedFrontendCohort(ReviewedRetainedSummaryCohort, DeclaredFamily, affix='FrontendCohort'):
     """Publish only the UI when every imported backend byte stays unchanged."""
 
     current_source_proof: ReviewedArtifact
     backend_source_proof: ReviewedArtifact
     commands: ClassVar[tuple[str, ...]] = ('toad',)
-    frontend_modules: ClassVar[tuple[str, ...]] = ('toad',)
+
+    @property
+    @abstractmethod
+    def frontend_modules(self) -> tuple[str, ...]:
+        """The concrete publication declaration owns its replaceable sources."""
+        ...
 
     def require_runtime(self):
         # This operation neither changes nor acquires the native package.
@@ -446,6 +452,13 @@ class ReviewedFrontendCohort(ReviewedRetainedSummaryCohort):
                 raise
         finally:
             os.close(directory)
+
+
+@dataclass(frozen=True)
+class ReviewedToadFrontendCohort(ReviewedFrontendCohort):
+    """The original Toad-only scope, with its declaration retained on the wire."""
+
+    frontend_modules: ClassVar[tuple[str, ...]] = ('toad',)
 
 
 @dataclass(frozen=True)
