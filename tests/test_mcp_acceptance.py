@@ -446,10 +446,8 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                     if key in os.environ:
                         env[key] = os.environ[key]
             environment.setattr(os, "environ", env)
-            if case == "allow":
-                await Coordination.run_worker(partial(
-                    _qualify_origin, node, env, project, tmp_path / "origin-guard",
-                ))
+            # The unchanged origin guard has its own retained SDK qualification.
+            # These four cases exercise MCP/ACP under that committed policy.
             args = [
                 "--offline",
                 "--no-extensions",
