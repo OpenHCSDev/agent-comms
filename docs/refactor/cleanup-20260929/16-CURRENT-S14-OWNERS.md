@@ -4,6 +4,50 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Current closure and source review — 2026-10-06
+
+Warm03 holder purpose3d9a is independently CLOSED063b72. Parent hash-matched the
+actual closed lifecycle, independent floor70fa936a, census5eb89e8a and
+classification35b796df. Bohr binds the explicit wholeba383 READ8923+EXEC90775
+returns, one normal floor restore and all original held fixtures. Sch received
+this independent closure for only the matching artifact records. No new warm
+purpose or runtime retry follows. The actual negative remains ReaderCheckpoint
+requiring descendant Markdown bodies, with zero verified warm/eviction branches.
+
+Heis traced the complete original acquisition/paint/checkpoint family and found a
+source counterexample: MeasuredViewportBody retains native strips in RenderedBody
+and removes reconstructible Markdown descendants. The existing checkpoint accepts
+only descendant native caches. Heis owns capture/verify/diagnostic migration to
+witness both original cache and visible ready source-bound rendered fragment paint,
+with nonwhite viewport crops and exact body/content identity. This is source
+reasoning, not the proved sole cause of warm03 or a product blank claim. Mandatory
+warm identity/rawreads0 and genuine eviction/editor/reader checks remain required.
+Configured690 and continuous consumer work continue separately.
+
+Parent reviewed actual68911afe77a partial retirement against OwnerCutover failure,
+abandon and recovery dispatch. Existing FencedOwnerBatch retains physical exits
+separately from validated retired witnesses, keeps acquired wire custody on a final
+refusal, transfers original cause through StoppedOwnerFailure, and refuses partial
+recovery before invoking the operation. Three current and three amended-P authored
+controls cover second guard, post-stop witness and final-set witness refusals;
+real process/OFD/installed central-batch acceptance remains unrun. Einstein retains
+this source family and the assigned goal-report preservation implementation.
+
+Parent compared exact PUBLIC475 Core3931 to current integration: threads,
+registry_document, thread_identity, goals, goal_history, registration,
+owner_lifecycle, owner_restart, owner_launch and owner_cutover files are byte equal.
+Authentic720 registry/goal-report conversion therefore remains a separate genuine
+cross-format requirement, rather than an assumed conversion requirement for the
+actual3931 same-format installed cutover. New689 handoff declarations still require
+coherent source/target phase ownership. No live stop, package build, registry data
+acquisition or admission bypass follows from this source relation.
+
+Installed-entrypoint native qualification now has its own actual3808 purpose and
+single joined stage reported by Mendel; Sch confirms a distinct new READ receipt
+already delivered. Sole proof and subsequent EXEC/four-case release remain original
+Bohr/Sch boundaries. Historical selected bee/4b/b2e/16c9 artifacts are unchanged;
+this is not a Parent688/478/690 installation or whole-goal completion.
+
 ### Warm03 returned negative and remaining transition assigned — 2026-10-06
 
 Parent read actual warm03 terminalffb0ca6e: FAIL1/36.296851687, controller joined
