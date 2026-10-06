@@ -1,0 +1,1648 @@
+{
+  "handoff": {
+    "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/evidence/configured-continuous-source-20261006/LOADED-EXISTING-CONTROL-HANDOFF.json",
+    "sha256": "fc452d75ca84a282d168bfdb35b37c2c9fddff5786926c0382e97caf78e55410",
+    "bytes": 6821
+  },
+  "stable_family": {
+    "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/evidence/configured-continuous-source-20261006/STABLE-CONFIGURED-HELPERS.json",
+    "sha256": "3bbdf0ad72db6480540e537becf19afb7933950ecaab564857890517feb836d3",
+    "bytes": 17918
+  },
+  "actual_selected_helpers": {
+    "carry_history_provenance": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/carry_history_provenance.py",
+      "sha256": "44735bcdd6424af4203ac75e509f8a80cf41641882b249610ccadd0215c527b2",
+      "bytes": 4308
+    },
+    "cutover_child": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/cutover_child.py",
+      "sha256": "69a63c30a27ce6971d31e9669ff8c86b06579612c796f044126f629917e51966",
+      "bytes": 1207
+    },
+    "native_schema_carry": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "sha256": "08d5b673910f96634ad017eb7e8224cb440e5b5cfea7c07d597b3ddf0f209c2b",
+      "bytes": 43894
+    },
+    "original_owner_capture": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/original_owner_capture.py",
+      "sha256": "0505975196d438b2721d48efde97e777f124a34ea1fe6f05dd50751a29f2932f",
+      "bytes": 3846
+    },
+    "owner_read_projection": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/owner_read_projection.py",
+      "sha256": "c719ec35fa61942ee76b6aa8b87e1155e66235eb1d696736bd9597b1fa2caba7",
+      "bytes": 4645
+    },
+    "publish_openhcs_recovery": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "sha256": "27516db16a4bec25bb37fb394e1c7bc04c567eb0a780fb1e0ed62235ca0ed9ff",
+      "bytes": 21793
+    },
+    "publish_retained_summary": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "sha256": "025babf120563228d99920617d34f2e4142307d38e049405d4af49b2ecd7a960",
+      "bytes": 24056
+    },
+    "read_original_owner": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/read_original_owner.py",
+      "sha256": "c963d51ec834e7caef5a0a10b704773546f548cf967e5e8716e147db0a2557d9",
+      "bytes": 1057
+    },
+    "retained_summary_reset": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/retained_summary_reset.py",
+      "sha256": "86d28cc9f9c74c9156ee258d061168a17003ab94f6c9ba1fdaac2dd01eb8dd12",
+      "bytes": 8554
+    },
+    "routing_carry": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_carry.py",
+      "sha256": "44509029e1fb4c975f8bb5b6c14cd8ecb1e2c9697f24374883b02f26360a3b4c",
+      "bytes": 11939
+    },
+    "routing_recovery": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_recovery.py",
+      "sha256": "af599ee91746123ed33606691973ef3a2a0e77e2d994cd158a1c5ddef2c2aafc",
+      "bytes": 2347
+    },
+    "runtime_installation": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/runtime_installation.py",
+      "sha256": "77841672b6d9d99e3cb4c724706ffdad7eefd604aab583743f2e4b341156224c",
+      "bytes": 3393
+    },
+    "thread_format_retirement": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/thread_format_retirement.py",
+      "sha256": "e31ca7198a19f0c7f92f65663adc82d3e10cd9194278951a77a936332ce25737",
+      "bytes": 3873
+    },
+    "l0a_native_installed_pilot": {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "sha256": "af0fb2d285ce9dddf728650809ab206b706000ed1d003e520d382b483b04e61a",
+      "bytes": 37666
+    },
+    "native_session_retention_pilot": {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "sha256": "9ba5a7000274c2de74e03f8400180cb526b4cf1963ed6cac5a7ebcc4e31b0ef5",
+      "bytes": 34560
+    },
+    "runtime_fixture": {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "sha256": "c34f37f450a02f09d344352466431744892a0c788953212da5ac434d912e3315",
+      "bytes": 18978
+    },
+    "saved_state_user_journey_pilot": {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "sha256": "7e6d769953fd8ae18ae3527d590a06d246891765d8a61a0ffc6a63722d8a2dbe",
+      "bytes": 46843
+    },
+    "thread_navigation_installed_journey": {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "sha256": "a23fbcb8578986949712cacc8d7b1af01b97808de225c9dbdf970177c4a6f4d2",
+      "bytes": 10668
+    },
+    "viewport_recent_tabs_pilot": {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/viewport_recent_tabs_pilot.py",
+      "sha256": "2ea128c76d469c15e8e4633922110ccfaf200f86e2131eeb0d942129284ce030",
+      "bytes": 18068
+    }
+  },
+  "imports": [
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/carry_history_provenance.py",
+      "line": 8,
+      "module": "__future__"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/carry_history_provenance.py",
+      "line": 11,
+      "module": "dataclasses"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/carry_history_provenance.py",
+      "line": 14,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/carry_history_provenance.py",
+      "line": 16,
+      "module": "agent_comms.field_codec"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/carry_history_provenance.py",
+      "line": 17,
+      "module": "agent_comms.historical_views"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/carry_history_provenance.py",
+      "line": 18,
+      "module": "agent_comms.registry_provenance"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/carry_history_provenance.py",
+      "line": 19,
+      "module": "agent_comms.store_files"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/carry_history_provenance.py",
+      "line": 20,
+      "module": "agent_comms.thread_provenance"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/cutover_child.py",
+      "line": 17,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/cutover_child.py",
+      "line": 18,
+      "module": "agent_comms.field_codec"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/cutover_child.py",
+      "line": 19,
+      "module": "agent_comms.owner_lifecycle"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 6,
+      "module": "__future__"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 8,
+      "module": "abc"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 9,
+      "module": "contextlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 10,
+      "module": "dataclasses"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 14,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 18,
+      "module": "typing"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 20,
+      "module": "agent_comms.field_codec"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 21,
+      "module": "agent_comms.declared_family"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 22,
+      "module": "agent_comms.private_path"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 23,
+      "module": "publish_openhcs_recovery"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 24,
+      "module": "retained_summary_reset"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 25,
+      "module": "routing_recovery"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 286,
+      "module": "agent_comms.typed_table"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 348,
+      "module": "agent_comms.goal_attempts"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 349,
+      "module": "agent_comms.typed_table"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 400,
+      "module": "agent_comms.coordination_schema"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 401,
+      "module": "agent_comms.coordination_response"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 402,
+      "module": "agent_comms.native_runtime_input"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 403,
+      "module": "agent_comms.typed_table"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 458,
+      "module": "agent_comms.native_runtime_input"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 492,
+      "module": "agent_comms.compaction_records"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 493,
+      "module": "agent_comms.input_origin"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 494,
+      "module": "agent_comms.selected_source"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 557,
+      "module": "agent_comms.compaction_records"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 47,
+      "module": "agent_comms.coordinated_runtime_schema"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 48,
+      "module": "agent_comms.native_runtime_input"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 49,
+      "module": "agent_comms.native_prompt_binding"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 50,
+      "module": "agent_comms.private_sidecar"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 51,
+      "module": "typing"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 52,
+      "module": "agent_comms.coordination_schema"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 53,
+      "module": "agent_comms.coordination_tables.metadata"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 54,
+      "module": "agent_comms.coordination_response"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 55,
+      "module": "agent_comms.native_runtime_input"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 56,
+      "module": "agent_comms.typed_table"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 57,
+      "module": "agent_comms.compaction_records"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 99,
+      "module": "agent_comms.goal_attempts"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 100,
+      "module": "agent_comms.typed_table"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 105,
+      "module": "agent_comms.goal_attempts"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 203,
+      "module": "agent_comms.compaction_records"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 204,
+      "module": "agent_comms.typed_table"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 658,
+      "module": "agent_comms.private_sidecar"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 167,
+      "module": "agent_comms.coordination_tables.metadata"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "line": 600,
+      "module": "agent_comms.compaction_identity"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/original_owner_capture.py",
+      "line": 8,
+      "module": "dataclasses"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/original_owner_capture.py",
+      "line": 11,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/original_owner_capture.py",
+      "line": 13,
+      "module": "typing"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/original_owner_capture.py",
+      "line": 15,
+      "module": "agent_comms.field_codec"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/original_owner_capture.py",
+      "line": 16,
+      "module": "agent_comms.owner_launch"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/original_owner_capture.py",
+      "line": 17,
+      "module": "agent_comms.owner_lifecycle"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/original_owner_capture.py",
+      "line": 18,
+      "module": "agent_comms.goal_history"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/original_owner_capture.py",
+      "line": 19,
+      "module": "agent_comms.registry_document"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/original_owner_capture.py",
+      "line": 20,
+      "module": "agent_comms.registry_provenance"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/original_owner_capture.py",
+      "line": 21,
+      "module": "agent_comms.historical_views"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/original_owner_capture.py",
+      "line": 22,
+      "module": "agent_comms.threads"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/original_owner_capture.py",
+      "line": 23,
+      "module": "owner_read_projection"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/owner_read_projection.py",
+      "line": 6,
+      "module": "abc"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/owner_read_projection.py",
+      "line": 7,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/owner_read_projection.py",
+      "line": 9,
+      "module": "agent_comms.declared_family"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/owner_read_projection.py",
+      "line": 10,
+      "module": "agent_comms.field_codec"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/owner_read_projection.py",
+      "line": 11,
+      "module": "agent_comms.registry_document"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/owner_read_projection.py",
+      "line": 12,
+      "module": "agent_comms.owner_lifecycle"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/owner_read_projection.py",
+      "line": 13,
+      "module": "agent_comms.store_files"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/owner_read_projection.py",
+      "line": 14,
+      "module": "agent_comms.wire_log"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/owner_read_projection.py",
+      "line": 15,
+      "module": "thread_format_retirement"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "line": 8,
+      "module": "__future__"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "line": 11,
+      "module": "dataclasses"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "line": 16,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "line": 21,
+      "module": "agent_comms.active_route"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "line": 22,
+      "module": "agent_comms.child_process"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "line": 23,
+      "module": "agent_comms.comms"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "line": 24,
+      "module": "agent_comms.field_codec"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "line": 25,
+      "module": "agent_comms.historical_views"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "line": 26,
+      "module": "agent_comms.input_disposition"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "line": 27,
+      "module": "agent_comms.native_package"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "line": 28,
+      "module": "agent_comms.owner_cutover"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "line": 29,
+      "module": "agent_comms.owner_restart"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "line": 30,
+      "module": "agent_comms.owner_launch"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "line": 31,
+      "module": "agent_comms.owner_lifecycle"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "line": 32,
+      "module": "agent_comms.private_path"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "line": 33,
+      "module": "agent_comms.store_files"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "line": 34,
+      "module": "carry_history_provenance"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 7,
+      "module": "__future__"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 9,
+      "module": "dataclasses"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 10,
+      "module": "abc"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 11,
+      "module": "contextlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 15,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 18,
+      "module": "typing"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 19,
+      "module": "urllib.parse"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 21,
+      "module": "agent_comms.active_route"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 22,
+      "module": "agent_comms.comms"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 23,
+      "module": "agent_comms.field_codec"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 24,
+      "module": "agent_comms.input_disposition"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 25,
+      "module": "agent_comms.native_package"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 26,
+      "module": "agent_comms.owner_cutover"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 27,
+      "module": "agent_comms.owner_restart"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 28,
+      "module": "agent_comms.owner_launch"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 29,
+      "module": "agent_comms.owner_lifecycle"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 30,
+      "module": "agent_comms.private_path"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 31,
+      "module": "agent_comms.store_files"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 32,
+      "module": "agent_comms.threads"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 33,
+      "module": "publish_openhcs_recovery"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 34,
+      "module": "retained_summary_reset"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 35,
+      "module": "native_schema_carry"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 36,
+      "module": "runtime_installation"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 37,
+      "module": "cutover_child"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "line": 302,
+      "module": "agent_comms.wire_log"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/read_original_owner.py",
+      "line": 8,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/read_original_owner.py",
+      "line": 11,
+      "module": "agent_comms.registration"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/read_original_owner.py",
+      "line": 12,
+      "module": "owner_read_projection"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/retained_summary_reset.py",
+      "line": 6,
+      "module": "__future__"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/retained_summary_reset.py",
+      "line": 8,
+      "module": "contextlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/retained_summary_reset.py",
+      "line": 9,
+      "module": "dataclasses"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/retained_summary_reset.py",
+      "line": 12,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/retained_summary_reset.py",
+      "line": 15,
+      "module": "agent_comms.field_codec"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/retained_summary_reset.py",
+      "line": 16,
+      "module": "agent_comms.private_path"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/retained_summary_reset.py",
+      "line": 17,
+      "module": "agent_comms.store_files"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/retained_summary_reset.py",
+      "line": 18,
+      "module": "publish_openhcs_recovery"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_carry.py",
+      "line": 6,
+      "module": "contextlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_carry.py",
+      "line": 7,
+      "module": "dataclasses"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_carry.py",
+      "line": 11,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_carry.py",
+      "line": 14,
+      "module": "typing"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_carry.py",
+      "line": 16,
+      "module": "agent_comms.field_codec"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_carry.py",
+      "line": 17,
+      "module": "agent_comms.transcript_routes"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_carry.py",
+      "line": 18,
+      "module": "agent_comms.typed_table"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_carry.py",
+      "line": 164,
+      "module": "agent_comms.bus_publication"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_carry.py",
+      "line": 165,
+      "module": "agent_comms.routing"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_carry.py",
+      "line": 166,
+      "module": "agent_comms.messages"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_carry.py",
+      "line": 167,
+      "module": "owner_read_projection"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_carry.py",
+      "line": 216,
+      "module": "agent_comms.message_reference"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_carry.py",
+      "line": 110,
+      "module": "agent_comms.routing"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_carry.py",
+      "line": 111,
+      "module": "agent_comms.historical_views"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_recovery.py",
+      "line": 2,
+      "module": "contextlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_recovery.py",
+      "line": 5,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_recovery.py",
+      "line": 8,
+      "module": "agent_comms.field_codec"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_recovery.py",
+      "line": 9,
+      "module": "routing_carry"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/runtime_installation.py",
+      "line": 2,
+      "module": "abc"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/runtime_installation.py",
+      "line": 3,
+      "module": "dataclasses"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/runtime_installation.py",
+      "line": 4,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/runtime_installation.py",
+      "line": 5,
+      "module": "typing"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/runtime_installation.py",
+      "line": 7,
+      "module": "agent_comms.declared_family"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/runtime_installation.py",
+      "line": 8,
+      "module": "agent_comms.field_codec"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/runtime_installation.py",
+      "line": 9,
+      "module": "publish_openhcs_recovery"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/runtime_installation.py",
+      "line": 10,
+      "module": "retained_summary_reset"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/runtime_installation.py",
+      "line": 11,
+      "module": "native_schema_carry"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/thread_format_retirement.py",
+      "line": 6,
+      "module": "dataclasses"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/thread_format_retirement.py",
+      "line": 7,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/thread_format_retirement.py",
+      "line": 9,
+      "module": "agent_comms.errors"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/thread_format_retirement.py",
+      "line": 10,
+      "module": "agent_comms.field_codec"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/thread_format_retirement.py",
+      "line": 11,
+      "module": "agent_comms.goal_history"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/thread_format_retirement.py",
+      "line": 12,
+      "module": "agent_comms.owner_lifecycle"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/thread_format_retirement.py",
+      "line": 13,
+      "module": "agent_comms.registry_document"
+    },
+    {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/thread_format_retirement.py",
+      "line": 14,
+      "module": "agent_comms.threads"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 1,
+      "module": "runtime_fixture"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 2,
+      "module": "toad.core"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 3,
+      "module": "toad.agent_schema"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 4,
+      "module": "agent_comms.acp_extension"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 6,
+      "module": "toad.navigation_target"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 8,
+      "module": "toad.navigation_target"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 9,
+      "module": "toad.conversation_kind"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 11,
+      "module": "agent_comms.cli_commands"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 13,
+      "module": "contextlib"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 23,
+      "module": "http.server"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 24,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 26,
+      "module": "agent_comms.comms"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 27,
+      "module": "agent_comms.native_package"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 28,
+      "module": "agent_comms.threads"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 29,
+      "module": "agent_comms.input_disposition"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 30,
+      "module": "runtime_fixture"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 31,
+      "module": "toad.acp.agent"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 32,
+      "module": "toad.widgets.agent_response"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 33,
+      "module": "toad.widgets.prompt"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 34,
+      "module": "toad.widgets.comms_chat"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 35,
+      "module": "toad.widgets.channel_participants"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 36,
+      "module": "toad.widgets.message_notifications"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 37,
+      "module": "toad.widgets.comms_sidebar"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 38,
+      "module": "toad"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 39,
+      "module": "toad.navigation_preparation"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 40,
+      "module": "runtime_fixture"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 44,
+      "module": "agent_comms.transcript_events"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 45,
+      "module": "toad.widgets.transcript_history"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 46,
+      "module": "viewport_recent_tabs_pilot"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 227,
+      "module": "agent_comms.field_codec"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 228,
+      "module": "agent_comms.selected_triage"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 229,
+      "module": "agent_comms.turn_context"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 145,
+      "module": "agent_comms.input_origin"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 569,
+      "module": "toad.widgets.transcript_history"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/l0a_native_installed_pilot.py",
+      "line": 539,
+      "module": "toad.widgets.conversation"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "line": 1,
+      "module": "agent_comms.acp_extension"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "line": 13,
+      "module": "importlib.resources"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "line": 14,
+      "module": "functools"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "line": 15,
+      "module": "weakref"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "line": 18,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "line": 25,
+      "module": "runtime_fixture"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "line": 26,
+      "module": "l0a_native_installed_pilot"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "line": 27,
+      "module": "toad.screens.main"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "line": 28,
+      "module": "toad.widgets.conversation"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "line": 29,
+      "module": "toad.widgets.side_bar"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "line": 30,
+      "module": "toad.widgets.session_tabs"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "line": 31,
+      "module": "toad.navigation_target"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "line": 123,
+      "module": "viewport_recent_tabs_pilot"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "line": 297,
+      "module": "viewport_recent_tabs_pilot"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "line": 579,
+      "module": "thread_navigation_installed_journey"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "line": 59,
+      "module": "functools"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/native_session_retention_pilot.py",
+      "line": 60,
+      "module": "toad.frame_presentation"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "line": 4,
+      "module": "contextlib"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "line": 12,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "line": 15,
+      "module": "agent_comms.comms"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "line": 16,
+      "module": "agent_comms.child_process"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "line": 17,
+      "module": "agent_comms.active_route"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "line": 18,
+      "module": "toad.app"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "line": 114,
+      "module": "toad.widgets.side_bar"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "line": 115,
+      "module": "toad.widgets.project_directory_tree"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "line": 132,
+      "module": "toad.widgets.comms_sidebar"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "line": 147,
+      "module": "toad.widgets.session_details"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "line": 161,
+      "module": "textual.widgets"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "line": 162,
+      "module": "toad.widgets.comms_command_dialog"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "line": 180,
+      "module": "agent_comms.native_package"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "line": 195,
+      "module": "agent_comms.acp_extension"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "line": 196,
+      "module": "agent_comms.comms"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "line": 205,
+      "module": "agent_comms.cli_commands"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/runtime_fixture.py",
+      "line": 206,
+      "module": "toad.thread_actions"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 10,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 11,
+      "module": "weakref"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 13,
+      "module": "acp.schema"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 14,
+      "module": "agent_comms.acp"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 15,
+      "module": "agent_comms.acp_extension"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 16,
+      "module": "agent_comms.threads"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 17,
+      "module": "l0a_native_installed_pilot"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 18,
+      "module": "l0a_native_installed_pilot"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 21,
+      "module": "native_session_retention_pilot"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 22,
+      "module": "runtime_fixture"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 23,
+      "module": "textual.widgets"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 24,
+      "module": "viewport_recent_tabs_pilot"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 26,
+      "module": "toad.screens.comms"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 27,
+      "module": "agent_comms.cli_commands"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 28,
+      "module": "toad.widgets.channel_participants"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 29,
+      "module": "toad.widgets.comms_chat"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 30,
+      "module": "toad.widgets.comms_menu"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 31,
+      "module": "toad.widgets.comms_sidebar"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 32,
+      "module": "toad.widgets.session_tabs"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 33,
+      "module": "toad.widgets.agent_response"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 34,
+      "module": "toad.widgets.transcript_history"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 35,
+      "module": "toad.widgets.presentation_window"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 36,
+      "module": "toad.widgets.message_divider"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 110,
+      "module": "toad.widgets.side_bar"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 111,
+      "module": "toad.widgets.thread_comms"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 226,
+      "module": "agent_comms.goal_waits"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 479,
+      "module": "textual.widgets"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 549,
+      "module": "manual_live_turn_status"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 629,
+      "module": "agent_comms.input_disposition"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 630,
+      "module": "agent_comms.transcript_events"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 631,
+      "module": "manual_live_turn_status"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 632,
+      "module": "toad.widgets.prompt"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 762,
+      "module": "agent_comms.field_codec"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 768,
+      "module": "compaction_source_successor_installed_journey"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 769,
+      "module": "original_owner_capture"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 770,
+      "module": "toad.agent_schema"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 843,
+      "module": "functools"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 592,
+      "module": "agent_comms.input_disposition"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 593,
+      "module": "agent_comms.input_origin"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 808,
+      "module": "agent_comms.field_codec"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 860,
+      "module": "publish_retained_summary"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 436,
+      "module": "toad.work_preparation"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "line": 6,
+      "module": "__future__"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "line": 11,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "line": 12,
+      "module": "weakref"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "line": 14,
+      "module": "acp.schema"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "line": 15,
+      "module": "agent_comms.acp"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "line": 16,
+      "module": "agent_comms.threads"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "line": 17,
+      "module": "l0a_native_installed_pilot"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "line": 18,
+      "module": "native_session_retention_pilot"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "line": 19,
+      "module": "saved_state_user_journey_pilot"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "line": 20,
+      "module": "toad.navigation_preparation"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "line": 21,
+      "module": "toad.navigation_target"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "line": 22,
+      "module": "toad.thread_navigation"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "line": 23,
+      "module": "toad.widgets.comms_chat"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "line": 24,
+      "module": "toad.widgets.agent_response"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "line": 25,
+      "module": "toad.session_admission"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "line": 26,
+      "module": "toad.session_tracker"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/thread_navigation_installed_journey.py",
+      "line": 27,
+      "module": "toad.screens.file_preview"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/viewport_recent_tabs_pilot.py",
+      "line": 7,
+      "module": "dataclasses"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/viewport_recent_tabs_pilot.py",
+      "line": 8,
+      "module": "weakref"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/viewport_recent_tabs_pilot.py",
+      "line": 13,
+      "module": "pathlib"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/viewport_recent_tabs_pilot.py",
+      "line": 15,
+      "module": "l0a_native_installed_pilot"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/viewport_recent_tabs_pilot.py",
+      "line": 16,
+      "module": "native_session_retention_pilot"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/viewport_recent_tabs_pilot.py",
+      "line": 17,
+      "module": "toad.screens.main"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/viewport_recent_tabs_pilot.py",
+      "line": 18,
+      "module": "textual.widget"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/viewport_recent_tabs_pilot.py",
+      "line": 19,
+      "module": "textual.widgets._markdown"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/viewport_recent_tabs_pilot.py",
+      "line": 20,
+      "module": "toad.widgets.prepared_markdown"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/viewport_recent_tabs_pilot.py",
+      "line": 21,
+      "module": "toad.widgets.transcript_history"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/viewport_recent_tabs_pilot.py",
+      "line": 22,
+      "module": "agent_comms.transcript_events"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/viewport_recent_tabs_pilot.py",
+      "line": 23,
+      "module": "toad.widgets.viewport_body"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/viewport_recent_tabs_pilot.py",
+      "line": 24,
+      "module": "toad.widgets.agent_response"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/viewport_recent_tabs_pilot.py",
+      "line": 25,
+      "module": "toad.widgets.transcript_fragments"
+    },
+    {
+      "path": "/home/ts/wt/toad-configured-continuous-owner-20261006/tests/viewport_recent_tabs_pilot.py",
+      "line": 26,
+      "module": "toad.work_preparation"
+    }
+  ],
+  "parse_compile_omissions": 0,
+  "control_imports_or_tests": 0,
+  "loaded_acceptance_relation": true,
+  "proof_owner_root": "/home/ts/wt/comms-configured-continuous-producer-20261006",
+  "existing_lifetime_owner": "installed agent_comms.child_process.BoundedRun.session/AttachedChild/child.wait/join_retirement",
+  "dormant_consumers": "manual_live_turn_status and configured_saved_agent/capture paths are declared inside unexecuted saved-state acceptance functions; loaded-only uses SavedStateSubscriber and original prepare, not configured capture",
+  "dynamic_limit": "AST records declarations; effective script, loaded-only branch and imported top-level code were read semantically. Future original fixture traces establish execution."
+}
