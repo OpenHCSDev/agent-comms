@@ -1,0 +1,132 @@
+{
+  "status": "PREPARED_ONLY; source patches not applied to peer checkout; no purpose issued",
+  "problem": "Capture the native waits and any verified pthread mutex holder at the original bulk Start completion failure, before App cleanup",
+  "predecessor": "bulk-start03 is consumed and immutable; no dead-process stack recovery or replay",
+  "owned_output": "/home/ts/.cache/agent-scratch/sidebar-bulk-start-native-waits-20261006",
+  "application_argv": [
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/sidebar-live-candidate-20261006/runtime/bin/python",
+    "-B",
+    "/home/ts/wt/toad-sidebar-context-pointer-20261006/tests/declared_target_actions_installed_pilot.py",
+    "--batch-start-stop-only",
+    "--output",
+    "/home/ts/.cache/agent-scratch/sidebar-bulk-start-native-waits-20261006/f"
+  ],
+  "cwd": "/home/ts/wt/toad-sidebar-context-pointer-20261006",
+  "outer_timeout_seconds": 600,
+  "start_completion_seconds": 15,
+  "diagnostic_launcher_argv_prefix": [
+    "/usr/bin/gdb",
+    "-q",
+    "-nx",
+    "-batch",
+    "-x",
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/bulk-start-native-waits-20261006/native-waits.gdb",
+    "--args"
+  ],
+  "diagnostic_process_owner_source": "/home/ts/wt/toad-sidebar-context-pointer-20261006/tests/tools/record_installed_tui.py",
+  "environment": {
+    "unset": [
+      "PYTHONPATH",
+      "PYTHONHOME",
+      "VIRTUAL_ENV",
+      "AGENT_COMMS_THREAD",
+      "AGENT_COMMS_STARTUP_INPUT_KEY",
+      "PI_PROMPT",
+      "PI_PARENT_ID",
+      "PI_AGENT_ID",
+      "PI_TASK",
+      "TEXTUAL_DRIVER",
+      "AC_REAL_ORIGINAL_PYTHON",
+      "AC_REAL_SOURCE_OWNER",
+      "AC_REAL_SOURCE_ROOT",
+      "AC_REAL_SOURCE_FILE",
+      "AC_REAL_PROVIDER_AUTHORIZED",
+      "AC_REAL_READ_ONLY_CUSTODY",
+      "WORKSPACE_COHORTS"
+    ],
+    "set": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONNOUSERSITE": "1",
+      "AC_NATIVE_COPIED_PACKAGE": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent",
+      "L0A_EVIDENCE": "/home/ts/.cache/agent-scratch/sidebar-bulk-start-native-waits-20261006/f/start-connections",
+      "TMPDIR": "/home/ts/.cache/agent-scratch/sidebar-bulk-start-native-waits-20261006/tmp",
+      "TOAD_START_FAILURE_GDB": "1",
+      "TOAD_NATIVE_WAIT_OUTPUT": "/home/ts/.cache/agent-scratch/sidebar-bulk-start-native-waits-20261006/native",
+      "TOAD_NATIVE_WAIT_LIBC_SHA256": "02c8c3d06180beee9c7d0392aa85736c7d19f274a81e7f8f0b3d9e28e0641524"
+    }
+  },
+  "control_source_proposals": {
+    "/home/ts/wt/toad-sidebar-context-pointer-20261006/tools/performance/capture_state.py": {
+      "before_sha256": "7f3e7cb4c00146c019714777f558cd8e9b054add06eb8cf95f6f152350c335ac",
+      "proposed_sha256": "b855622114236ef14461826a0f1b79cdff2182332e177e29c9e353ae5e3c5884"
+    },
+    "/home/ts/wt/toad-sidebar-context-pointer-20261006/tests/declared_target_actions_installed_pilot.py": {
+      "before_sha256": "9b1987ef3faaaad29b2ae5d315ccd0c6a84534d66fcd754b9222d63154252e00",
+      "proposed_sha256": "64cf0a3736e7a94909e51901e32f47ff749df3f312a63d15afaaa9b604aa8cfd"
+    }
+  },
+  "controller_source_proposal": {
+    "path": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/sidebar-live-candidate-20261006/acceptance03/run_selected_targets.py",
+    "before_sha256": "8b70fc2a03523c16cc24ab0cc1490813db1b7374cd6621cc66c18dea782c3f02",
+    "proposed_sha256": "e9865d57f00a7bbe94cb15ea5bb46c1d691503503476aa69c962225b28dbfe0f"
+  },
+  "custody": "Original BoundedRun owns GDB. At starti, original ProcessIdentity + recorder ProcessOwner.transfer acquire the inferior group before release; GDB waits its original inferior, controller waits GDB and retires the transferred group.",
+  "phase": "same installed source and original private fixture; freshly authored Start input; no accepted selection repeat, provider prompt, public operation, rebuild or guessed SQLite correction",
+  "necessary_dependency": "Parent adopts the two capture changes and controller patch on its existing workflow branch, binds actual source paths/hash and a fresh reviewed purpose; no peer writes performed",
+  "limits": "Missing SQLite DWARF prevents named sqlite3 fields/arguments. Only a verified glibc pthread_mutex frame plus actual FUTEX_WAIT syscall and matched libc allows an owner_tid claim. Otherwise retain raw stacks/registers and UNKNOWN, no inferred holder.",
+  "host": {
+    "yama_ptrace_scope": 1,
+    "gdb": "17.2",
+    "glibc": "2.44+r50+g1848099f063e-1",
+    "libc_build_id": "d320029ad1a23be2f4bce117fd321cbd23a2014b",
+    "libc_sha256": "02c8c3d06180beee9c7d0392aa85736c7d19f274a81e7f8f0b3d9e28e0641524"
+  },
+  "new_outputs": [
+    "debugger-startup.log",
+    "debugger-inferior-handle.json",
+    "native/native-waits.json",
+    "native/inferior-terminal.json"
+  ],
+  "recovery": "Original bound cleanup, floor restoration and whole return; no repeated install or qualification inferred from debugger observation",
+  "files": {
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/bulk-start-native-waits-20261006/existing-capture.patch": {
+      "sha256": "5e5347f999168355db09b241e4f985180941a9ec18f16bb5840ca3bc0047bcd7",
+      "bytes": 1441
+    },
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/bulk-start-native-waits-20261006/native-waits.gdb": {
+      "sha256": "1c846c1966026860b54589ad30dee6fe813c0e56c0e4c02160e36b481129885c",
+      "bytes": 6228
+    },
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/bulk-start-native-waits-20261006/README.md": {
+      "sha256": "a966500110f3f3cd5e67901a2d2b6c788cb493e29477f2507e5a8b85d93ec799",
+      "bytes": 2841
+    },
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/bulk-start-native-waits-20261006/existing-controller.patch": {
+      "sha256": "8860b3135d980761ba44c4453d875cbd1ca2a5213702dab15c547a7f3d392b52",
+      "bytes": 3768
+    },
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/bulk-start-native-waits-20261006/capture-source-binding.json": {
+      "sha256": "788d87e280338baeec14913f3aac917af8114697f29dfe1c4537f01488ad8b7a",
+      "bytes": 569
+    },
+    "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/bulk-start-native-waits-20261006/controller-source-binding.json": {
+      "sha256": "630d82fcc21f644c015614f8df7b6e00f7a033f74934fd0c28063b6accebd5c3",
+      "bytes": 324
+    }
+  },
+  "retained_control_hashes_before_adoption": {
+    "/home/ts/wt/toad-sidebar-context-pointer-20261006/tests/declared_target_actions_installed_pilot.py": "9b1987ef3faaaad29b2ae5d315ccd0c6a84534d66fcd754b9222d63154252e00",
+    "/home/ts/wt/toad-sidebar-context-pointer-20261006/tests/l0a_native_installed_pilot.py": "af0fb2d285ce9dddf728650809ab206b706000ed1d003e520d382b483b04e61a",
+    "/home/ts/wt/toad-sidebar-context-pointer-20261006/tests/viewport_recent_tabs_pilot.py": "b6141aeb7024439d39c57802bf3f0d10be394e17e5e6f0610479843ad3a19f57",
+    "/home/ts/wt/toad-sidebar-context-pointer-20261006/tests/native_session_retention_pilot.py": "b2ef51a97609077948f4e9ac0c4820aa4e0ae04bdf2a12e8e5c7544afc33e85c",
+    "/home/ts/wt/toad-sidebar-context-pointer-20261006/tests/thread_navigation_installed_journey.py": "a23fbcb8578986949712cacc8d7b1af01b97808de225c9dbdf970177c4a6f4d2",
+    "/home/ts/wt/toad-sidebar-context-pointer-20261006/tests/saved_state_user_journey_pilot.py": "c9e8e3b32c0285653112a37ea6596a809d601e0c779a3dabd35f6b2f0b4c971e",
+    "/home/ts/wt/toad-sidebar-context-pointer-20261006/tests/manual_live_turn_status.py": "f333da956fcc9e367f993853aa3daabbaea8d4278feed24eaa644d51c74e48fa",
+    "/home/ts/wt/toad-sidebar-context-pointer-20261006/tests/runtime_fixture.py": "c34f37f450a02f09d344352466431744892a0c788953212da5ac434d912e3315",
+    "/home/ts/wt/toad-sidebar-context-pointer-20261006/tools/performance/capture_state.py": "7f3e7cb4c00146c019714777f558cd8e9b054add06eb8cf95f6f152350c335ac"
+  },
+  "grant": null,
+  "lifecycle": null,
+  "native_READ": null,
+  "native_EXEC": null
+}

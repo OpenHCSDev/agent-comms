@@ -1,0 +1,10 @@
+{
+  "/home/ts/wt/toad-sidebar-context-pointer-20261006/tools/performance/capture_state.py": {
+    "before_sha256": "7f3e7cb4c00146c019714777f558cd8e9b054add06eb8cf95f6f152350c335ac",
+    "proposed_sha256": "b855622114236ef14461826a0f1b79cdff2182332e177e29c9e353ae5e3c5884"
+  },
+  "/home/ts/wt/toad-sidebar-context-pointer-20261006/tests/declared_target_actions_installed_pilot.py": {
+    "before_sha256": "9b1987ef3faaaad29b2ae5d315ccd0c6a84534d66fcd754b9222d63154252e00",
+    "proposed_sha256": "64cf0a3736e7a94909e51901e32f47ff749df3f312a63d15afaaa9b604aa8cfd"
+  }
+}

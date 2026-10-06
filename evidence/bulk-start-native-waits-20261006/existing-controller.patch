@@ -1,0 +1,61 @@
+--- a/run_selected_targets.py
++++ b/run_selected_targets.py
+@@ -35,6 +35,8 @@
+     assert hashlib.sha256(Path(control["path"]).read_bytes()).hexdigest() == control["sha256"]
+     for path, expected in g["control_hashes"].items():
+         assert hashlib.sha256(Path(path).read_bytes()).hexdigest() == expected
++    application_command = command
++    command = (*g["diagnostic_launcher_argv_prefix"], *application_command)
+     out = Path(__file__).parent
+     binding_proofs = json.loads((out / "App-proof-binding.json").read_bytes())
+     for name, expected in binding_proofs.items():
+@@ -48,6 +50,9 @@
+     environment.update(g["environment"]["set"])
+     from agent_comms.child_process import BoundedRun, ProcessIdentity
+     from agent_comms.field_codec import FieldCodec
++    import runpy
++    ProcessOwner = runpy.run_path(g["diagnostic_process_owner_source"])["ProcessOwner"]
++    diagnostic_owner = ProcessOwner()
+     controller = FieldCodec.encode(ProcessIdentity.capture(os.getpid()))
+     binding = {"issued": str(grant), "issued_sha256": hashlib.sha256(raw).hexdigest(),
+                "lifecycle": str(lifecycle), "lifecycle_sha256_at_launch": hashlib.sha256(lr).hexdigest(),
+@@ -71,6 +76,25 @@
+             with (out / "control-handle.json").open("x") as stream:
+                 json.dump(handle, stream, indent=2)
+             print("CONTROL_HANDLE", json.dumps(handle), flush=True)
++            # GDB stops before application code. Transfer its separate
++            # inferior group through the recorder's original process owner.
++            with (out / "debugger-startup.log").open("xb") as startup:
++                while True:
++                    line = await child.stdout.readline()
++                    startup.write(line)
++                    startup.flush()
++                    if not line:
++                        raise RuntimeError("Debugger exited before inferior custody")
++                    if line.startswith(b"GDB_INFERIOR "):
++                        publication = json.loads(line[len(b"GDB_INFERIOR "):])
++                        break
++            assert publication["parent_pid"] == child.identity.pid
++            inferior = ProcessIdentity.capture(publication["pid"])
++            diagnostic_owner.transfer(inferior.pid, inferior.start_time)
++            with (out / "debugger-inferior-handle.json").open("x") as stream:
++                json.dump(FieldCodec.encode(inferior), stream, indent=2)
++            child.process.stdin.write(b"G\n")
++            await child.process.stdin.drain()
+             tasks = [asyncio.create_task(drain(child.stdout, out / "control.stdout.log")),
+                      asyncio.create_task(drain(child.stderr, out / "control.stderr.log"))]
+             outcome = await child.wait()
+@@ -79,11 +103,12 @@
+     except BaseException as failure:
+         error = repr(failure)
+     finally:
++        diagnostic_cleanup = diagnostic_owner.cleanup()
+         drained = await asyncio.gather(*tasks, return_exceptions=True) if tasks else []
+         drain_errors = [repr(item) for item in drained if isinstance(item, BaseException)]
+         terminal = {"elapsed": time.monotonic() - start,
+                     "returncode": None if child is None else child.returncode,
+-                    "timed_out": timed_out, "error": error, "drain_errors": drain_errors,
++                    "timed_out": timed_out, "error": error, "drain_errors": drain_errors, "diagnostic_cleanup": diagnostic_cleanup,
+                     "outcome": None if outcome is None else FieldCodec.encode(outcome),
+                     "child_retired": None if child is None else child.retired,
+                     "owned_group_members": [] if child is None else FieldCodec.encode(child.platform.group_members(child.identity)),
