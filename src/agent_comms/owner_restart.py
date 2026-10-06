@@ -17,6 +17,7 @@ from .errors import RelationViolationError
 from .owner_launch import RestartEnvironment, RetainedOwnerLaunch
 from .restart_refusals import OwnerBusyRefusal, OwnerSelectionChangedRefusal
 from .owner_lifecycle import OwnerRestartSelection
+from .thread_identity import AdmissionIdentity, OwnerIdentity
 
 if TYPE_CHECKING:
     from .owner_cutover import OwnerCutover
@@ -56,17 +57,37 @@ class OwnerRestartRequest:
 class RetiredOwnerLaunch:
     """Original stopped registry observation plus acquired launch resources."""
 
-    selection: OwnerRestartSelection
+    owner: OwnerIdentity
+    admission: AdmissionIdentity
     launch: RetainedOwnerLaunch
+
+    @classmethod
+    def capture_retired(cls, snapshot: RegistrySnapshot, original: Thread,
+                        launch: RetainedOwnerLaunch) -> RetiredOwnerLaunch:
+        """Acquire the original post-retirement allocations, never live admission."""
+        original.require_local_process(launch.process)
+        owner = cls(snapshot.owner_identity(original.name),
+                    snapshot.admission_identity(original.name), launch)
+        if owner.owner.incarnation != original.incarnation:
+            raise RelationViolationError('Retired owner incarnation changed')
+        owner.require_current(snapshot)
+        return owner
 
     @property
     def name(self) -> str:
-        return self.selection.name
+        return self.owner.incarnation.name
 
     def require_current(self, snapshot: RegistrySnapshot) -> Thread:
-        thread = self.selection.require_retired(snapshot)
-        if self.launch.process != self.selection.process:
-            raise RelationViolationError('Retired launch names another process')
+        if snapshot.owner_identity(self.name) != self.owner:
+            raise RelationViolationError('Retired owner incarnation/generation changed')
+        if snapshot.admission_identity(self.name) != self.admission:
+            raise RelationViolationError('Retired owner admission changed')
+        thread = snapshot.threads[self.name]
+        thread.require_local_process(self.launch.process)
+        thread.require_idle()
+        snapshot.statuses[self.name].require_stopped()
+        if thread.process_alive:
+            raise RelationViolationError('Original owner survived retirement')
         return thread
 
 
@@ -220,9 +241,7 @@ class FencedOwnerBatch:
                 with self.lifecycle.restart_wire():
                     self.lifecycle._require_same_stop_owner(thread, generation)
                     snapshot = self.lifecycle.registry.snapshot()
-                    owner = RetiredOwnerLaunch(
-                        OwnerRestartSelection.capture_retired(snapshot, thread), launch,
-                    )
+                    owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
                 progress = replace(progress, retired=progress.retired + (owner,))
             wire = self.custody.enter_context(self.lifecycle.restart_wire())
             snapshot = self.lifecycle.registry.snapshot()

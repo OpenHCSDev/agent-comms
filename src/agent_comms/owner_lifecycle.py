@@ -60,30 +60,6 @@ class OwnerRestartSelection:
             raise OwnerGenerationChangedRefusal()
         return snapshot.require_active(self.name)
 
-    @classmethod
-    def capture_retired(cls, snapshot: RegistrySnapshot, original: Thread):
-        """Capture the post-fence generations without borrowing live admission."""
-        selection = cls(snapshot.owner_identity(original.name), original.require_process(),
-                        snapshot.admission_generations[original.name])
-        if selection.identity.incarnation != original.incarnation:
-            raise OwnerSelectionChangedRefusal()
-        selection.require_retired(snapshot)
-        return selection
-
-    def require_retired(self, snapshot: RegistrySnapshot) -> Thread:
-        """The complete stopped witness remains authority until replacement launch."""
-        if snapshot.owner_identity(self.name) != self.identity:
-            raise OwnerSelectionChangedRefusal()
-        if snapshot.admission_generations[self.name] != self.admission_generation:
-            raise OwnerGenerationChangedRefusal()
-        thread = snapshot.threads[self.name]
-        thread.require_local_process(self.process)
-        thread.require_idle()
-        snapshot.statuses[self.name].require_stopped()
-        if thread.process_alive:
-            raise RelationViolationError("Original owner survived retirement")
-        return thread
-
 
 @dataclass(frozen=True, slots=True)
 class OwnerRestartResult:

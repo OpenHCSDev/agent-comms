@@ -1,6 +1,11 @@
 # Original owner admission and launch implementation proposal
 
-Status: source-method proposal, not an implemented or installed central batch.
+Historical initial method proposal below is preserved. The implemented
+successor is documented in CURRENT3931-PHASE-TRANSPORT-RELATION.md: the original
+owner/admission/launch handoff is canonical; stopped capture/validation moved
+from live selection to RetiredOwnerLaunch. P now declares AdmissionIdentity from
+its original allocations. These supersede the initial selection-wire choice
+below. No installed central batch is claimed.
 Einstein owns this closure. The existing stopped-routing tuple b52ed4da/145cd9b5
 and its selected b973/d08 source and c44/0fb wheels remain unchanged and unissued.
 This proposal is on a separate working branch based on 8877cab7; it does not
