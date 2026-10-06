@@ -1,0 +1,24 @@
+--- original mlh01 determining control
++++ repaired loaded control
+@@ -358,7 +358,8 @@
+                         await until(pilot, lambda: expected in conversation_paint(app.screen))
+                         await settled(pilot, loaded.conversation)
+                         assert loaded.conversation.window.histories
+-                        assert all(history.pages and history.displayed_cursor is not None
++                        assert loaded.conversation.transcript.displayed_cursor is not None
++                        assert all(history.pages
+                                    for history in loaded.conversation.window.histories)
+                         loaded_modes.add(details.mode_name)
+                     else:
+@@ -418,9 +419,9 @@
+                                 assert editor.text == witness.text
+                                 assert view.window.scroll_y == witness.reader_y
+                                 assert view.window.follows_tail is witness.follows_tail
++                                assert view.transcript.displayed_cursor is not None
+                                 assert view.window.histories and all(
+-                                    history.pages and history.displayed_cursor is not None
+-                                    for history in view.window.histories)
++                                    history.pages for history in view.window.histories)
+                             read_delta = await witness.page_reads() - reads_before
+                             painted[-1]["raw_page_read_delta"] = read_delta
+                             if not loaded_histories or retained:
