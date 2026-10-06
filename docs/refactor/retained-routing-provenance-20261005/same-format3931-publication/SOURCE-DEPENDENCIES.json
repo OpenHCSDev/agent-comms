@@ -1,0 +1,152 @@
+{
+  "original_source": "3931f16feb8bcb2dbcc3041446ca342dea665024",
+  "selected_target": "ddcdc422c7fe01453edb2469bcfa8303d771db67",
+  "operative_owner_and_helper_paths": [
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "selected_sha256": "f0de7d13f02e73a2cfd9ecc9781e450d6dba6f530d822ef4d7ac3d69ff7d6b0d",
+      "owned_worktree_byte_equal": true,
+      "source3931_sha256": "472288254c4b3b5cba904254432f31efac7d47c421200684692094e100d56bf8",
+      "source3931_whole_file_equal": false
+    },
+    {
+      "path": "src/agent_comms/owner_cutover.py",
+      "selected_sha256": "690c931f0bd6b892b3b9001997d91a456923b07465b959047997fa8f48a8f758",
+      "owned_worktree_byte_equal": true,
+      "source3931_sha256": "690c931f0bd6b892b3b9001997d91a456923b07465b959047997fa8f48a8f758",
+      "source3931_whole_file_equal": true
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "selected_sha256": "1d5c14d2b68b895c347a642465e3a0deb2a8a497015a571b809d3d06bf49ef20",
+      "owned_worktree_byte_equal": true,
+      "source3931_sha256": "0f5480eba79f7486f64216c06a421f8d4edee5b05895a8a3c9c6290cada22919",
+      "source3931_whole_file_equal": false
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "selected_sha256": "4c547681bb1f645571aaf1986c90dd6690d5de5cc4368a2f315b280dd0641b7a",
+      "owned_worktree_byte_equal": true,
+      "source3931_sha256": "4c547681bb1f645571aaf1986c90dd6690d5de5cc4368a2f315b280dd0641b7a",
+      "source3931_whole_file_equal": true
+    },
+    {
+      "path": "src/agent_comms/thread_identity.py",
+      "selected_sha256": "e0bf0f6696640417876de1c66459e2571f74ae7b1f200e68bd5c88911fa200b3",
+      "owned_worktree_byte_equal": true,
+      "source3931_sha256": "e0bf0f6696640417876de1c66459e2571f74ae7b1f200e68bd5c88911fa200b3",
+      "source3931_whole_file_equal": true
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "selected_sha256": "897f5940e8839db9dbd0d92601408cf65b28ba97def00697bcb1769f56525ae7",
+      "owned_worktree_byte_equal": true,
+      "source3931_sha256": "897f5940e8839db9dbd0d92601408cf65b28ba97def00697bcb1769f56525ae7",
+      "source3931_whole_file_equal": true
+    },
+    {
+      "path": "src/agent_comms/field_codec.py",
+      "selected_sha256": "fee42c444039711ffc971c93b620235d5387c9e6805c18a0602429f44a6124fc",
+      "owned_worktree_byte_equal": true,
+      "source3931_sha256": "766db776e16b92c934cadd3079201bb2e812f5f23e8dd8e18a91402febe63699",
+      "source3931_whole_file_equal": false
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "selected_sha256": "5394380e2095f12eb0d25e226c57f377087264e4b61187cc016801d3ec7c7ff5",
+      "owned_worktree_byte_equal": true,
+      "source3931_sha256": "5394380e2095f12eb0d25e226c57f377087264e4b61187cc016801d3ec7c7ff5",
+      "source3931_whole_file_equal": true
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "selected_sha256": "025babf120563228d99920617d34f2e4142307d38e049405d4af49b2ecd7a960",
+      "owned_worktree_byte_equal": true,
+      "source3931_sha256": "025babf120563228d99920617d34f2e4142307d38e049405d4af49b2ecd7a960",
+      "source3931_whole_file_equal": true
+    },
+    {
+      "path": "tools/cutover/execute_retained_summary_foundation.py",
+      "selected_sha256": "49c9a05298b68ccfd91dc75c9de8980e2a0a72e6b670e45d581ccac3ae6e3a19",
+      "owned_worktree_byte_equal": true,
+      "source3931_sha256": "49c9a05298b68ccfd91dc75c9de8980e2a0a72e6b670e45d581ccac3ae6e3a19",
+      "source3931_whole_file_equal": true
+    },
+    {
+      "path": "tools/cutover/cutover_child.py",
+      "selected_sha256": "69a63c30a27ce6971d31e9669ff8c86b06579612c796f044126f629917e51966",
+      "owned_worktree_byte_equal": true,
+      "source3931_sha256": "26b307ce045a4642a8dc2a9c6fef9b94900726250bb663413f256abda11fa1e3",
+      "source3931_whole_file_equal": false
+    },
+    {
+      "path": "tools/cutover/restore_stopped_owners.py",
+      "selected_sha256": "bb398359fe7593ac22ed2d8bde4520099a5fa83f7bab82616a1c85b61fde8787",
+      "owned_worktree_byte_equal": true,
+      "source3931_sha256": "7336914c1141c60f7769c60f45dae2279c003f4a55a1c43bb4ed4a95199f2f97",
+      "source3931_whole_file_equal": false
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "selected_sha256": "77841672b6d9d99e3cb4c724706ffdad7eefd604aab583743f2e4b341156224c",
+      "owned_worktree_byte_equal": true,
+      "source3931_sha256": "77841672b6d9d99e3cb4c724706ffdad7eefd604aab583743f2e4b341156224c",
+      "source3931_whole_file_equal": true
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "selected_sha256": "08d5b673910f96634ad017eb7e8224cb440e5b5cfea7c07d597b3ddf0f209c2b",
+      "owned_worktree_byte_equal": true,
+      "source3931_sha256": "08d5b673910f96634ad017eb7e8224cb440e5b5cfea7c07d597b3ddf0f209c2b",
+      "source3931_whole_file_equal": true
+    },
+    {
+      "path": "tools/cutover/checkpoint_schema.py",
+      "selected_sha256": "0d32c74d741572f9f5a242eb34750f7c3353ee88a480957d59380afb1147adee",
+      "owned_worktree_byte_equal": true,
+      "source3931_sha256": "0d32c74d741572f9f5a242eb34750f7c3353ee88a480957d59380afb1147adee",
+      "source3931_whole_file_equal": true
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "selected_sha256": "86d28cc9f9c74c9156ee258d061168a17003ab94f6c9ba1fdaac2dd01eb8dd12",
+      "owned_worktree_byte_equal": true,
+      "source3931_sha256": "86d28cc9f9c74c9156ee258d061168a17003ab94f6c9ba1fdaac2dd01eb8dd12",
+      "source3931_whole_file_equal": true
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "selected_sha256": "27516db16a4bec25bb37fb394e1c7bc04c567eb0a780fb1e0ed62235ca0ed9ff",
+      "owned_worktree_byte_equal": true,
+      "source3931_sha256": "27516db16a4bec25bb37fb394e1c7bc04c567eb0a780fb1e0ed62235ca0ed9ff",
+      "source3931_whole_file_equal": true
+    }
+  ],
+  "native_declarations": [
+    {
+      "source_head": "3931f16feb8bcb2dbcc3041446ca342dea665024",
+      "forced_git_input": "stack/pi-native.sha256",
+      "wheel_member": "agent_comms/_native/pi-native.sha256",
+      "manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+      "tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d"
+    },
+    {
+      "source_head": "ddcdc422c7fe01453edb2469bcfa8303d771db67",
+      "forced_git_input": "stack/pi-native.sha256",
+      "wheel_member": "agent_comms/_native/pi-native.sha256",
+      "manifest": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+      "tree": "63f18710cb9329be6ade27bac3b4dd822e2b36f013756fa8e6717b8073a4592c"
+    }
+  ],
+  "handoff_declarations": {
+    "path": "/home/ts/wt/comms-original-owner-admission-20261006/docs/refactor/retained-routing-provenance-20261005/CURRENT3931-HANDOFF-DECLARATION-RELATION.json",
+    "sha256": "01d157fc4b23a2d34f3b2609bcfea95ee039eaac07a76937f080b198505e7d5d",
+    "bytes": 12480
+  },
+  "existing_source_controls": {
+    "path": "/home/ts/wt/comms-original-owner-admission-20261006/docs/refactor/retained-routing-provenance-20261005/3931-handoff-source-controls/results.json",
+    "sha256": "4e7ce091d289b2c2403aafe5c319b1864de6962f45f6742a110e4c53510d67bb",
+    "bytes": 1644
+  },
+  "scope": "Source evidence; original3931 decoder/physicalOFD/fence/launch/recovery UNRUN."
+}

@@ -5,6 +5,10 @@ standing owner decisions in `docs/DECISIONS.md`. Follow the latest NRA and
 refactor-audit skills. Current owner instructions supersede old plan holds.
 Keep the short reminders at the top of that prompt in context after compaction.
 Use ordinary language: what changed, what still fails, what happens next.
+Keep hashes, process inventories and audit detail in existing evidence files.
+Messages carry useful results, necessary handoffs or concrete blockers; batch
+routine custody records inside the existing operation instead of repeated
+receipt acknowledgments. Tristan should not have to decode compressed jargon.
 
 - Judge existing and newly written code, including your own, by semantic ownership and correct-maintenance. Treat surrounding code and previous refactors as claims to examine, not evidence of correctness. Trace competing decisions and duplicated behavior across the whole family; move the work into the existing owning classes through shared implementation, inheritance and composable capabilities, then delete the replaced paths. A local test pass or familiar code style does not justify retaining a flawed structure. Apply this scrutiny continuously while implementing; it is not a separate audit project or approval gate.
 - Carry the source-first ownership method into every delegated task and after compaction through these existing instructions. Reason from source before implementation; tests and the actual configured saved-session/application path confirm the coherent change last. Each check, review and handoff needs a concrete delivery or risk reason; "industry best practice" alone justifies nothing. Propagate the instruction directly without acknowledgement chatter or another reminder mechanism.
