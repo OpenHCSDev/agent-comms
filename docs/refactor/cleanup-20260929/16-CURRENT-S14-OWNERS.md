@@ -139,7 +139,11 @@ retained source/wheel/controller and original150s BoundRun. Bohr issued fresh
 single Toad61bf+Text71bc47 stage and own-root preparation are released; Core3fe
 is unchanged. Heis personally read the actual issue and owns that stage. Its actual lifecycle
 5eb0986c records stage1 consumedPASS and disabled, matching7a READ bound; proof
-remains held pending the exact materialized helper/argv/output binding.
+was released at54f67442 after its exact materialized binding. The sole proof
+terminal1ee75449 passed3.924s with its original child joined and absent. Parent
+matched all21 final handoff references210a0ba1, source proof and FullTrust
+receipts. Mounted warm behavior remains UNRUN pending separate final EXEC/App
+release; no terminal0-to-behavior inference is made.
 New matching7a READ, exclusive proof bindings, actual proof/DTO/Trust and separate
 EXEC/App release remain required in this same purpose. No public decoder,
 configured fork, loaded cohort, accepted07/466 replay or new build is included.
@@ -202,7 +206,18 @@ declare_thread(cwd,0), while the amended shared method unconditionally calls
 OwnerLifecycle.acquire_thread, which rejects0. Mendel received this exact
 counterexample to preserve the existing attachment's declaration-only semantics
 through lifecycle capabilities; no participant injection or new native run is
-needed to establish that source defect.
+needed to establish that source defect. Mendel's corrected041026c3
+now shares declaration and membership publication, then calls the existing
+acquire_declared_thread hook: owning lifecycle acquires actual currentPID;
+attached lifecycle preserves the PID0 declaration for original load admission.
+Both new_session callers and the saved-owner fixture migrated. Actual-storage
+owned/attached controls check committed membership, current process or PID0,
+active status and no attached binding; the private delivery control's
+post-new_session participant injection is deleted. Parent reviewed these exact
+source/test bodies and cleared one focused three-control source batch, then
+the one necessary normal cached Core wheel with unchanged4b native commitment
+once source is frozen and no matching wheel exists. No native assembly, new
+runtime purpose, old NotSent replay or private authority inheritance follows.
 
 Parent reviewed final scoped Ready68584b47b5a, matched all17 named final
 references and verified no source/build change from frozen5c689. Exact685 was
