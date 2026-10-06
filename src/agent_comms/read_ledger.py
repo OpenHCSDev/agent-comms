@@ -124,7 +124,7 @@ class ReadLedger(Sealed, LockedStore[ReadDocument]):
         self.update(advance)
 
     def seen_sequences(
-        self, viewer: str, snapshot: RegistrySnapshot, *, document: ReadDocument | None = None
+        self, viewer: str, snapshot: RegistryProvenance, *, document: ReadDocument | None = None
     ) -> frozenset[int]:
         viewer = snapshot.canonical_name(viewer)
         thread = snapshot.threads[viewer]
@@ -146,12 +146,31 @@ class ReadLedger(Sealed, LockedStore[ReadDocument]):
         Processing, assignment acceptance and a reply cannot grant this fact.
         A reused name with a different creation identity cannot inherit it.
         """
+        return self._displayed_recipient(
+            message, recipient, snapshot,
+            (thread for thread in snapshot.threads.values() if self.human(thread.role)),
+            document=document,
+        )
+
+    def historical_displayed_recipient(self, message, recipient, snapshot, *, document=None):
+        """Read this archive's human paint ledger, never an original CLI ACK.
+
+        HistoryArchive does not copy the source's read ledger. Its new ledger
+        is written by HistoricalDisplay.acknowledge after verifying the human
+        viewer's incarnation. A same-name destination reader cannot attest a
+        different frozen recipient or replace the recorded namespace.
+        """
+        return self._displayed_recipient(
+            message, recipient, snapshot, snapshot.threads.values(), document=document
+        )
+
+    def _displayed_recipient(self, message, recipient, snapshot, threads, *, document):
         from .bus_publication import stable_thread_lookup
 
-        for thread in snapshot.threads.values():
+        for thread in threads:
             if (
-                self.human(thread.role)
-                and stable_thread_lookup(thread.created_at) == recipient.recipient_lookup
+                stable_thread_lookup(thread.created_at) == recipient.recipient_lookup
+                and snapshot.canonical_name(recipient.canonical_thread) == thread.name
                 and message.seq in self.seen_sequences(thread.name, snapshot, document=document)
             ):
                 return (thread.incarnation,)

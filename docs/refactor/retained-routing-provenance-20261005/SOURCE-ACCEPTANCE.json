@@ -1,0 +1,311 @@
+{
+  "source_base_core": "7244e985beaa1d99e4af23038937ff14c8a9eb32",
+  "source_base_toad": "15b96ce242bd928a8f1de3dfc9773cb353197690",
+  "scope": "development source controls; no installed/runtime/native qualification",
+  "distinct_selected_controls_with_pass_result": 32,
+  "one_shot_green_full_batch": false,
+  "latest_failed_controls_resolved": true,
+  "initial_collection_failure_preserved": true,
+  "batches": [
+    {
+      "batch": 1,
+      "exit_code": 2,
+      "elapsed_seconds": 2.663006959017366,
+      "argv": [
+        "-o",
+        "addopts=",
+        "--noconftest",
+        "--basetemp",
+        "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch01/scratch",
+        "-q",
+        "--tb=short",
+        "/home/ts/wt/comms-field-codec-closure-20260928/tests/test_historical_views.py",
+        "/home/ts/wt/comms-field-codec-closure-20260928/tests/test_transcript_read_identity.py",
+        "/home/ts/wt/comms-field-codec-closure-20260928/tests/test_transcript_pages.py",
+        "/home/ts/wt/comms-field-codec-closure-20260928/tests/test_acp_extension.py",
+        "/home/ts/wt/toad-regression-widget-cost-20261001/tests/test_recorded_transcript_reader.py"
+      ],
+      "python": "/usr/bin/python",
+      "core_source": "/home/ts/wt/comms-field-codec-closure-20260928/src",
+      "toad_source": "/home/ts/wt/toad-regression-widget-cost-20261001/src",
+      "scope": "authored source controls only; no installed/native/provider qualification",
+      "raw": [
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch01/terminal.json",
+          "sha256": "86063b2af4c22f29fb1f96f56b97bd4a077e4dbc6b3e4b79c2b4017e990fd843",
+          "bytes": 999
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch01/stdout.log",
+          "sha256": "b9e81ac9267d216960980404d03eee0c89c4648870df1da6800bec1fe7e72f39",
+          "bytes": 1544
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch01/stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "batch": 2,
+      "exit_code": 1,
+      "elapsed_seconds": 36.08453257603105,
+      "argv": [
+        "-o",
+        "addopts=",
+        "--noconftest",
+        "--basetemp",
+        "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch02/scratch",
+        "-q",
+        "--tb=short",
+        "/home/ts/wt/comms-field-codec-closure-20260928/tests/test_historical_views.py",
+        "/home/ts/wt/comms-field-codec-closure-20260928/tests/test_transcript_read_identity.py",
+        "/home/ts/wt/comms-field-codec-closure-20260928/tests/test_transcript_pages.py",
+        "/home/ts/wt/comms-field-codec-closure-20260928/tests/test_acp_extension.py",
+        "/home/ts/wt/toad-regression-widget-cost-20261001/tests/test_recorded_transcript_reader.py"
+      ],
+      "python": "/usr/bin/python",
+      "core_source": "/home/ts/wt/comms-field-codec-closure-20260928/src",
+      "toad_source": "/home/ts/wt/toad-regression-widget-cost-20261001/src",
+      "acp_dependency": "/home/ts/.cache/uv/archive-v0/mNatOBGB9uuf-bXB",
+      "scope": "authored source controls only; no installed/native/provider qualification",
+      "raw": [
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch02/terminal.json",
+          "sha256": "7192355132ef98a7f7333625ccd0f6719c104e28b5bdb27515820a7133467485",
+          "bytes": 1069
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch02/stdout.log",
+          "sha256": "9d41f9602f4da0ad200d6a7fc39195dc2db6f1a17a5ee2681a563c328be53287",
+          "bytes": 7934
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch02/stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "batch": 3,
+      "exit_code": 1,
+      "elapsed_seconds": 30.610679820063524,
+      "argv": [
+        "-o",
+        "addopts=",
+        "--noconftest",
+        "--basetemp",
+        "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch03/scratch",
+        "-q",
+        "--tb=short",
+        "/home/ts/wt/comms-field-codec-closure-20260928/tests/test_historical_views.py",
+        "/home/ts/wt/comms-field-codec-closure-20260928/tests/test_transcript_read_identity.py",
+        "/home/ts/wt/comms-field-codec-closure-20260928/tests/test_transcript_pages.py",
+        "/home/ts/wt/comms-field-codec-closure-20260928/tests/test_acp_extension.py",
+        "/home/ts/wt/toad-regression-widget-cost-20261001/tests/test_recorded_transcript_reader.py"
+      ],
+      "python": "/usr/bin/python",
+      "core_source": "/home/ts/wt/comms-field-codec-closure-20260928/src",
+      "toad_source": "/home/ts/wt/toad-regression-widget-cost-20261001/src",
+      "acp_dependency": "/home/ts/.cache/uv/archive-v0/mNatOBGB9uuf-bXB",
+      "original_fixture_plugin": "/home/ts/wt/comms-field-codec-closure-20260928/tests/conftest.py",
+      "scope": "authored source controls only; no installed/native/provider qualification",
+      "raw": [
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch03/terminal.json",
+          "sha256": "a23d53c0e9cfc4a86f4e8b1c0f5f84bfce9db3c28f01c18da3f4028d34ab55be",
+          "bytes": 1167
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch03/stdout.log",
+          "sha256": "a9061d7755c08f16c3f8e6f06cfab30054a1ee18abfe3415fa0a56cda0732044",
+          "bytes": 5477
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch03/stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "batch": 4,
+      "exit_code": 1,
+      "elapsed_seconds": 2.926396969007328,
+      "argv": [
+        "-o",
+        "addopts=",
+        "--noconftest",
+        "--basetemp",
+        "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch04/scratch",
+        "-q",
+        "--tb=short",
+        "tests/test_historical_views.py::test_recorded_transcript_witness_roundtrip_keeps_original_namespace",
+        "tests/test_historical_views.py::test_original_recorded_projection_is_strict_and_attaches_before_destination_decode",
+        "tests/test_acp_extension.py::test_declared_family_roundtrip_and_strict_boundary",
+        "tests/test_field_codec.py::test_golden_nested_family_record_round_trip"
+      ],
+      "python": "/usr/bin/python",
+      "original_fixture_plugin": "/home/ts/wt/comms-field-codec-closure-20260928/tests/conftest.py",
+      "scope": "three concrete failure resolutions and affected string-map declaration; no broader replay",
+      "raw": [
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch04/terminal.json",
+          "sha256": "66381c60646b146db47b02f5beb9cd7f720ad564d999276b9c1ad8338603cc47",
+          "bytes": 920
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch04/stdout.log",
+          "sha256": "a611c02d7254f2bbef2f3b2f06e1ee8e16ce3ae21cacb9d51fdc96a9f3348003",
+          "bytes": 3462
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch04/stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "batch": 5,
+      "exit_code": 1,
+      "elapsed_seconds": 1.9439137380104512,
+      "argv": [
+        "-o",
+        "addopts=",
+        "--noconftest",
+        "--basetemp",
+        "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch05/scratch",
+        "-q",
+        "--tb=short",
+        "tests/test_historical_views.py::test_original_recorded_projection_is_strict_and_attaches_before_destination_decode",
+        "tests/test_acp_extension.py::test_declared_family_roundtrip_and_strict_boundary"
+      ],
+      "scope": "two remaining source controls only",
+      "raw": [
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch05/terminal.json",
+          "sha256": "d9953ac11257f9d1de5a76ad2b6bd6f9e9eb12f0f4a580600cf47d1815174ea6",
+          "bytes": 553
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch05/stdout.log",
+          "sha256": "024582c407ee924b9cecc12651bd62d017314e2411bd87aa71cff82ace2fe920",
+          "bytes": 2673
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch05/stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "batch": 6,
+      "exit_code": 0,
+      "elapsed_seconds": 1.8200690370285884,
+      "argv": [
+        "-o",
+        "addopts=",
+        "--noconftest",
+        "--basetemp",
+        "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch06/scratch",
+        "-q",
+        "--tb=short",
+        "tests/test_acp_extension.py::test_declared_family_roundtrip_and_strict_boundary"
+      ],
+      "scope": "remaining typed ACP sample fixture closure only",
+      "raw": [
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch06/terminal.json",
+          "sha256": "a066f59f13ea2b2bcfb877723ae00b352be7f6ffcb91793dfc8c4041ab98a098",
+          "bytes": 444
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch06/stdout.log",
+          "sha256": "7ccf0fd814bf75a35db28acedc1714736804ec6b943ff25b8e07969d5631a02d",
+          "bytes": 98
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch06/stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "batch": 7,
+      "exit_code": 0,
+      "elapsed_seconds": 1.933197600999847,
+      "argv": [
+        "-o",
+        "addopts=",
+        "--noconftest",
+        "--basetemp",
+        "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch07/scratch",
+        "-q",
+        "--tb=short",
+        "tests/test_historical_views.py::test_original_recorded_projection_is_strict_and_attaches_before_destination_decode",
+        "tests/test_field_codec.py::test_golden_nested_family_record_round_trip",
+        "tests/test_acp_extension.py::test_declared_family_roundtrip_and_strict_boundary"
+      ],
+      "scope": "Parent final requested map declaration/strict projection/current FileRevision batch",
+      "raw": [
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch07/terminal.json",
+          "sha256": "5481860ab34f1b8cadb2cae409df2e6342b96a557c8d38bb541ff299292cbeaf",
+          "bytes": 679
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch07/stdout.log",
+          "sha256": "d0d58fe0ce72b4ad7a5753e7ea987720fa7d34534a57f72fbee21d55bec1e265",
+          "bytes": 98
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/source-batch07/stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        }
+      ]
+    }
+  ],
+  "production_correction": "FieldCodec.value_schema now derives string-keyed dictionary schema from original declared value type; codec decoder unchanged",
+  "remaining_unqualified": [
+    "genuine old720 recorded routing/SDK installed path",
+    "live central owner batch",
+    "complete instance JSON schema for recursive live Thread context graph",
+    "HistoricalSessions.publish_handling old-registry notification acquisition; unchanged MessageNotification.delivery_window still requires live Registration.snapshot"
+  ],
+  "compiled_changed_paths": [
+    "/home/ts/wt/comms-field-codec-closure-20260928/src/agent_comms/field_codec.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tests/test_acp_extension.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tests/test_field_codec.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tests/test_historical_views.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tests/test_transcript_pages.py",
+    "/home/ts/wt/comms-field-codec-closure-20260928/tests/test_transcript_read_identity.py",
+    "/home/ts/wt/toad-regression-widget-cost-20261001/tests/test_recorded_transcript_reader.py"
+  ],
+  "parse_omissions": 0,
+  "compiler": "system Python3.14, parse Python3.11 grammar",
+  "diagnostic_scratch": {
+    "owner": "Einstein",
+    "purpose": "retained source-control fixture failures and source preservation evidence",
+    "base": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005",
+    "approximate_bytes": 68000000
+  },
+  "required_map_schema_and_projection_final_batch": "3 passed; actual requested schema and original namespace equality, nonstring-key schema refusal, all ACP sample strict roundtrip",
+  "schema_callers": [
+    {
+      "path": "tools/cutover/original_owner_capture.py",
+      "method": "OriginalTypedCapture.recorded",
+      "schema": "RegistryProvenance"
+    },
+    {
+      "path": "tools/cutover/retained_routing_cutover.py",
+      "method": "RetainedRoutingCutover.operation_arguments",
+      "schema": "RegistryProvenance"
+    }
+  ]
+}

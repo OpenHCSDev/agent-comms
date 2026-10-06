@@ -118,9 +118,9 @@ class HistoryViews:
             max_bytes=max_bytes,
         )
 
-    def attach_history(self, source_root: Path) -> HistorySource:
+    def attach_history(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
         """Attach preserved history without admitting any historical execution."""
-        source = self.bus.history.attach(Path(source_root))
+        source = self.bus.history.attach(Path(source_root), source_read=source_read)
         catalog = ChannelCatalog(Path(source.root) / ChannelCatalog.filename)
         incoming = catalog.read()
         source_threads = source.provenance.threads
