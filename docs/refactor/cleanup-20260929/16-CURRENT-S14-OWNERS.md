@@ -142,10 +142,11 @@ is unchanged. Heis personally read the actual issue and owns that stage. Its act
 was released at54f67442 after its exact materialized binding. The sole proof
 terminal1ee75449 passed3.924s with its original child joined and absent. Parent
 matched all21 final handoff references210a0ba1, source proof and FullTrust
-receipts. Mounted warm behavior remains UNRUN pending separate final EXEC/App
-release; no terminal0-to-behavior inference is made.
-New matching7a READ, exclusive proof bindings, actual proof/DTO/Trust and separate
-EXEC/App release remain required in this same purpose. No public decoder,
+receipts. Bohr released the sole warm App at93638d95 with NEW7a EXEC471ec3cd.
+Parent read the original warm handle and verified controller2433857/b72325800
+and child2433903/b72325879 live at those exact births. No warm terminal or
+behavioral result is available at this checkpoint; retain the same attempt.
+No public decoder,
 configured fork, loaded cohort, accepted07/466 replay or new build is included.
 Normal return is actual CURRENT471 ToAdb2e+Text16c9 once; all original floor,
 origins and protected assets must match before independent closure.
@@ -218,6 +219,15 @@ source/test bodies and cleared one focused three-control source batch, then
 the one necessary normal cached Core wheel with unchanged4b native commitment
 once source is frozen and no matching wheel exists. No native assembly, new
 runtime purpose, old NotSent replay or private authority inheritance follows.
+The initial focused batch passed the real-storage owned and attached checks;
+the delivery control failed setup at a removed trust-stub import. Mendel migrated
+the original fake-model consumer to SelectedSession and NativeSessionIdentity,
+preserving a second fixture failure before the changed control passed2.42s.
+Neither earlier passing check was repeated. The single cached successor build
+passed0.882s from3e109632 with unchanged4b commitment. Parent verified all355
+current source/ZIP assets and wheelbee0813b (906687 bytes). This is a new truthful
+source wheel, not retained5d equivalence. Installed fresh ACP/MCP acceptance is
+still unproved and requires a separate fresh purpose; no old9b replay follows.
 
 Parent reviewed final scoped Ready68584b47b5a, matched all17 named final
 references and verified no source/build change from frozen5c689. Exact685 was
@@ -286,10 +296,17 @@ non-string keys remain refused. Earlier28-pass/3-fail results and all negatives
 remain raw evidence; no one-shot-green claim is made. The existing recursive
 full live Thread schema graph is an explicit unconsumed gap. Installed old720
 routing/SDK and genuine live central-batch acceptance remain unrun. Einstein
-continues the concrete HistoricalSessions.publish_handling -> MessageNotification
-historical assignment/read-ledger acquisition, which still tries a live registry
-snapshot on an archive. He owns this source closure; Mendel's fresh ACP membership
-seam is separate. No accepted684 qualifier is replayed.
+published the notification closure at Core220fd948/Toadbdaffe69. HistorySource
+checks the same attached recorded namespace before and after bounded original
+WireLog acquisition; MessageNotification shares assignment/read-ledger projection.
+The archived Comms/live snapshot/manual historical-message window is deleted.
+Recorded activity supplies durable pending/selected facts without live turn,
+process or CLI ACK inference. Human paint acknowledgment retains the original
+viewer/incarnation validation; strict assignment schema refusal is unchanged.
+Parent reviewed these source bodies and the preserved three-batch receipt:
+11 distinct selected controls have passing results, not one-shot full green.
+Mounted and cross-version notifications remain unqualified. Mendel's fresh ACP
+membership seam is separate. No accepted684 qualifier is replayed.
 
 Core681 fork-source delivery is actually merged38a0533e at frozen3dc11331.
 Its nine authored source checks support recorded inheritance, not independent
