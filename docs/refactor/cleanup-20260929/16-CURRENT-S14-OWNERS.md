@@ -4,6 +4,32 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Configured continuous producer source followthrough — 2026-10-06
+
+Parent read the current original l0a native fixture, saved-state user journey,
+read-only saved reader and Core configured_saved_agent acquisition. The
+continuous saved-state journey still uses the l0a loopback producer, whose
+selected-offline/fixture model, private configuration and synthetic replies
+cannot establish configured saved-source acceptance. The read-only reader
+instead attaches original owners; it does not supply the private configured
+input producer. These are distinct existing scopes and remain preserved.
+
+Core configured_saved_agent already acquires a private SDK fork from an
+authenticated original source, carries RetainedOwnerLaunch environment/model
+and thinking, verifies installed source and joins native shutdown. Parent
+directly assigned Heis the complete acquisition-to-continuous-UI consumer
+closure through these existing owners, with CurrentTypedCapture source
+identity and original input disposition custody. This is source implementation
+followthrough, not new provider/input, package or native authority. The
+configured producer's explicit participant registration must be reconciled
+through original lifecycle capabilities, not copied into another fixture.
+
+Warm03 separately has a new stage-only issued purpose3d9a0cd1, based on final
+699dd44f and unchanged61bf product wheel. Proof and App require their own
+matching authority and releases. Warm01/02 remain closed negative evidence;
+two authored journals do not satisfy the configured continuous or >=40MB
+source objective. No configured runtime acceptance has been performed here.
+
 Current live release: Parent normally merged exact475 fddc0697 at55d942e2,
 then personally matched NEW4622 authority, its18 receipt references and all112
 frozen member hashes/bytes/modes. The original fresh admission passed for19
