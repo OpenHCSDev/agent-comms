@@ -6,6 +6,25 @@ The original objective remains incomplete. CI is deferred as a merge gate.
 
 ### Current priority: sidebar and scrolling responsiveness
 
+- Core696 and Toad488 are merged together. Ctrl/Shift thread/channel selection,
+  retained right-click batch, original backend dialogs/read/archive and actual
+  partial refusal display passed in the real private App with native73 sources.
+  No public installed change or native start/stop acceptance is claimed yet.
+- Core697 and Toad486 are merged. The actual mounted menu preserves clipped-row
+  scroll/composer focus; keyboard traversal still reveals its row.
+- Toad487 is merged: CommsChat uses the original shared coordination observer
+  instead of independently polling every50ms. Matched source App comparison:
+  33 actual notification reads over2.2s idle before, four afterward; live updates
+  and retained-tab returns pass in both. This is a read-count reduction, not an
+  installed frame-time result. Public installation remains unchanged.
+- Parent's reused isolated sidebar-selected-targets checkout now owns complete
+  right-sidebar parking/eviction integration. Warm panel graph retention and
+  actual teardown are separated under existing native admission; full session
+  widget cost includes the sidebar. Existing project-tree restoration check
+  still fails after eviction and is being traced before acceptance/publication.
+  No repeat physical operation or source/provider input is authorized by that
+  source investigation.
+
 - Parent captured a second120-second profile of the actual running UI during
   Tristan's #openhcs response burst. Notification reads/decoding and main-thread
   route validation are concrete hotspots; substantial sampler losses preclude
