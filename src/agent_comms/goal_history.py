@@ -29,6 +29,9 @@ class GoalHistoryError(RuntimeError):
 
 @dataclass(frozen=True)
 class GoalHistoryEntry(TypedTable):
+    # The durable kind field is a journal fact, not the TypedTable family tag.
+    family_discriminator = "row"
+
     sequence: int | None = field(metadata={"sql": Column(primary_key=True)})
     kind: Literal["transition", "baseline", "observed_gap"]
     observed_at: float
@@ -60,6 +63,39 @@ class GoalHistoryStore:
         self.registry_path = registry_path
         self.path = registry_path.parent / "goal_history.sqlite3"
         self._initialize()
+
+    @classmethod
+    def acquire_read_only(cls, registry_path: Path) -> tuple[GoalHistoryEntry, ...]:
+        """Acquire full original rows; caller holds original registry custody.
+
+        This boundary never constructs a store, initializes a database, observes
+        current goals or reconciles pending writes. Missing/foreign storage is a
+        refusal, not permission to manufacture a history baseline.
+        """
+        path = registry_path.parent / "goal_history.sqlite3"
+        try:
+            before = path.lstat()
+            if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()
+                    or stat.S_IMODE(before.st_mode) != 0o600):
+                raise GoalHistoryError("Original goal history must be a private regular file.")
+            with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True,
+                                         timeout=5, isolation_level=None)) as connection:
+                connection.execute("PRAGMA query_only=ON")
+                connection.execute("BEGIN")
+                actual = SQLiteSchemaObject.read(connection.execute(
+                    "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
+                    "AND name NOT LIKE 'sqlite_%'"
+                ))
+                if {row.name: row.sql for row in actual} != GoalHistoryEntry.schema_objects():
+                    raise GoalHistoryError("Original goal history declaration differs.")
+                rows = tuple(GoalHistoryEntry.select(connection, order_by=("sequence",)))
+            after = path.lstat()
+            if ((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
+                    != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)):
+                raise GoalHistoryError("Original goal history changed during acquisition.")
+            return rows
+        except (OSError, sqlite3.Error, ValueError, TypeError) as error:
+            raise GoalHistoryError("Cannot acquire original goal history read-only.") from error
 
     def _connect(self) -> sqlite3.Connection:
         try:
