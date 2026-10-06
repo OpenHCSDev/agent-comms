@@ -4,6 +4,38 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Warm03 returned negative and remaining transition assigned — 2026-10-06
+
+Parent read actual warm03 terminalffb0ca6e: FAIL1/36.296851687, controller joined
+37.19949981, no timeout/error/drain errors or remaining group. The original
+controller2792684 and child2792685 are absent. Coverage/history/cursor admission
+progressed beyond the earlier strict failure; ReaderCheckpoint.capture103 then
+refused because no rendered native Markdown body was visible in its scrollable
+region after original draft/undo/non-tail setup. Both warm and eviction verified
+branches remain zero; exactly two authored localhost requests are recorded with
+no provider errors. Cause beyond that assertion is unproved.
+
+Owner whole handbackba3832a3 explicitly returns package/operator/READ8923+EXEC90775.
+Parent verified its63 hash/length descriptors (55 unique paths) with zero mismatches,
+including all52 raw references. Original CURRENT471 b2e+16c9 floor restoration ran
+once; full1467/953 ZIP/69RAW/2253+266/bootstrap2/PREFIX return and held65 fixture files
+and two journals remain original evidence. Sch received the exact return through
+Parent transport; independent holder/artifact closures remain original Bohr/Sch
+work. No duplicate restore, replay or new purpose follows. Heis owns the complete
+acquisition-to-viewport/paint/checkpoint source investigation, not another isolated
+readiness predicate workaround; configured continuous source work stays active.
+
+Parent assigned originalEinstein the remaining source preservation relationship
+through existing GoalHistoryStore and GoalReportMemberRetirement, retaining strict
+target decoding. Original720 model transitions write Goal.reported_turn; owner
+Set/Clear/Edit can leave Thread.last_goal_report_turn after current goal replacement.
+Therefore current Goal alone cannot authenticate retirement. Original committed
+journal rows keyed by owner incarnation must supply preservation across replacement;
+constructor/history observation cannot be used as a read-only acquisition because
+they initialize/reconcile/add baseline or gap rows. No data acquisition, sourcefield
+strip, new codec/store, native operation or registry transition is authorized by this
+source assignment. The partial-retirement phase correction remains Einstein's scope.
+
 ### Qualified routing source merged into both forks — 2026-10-06
 
 Parent verified final Core6861cc39564 and Toad4770c0f15dc add only two scoped
