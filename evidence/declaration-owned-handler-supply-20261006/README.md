@@ -24,5 +24,21 @@ failure, tracked-turn and AST-ratchet consumers all share this implementation.
 Original Toad/native subclass hooks are cooperative. No shared-file conflict
 was found; SQLite lifetime work is separate.
 
-Working source checkpoint; final declaration controls and affected source App
-confirmation follow the coherent implementation. No installed/live claim.
+Final checks:3 existing ordering/replacement variants passed; added C3 masking/
+instance-binding control passed1/.78s after correcting its authored abstract
+constructor. No production adjustment resulted from that refusal. The system
+author environment had pytest without ACP; the App environment had ACP without
+pytest. Startup refusals remain. Source controls reused the App dependency order
+and appended installed system pytest dependencies; no package/env changes.
+
+ONE changed source App run completed0/empty stderr:508widgets/10tabs/zero
+provider. Core baseline product files d8467b730 and original574098293 are Git
+byte-equal; only the dispatch owner changed. Toad437e/native79 unchanged. Right
+profile36 handler calls fell from~21ms inclusive to0.108ms; left53 calls took
+0.166ms. Median first headless display36.0ms(left)/36.5ms(right), versus the most
+matched native79 run41.8/47.4ms. Single-run source result, not installed/live
+latency or terminal pixels. Width-dependent layout/render remains unchanged.
+
+RESULT.json pins original/changed profiles and all control/App logs. All launch
+handles are terminal and fixture temporary roots are empty. No installed pin,
+public runtime, artifact, provider or original session changed.
