@@ -1,0 +1,330 @@
+{
+  "owner": "OriginalMendel",
+  "purpose": "selected-target Core backend feature; source imports and private authored stores only",
+  "base": "cc5a9daf79c2af575bca478861b948ac47905154",
+  "production_checkpoint": "fde60004697b8776ed303b92ae292e1d9a7dfb71",
+  "source": [
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "sha256": "dc4a45c1289f44576e29f5327c5cd8b501df714eaa2f2d900eaa1fa25e5880d4",
+      "bytes": 60809
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "sha256": "6671c505071449d4a716526d9ece250611061bed9a826c7c66ffeeb60dcb041c",
+      "bytes": 13662
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "sha256": "671e1b68ddbe7e5401421ca370c43a434705b3e4c8157479146cd43406d632f2",
+      "bytes": 40815
+    },
+    {
+      "path": "src/agent_comms/cli.py",
+      "sha256": "68b55d8caeb50728c2a052d06ccd54c8c8efedbbaa0859b864c6703b6d37bc02",
+      "bytes": 2367
+    },
+    {
+      "path": "tests/test_cli.py",
+      "sha256": "e48017b32c1a18ca0764d9f9e28ed8d47149c28cdffc6191fa0aa755732f9cd7",
+      "bytes": 19131
+    },
+    {
+      "path": "tests/test_channels.py",
+      "sha256": "2e33940eed13d13dc5907dee1093bc46ec518ce57234d8b62934f5fe04cafe7b",
+      "bytes": 29799
+    }
+  ],
+  "unique_passing_controls": 13,
+  "checks": [
+    {
+      "root": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-01",
+      "terminal": {
+        "exit_code": 1,
+        "seconds": 2.8445089840097353,
+        "joined": true,
+        "pid": 3891245,
+        "birth": 75196378
+      },
+      "original_process_absent": true,
+      "cases": [
+        {
+          "class": "tests.test_cli.TestSelectedTargetActions",
+          "name": "test_catalog_projects_mixed_operations_and_original_editor_fields",
+          "passed": true,
+          "failure": null
+        },
+        {
+          "class": "tests.test_cli.TestSelectedTargetActions",
+          "name": "test_mixed_archive_reports_partial_results_in_selection_order",
+          "passed": true,
+          "failure": null
+        },
+        {
+          "class": "tests.test_cli.TestSelectedTargetActions",
+          "name": "test_confirmation_and_target_override_refuse_before_any_batch_write",
+          "passed": true,
+          "failure": null
+        },
+        {
+          "class": "tests.test_cli.TestSelectedTargetActions",
+          "name": "test_channel_stop_deduplicates_selected_member_and_preserves_single_result",
+          "passed": true,
+          "failure": null
+        },
+        {
+          "class": "tests.test_cli.TestSelectedTargetActions",
+          "name": "test_channel_start_uses_native_visible_roster_without_launching",
+          "passed": true,
+          "failure": null
+        },
+        {
+          "class": "tests.test_cli.TestSelectedTargetActions",
+          "name": "test_mixed_pins_keep_each_rows_original_channel",
+          "passed": true,
+          "failure": null
+        },
+        {
+          "class": "tests.test_cli.TestSelectedTargetActions",
+          "name": "test_catalog_and_execution_keep_missing_and_single_only_targets_truthful",
+          "passed": true,
+          "failure": null
+        },
+        {
+          "class": "tests.test_cli.TestDeclaredTargetActions",
+          "name": "test_catalog_edit_rename_review_delete_and_reopen",
+          "passed": true,
+          "failure": null
+        },
+        {
+          "class": "tests.test_channels",
+          "name": "test_exclusive_tag_deletion_uses_original_storage_and_preserves_survivors",
+          "passed": true,
+          "failure": null
+        },
+        {
+          "class": "tests.test_channels",
+          "name": "test_exclusive_tag_deletion_never_deletes_a_stopped_owner_that_is_still_alive",
+          "passed": true,
+          "failure": null
+        },
+        {
+          "class": "tests.test_channels",
+          "name": "test_new_tag_disposition_is_declared_in_original_editor_and_tool_catalog",
+          "passed": false,
+          "failure": "StopIteration"
+        },
+        {
+          "class": "tests.test_channels",
+          "name": "test_tag_cohort_refuses_active_owners_before_any_registry_publication",
+          "passed": true,
+          "failure": null
+        }
+      ],
+      "raw": [
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-01/command.json",
+          "sha256": "c9008987576ae11ef992b0c47621f3e9bc832c129cec7fdedec04d38b9daabfe",
+          "bytes": 1155
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-01/launch.json",
+          "sha256": "a0447ed2de9a1a94611206a79ff610f00d5f1bea4b5cf7ecd445dc05a770f6f4",
+          "bytes": 36
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-01/terminal.json",
+          "sha256": "c9f062eebc390c584ea218d094b2faeca46279a5157d1e0b7338b5fe70c9a0a8",
+          "bytes": 111
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-01/stdout.log",
+          "sha256": "defd5943cec3be7cd725230e5f5fbb23f465bb1871ba373ee2bd41180eb1ec1e",
+          "bytes": 2130
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-01/stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-01/results.xml",
+          "sha256": "c3678d56bd3ee7807124d3b36167b8e47f91a3619d339384e8aeef0f2bc24ec0",
+          "bytes": 3269
+        }
+      ]
+    },
+    {
+      "root": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-02",
+      "terminal": {
+        "exit_code": 1,
+        "seconds": 2.141711847973056,
+        "joined": true,
+        "pid": 3898088,
+        "birth": 75219103
+      },
+      "original_process_absent": true,
+      "cases": [
+        {
+          "class": "tests.test_channels",
+          "name": "test_new_tag_disposition_is_declared_in_original_editor_and_tool_catalog",
+          "passed": true,
+          "failure": null
+        },
+        {
+          "class": "tests.test_cli.TestSelectedTargetActions",
+          "name": "test_mixed_read_marks_human_views_without_advancing_executor_delivery",
+          "passed": false,
+          "failure": "assert 2 == 1"
+        }
+      ],
+      "raw": [
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-02/command.json",
+          "sha256": "be3aa16b3f16f6be5ab56e9ec46380c35c2eb21cac19bc14871597e646387507",
+          "bytes": 906
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-02/launch.json",
+          "sha256": "e51279320f5d3d00430c56b8dbc8d364d1de69dd0fc22f59d5573cda8ce12de4",
+          "bytes": 572
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-02/terminal.json",
+          "sha256": "b2d9328e200a763c4c90262662eba1c0ed98ef796f621da34b80270a7603ba9c",
+          "bytes": 110
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-02/stdout.log",
+          "sha256": "01948465b0ea5f4e43fa07cb1a892d9455ac52a1293577220727bc66aa41036b",
+          "bytes": 2337
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-02/stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-02/results.xml",
+          "sha256": "981ecb1c2d2b1d34a879dfe8c355c202251c2800c3eb98712ee2913b152cd31c",
+          "bytes": 1999
+        }
+      ]
+    },
+    {
+      "root": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-03",
+      "terminal": {
+        "exit_code": 1,
+        "seconds": 2.0193248820723966,
+        "joined": true,
+        "pid": 3899078,
+        "birth": 75224528
+      },
+      "original_process_absent": true,
+      "cases": [
+        {
+          "class": "tests.test_cli.TestSelectedTargetActions",
+          "name": "test_mixed_read_marks_human_views_without_advancing_executor_delivery",
+          "passed": false,
+          "failure": "AssertionError: assert 1 == 2\n +  where 1 = pending_count('beta', '#team')\n +    where pending_count = <agent_comms.message_bus.MessageBus object at 0x7f09c4b7d010>.pending_count\n +      where <agent_comms.message_bus.MessageBus object at 0x7f09c4b7d010> = <agent_comms.comms.Comms object at 0x7f09c4b7cad0>.bus"
+        }
+      ],
+      "raw": [
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-03/command.json",
+          "sha256": "93657ebe6e8df1fb07c1a3b441964888c12245560ea12f417c630320093cabd8",
+          "bytes": 783
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-03/launch.json",
+          "sha256": "46875d47eadca5da9460b8f41465b2224b8e861cba86e6c469297dd345769778",
+          "bytes": 468
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-03/terminal.json",
+          "sha256": "d4a676a7beb3ac9ad73fca1a8d1d52945a7166b9fe549b82a56c3f80a8f99ab0",
+          "bytes": 111
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-03/stdout.log",
+          "sha256": "1ff8676c8d85e9532293646c1e9ad094eeec41046fde09171fe805bed9502d1b",
+          "bytes": 3291
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-03/stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-03/results.xml",
+          "sha256": "2ea791c2d18d84f82c982194f678e41b12c9d2d51692f833f00d31767fd7e9f6",
+          "bytes": 3172
+        }
+      ]
+    },
+    {
+      "root": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-04",
+      "terminal": {
+        "exit_code": 0,
+        "seconds": 2.0516411109128967,
+        "joined": true,
+        "pid": 3902776,
+        "birth": 75234586
+      },
+      "original_process_absent": true,
+      "cases": [
+        {
+          "class": "tests.test_cli.TestSelectedTargetActions",
+          "name": "test_mixed_read_marks_human_views_without_advancing_executor_delivery",
+          "passed": true,
+          "failure": null
+        }
+      ],
+      "raw": [
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-04/command.json",
+          "sha256": "63af6d8c55b1aab1b571b35b1c3b0904ca1f12d89f8eaba0a2ad35dedbeb7302",
+          "bytes": 787
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-04/launch.json",
+          "sha256": "50e94de41bb8d7561d6a890254c40138aa900d03b8be178ad51f834ce631365c",
+          "bytes": 468
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-04/terminal.json",
+          "sha256": "4c86cca3d4f5e6b545fa7126e495d965a200eb11d10d80e35c74ad8e8de1297a",
+          "bytes": 111
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-04/stdout.log",
+          "sha256": "0a1f9242f75e71851c01de83c92f9bfa8921f7d35d363abd7b7846a164554373",
+          "bytes": 537
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-04/stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/mendel-selected-target-source-20261006-04/results.xml",
+          "sha256": "0f85685a2d2b1c643f26daeb5e76512b233ff1b737471e24c5eb960e97c50e49",
+          "bytes": 398
+        }
+      ]
+    }
+  ],
+  "failure_disposition": [
+    "Initial test selected nonexistent comms_tag; fixed test to use original CommsTagsTool declaration.",
+    "New read control omitted original membership notice from human unread count; corrected expected count.",
+    "Its subsequent executor count included its own notice; original DeliveryScope excludes sender from delivery. Corrected expectation after reading routing owner.",
+    "Production unchanged after the initial implementation. No failed command or input was replayed on any public/native/installed runtime."
+  ],
+  "limits": [
+    "Installed selection UI and native process start/stop are UNRUN.",
+    "Stop control used genuine running declarations with no process identity; original stop retired registry state without signals or native launch.",
+    "Toad selection/dialog/completion migration belongs to Parent.",
+    "Historical source/helper/native evidence and all consumed purposes remain unchanged."
+  ],
+  "resource_read": "Prior batch host measurement: 17.3 GiB available RAM; home 5.9 GiB/root 4.6 GiB free/swap 12.1 GiB. Warning thresholds retained. One small serial source worker; no env/build/package/fleet/native/public operation."
+}

@@ -907,6 +907,10 @@ class CommsArchiveTool(OwnerLifecycleControl, ToolRequest):
     action_order = 30
     name: str = tool_field("Stopped thread name", binding=SubjectBinding)
 
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
+        return status.stopped
+
     def apply(self, comms: Comms) -> JsonObject:
         return ArchiveCliCommand(name=self.name).apply(comms)
 
