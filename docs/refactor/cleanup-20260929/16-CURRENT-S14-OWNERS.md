@@ -4,6 +4,15 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Superseded warm source PR reconciled — 2026-10-06
+
+Parent verified the entire published Toad476 head is an ancestor of active478
+and closed476 as superseded. Source, original artifacts, journals and failures
+stay retained. Heis still owns configured continuous acceptance, genuine
+reader/eviction verification, loaded cohorts and performance in478; closing the
+duplicate is not acceptance. Browser50 is merged; original workspace116 is
+already closed. No branch or worktree was deleted and no runtime repeated.
+
 ### Repaired artifact and actual affected native run — 2026-10-06
 
 One separate Toad successor wheel now contains joined reader480. All319 source
