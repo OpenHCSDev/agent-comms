@@ -1,0 +1,29 @@
+{
+  "scope": "Append-only precision of source-wheel versus deployment recipe difference; earlier artifact receipts unchanged",
+  "selected_receiving_Core": "3931f16feb8bcb2dbcc3041446ca342dea665024",
+  "actual_guard_source_head": "fba52d47ddc48552cf0197c8fcb6e888236a1ef1",
+  "whole_source_delta": [
+    "src/agent_comms/compaction_records.py",
+    "src/agent_comms/pi_project_bootstrap.mjs",
+    "stack/bin/prepare-pi-native",
+    "stack/pi-native.sha256",
+    "stack/prepare-native-import-boundary.py"
+  ],
+  "packaged_runtime_and_forced_resource_delta": [
+    "src/agent_comms/compaction_records.py",
+    "src/agent_comms/pi_project_bootstrap.mjs",
+    "stack/pi-native.sha256"
+  ],
+  "deployment_builder_seam_delta": [
+    "stack/bin/prepare-pi-native",
+    "stack/prepare-native-import-boundary.py"
+  ],
+  "existing_ARTIFACT_HANDOFF_sha256": "179fd28a8310cbe3f86ab0c38733e4ff3ce4b54de979e9aa1d181d32818f0c1e",
+  "native_launcher": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/bin/pi-native",
+  "adjacent_manifest": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/pi-native.sha256",
+  "manifest_sha256": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+  "old_qualifier_WT7a_launcher_not_selected": true,
+  "whole_source_not_equal_receiving3931": true,
+  "native_runtime_qualification": "UNRUN; no authority here",
+  "builds_repeated": false
+}

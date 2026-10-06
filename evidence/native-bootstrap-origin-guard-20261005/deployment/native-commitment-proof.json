@@ -1,0 +1,70 @@
+{
+  "status": "ASSEMBLED/PINNED/FULLY VERIFIED; native acceptance UNRUN",
+  "source_head_before_pin": "c0961d58afd849d8248eaef3e6f5364db376b139",
+  "source_bootstrap": {
+    "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/src/agent_comms/pi_project_bootstrap.mjs",
+    "sha256": "b9af81dbe003fde1c4d80dbd77fa7ae08f4a1c017deb8a94f8520452da47de27"
+  },
+  "package": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent",
+  "manifest": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/pi-native.sha256",
+  "manifest_sha256": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+  "tree": "63f18710cb9329be6ade27bac3b4dd822e2b36f013756fa8e6717b8073a4592c",
+  "previous_manifest_sha256": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+  "previous_tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d",
+  "previous_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent",
+  "full_nodes": 21276,
+  "full_files": 19190,
+  "native_payload_delta": {
+    "dist/agent-comms-project-bootstrap.mjs": {
+      "before": {
+        "type": "file",
+        "mode": 256,
+        "bytes": 1741,
+        "sha256": "b49b5fb2f8018fd85cb55e8bf9693f1a5c45d147135638cd9dbc30dc4af13475"
+      },
+      "after": {
+        "type": "file",
+        "mode": 256,
+        "bytes": 4801,
+        "sha256": "b9af81dbe003fde1c4d80dbd77fa7ae08f4a1c017deb8a94f8520452da47de27"
+      }
+    }
+  },
+  "missing": [],
+  "extra": [],
+  "selected_perfile_manifest_entries_unchanged": true,
+  "original_shared7a_full_bytes_modes_unchanged": true,
+  "original_MCP_dependency_subtree_and_import_manifest_unchanged": true,
+  "assembly": {
+    "exit": 0,
+    "elapsed_seconds": 12.986377601977438,
+    "pid": 2076621,
+    "birth": "71738753",
+    "joined": true,
+    "proc_absent": true,
+    "argv": [
+      "bash",
+      "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/capture-stock-recipe.sh"
+    ]
+  },
+  "assembly_owner_recipe": {
+    "recipe": "canonical stack/bin/prepare-pi-native with existing commitment-capture preparation boundary; verify/publication held for actualfullcomparison+pin",
+    "canonical_sha256": "f51062ca921d539948fd35db2fc65207b60d4f017a52d6b4e338fd5c810035cc",
+    "capture": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/capture-stock-recipe.sh",
+    "capture_sha256": "50cb2d4814a9a57e2c46a53ea6ed603b00276808789dbc906d63642769178754",
+    "capture_only_adaptations": [
+      "ownstack_root literal",
+      "existing-target block absent for fresh unverified assembly",
+      "final verify(stage) held until actual new full-tree commitment",
+      "stage renamed into own fresh-unverified rather than committed target"
+    ],
+    "MCP_input": "existing fullyverified7a subtree; currentmanifest ORIGINAL7a before anypin write; no npm ci or resolve",
+    "expected_native_delta": [
+      "dist/agent-comms-project-bootstrap.mjs"
+    ],
+    "no_runtime_execution_authority": true
+  },
+  "verification_seconds": 7.359903099015355,
+  "native_acceptance_execution": false,
+  "receiving474_selected_Core3931_unaffected": true
+}
