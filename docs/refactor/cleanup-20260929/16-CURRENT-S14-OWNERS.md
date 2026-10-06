@@ -4,6 +4,23 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Configured private producer joined into integration — 2026-10-06
+
+Parent reviewed Core690 exact12575d92 and normally joined it at260446b5.
+Only configured_saved_agent changes among the module's declarations; source
+compilation passed without executing imports. Original ForkSessionRequest.cwd
+supplies the optional owned project, SDK cwd and both private owner declarations.
+ThreadManagement.restore_stopped owns committed membership and acquire_thread
+owns actual process birth. Both bindings share CommsAgent's original RuntimeServer;
+its start is idempotent and release_owned closes that runtime after owner release.
+Direct participant injection and manual process replacement are deleted.
+
+Existing default callers retain original.worktree and their separate arm clocks.
+This is a source integration checkpoint, not configured saved-session, provider,
+continuous UI or package acceptance. Heis continues the affected Toad consumer in
+its separate source worktree. Current live PUBLIC475 and every frozen warm/native
+purpose keep their reviewed artifacts and inputs; no pin or rebuild follows.
+
 ### Installed historical routing pass and admission review — 2026-10-06
 
 Einstein's single paired85af/55cc controller passed in25.731419895s under
