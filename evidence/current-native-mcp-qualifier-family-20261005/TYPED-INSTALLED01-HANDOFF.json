@@ -1,0 +1,76 @@
+{
+  "state": "Package proof PASS; first launch admission FAIL; actual typed mounted acceptance UNRUN",
+  "source_product_controls_unchanged": true,
+  "failure_owner": "OriginalMendel launch admission mapping iteration before original controller creation",
+  "failure_error": "TypeError: string indices must be integers, not str",
+  "actual_wrapper_launches": 0,
+  "stage": {
+    "attempts": 1,
+    "PASS": true
+  },
+  "proof": {
+    "attempts": 1,
+    "PASS": true,
+    "953_assets": true,
+    "69_packages": true,
+    "native_full_trust": false
+  },
+  "no_retry": true,
+  "floor_restore": {
+    "attempts": 1,
+    "PASS": true,
+    "1477_original_records": true,
+    "953_wheel_assets": true,
+    "69_RAW_origins": true,
+    "631_protected_originals": true,
+    "no_extra_assets": true,
+    "original_PREFIXactivation_unchanged": true
+  },
+  "whole_claim_returned": true,
+  "shared_lifecycle_Bohr_independent_closure_pending": true,
+  "SDK_native_provider_public_inputs": 0,
+  "source_correction": "Use named original source_helpers mapping records, not keys as records; source-only compiled/unrun. Original wrapper7cac/typed e783 unchanged.",
+  "references": {
+    "/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/whole-handback.json": {
+      "sha256": "71a78bbc79bc0210b3749d52e3f5316ea57286babbb7a0d08192f56707af4902",
+      "bytes": 8503
+    },
+    "/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/launch-admission-failure.json": {
+      "sha256": "f88bddde8b5c91917b0f9884bcc7bf3ee7946b99e8c1d8f5c0ff9b18d9acd99a",
+      "bytes": 1101
+    },
+    "/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/launch-admission.stderr.log": {
+      "sha256": "243e231f9f77d863b133e2255f8a540a01f42cbb8d0e0beb174156817107d457",
+      "bytes": 128
+    },
+    "/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/launch-admission-source-correction.py": {
+      "sha256": "e2885114bb0a424483b0bb15685fb1c13aea0a671f715da17a82763ed6512687",
+      "bytes": 395
+    },
+    "/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/floor-restoration-readback.json": {
+      "sha256": "5442fc37c0bc315ea124b3a74c45b06774d1942e7ef67d76b3d5f9dd501c14ce",
+      "bytes": 2267
+    },
+    "/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/restore-terminal.json": {
+      "sha256": "20812d640960b5b7cbb00d6e9c1bb1099103b9de4dda2d6f066cbcb50e20ac4e",
+      "bytes": 717
+    },
+    "/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/restored-metadata-origins.json": {
+      "sha256": "a9c551d73d4c29c231c18b495c9779005b425f3fc75137751fc7c586ecbbd587",
+      "bytes": 4931
+    },
+    "/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/PROOF-WHOLE-RETURN.json": {
+      "sha256": "4e8669eb56557247b321e600fc28629141838a72e5d76c15df45f178e7b0832f",
+      "bytes": 2628
+    },
+    "/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/candidate-source-proof.json": {
+      "sha256": "f512f2eee5b677a9fa47c0f62f357e3add27241aada752b0fa9ecb45769f4d68",
+      "bytes": 9270
+    },
+    "/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/candidate-activation.json": {
+      "sha256": "f1e51326a3611c675939f50e1043aa69395b816e3dff7e4a8308c7368bf6e2ed",
+      "bytes": 2208
+    }
+  },
+  "remaining_acceptance": "ONE original90s typed mounted control remains needed under fresh specific actual purpose after independent wholeclose and new eligible holder/source binding. No current or inherited loan. Native four-case acceptance separately needs new guarded resource/pin/custody."
+}

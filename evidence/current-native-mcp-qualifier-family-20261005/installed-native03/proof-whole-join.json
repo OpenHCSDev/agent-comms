@@ -1,0 +1,125 @@
+{
+  "state": "PASS ONE original8c8f sourceproof and nativeFullTrust; exact953/69; proof child/controller joined/absent; nativeSDK controls HELD",
+  "issued_sha256": "25cee9a6cb928f5f41d68f1d2032b0f591d564f8955abc50e5e48e1c56dd52d5",
+  "identities": [
+    {
+      "pid": 2515235,
+      "start_time": 72459070,
+      "proc_absent": true
+    },
+    {
+      "pid": 2515247,
+      "start_time": 72459172,
+      "proc_absent": true
+    }
+  ],
+  "groups_remaining": [],
+  "refs": [
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/candidate-source-proof.json",
+      "sha256": "58879e571ddcca7814ea78e291053c2d67c7c67eb27056f1dd626a1f9235b4f1",
+      "bytes": 9235
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/candidate-activation.json",
+      "sha256": "e89e9c7b6ff0749bbc7983e61df518188912cde82e0b836fad64b016ab6ad5f8",
+      "bytes": 2180
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/native-full-trust.json",
+      "sha256": "291b7adbed51d8b2c68e889e29ae741a38766fb66e36592dc6282db36fcf7068",
+      "bytes": 717
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/proof-result.json",
+      "sha256": "b9a1cc3ed4de36fdc03cda643fb3f6478497736590323bf2410e40fc18cb40ea",
+      "bytes": 823
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/agent_comms-inventory.json",
+      "sha256": "de2fdd2b9346020d1ace1368e8bd9b491f8ea4c8cd2b859d7728ce258496bacf",
+      "bytes": 69032
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/toad-inventory.json",
+      "sha256": "e00340f87099eebdddd33527511fba230e4c3e24c9de8a4f4b6f069e52153893",
+      "bytes": 59937
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/textual-inventory.json",
+      "sha256": "26ece1c3efeed80249d1982d460f2b270b1ce24d186ba9b5f1cc3aa2dda1f2a4",
+      "bytes": 49698
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/refactor_audit-inventory.json",
+      "sha256": "12678c403aae762ee76977495dc3881ab97b460a616a662f54a6ff5f0056ee35",
+      "bytes": 1899
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/textual_diff_view-inventory.json",
+      "sha256": "22bde5d91bbe6ba4e9e4e0f45075bb8b84596c11043c1ff68fbd9266b0742ab0",
+      "bytes": 571
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/wheel-installed-readback.json",
+      "sha256": "191f900524a6bec1143ae6821b01e699147e53aee14cac78b13b3b2447bf537e",
+      "bytes": 2027
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/forced-native-assets.json",
+      "sha256": "c309fc30a130ad9802e6170f1fd04ad02e7f386ef1b0b9822909d9d747c8b6c4",
+      "bytes": 589
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/metadata-origin-readback.json",
+      "sha256": "3f772279dab80f494fcc0a1b17ae31680f898ed8532ff02b5af70dbf9269bf78",
+      "bytes": 6150
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/retained-wheel-install.txt",
+      "sha256": "8fa02bc1d85a6e95bba6abb145d17bc4898e3dcfa3bbd4d0a53b7ede8c51e1ba",
+      "bytes": 1383
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/unchanged-keepers-after.json",
+      "sha256": "fd30c04f327463e8c3e3f4656b5aca41f52dbdd328354222959804e0b4824838",
+      "bytes": 153
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/proof-controller.json",
+      "sha256": "872e8431579dac7d5765b38248ec4c1ccde4c20cbca0a23e2925d8fc3d8c4dcd",
+      "bytes": 2455
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/proof-child.json",
+      "sha256": "a6651affc019b8c49fdd01dca793e246d2f083be1474619daecdb856c1697ee5",
+      "bytes": 71
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/proof-terminal.json",
+      "sha256": "01c68c8ca6c048efd2e41791ade2bf14cdacb5a8bd76169f107be3ce397bfefc",
+      "bytes": 1063
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/proof-stdout.log",
+      "sha256": "1b6b050937d812bff333273951cfc99959f07bcde1fe03f69c7e606b3c1b2207",
+      "bytes": 824
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/proof-stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  ],
+  "proof_attempts": 1,
+  "package_stage_attempts": 1,
+  "native_executions": 0,
+  "controlled_native_inputs": 0,
+  "purpose_whole_handback": false,
+  "resolved_controller": {
+    "path": "/home/ts/.cache/agent-scratch/m687n01/resolved-controller-operands.json",
+    "sha256": "a0b59560c0f542ffd50ee02842b846c2b16fd3fe4d2d5ce57d627f5372950293",
+    "bytes": 3992
+  },
+  "next_boundary": "OriginalSch NEWmatching4bEXEC personallyreads actualproofDTOTrust/controller; originalBohr bind/release SAMEpurpose before one originalfourcase controller"
+}

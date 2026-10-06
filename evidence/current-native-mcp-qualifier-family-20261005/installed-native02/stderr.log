@@ -1,0 +1,6 @@
+Task exception was never retrieved
+future: <Task finished name='Task-148' coro=<RuntimeConnection.request() done, defined at /home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/runtime.py:354> exception=RequestError('Internal error')>
+Traceback (most recent call last):
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/runtime.py", line 372, in request
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/runtime.py", line 142, in _raise_owner_error
+acp.exceptions.RequestError: Internal error

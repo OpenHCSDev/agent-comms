@@ -1,0 +1,4600 @@
+{
+  "revision": "3fe2eeb545b2a79656d49ed120f6b2bf68ec4148",
+  "collector": "original audit.findings.Package/audit.repository.Repository",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 324,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 373,
+      "omissions": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "sites": [
+        {
+          "line": 70,
+          "kind": "import",
+          "source": "from .runtime import UNBOUND_CONTROLLER, RuntimeProxy, RuntimeServer, socket_path"
+        },
+        {
+          "line": 444,
+          "kind": "declaration",
+          "name": "shutdown"
+        },
+        {
+          "line": 155,
+          "kind": "call",
+          "source": "RuntimeProxy(self, session_id, socket_path(self._comms.root, thread.pid))"
+        },
+        {
+          "line": 316,
+          "kind": "call",
+          "source": "(client or self._runtime).session_update(session_id=session_id, update=AgentMessageChunk(session_update='agent_message_chunk', content=TextContentBlock(type='text', text=''), field_meta=await self.sessions.metadata(name,"
+        },
+        {
+          "line": 458,
+          "kind": "call",
+          "source": "(client or self._runtime).session_update(session_id=session_id, update=AgentMessageChunk(session_update='agent_message_chunk', content=TextContentBlock(type='text', text=text), field_meta=encode_updates(TextRouteUpdate(r"
+        },
+        {
+          "line": 574,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "sites": [
+        {
+          "line": 28,
+          "kind": "import",
+          "source": "from .turn_lease import TurnState"
+        },
+        {
+          "line": 67,
+          "kind": "declaration",
+          "name": "TurnChangedUpdate"
+        },
+        {
+          "line": 519,
+          "kind": "declaration",
+          "name": "McpClientReceiptUpdate"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/acp_failure.py",
+      "sites": [
+        {
+          "line": 83,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 139,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 157,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 178,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 110,
+          "kind": "call",
+          "source": "member.matches(code, detail, diagnostics)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "sites": [
+        {
+          "line": 259,
+          "kind": "call",
+          "source": "checkpoint.matches(self._path, revision)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/activity_checkpoint.py",
+      "sites": [
+        {
+          "line": 35,
+          "kind": "declaration",
+          "name": "matches"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "sites": [
+        {
+          "line": 30,
+          "kind": "import",
+          "source": "from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "sites": [
+        {
+          "line": 21,
+          "kind": "import",
+          "source": "from .acp_extension import CompactionChangedUpdate, GoalChangedUpdate, InputFailedUpdate, McpClientReceiptUpdate, PromptCancelledUpdate, RequestFailedUpdate, TextRouteUpdate, encode_updates"
+        },
+        {
+          "line": 57,
+          "kind": "call",
+          "source": "self.client.session_update(session_id=self.session_id, update=SessionInfoUpdate(session_update='session_info_update', field_meta=encode_updates(GoalChangedUpdate(event.goal, event.execution))))"
+        },
+        {
+          "line": 83,
+          "kind": "call",
+          "source": "client.session_update(session_id=session_id, update=start_update)"
+        },
+        {
+          "line": 105,
+          "kind": "call",
+          "source": "client.session_update(session_id=session_id, update=progress_update)"
+        },
+        {
+          "line": 120,
+          "kind": "call",
+          "source": "client.session_update(session_id=session_id, update=end_update)"
+        },
+        {
+          "line": 126,
+          "kind": "call",
+          "source": "client.session_update(session_id=session_id, update=AgentThoughtChunk(session_update='agent_thought_chunk', content=TextContentBlock(type='text', text=event.text or '')))"
+        },
+        {
+          "line": 141,
+          "kind": "call",
+          "source": "client.session_update(session_id=session_id, update=AgentMessageChunk(session_update='agent_message_chunk', content=TextContentBlock(type='text', text=''), field_meta=encode_updates(McpClientReceiptUpdate(turn_id, event."
+        },
+        {
+          "line": 171,
+          "kind": "call",
+          "source": "self.client.session_update(session_id=self.session_id, update=AgentMessageChunk(session_update='agent_message_chunk', content=TextContentBlock(type='text', text=''), field_meta=encode_updates(CompactionChangedUpdate(even"
+        },
+        {
+          "line": 198,
+          "kind": "call",
+          "source": "client.session_update(session_id=session_id, update=AgentMessageChunk(session_update='agent_message_chunk', content=TextContentBlock(type='text', text=''), field_meta=encode_updates(TextRouteUpdate(None), RequestFailedUp"
+        },
+        {
+          "line": 214,
+          "kind": "call",
+          "source": "self.client.session_update(session_id=self.session_id, update=AgentMessageChunk(session_update='agent_message_chunk', content=TextContentBlock(type='text', text=''), field_meta=encode_updates(PromptCancelledUpdate(event."
+        },
+        {
+          "line": 157,
+          "kind": "call",
+          "source": "client.session_update(session_id=session_id, update=UsageUpdate(session_update='usage_update', used=used, size=size))"
+        },
+        {
+          "line": 146,
+          "kind": "call",
+          "source": "McpClientReceiptUpdate(turn_id, event.receipt)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "sites": [
+        {
+          "line": 340,
+          "kind": "declaration",
+          "name": "TurnState"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "sites": [
+        {
+          "line": 696,
+          "kind": "call",
+          "source": "events.TurnState(state='failed', reason_code='session_identity_uncertain', elapsed_ms=0, phase=ShutdownPhase())"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/catalog_document.py",
+      "sites": [
+        {
+          "line": 100,
+          "kind": "call",
+          "source": "kind.matches(tags)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "sites": [
+        {
+          "line": 165,
+          "kind": "call",
+          "source": "channel.matches(thread.tags)"
+        },
+        {
+          "line": 165,
+          "kind": "call",
+          "source": "channel.matches(updated.tags)"
+        },
+        {
+          "line": 240,
+          "kind": "call",
+          "source": "view.matches(thread.tags)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/channel_targets.py",
+      "sites": [
+        {
+          "line": 32,
+          "kind": "declaration",
+          "name": "matches"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/channels.py",
+      "sites": [
+        {
+          "line": 72,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 113,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 119,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 125,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 142,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 143,
+          "kind": "call",
+          "source": "self.match.matches(self.tags, tags)"
+        },
+        {
+          "line": 74,
+          "kind": "call",
+          "source": "self.view.predicate.matches(tags)"
+        },
+        {
+          "line": 75,
+          "kind": "call",
+          "source": "self.builtin.matches(tags)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "sites": [
+        {
+          "line": 191,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 55,
+          "kind": "call",
+          "source": "Platform.current().matches(self)"
+        },
+        {
+          "line": 848,
+          "kind": "call",
+          "source": "self.platform.matches(self.identity)"
+        },
+        {
+          "line": 198,
+          "kind": "call",
+          "source": "self.matches(identity)"
+        },
+        {
+          "line": 518,
+          "kind": "call",
+          "source": "self.matches(identity)"
+        },
+        {
+          "line": 506,
+          "kind": "call",
+          "source": "self.matches(leader)"
+        },
+        {
+          "line": 531,
+          "kind": "call",
+          "source": "self.matches(identity)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "sites": [
+        {
+          "line": 1374,
+          "kind": "call",
+          "source": "document.resolve(channel).matches(thread.tags)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/compaction_publication.py",
+      "sites": [
+        {
+          "line": 99,
+          "kind": "call",
+          "source": "runtime.session_update(session_id=session_id, update=AgentMessageChunk(session_update='agent_message_chunk', content=TextContentBlock(type='text', text=''), field_meta=encode_updates(CompactionPublishedUpdate(metadata)))"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/compaction_result.py",
+      "sites": [
+        {
+          "line": 56,
+          "kind": "call",
+          "source": "runner.runtime.session_update(session_id=session_id, update=AgentMessageChunk(session_update='agent_message_chunk', content=TextContentBlock(type='text', text=''), field_meta=encode_updates(TranscriptChangedUpdate(None))"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/config_options.py",
+      "sites": [
+        {
+          "line": 254,
+          "kind": "call",
+          "source": "self.runtime.session_update(session_id=session_id, update=ConfigOptionUpdate(session_update='config_option_update', config_options=options))"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "sites": [
+        {
+          "line": 37,
+          "kind": "call",
+          "source": "before.matches(source.reserved_revision)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "sites": [
+        {
+          "line": 116,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 543,
+          "kind": "call",
+          "source": "dispatch.matches(wire_root_id, fence, exact_target)"
+        },
+        {
+          "line": 532,
+          "kind": "call",
+          "source": "prior.matches(wire_root_id, fence, exact_target)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/cursor_owner.py",
+      "sites": [
+        {
+          "line": 67,
+          "kind": "call",
+          "source": "row.sent_owner_admission_generation.matches(self.admission_generation)"
+        },
+        {
+          "line": 111,
+          "kind": "call",
+          "source": "row.sent_owner_admission_generation.matches(self.admission_generation)"
+        },
+        {
+          "line": 148,
+          "kind": "call",
+          "source": "reserved.sent_owner_admission_generation.matches(self.admission_generation)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "sites": [
+        {
+          "line": 146,
+          "kind": "call",
+          "source": "self.runtime.session_update(session_id=session_id, update=SessionInfoUpdate(session_update='session_info_update', field_meta=encode_updates(CursorAdvancedUpdate(observed, selected_status))))"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "sites": [
+        {
+          "line": 179,
+          "kind": "declaration",
+          "name": "matches"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/goal_failure_observation.py",
+      "sites": [
+        {
+          "line": 148,
+          "kind": "call",
+          "source": "lease.matches(evidence.turn)"
+        },
+        {
+          "line": 106,
+          "kind": "call",
+          "source": "self.turn.matches(observed)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "sites": [
+        {
+          "line": 229,
+          "kind": "call",
+          "source": "observed.matches(fence.renamed(canonical))"
+        },
+        {
+          "line": 341,
+          "kind": "call",
+          "source": "wait.matches(original)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "sites": [
+        {
+          "line": 67,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 77,
+          "kind": "call",
+          "source": "self.matches(original)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/goals.py",
+      "sites": [
+        {
+          "line": 152,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 156,
+          "kind": "call",
+          "source": "self.digest.matches(goal.text)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "sites": [
+        {
+          "line": 255,
+          "kind": "call",
+          "source": "resolved.matches(message)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/input_attempt.py",
+      "sites": [
+        {
+          "line": 252,
+          "kind": "call",
+          "source": "self.digest.matches(text)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "sites": [
+        {
+          "line": 132,
+          "kind": "call",
+          "source": "(client or self.runtime).session_update(session_id=session_id, update=(await self.queue_state(session_id)).acp_chunk())"
+        },
+        {
+          "line": 154,
+          "kind": "call",
+          "source": "(client or self.runtime).session_update(session_id=session_id, update=InputStartedUpdate(input_id, text, scope, revision, native_id).acp_chunk())"
+        },
+        {
+          "line": 167,
+          "kind": "call",
+          "source": "(client or self.runtime).session_update(session_id=session_id, update=InputDeliveryChangedUpdate(input_id).acp_chunk())"
+        },
+        {
+          "line": 292,
+          "kind": "call",
+          "source": "self.effects.turns.turn_state(session_id)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_admission_epoch.py",
+      "sites": [
+        {
+          "line": 26,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 43,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 76,
+          "kind": "declaration",
+          "name": "matches"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "sites": [
+        {
+          "line": 204,
+          "kind": "call",
+          "source": "executor.shutdown(wait=False)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/pi_payloads.py",
+      "sites": [
+        {
+          "line": 602,
+          "kind": "call",
+          "source": "display.matches(raw_text)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "sites": [
+        {
+          "line": 429,
+          "kind": "call",
+          "source": "channel.matches(thread.tags)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "sites": [
+        {
+          "line": 386,
+          "kind": "call",
+          "source": "channel.matches(thread.tags)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "sites": [
+        {
+          "line": 26,
+          "kind": "import",
+          "source": "from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "sites": [
+        {
+          "line": 31,
+          "kind": "import",
+          "source": "from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence, TurnState"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "sites": [
+        {
+          "line": 418,
+          "kind": "call",
+          "source": "source.matches(goal, owner, registry)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/reservation_rules.py",
+      "sites": [
+        {
+          "line": 118,
+          "kind": "call",
+          "source": "check.revision.matches(check.source.reserved_revision)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/runtime.py",
+      "sites": [
+        {
+          "line": 381,
+          "kind": "declaration",
+          "name": "RuntimeProxy"
+        },
+        {
+          "line": 108,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 180,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 237,
+          "kind": "declaration",
+          "name": "request_permission"
+        },
+        {
+          "line": 394,
+          "kind": "declaration",
+          "name": "subscribe"
+        },
+        {
+          "line": 213,
+          "kind": "call",
+          "source": "client.session_update(session_id=session_id, update=update)"
+        },
+        {
+          "line": 434,
+          "kind": "call",
+          "source": "self.agent.sessions.client.session_update(session_id=self.session_id, update={**data['update'], '_meta': present_session(data['update'].get('_meta') or {}, self.session_id)})"
+        },
+        {
+          "line": 228,
+          "kind": "call",
+          "source": "socket_client.session_update(session_id=session_id, update=update)"
+        },
+        {
+          "line": 516,
+          "kind": "call",
+          "source": "self.agent.sessions.client.session_update(session_id=self.session_id, update={'sessionUpdate': 'config_option_update', 'configOptions': metadata['configOptions']})"
+        },
+        {
+          "line": 459,
+          "kind": "call",
+          "source": "self.agent.sessions.client.request_permission(session_id=self.session_id, tool_call=request['toolCall'], options=request['options'])"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "sites": [
+        {
+          "line": 273,
+          "kind": "import",
+          "source": "from .acp_extension import TurnChangedUpdate, encode_updates"
+        },
+        {
+          "line": 281,
+          "kind": "call",
+          "source": "TurnChangedUpdate(await Coordination.run_worker(partial(ctx.server.agent.turns.turn_state, ctx.session_id)))"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/selected_source.py",
+      "sites": [
+        {
+          "line": 42,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 89,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 93,
+          "kind": "call",
+          "source": "self.observe(session_file).matches(self)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/selected_summary_admission.py",
+      "sites": [
+        {
+          "line": 46,
+          "kind": "call",
+          "source": "self.source.input_digest.matches(text)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "sites": [
+        {
+          "line": 302,
+          "kind": "call",
+          "source": "row.sent_owner_admission_generation.matches(admission.owner_admission_generation)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/session_effects.py",
+      "sites": [
+        {
+          "line": 8,
+          "kind": "import",
+          "source": "from .runtime import RuntimeProxy"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "sites": [
+        {
+          "line": 41,
+          "kind": "import",
+          "source": "from .runtime import RuntimeProxy, RuntimeServer"
+        },
+        {
+          "line": 330,
+          "kind": "call",
+          "source": "self.runtime.session_update(session_id=session_id, update=SessionInfoUpdate(session_update='session_info_update', title=thread.title or name, field_meta=await self.metadata(name, session_id=session_id)))"
+        },
+        {
+          "line": 298,
+          "kind": "call",
+          "source": "proxy.subscribe()"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/text_digest.py",
+      "sites": [
+        {
+          "line": 20,
+          "kind": "declaration",
+          "name": "matches"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/threads.py",
+      "sites": [
+        {
+          "line": 27,
+          "kind": "import",
+          "source": "from .turn_lease import ActiveTurn, TurnFence, TurnLeaseFence, TurnState"
+        },
+        {
+          "line": 81,
+          "kind": "declaration",
+          "name": "turn_state"
+        },
+        {
+          "line": 82,
+          "kind": "call",
+          "source": "TurnState(self.active_turn, self.last_finished_turn_id)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "sites": [
+        {
+          "line": 43,
+          "kind": "declaration",
+          "name": "matches"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/transcript_updates.py",
+      "sites": [
+        {
+          "line": 12,
+          "kind": "import",
+          "source": "from .acp_extension import TurnChangedUpdate, TranscriptSnapshotUpdate, encode_updates"
+        },
+        {
+          "line": 20,
+          "kind": "import",
+          "source": "from .turn_lease import TurnState"
+        },
+        {
+          "line": 30,
+          "kind": "declaration",
+          "name": "TurnTranscriptUpdate"
+        },
+        {
+          "line": 34,
+          "kind": "call",
+          "source": "client.session_update(session_id=session_id, update=AgentMessageChunk(session_update='agent_message_chunk', content=TextContentBlock(type='text', text=''), field_meta=encode_updates(TurnChangedUpdate(self.state))))"
+        },
+        {
+          "line": 53,
+          "kind": "call",
+          "source": "destination.session_update(session_id=session_id, update=AgentMessageChunk(session_update='agent_message_chunk', content=TextContentBlock(type='text', text=''), field_meta=encode_updates(snapshot)))"
+        },
+        {
+          "line": 39,
+          "kind": "call",
+          "source": "TurnChangedUpdate(self.state)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "sites": [
+        {
+          "line": 566,
+          "kind": "call",
+          "source": "binding.matches(sent_text)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "sites": [
+        {
+          "line": 96,
+          "kind": "call",
+          "source": "wait.matches(original)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_lease.py",
+      "sites": [
+        {
+          "line": 50,
+          "kind": "declaration",
+          "name": "TurnState"
+        },
+        {
+          "line": 81,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 123,
+          "kind": "declaration",
+          "name": "matches"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "sites": [
+        {
+          "line": 27,
+          "kind": "import",
+          "source": "from .transcript_updates import TurnTranscriptUpdate"
+        },
+        {
+          "line": 28,
+          "kind": "import",
+          "source": "from .turn_lease import TurnState"
+        },
+        {
+          "line": 331,
+          "kind": "call",
+          "source": "self.runtime.session_update(session_id=self.session_id, update=AgentMessageChunk(session_update='agent_message_chunk', content=TextContentBlock(type='text', text=''), field_meta=encode_updates(TranscriptChangedUpdate(che"
+        },
+        {
+          "line": 240,
+          "kind": "call",
+          "source": "TurnTranscriptUpdate(state=state)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "sites": [
+        {
+          "line": 49,
+          "kind": "import",
+          "source": "from .transcript_updates import TurnTranscriptUpdate"
+        },
+        {
+          "line": 51,
+          "kind": "import",
+          "source": "from .turn_lease import TurnLeaseFence, TurnState"
+        },
+        {
+          "line": 150,
+          "kind": "declaration",
+          "name": "turn_state"
+        },
+        {
+          "line": 155,
+          "kind": "call",
+          "source": "self.turn_state(session_id)"
+        },
+        {
+          "line": 475,
+          "kind": "call",
+          "source": "TurnTranscriptUpdate(state=self.turn_state(session_id))"
+        },
+        {
+          "line": 152,
+          "kind": "call",
+          "source": "TurnState()"
+        },
+        {
+          "line": 148,
+          "kind": "call",
+          "source": "self.turn_state(session_id)"
+        },
+        {
+          "line": 475,
+          "kind": "call",
+          "source": "self.turn_state(session_id)"
+        },
+        {
+          "line": 163,
+          "kind": "call",
+          "source": "TurnTranscriptUpdate(state=state)"
+        },
+        {
+          "line": 384,
+          "kind": "call",
+          "source": "self.runtime.request_permission(session_id, controller, {'toolCall': tool_call.model_dump(by_alias=True, exclude_none=True), 'options': [option.model_dump(by_alias=True, exclude_none=True) for option in options]})"
+        },
+        {
+          "line": 400,
+          "kind": "call",
+          "source": "controller.request_permission(session_id=session_id, tool_call=tool_call, options=options)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "sites": [
+        {
+          "line": 117,
+          "kind": "call",
+          "source": "events.TurnState(state=state, reason_code=reason_code, elapsed_ms=max(0, elapsed_ms), phase=phase, attempt=attempt)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/worker.py",
+      "sites": [
+        {
+          "line": 49,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/acp_error_payload_installed_journey.py",
+      "sites": [
+        {
+          "line": 44,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 55,
+          "kind": "declaration",
+          "name": "request_permission"
+        },
+        {
+          "line": 201,
+          "kind": "call",
+          "source": "server.shutdown()"
+        },
+        {
+          "line": 45,
+          "kind": "call",
+          "source": "super().session_update(**kwargs)"
+        }
+      ]
+    },
+    {
+      "path": "tests/codex_loopback_provider.py",
+      "sites": [
+        {
+          "line": 131,
+          "kind": "call",
+          "source": "self.server.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "sites": [
+        {
+          "line": 182,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 161,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/delivery_owner_fixture.py",
+      "sites": [
+        {
+          "line": 52,
+          "kind": "declaration",
+          "name": "canonical_agent"
+        },
+        {
+          "line": 49,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/explicit_private_owner_installed_journey.py",
+      "sites": [
+        {
+          "line": 28,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 31,
+          "kind": "declaration",
+          "name": "request_permission"
+        }
+      ]
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "sites": [
+        {
+          "line": 21,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 102,
+          "kind": "call",
+          "source": "canonical_agent(Comms(self.root), auto_wake=auto_wake, runtime_enabled=runtime_enabled, agent_bin='pi', agent_args=self.native_arguments(native_options))"
+        },
+        {
+          "line": 111,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/native_context_budget_installed_journey.py",
+      "sites": [
+        {
+          "line": 33,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 221,
+          "kind": "call",
+          "source": "server.shutdown()"
+        },
+        {
+          "line": 153,
+          "kind": "declaration",
+          "name": "request_permission"
+        }
+      ]
+    },
+    {
+      "path": "tests/native_context_reader_journey.py",
+      "sites": [
+        {
+          "line": 17,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 47,
+          "kind": "call",
+          "source": "canonical_agent(Comms(fixture.root), agent_bin='pi', agent_args=['--model', 'response-local/fixture', '--offline'], auto_wake=False, runtime_enabled=True)"
+        },
+        {
+          "line": 149,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/native_request_wait_installed_journey.py",
+      "sites": [
+        {
+          "line": 125,
+          "kind": "declaration",
+          "name": "subscribe"
+        },
+        {
+          "line": 225,
+          "kind": "call",
+          "source": "subscribe()"
+        },
+        {
+          "line": 160,
+          "kind": "call",
+          "source": "subscribe()"
+        },
+        {
+          "line": 163,
+          "kind": "call",
+          "source": "subscribe()"
+        },
+        {
+          "line": 164,
+          "kind": "call",
+          "source": "subscribe()"
+        }
+      ]
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "sites": [
+        {
+          "line": 194,
+          "kind": "call",
+          "source": "row.digest.matches(command)"
+        }
+      ]
+    },
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "sites": [
+        {
+          "line": 91,
+          "kind": "declaration",
+          "name": "session_update"
+        }
+      ]
+    },
+    {
+      "path": "tests/retained_task_native_journey.py",
+      "sites": [
+        {
+          "line": 22,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 75,
+          "kind": "call",
+          "source": "canonical_agent(Comms(fixture.root), agent_bin='pi', agent_args=['--model', 'response-local/fixture', '--thinking', 'off', '--offline', '--no-extensions', '--no-skills', '--no-context-files', '--no-prompt-templates', '--"
+        },
+        {
+          "line": 81,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 153,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "sites": [
+        {
+          "line": 166,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 502,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 708,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 1073,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 561,
+          "kind": "call",
+          "source": "attachment.shutdown()"
+        },
+        {
+          "line": 793,
+          "kind": "call",
+          "source": "attachment.shutdown()"
+        },
+        {
+          "line": 851,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 1379,
+          "kind": "call",
+          "source": "attachment.shutdown()"
+        },
+        {
+          "line": 385,
+          "kind": "call",
+          "source": "attachment.shutdown()"
+        },
+        {
+          "line": 307,
+          "kind": "call",
+          "source": "native.sent_owner_admission_generation.matches(cursor.owner_admission_generation)"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_acp.py",
+      "sites": [
+        {
+          "line": 27,
+          "kind": "import",
+          "source": "from agent_comms.acp_extension import ClearQueueRequest, ContextUsage, CoordinationChangedUpdate, GoalChangedUpdate, InputDeliveryChangedUpdate, InputFailedUpdate, InputStartedUpdate, RequestFailedUpdate, TranscriptChangedUpdate, TranscriptSnapshotUpdate, TurnChangedUpdate, decode_updates, encode_request"
+        },
+        {
+          "line": 53,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+        },
+        {
+          "line": 55,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 87,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'wire'), reply_window=0.1, no_reply_window=0.1, reply_quiet=0.05)"
+        },
+        {
+          "line": 131,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'wire'), agent_args=['--print', '--provider', 'openrouter', '--model', 'one'])"
+        },
+        {
+          "line": 172,
+          "kind": "call",
+          "source": "canonical_agent(wire(agent._comms.root))"
+        },
+        {
+          "line": 188,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'wire'), agent_args=['--provider', 'openrouter', '--model', 'one'])"
+        },
+        {
+          "line": 292,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 307,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'wire'), no_reply_window=0.1)"
+        },
+        {
+          "line": 381,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 404,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'wire'), no_reply_window=0.1)"
+        },
+        {
+          "line": 434,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'wire'), reply_window=30, no_reply_window=30, reply_quiet=30)"
+        },
+        {
+          "line": 479,
+          "kind": "call",
+          "source": "canonical_agent(wired, agent_bin='pi', agent_args=[])"
+        },
+        {
+          "line": 497,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 521,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 552,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 626,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 671,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 700,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 735,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 796,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 854,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 890,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 923,
+          "kind": "call",
+          "source": "canonical_agent(wired, agent_bin='pi', runtime_enabled=True)"
+        },
+        {
+          "line": 927,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 971,
+          "kind": "call",
+          "source": "canonical_agent(wired, agent_bin='pi')"
+        },
+        {
+          "line": 976,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 1025,
+          "kind": "call",
+          "source": "canonical_agent(wired, agent_bin='pi', runtime_enabled=True)"
+        },
+        {
+          "line": 1029,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 1065,
+          "kind": "call",
+          "source": "canonical_agent(wired, agent_bin='pi', runtime_enabled=True)"
+        },
+        {
+          "line": 1069,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 1098,
+          "kind": "call",
+          "source": "canonical_agent(wired, agent_bin='pi', runtime_enabled=True)"
+        },
+        {
+          "line": 1103,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 1148,
+          "kind": "call",
+          "source": "canonical_agent(wired, agent_bin='pi', runtime_enabled=True)"
+        },
+        {
+          "line": 1171,
+          "kind": "call",
+          "source": "RuntimeProxy(agent, 'proj', socket_path(wired.root, os.getpid()))"
+        },
+        {
+          "line": 1187,
+          "kind": "call",
+          "source": "canonical_agent(wired, agent_bin='pi', runtime_enabled=True)"
+        },
+        {
+          "line": 1193,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 1274,
+          "kind": "call",
+          "source": "canonical_agent(wired, agent_bin='pi')"
+        },
+        {
+          "line": 1291,
+          "kind": "call",
+          "source": "canonical_agent(wired, agent_bin='pi')"
+        },
+        {
+          "line": 1323,
+          "kind": "call",
+          "source": "canonical_agent(wired, agent_bin='pi')"
+        },
+        {
+          "line": 1465,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'wire'), reply_window=0.2, no_reply_window=0.1, reply_quiet=0.05)"
+        },
+        {
+          "line": 1507,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 1556,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 1650,
+          "kind": "call",
+          "source": "canonical_agent(wired, reply_window=0.1, no_reply_window=0.05, reply_quiet=0.02)"
+        },
+        {
+          "line": 1837,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 1863,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 373,
+          "kind": "call",
+          "source": "first.shutdown()"
+        },
+        {
+          "line": 451,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 963,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 1018,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 1091,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 1125,
+          "kind": "call",
+          "source": "RuntimeProxy(agent, 'proj', socket_path(wired.root, os.getpid()))"
+        },
+        {
+          "line": 1239,
+          "kind": "call",
+          "source": "canonical_agent(wired, agent_bin='pi', runtime_enabled=True)"
+        },
+        {
+          "line": 1243,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 1286,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 1316,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 1352,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 1475,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 211,
+          "kind": "call",
+          "source": "agent.turns.turn_state(session)"
+        },
+        {
+          "line": 215,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 304,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 1058,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 1141,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 1181,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 1231,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 1267,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 1529,
+          "kind": "call",
+          "source": "agent.turns.turn_state(session)"
+        },
+        {
+          "line": 1910,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 207,
+          "kind": "call",
+          "source": "agent.turns.turn_state(session)"
+        },
+        {
+          "line": 222,
+          "kind": "call",
+          "source": "agent.turns.turn_state(session)"
+        },
+        {
+          "line": 236,
+          "kind": "call",
+          "source": "agent.turns.turn_state(session)"
+        },
+        {
+          "line": 219,
+          "kind": "call",
+          "source": "TurnChangedUpdate(state)"
+        },
+        {
+          "line": 270,
+          "kind": "call",
+          "source": "agent.turns.turn_state(session)"
+        },
+        {
+          "line": 1544,
+          "kind": "call",
+          "source": "agent.turns.turn_state(session)"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_acp_compact_command.py",
+      "sites": [
+        {
+          "line": 18,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 27,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'wire'), auto_wake=False)"
+        },
+        {
+          "line": 51,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'wire'), auto_wake=False)"
+        },
+        {
+          "line": 80,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'wire'), auto_wake=False)"
+        },
+        {
+          "line": 107,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'wire'), auto_wake=False)"
+        },
+        {
+          "line": 125,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'wire'), auto_wake=False)"
+        },
+        {
+          "line": 142,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'wire'), auto_wake=False)"
+        },
+        {
+          "line": 46,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 75,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 102,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 120,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 152,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_acp_compaction_activity.py",
+      "sites": [
+        {
+          "line": 6,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 19,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='pi', auto_wake=False)"
+        },
+        {
+          "line": 61,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='pi', auto_wake=False)"
+        },
+        {
+          "line": 54,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 74,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_acp_extension.py",
+      "sites": [
+        {
+          "line": 6,
+          "kind": "import",
+          "source": "from agent_comms.acp_extension import AgentCommsUpdate, AvailableQueueProjection, CompactionChangedUpdate, CompactionCommittedUpdate, CompactionPublishedUpdate, CoordinationChangedUpdate, CursorAdvancedUpdate, CursorEnvelope, CursorScope, GoalChangedUpdate, InputDeliveryChangedUpdate, InputFailedUpdate, InputStartedUpdate, McpClientReceiptUpdate, QueueChangedUpdate, QueueItem, QueueScope, RequestFailedUpdate, PromptCancelledUpdate, SelectedWriteAcceptedUpdate, TextRouteUpdate, TranscriptChangedUpdate, TranscriptSnapshotUpdate, TurnChangedUpdate, UnavailableCursorObservation, decode_updates, encode_updates"
+        },
+        {
+          "line": 41,
+          "kind": "import",
+          "source": "from agent_comms.turn_lease import ActiveTurn, TurnState"
+        },
+        {
+          "line": 83,
+          "kind": "call",
+          "source": "McpClientReceiptUpdate('turn', McpLiveReceipt(1, 'pi-mcp-client', 'a' * 32, 'running', 'turn', ()))"
+        },
+        {
+          "line": 86,
+          "kind": "call",
+          "source": "TurnChangedUpdate(TurnState(ActiveTurn('turn', 123, started_at=1.0)))"
+        },
+        {
+          "line": 87,
+          "kind": "call",
+          "source": "TurnChangedUpdate(TurnState(finished_turn_id='turn'))"
+        },
+        {
+          "line": 86,
+          "kind": "call",
+          "source": "TurnState(ActiveTurn('turn', 123, started_at=1.0))"
+        },
+        {
+          "line": 87,
+          "kind": "call",
+          "source": "TurnState(finished_turn_id='turn')"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_acp_failure.py",
+      "sites": [
+        {
+          "line": 71,
+          "kind": "declaration",
+          "name": "matches"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_acp_goal_input_authority.py",
+      "sites": [
+        {
+          "line": 28,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 34,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='pi', runtime_enabled=True)"
+        },
+        {
+          "line": 40,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 93,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 158,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 231,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 271,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_acp_goal_original_input.py",
+      "sites": [
+        {
+          "line": 20,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 26,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='pi', runtime_enabled=True)"
+        },
+        {
+          "line": 32,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 90,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 135,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 162,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "sites": [
+        {
+          "line": 24,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+        },
+        {
+          "line": 25,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 33,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 248,
+          "kind": "call",
+          "source": "canonical_agent(comms, auto_wake=False)"
+        },
+        {
+          "line": 95,
+          "kind": "call",
+          "source": "canonical_agent(owner._comms, auto_wake=False)"
+        },
+        {
+          "line": 98,
+          "kind": "call",
+          "source": "RuntimeProxy(attachment, session, socket_path(native.root, os.getpid()))"
+        },
+        {
+          "line": 174,
+          "kind": "call",
+          "source": "canonical_agent(owner._comms, auto_wake=False)"
+        },
+        {
+          "line": 176,
+          "kind": "call",
+          "source": "RuntimeProxy(attachment, session, socket_path(native.root, os.getpid()))"
+        },
+        {
+          "line": 256,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 103,
+          "kind": "call",
+          "source": "proxy.subscribe()"
+        },
+        {
+          "line": 161,
+          "kind": "call",
+          "source": "attachment.shutdown()"
+        },
+        {
+          "line": 178,
+          "kind": "call",
+          "source": "proxy.subscribe()"
+        },
+        {
+          "line": 204,
+          "kind": "call",
+          "source": "attachment.shutdown()"
+        },
+        {
+          "line": 68,
+          "kind": "call",
+          "source": "owner.turns.turn_state(session)"
+        },
+        {
+          "line": 155,
+          "kind": "call",
+          "source": "owner.turns.turn_state(session)"
+        },
+        {
+          "line": 198,
+          "kind": "call",
+          "source": "owner.turns.turn_state(session)"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "sites": [
+        {
+          "line": 346,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 606,
+          "kind": "call",
+          "source": "agent.turns.turn_state(session)"
+        },
+        {
+          "line": 616,
+          "kind": "call",
+          "source": "agent.turns.turn_state(session)"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "sites": [
+        {
+          "line": 116,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 238,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 191,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 199,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 214,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 228,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 386,
+          "kind": "call",
+          "source": "attached.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_agent_events.py",
+      "sites": [
+        {
+          "line": 22,
+          "kind": "import",
+          "source": "from agent_comms.transcript_updates import TurnTranscriptUpdate"
+        },
+        {
+          "line": 165,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_auth.py",
+      "sites": [
+        {
+          "line": 9,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 56,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path), agent_args=['--model', 'test/base'])"
+        },
+        {
+          "line": 62,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 89,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_auto_title.py",
+      "sites": [
+        {
+          "line": 18,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_backend_failure_owner_pause.py",
+      "sites": [
+        {
+          "line": 19,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 28,
+          "kind": "call",
+          "source": "canonical_agent(wired, agent_bin='pi')"
+        },
+        {
+          "line": 106,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_captured_input_dispatch.py",
+      "sites": [
+        {
+          "line": 24,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 48,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 68,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 97,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_certified_bootstrap.py",
+      "sites": [
+        {
+          "line": 126,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_channel_bus_ownership.py",
+      "sites": [
+        {
+          "line": 118,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_channels.py",
+      "sites": [
+        {
+          "line": 77,
+          "kind": "call",
+          "source": "view.predicate.matches(thread.tags)"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_command_families.py",
+      "sites": [
+        {
+          "line": 17,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, RuntimeServer"
+        },
+        {
+          "line": 157,
+          "kind": "call",
+          "source": "RuntimeProxy(agent, 'owner', server.path)"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "sites": [
+        {
+          "line": 24,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 42,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='pi', runtime_enabled=True)"
+        },
+        {
+          "line": 102,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 144,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 194,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 232,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 240,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 273,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 279,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 326,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 447,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 73,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 337,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 372,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 87,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 128,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 176,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 219,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 259,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 305,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 385,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 468,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_compaction_send_admission.py",
+      "sites": [
+        {
+          "line": 17,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 53,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='pi', runtime_enabled=True)"
+        },
+        {
+          "line": 90,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_current_input_origin.py",
+      "sites": [
+        {
+          "line": 27,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 99,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_detached_owner.py",
+      "sites": [
+        {
+          "line": 12,
+          "kind": "import",
+          "source": "from agent_comms.acp_extension import CoordinationChangedUpdate, TurnSettledUpdate, decode_updates"
+        },
+        {
+          "line": 84,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 99,
+          "kind": "call",
+          "source": "first.shutdown()"
+        },
+        {
+          "line": 118,
+          "kind": "call",
+          "source": "second.shutdown()"
+        },
+        {
+          "line": 119,
+          "kind": "call",
+          "source": "third.shutdown()"
+        },
+        {
+          "line": 128,
+          "kind": "call",
+          "source": "client.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_extension_ui_native.py",
+      "sites": [
+        {
+          "line": 7,
+          "kind": "import",
+          "source": "from agent_comms.acp_extension import McpClientReceiptUpdate, decode_updates"
+        },
+        {
+          "line": 9,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy"
+        },
+        {
+          "line": 10,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 19,
+          "kind": "call",
+          "source": "canonical_agent(Comms(fixture.root), agent_bin='pi', agent_args=['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', '--no-extensions', '--no-skills', '--no-context-files', '--no-promp"
+        },
+        {
+          "line": 42,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 45,
+          "kind": "declaration",
+          "name": "request_permission"
+        },
+        {
+          "line": 63,
+          "kind": "call",
+          "source": "RuntimeProxy(attached, 'project', owner._runtime.path)"
+        },
+        {
+          "line": 64,
+          "kind": "call",
+          "source": "proxy.subscribe()"
+        },
+        {
+          "line": 126,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "sites": [
+        {
+          "line": 31,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+        },
+        {
+          "line": 32,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 67,
+          "kind": "call",
+          "source": "canonical_agent(comms, auto_wake=False, runtime_enabled=True, agent_args=['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', '--no-extensions', '--no-skills', '--no-context-files', '--no-promp"
+        },
+        {
+          "line": 86,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 218,
+          "kind": "call",
+          "source": "canonical_agent(comms, auto_wake=False, runtime_enabled=True, agent_args=['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', '--no-extensions', '--no-skills', '--no-context-files', '--no-promp"
+        },
+        {
+          "line": 207,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 316,
+          "kind": "call",
+          "source": "RuntimeProxy(agent, sid, socket_path(comms.root, os.getpid()))"
+        },
+        {
+          "line": 334,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_goal_nominal.py",
+      "sites": [
+        {
+          "line": 92,
+          "kind": "declaration",
+          "name": "session_update"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_goal_standby.py",
+      "sites": [
+        {
+          "line": 24,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 34,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='pi')"
+        },
+        {
+          "line": 63,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_goal_standby_liveness.py",
+      "sites": [
+        {
+          "line": 26,
+          "kind": "import",
+          "source": "from agent_comms.transcript_updates import TurnTranscriptUpdate"
+        },
+        {
+          "line": 27,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 38,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='pi', runtime_enabled=True, auto_wake=False, adaptive_compaction_enabled=False, agent_args=['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', '--no-extensions"
+        },
+        {
+          "line": 65,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 514,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_goal_ui_creation.py",
+      "sites": [
+        {
+          "line": 15,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+        },
+        {
+          "line": 16,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 31,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='pi', agent_args=['--provider', 'openrouter', '--model', 'fake'], runtime_enabled=True, auto_wake=False)"
+        },
+        {
+          "line": 42,
+          "kind": "call",
+          "source": "RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))"
+        },
+        {
+          "line": 58,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 79,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_goal_wait_certified_reply.py",
+      "sites": [
+        {
+          "line": 39,
+          "kind": "call",
+          "source": "wait.matches(original)"
+        },
+        {
+          "line": 49,
+          "kind": "call",
+          "source": "wait.matches(original)"
+        },
+        {
+          "line": 78,
+          "kind": "call",
+          "source": "wait.matches(original)"
+        },
+        {
+          "line": 136,
+          "kind": "call",
+          "source": "wait.matches(source.delivery(original.seq))"
+        },
+        {
+          "line": 53,
+          "kind": "call",
+          "source": "replacement_wait.matches(original)"
+        },
+        {
+          "line": 75,
+          "kind": "call",
+          "source": "wait.matches(source.delivery(wrong.seq))"
+        },
+        {
+          "line": 76,
+          "kind": "call",
+          "source": "wait.matches(source.delivery(notice.seq))"
+        },
+        {
+          "line": 79,
+          "kind": "call",
+          "source": "replace(wait, after_seq=reply.seq).matches(original)"
+        },
+        {
+          "line": 92,
+          "kind": "call",
+          "source": "replace(wait, owner_created_at=replacement.created_at).matches(source.delivery(reply.seq))"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_headless_diagnostics.py",
+      "sites": [
+        {
+          "line": 104,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_image_inputs.py",
+      "sites": [
+        {
+          "line": 15,
+          "kind": "import",
+          "source": "from agent_comms.acp_extension import InputDeliveryChangedUpdate, QueueChangedUpdate, QueuePromptRequest, SteerPromptRequest, TurnStartedUpdate, decode_updates, encode_request"
+        },
+        {
+          "line": 26,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+        },
+        {
+          "line": 27,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 70,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'wire'), agent_bin='pi-image-stub', agent_args=['--model', 'test/model'])"
+        },
+        {
+          "line": 103,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 144,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='pi-image-stub', agent_args=['--model', 'test/model'], runtime_enabled=True)"
+        },
+        {
+          "line": 147,
+          "kind": "call",
+          "source": "canonical_agent(comms)"
+        },
+        {
+          "line": 157,
+          "kind": "call",
+          "source": "RuntimeProxy(client, 'project', socket_path(comms.root, os.getpid()))"
+        },
+        {
+          "line": 223,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 256,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'acp-wire'), agent_bin=str(stub), agent_args=['--model', 'test/model'])"
+        },
+        {
+          "line": 264,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 91,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 137,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 159,
+          "kind": "call",
+          "source": "proxy.subscribe()"
+        },
+        {
+          "line": 193,
+          "kind": "call",
+          "source": "client.shutdown()"
+        },
+        {
+          "line": 194,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 231,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 278,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 290,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_input_delivery_history.py",
+      "sites": [
+        {
+          "line": 11,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+        },
+        {
+          "line": 100,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 104,
+          "kind": "call",
+          "source": "RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))"
+        },
+        {
+          "line": 125,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_input_drain.py",
+      "sites": [
+        {
+          "line": 227,
+          "kind": "declaration",
+          "name": "session_update"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_input_drain_native.py",
+      "sites": [
+        {
+          "line": 63,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 198,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_l0_goal_input_closure.py",
+      "sites": [
+        {
+          "line": 30,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+        },
+        {
+          "line": 183,
+          "kind": "call",
+          "source": "RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))"
+        },
+        {
+          "line": 226,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_live_drain_failure.py",
+      "sites": [
+        {
+          "line": 83,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 105,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_managed_project_native_latency.py",
+      "sites": [
+        {
+          "line": 26,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 87,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 100,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='pi', runtime_enabled=True, auto_wake=False, agent_args=['--offline', '--no-extensions', '--extension', str(extension), '--no-skills', '--no-context-files', '--no-prompt-templates', '--to"
+        },
+        {
+          "line": 154,
+          "kind": "call",
+          "source": "attachment.shutdown()"
+        },
+        {
+          "line": 155,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_mcp_acceptance.py",
+      "sites": [
+        {
+          "line": 29,
+          "kind": "import",
+          "source": "from agent_comms.acp_extension import McpClientReceiptUpdate, TurnSettledUpdate, TurnStartedUpdate, decode_updates"
+        },
+        {
+          "line": 37,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy"
+        },
+        {
+          "line": 38,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 279,
+          "kind": "call",
+          "source": "server.shutdown()"
+        },
+        {
+          "line": 296,
+          "kind": "call",
+          "source": "module.open_observer(case, root)"
+        },
+        {
+          "line": 353,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'wire'), agent_bin=binary, agent_args=args, runtime_enabled=True, auto_wake=False)"
+        },
+        {
+          "line": 369,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 382,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 396,
+          "kind": "declaration",
+          "name": "request_permission"
+        },
+        {
+          "line": 410,
+          "kind": "call",
+          "source": "canonical_agent(owner._comms, auto_wake=False)"
+        },
+        {
+          "line": 412,
+          "kind": "call",
+          "source": "RuntimeProxy(attached, 'project', owner._runtime.path)"
+        },
+        {
+          "line": 413,
+          "kind": "call",
+          "source": "proxy.subscribe()"
+        },
+        {
+          "line": 537,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 432,
+          "kind": "call",
+          "source": "owner.turns.turn_state('project')"
+        },
+        {
+          "line": 385,
+          "kind": "call",
+          "source": "observer.session_update(session_id=session_id, update=update)"
+        },
+        {
+          "line": 400,
+          "kind": "call",
+          "source": "observer.request_permission(**kwargs)"
+        },
+        {
+          "line": 442,
+          "kind": "call",
+          "source": "owner.turns.turn_state('project')"
+        },
+        {
+          "line": 454,
+          "kind": "call",
+          "source": "owner.turns.turn_state('project')"
+        },
+        {
+          "line": 463,
+          "kind": "call",
+          "source": "owner.turns.turn_state('project')"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_mcp_relay.py",
+      "sites": [
+        {
+          "line": 16,
+          "kind": "import",
+          "source": "from agent_comms.acp_extension import McpClientReceiptUpdate, decode_updates"
+        },
+        {
+          "line": 23,
+          "kind": "import",
+          "source": "from agent_comms.runtime import UNBOUND_CONTROLLER, RuntimeProxy, SocketClient"
+        },
+        {
+          "line": 24,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 50,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 164,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 167,
+          "kind": "declaration",
+          "name": "request_permission"
+        },
+        {
+          "line": 64,
+          "kind": "call",
+          "source": "owner.turns.turn_state(session_id)"
+        },
+        {
+          "line": 336,
+          "kind": "call",
+          "source": "canonical_agent(owner._comms, auto_wake=False)"
+        },
+        {
+          "line": 338,
+          "kind": "call",
+          "source": "RuntimeProxy(attachment, session_id, owner._runtime.path)"
+        },
+        {
+          "line": 62,
+          "kind": "call",
+          "source": "McpClientReceiptUpdate(original_id, receipt)"
+        },
+        {
+          "line": 339,
+          "kind": "call",
+          "source": "proxy.subscribe()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_native_arguments.py",
+      "sites": [
+        {
+          "line": 102,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 111,
+          "kind": "call",
+          "source": "canonical_agent(Comms(native.root), auto_wake=False, agent_args=['--provider=response-local', '--model=fixture', '--thinking=low', '--thinking=off', '--offline', '--no-extensions', '--no-skills', '--no-context-files', '-"
+        },
+        {
+          "line": 167,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "sites": [
+        {
+          "line": 18,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 176,
+          "kind": "call",
+          "source": "canonical_agent(Comms(native.root), agent_bin='pi', agent_args=['--model', 'response-local/fixture', '--offline'], auto_wake=False)"
+        },
+        {
+          "line": 187,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_native_channel_reply_roundtrip.py",
+      "sites": [
+        {
+          "line": 232,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 475,
+          "kind": "call",
+          "source": "server.shutdown()"
+        },
+        {
+          "line": 472,
+          "kind": "call",
+          "source": "attachment.shutdown()"
+        },
+        {
+          "line": 442,
+          "kind": "call",
+          "source": "attachment.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "sites": [
+        {
+          "line": 24,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 74,
+          "kind": "call",
+          "source": "canonical_agent(Comms(fixture.root), agent_bin='pi', agent_args=['--model', 'response-local/fixture', '--thinking', 'off', '--offline', '--no-extensions', '--no-skills', '--no-prompt-templates', '--no-builtin-tools', '--"
+        },
+        {
+          "line": 85,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 351,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 105,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_native_fork_first_input.py",
+      "sites": [
+        {
+          "line": 228,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 322,
+          "kind": "call",
+          "source": "attachment.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_native_only_execution.py",
+      "sites": [
+        {
+          "line": 211,
+          "kind": "call",
+          "source": "client.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "sites": [
+        {
+          "line": 1202,
+          "kind": "call",
+          "source": "server.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_native_project_observation.py",
+      "sites": [
+        {
+          "line": 12,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 20,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='/bin/echo', agent_args=[], runtime_enabled=True)"
+        },
+        {
+          "line": 59,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_native_routed_progress.py",
+      "sites": [
+        {
+          "line": 158,
+          "kind": "call",
+          "source": "server.shutdown()"
+        },
+        {
+          "line": 157,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_native_tool_declarations.py",
+      "sites": [
+        {
+          "line": 14,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 168,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'sdk-wire'), auto_wake=False)"
+        },
+        {
+          "line": 172,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 203,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_ordinary_admission_rules.py",
+      "sites": [
+        {
+          "line": 105,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_outbound_native_journey.py",
+      "sites": [
+        {
+          "line": 14,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 29,
+          "kind": "call",
+          "source": "canonical_agent(comms, auto_wake=False, runtime_enabled=True, agent_args=['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', '--no-extensions', '--no-skills', '--no-context-files', '--no-promp"
+        },
+        {
+          "line": 60,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 145,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "sites": [
+        {
+          "line": 39,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 899,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='pi', runtime_enabled=True)"
+        },
+        {
+          "line": 915,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 981,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_private_runtime_bootstrap_native.py",
+      "sites": [
+        {
+          "line": 169,
+          "kind": "call",
+          "source": "server.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_project.py",
+      "sites": [
+        {
+          "line": 14,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 107,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+        },
+        {
+          "line": 241,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+        },
+        {
+          "line": 73,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='/bin/echo', agent_args=[])"
+        },
+        {
+          "line": 78,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 90,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='/bin/echo', agent_args=[])"
+        },
+        {
+          "line": 114,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 183,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='/bin/echo', agent_args=[], runtime_enabled=True)"
+        },
+        {
+          "line": 217,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='/bin/echo', agent_args=[])"
+        },
+        {
+          "line": 247,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='/bin/echo', agent_args=[], runtime_enabled=True)"
+        },
+        {
+          "line": 255,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 89,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 102,
+          "kind": "call",
+          "source": "resumed.shutdown()"
+        },
+        {
+          "line": 126,
+          "kind": "call",
+          "source": "canonical_agent(agent._comms, auto_wake=False)"
+        },
+        {
+          "line": 128,
+          "kind": "call",
+          "source": "RuntimeProxy(attached, session_id, socket_path(native.root, os.getpid()))"
+        },
+        {
+          "line": 209,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 236,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 260,
+          "kind": "call",
+          "source": "canonical_agent(comms)"
+        },
+        {
+          "line": 262,
+          "kind": "call",
+          "source": "RuntimeProxy(client, session, socket_path(comms.root, os.getpid()))"
+        },
+        {
+          "line": 286,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 130,
+          "kind": "call",
+          "source": "proxy.subscribe()"
+        },
+        {
+          "line": 170,
+          "kind": "call",
+          "source": "attached.shutdown()"
+        },
+        {
+          "line": 266,
+          "kind": "call",
+          "source": "proxy.subscribe()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_prompt_queue.py",
+      "sites": [
+        {
+          "line": 14,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 19,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path), agent_bin='pi', agent_args=['--model', 'test/base'])"
+        },
+        {
+          "line": 30,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 82,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 73,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 110,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_reply_routing.py",
+      "sites": [
+        {
+          "line": 8,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 22,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='pi', agent_args=[], runtime_enabled=True, auto_wake=False)"
+        },
+        {
+          "line": 31,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 107,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='/bin/echo', agent_args=[], runtime_enabled=True)"
+        },
+        {
+          "line": 102,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 125,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_reservation_rules.py",
+      "sites": [
+        {
+          "line": 176,
+          "kind": "call",
+          "source": "FieldCodec.decode(TextDigest, FieldCodec.encode(admission.input_digest)).matches('original')"
+        },
+        {
+          "line": 65,
+          "kind": "call",
+          "source": "unavailable.matches(present)"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_retained_fork_first_input.py",
+      "sites": [
+        {
+          "line": 77,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 131,
+          "kind": "call",
+          "source": "attachment.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_retained_manual_compaction.py",
+      "sites": [
+        {
+          "line": 156,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 277,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_runtime.py",
+      "sites": [
+        {
+          "line": 11,
+          "kind": "import",
+          "source": "from agent_comms.acp_extension import CoordinationChangedUpdate, TranscriptSnapshotUpdate, TurnSettledUpdate, decode_updates"
+        },
+        {
+          "line": 21,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, present_session, socket_path"
+        },
+        {
+          "line": 24,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 84,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='/bin/echo', agent_args=[], runtime_enabled=True)"
+        },
+        {
+          "line": 85,
+          "kind": "call",
+          "source": "canonical_agent(comms)"
+        },
+        {
+          "line": 87,
+          "kind": "call",
+          "source": "RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))"
+        },
+        {
+          "line": 123,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='/bin/echo', agent_args=[], runtime_enabled=True)"
+        },
+        {
+          "line": 124,
+          "kind": "call",
+          "source": "canonical_agent(comms)"
+        },
+        {
+          "line": 128,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 146,
+          "kind": "call",
+          "source": "RuntimeProxy(client, response.session_id, path)"
+        },
+        {
+          "line": 196,
+          "kind": "call",
+          "source": "canonical_agent(comms)"
+        },
+        {
+          "line": 200,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 242,
+          "kind": "call",
+          "source": "RuntimeProxy(client, 'worker', old_path)"
+        },
+        {
+          "line": 347,
+          "kind": "call",
+          "source": "RuntimeProxy(context, 'worker', old_path)"
+        },
+        {
+          "line": 368,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='/bin/echo', agent_args=[], runtime_enabled=True)"
+        },
+        {
+          "line": 369,
+          "kind": "call",
+          "source": "canonical_agent(comms)"
+        },
+        {
+          "line": 373,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 385,
+          "kind": "call",
+          "source": "RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))"
+        },
+        {
+          "line": 414,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='/bin/echo', agent_args=['--provider', 'test', '--model', 'one'], runtime_enabled=True)"
+        },
+        {
+          "line": 420,
+          "kind": "call",
+          "source": "canonical_agent(comms)"
+        },
+        {
+          "line": 452,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='/bin/echo')"
+        },
+        {
+          "line": 471,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='/bin/echo', runtime_enabled=True)"
+        },
+        {
+          "line": 472,
+          "kind": "call",
+          "source": "canonical_agent(comms)"
+        },
+        {
+          "line": 476,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 491,
+          "kind": "call",
+          "source": "RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))"
+        },
+        {
+          "line": 386,
+          "kind": "call",
+          "source": "proxy.subscribe()"
+        },
+        {
+          "line": 115,
+          "kind": "call",
+          "source": "client.shutdown()"
+        },
+        {
+          "line": 116,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 148,
+          "kind": "call",
+          "source": "proxy.subscribe()"
+        },
+        {
+          "line": 180,
+          "kind": "call",
+          "source": "RuntimeProxy(client, 'missing-thread', path)"
+        },
+        {
+          "line": 183,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 244,
+          "kind": "call",
+          "source": "proxy.subscribe()"
+        },
+        {
+          "line": 301,
+          "kind": "call",
+          "source": "client.shutdown()"
+        },
+        {
+          "line": 406,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 445,
+          "kind": "call",
+          "source": "client.shutdown()"
+        },
+        {
+          "line": 446,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 464,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 493,
+          "kind": "call",
+          "source": "proxy.subscribe()"
+        },
+        {
+          "line": 508,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_runtime_attachment_lifetime.py",
+      "sites": [
+        {
+          "line": 13,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+        },
+        {
+          "line": 83,
+          "kind": "declaration",
+          "name": "subscribe"
+        },
+        {
+          "line": 24,
+          "kind": "call",
+          "source": "RuntimeProxy(SimpleNamespace(_comms=comms), 'cold', socket_path(comms.root, process.pid))"
+        },
+        {
+          "line": 118,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_runtime_cold_attachment.py",
+      "sites": [
+        {
+          "line": 81,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 127,
+          "kind": "call",
+          "source": "client.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "sites": [
+        {
+          "line": 23,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 28,
+          "kind": "call",
+          "source": "canonical_agent(Comms(native.root), auto_wake=False, runtime_enabled=False, agent_args=arguments)"
+        },
+        {
+          "line": 60,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_runtime_goal_edit.py",
+      "sites": [
+        {
+          "line": 8,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 16,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+        },
+        {
+          "line": 23,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='pi', agent_args=[], runtime_enabled=True)"
+        },
+        {
+          "line": 32,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 35,
+          "kind": "call",
+          "source": "canonical_agent(comms)"
+        },
+        {
+          "line": 37,
+          "kind": "call",
+          "source": "RuntimeProxy(observer, session, socket_path(comms.root, os.getpid()))"
+        },
+        {
+          "line": 39,
+          "kind": "call",
+          "source": "proxy.subscribe()"
+        },
+        {
+          "line": 73,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_runtime_goal_retry_running.py",
+      "sites": [
+        {
+          "line": 25,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+        },
+        {
+          "line": 52,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 123,
+          "kind": "call",
+          "source": "RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))"
+        },
+        {
+          "line": 124,
+          "kind": "call",
+          "source": "proxy.subscribe()"
+        },
+        {
+          "line": 195,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 224,
+          "kind": "call",
+          "source": "RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))"
+        },
+        {
+          "line": 130,
+          "kind": "call",
+          "source": "owner.turns.turn_state(session)"
+        },
+        {
+          "line": 171,
+          "kind": "call",
+          "source": "owner.turns.turn_state(session)"
+        },
+        {
+          "line": 243,
+          "kind": "call",
+          "source": "owner.turns.turn_state(session)"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_runtime_goal_snapshot.py",
+      "sites": [
+        {
+          "line": 12,
+          "kind": "import",
+          "source": "from agent_comms.acp_extension import TurnChangedUpdate, encode_updates"
+        },
+        {
+          "line": 26,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+        },
+        {
+          "line": 28,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 37,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin='pi', runtime_enabled=True, auto_wake=False)"
+        },
+        {
+          "line": 40,
+          "kind": "call",
+          "source": "RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))"
+        },
+        {
+          "line": 47,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 54,
+          "kind": "call",
+          "source": "TurnChangedUpdate(comms.registry.require(session).turn_state)"
+        },
+        {
+          "line": 120,
+          "kind": "call",
+          "source": "TurnChangedUpdate(comms.registry.require(session).turn_state)"
+        },
+        {
+          "line": 69,
+          "kind": "call",
+          "source": "TurnChangedUpdate(comms.registry.require(session).turn_state)"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_runtime_owned_session_admission.py",
+      "sites": [
+        {
+          "line": 16,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+        },
+        {
+          "line": 39,
+          "kind": "call",
+          "source": "RuntimeProxy(client, 'registered', socket_path(root, os.getpid()))"
+        },
+        {
+          "line": 82,
+          "kind": "call",
+          "source": "client.shutdown()"
+        },
+        {
+          "line": 83,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_runtime_subscription_handshake.py",
+      "sites": [
+        {
+          "line": 12,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+        },
+        {
+          "line": 63,
+          "kind": "call",
+          "source": "RuntimeProxy(client, 'owner', path)"
+        },
+        {
+          "line": 77,
+          "kind": "call",
+          "source": "client.shutdown()"
+        },
+        {
+          "line": 67,
+          "kind": "call",
+          "source": "proxy.subscribe()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_s1_event_behavior.py",
+      "sites": [
+        {
+          "line": 20,
+          "kind": "import",
+          "source": "from agent_comms.transcript_updates import TurnTranscriptUpdate"
+        },
+        {
+          "line": 137,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 332,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 416,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 497,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_saved_view_boundary.py",
+      "sites": [
+        {
+          "line": 44,
+          "kind": "declaration",
+          "name": "matches"
+        },
+        {
+          "line": 58,
+          "kind": "call",
+          "source": "decoded.predicate.matches(frozenset({'api'}))"
+        },
+        {
+          "line": 29,
+          "kind": "call",
+          "source": "ViewPredicate(AnyOfMatch, frozenset(required)).matches(frozenset(observed))"
+        },
+        {
+          "line": 30,
+          "kind": "call",
+          "source": "ViewPredicate(AllOfMatch, frozenset(required)).matches(frozenset(observed))"
+        },
+        {
+          "line": 59,
+          "kind": "call",
+          "source": "decoded.predicate.matches(frozenset({'ui'}))"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_selected_compaction_decision_native.py",
+      "sites": [
+        {
+          "line": 262,
+          "kind": "call",
+          "source": "server.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_selected_execution_native.py",
+      "sites": [
+        {
+          "line": 280,
+          "kind": "call",
+          "source": "server.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "sites": [
+        {
+          "line": 404,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 985,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 735,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 1041,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 1124,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "sites": [
+        {
+          "line": 446,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 434,
+          "kind": "call",
+          "source": "server.shutdown()"
+        },
+        {
+          "line": 117,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 178,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 294,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 433,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 523,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "sites": [
+        {
+          "line": 260,
+          "kind": "call",
+          "source": "server.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "sites": [
+        {
+          "line": 200,
+          "kind": "call",
+          "source": "row.sent_owner_admission_generation.matches(bound[0][0].owner_admission_generation)"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_session_components.py",
+      "sites": [
+        {
+          "line": 20,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 38,
+          "kind": "call",
+          "source": "canonical_agent(wire(tmp_path / 'wire'), agent_bin='pi', agent_args=['--model', 'test/one'], auto_wake=False)"
+        },
+        {
+          "line": 138,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 72,
+          "kind": "call",
+          "source": "other.shutdown()"
+        },
+        {
+          "line": 48,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_stack_channel_delivery.py",
+      "sites": [
+        {
+          "line": 235,
+          "kind": "call",
+          "source": "server.shutdown()"
+        },
+        {
+          "line": 219,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 232,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 150,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_stack_goal_cancel_resume.py",
+      "sites": [
+        {
+          "line": 19,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+        },
+        {
+          "line": 139,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 151,
+          "kind": "call",
+          "source": "RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))"
+        },
+        {
+          "line": 254,
+          "kind": "call",
+          "source": "server.shutdown()"
+        },
+        {
+          "line": 249,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_stack_goal_continuation.py",
+      "sites": [
+        {
+          "line": 340,
+          "kind": "call",
+          "source": "server.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_stack_goal_pause.py",
+      "sites": [
+        {
+          "line": 286,
+          "kind": "call",
+          "source": "server.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_stack_goal_standby.py",
+      "sites": [
+        {
+          "line": 288,
+          "kind": "call",
+          "source": "server.shutdown()"
+        },
+        {
+          "line": 287,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        },
+        {
+          "line": 243,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_stack_inbox_output.py",
+      "sites": [
+        {
+          "line": 284,
+          "kind": "call",
+          "source": "server.shutdown()"
+        },
+        {
+          "line": 283,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_stack_native_compaction.py",
+      "sites": [
+        {
+          "line": 416,
+          "kind": "call",
+          "source": "server.shutdown()"
+        },
+        {
+          "line": 376,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 412,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_stack_persistent_compaction.py",
+      "sites": [
+        {
+          "line": 18,
+          "kind": "import",
+          "source": "from agent_comms.acp_extension import CompactionChangedUpdate, CompactionCommittedUpdate, CompactRequest, TranscriptChangedUpdate, TurnSettledUpdate, decode_updates, encode_request"
+        },
+        {
+          "line": 30,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 204,
+          "kind": "call",
+          "source": "canonical_agent(comms, agent_bin=native, agent_args=['--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off'], runtime_enabled=True, auto_wake=False)"
+        },
+        {
+          "line": 225,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 239,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 350,
+          "kind": "call",
+          "source": "server.shutdown()"
+        },
+        {
+          "line": 335,
+          "kind": "call",
+          "source": "attachment.shutdown()"
+        },
+        {
+          "line": 336,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 345,
+          "kind": "call",
+          "source": "attachment.shutdown()"
+        },
+        {
+          "line": 346,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_stack_retry_running.py",
+      "sites": [
+        {
+          "line": 14,
+          "kind": "import",
+          "source": "from agent_comms.runtime import RuntimeProxy, socket_path"
+        },
+        {
+          "line": 48,
+          "kind": "call",
+          "source": "RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))"
+        },
+        {
+          "line": 49,
+          "kind": "call",
+          "source": "proxy.subscribe()"
+        },
+        {
+          "line": 89,
+          "kind": "call",
+          "source": "owner.turns.turn_state(session)"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_stack_send_now.py",
+      "sites": [
+        {
+          "line": 295,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 497,
+          "kind": "call",
+          "source": "server.shutdown()"
+        },
+        {
+          "line": 219,
+          "kind": "call",
+          "source": "server.shutdown()"
+        },
+        {
+          "line": 277,
+          "kind": "call",
+          "source": "server.shutdown()"
+        },
+        {
+          "line": 496,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_stack_settlement_boundary.py",
+      "sites": [
+        {
+          "line": 198,
+          "kind": "call",
+          "source": "server.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_toad_contract.py",
+      "sites": [
+        {
+          "line": 36,
+          "kind": "declaration",
+          "name": "session_update"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_tool_diffs.py",
+      "sites": [
+        {
+          "line": 132,
+          "kind": "declaration",
+          "name": "session_update"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_transcript_event_time.py",
+      "sites": [
+        {
+          "line": 102,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 105,
+          "kind": "call",
+          "source": "canonical_agent(comms, auto_wake=False)"
+        },
+        {
+          "line": 109,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 149,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_transcript_input_display.py",
+      "sites": [
+        {
+          "line": 112,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 131,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_transcript_routes_index.py",
+      "sites": [
+        {
+          "line": 87,
+          "kind": "call",
+          "source": "row.matches('exact sent text')"
+        },
+        {
+          "line": 88,
+          "kind": "call",
+          "source": "row.matches('different text')"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "sites": [
+        {
+          "line": 167,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_turn_goal_account.py",
+      "sites": [
+        {
+          "line": 135,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 190,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_turn_runner.py",
+      "sites": [
+        {
+          "line": 149,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 198,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 247,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 86,
+          "kind": "call",
+          "source": "owner.turns.turn_state(session)"
+        },
+        {
+          "line": 97,
+          "kind": "call",
+          "source": "owner.turns.turn_state(session)"
+        },
+        {
+          "line": 113,
+          "kind": "call",
+          "source": "owner.turns.turn_state(session)"
+        },
+        {
+          "line": 114,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        },
+        {
+          "line": 185,
+          "kind": "call",
+          "source": "owner.turns.turn_state(session)"
+        },
+        {
+          "line": 238,
+          "kind": "call",
+          "source": "owner.turns.turn_state(session)"
+        },
+        {
+          "line": 276,
+          "kind": "call",
+          "source": "owner.turns.turn_state(session)"
+        },
+        {
+          "line": 62,
+          "kind": "call",
+          "source": "owner.turns.turn_state(sid)"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_wake_lifetime.py",
+      "sites": [
+        {
+          "line": 60,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/test_wire_watch.py",
+      "sites": [
+        {
+          "line": 142,
+          "kind": "call",
+          "source": "agent.shutdown()"
+        }
+      ]
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "sites": [
+        {
+          "line": 142,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 179,
+          "kind": "declaration",
+          "name": "session_update"
+        },
+        {
+          "line": 250,
+          "kind": "declaration",
+          "name": "session_update"
+        }
+      ]
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "sites": [
+        {
+          "line": 182,
+          "kind": "import",
+          "source": "from delivery_owner_fixture import canonical_agent"
+        },
+        {
+          "line": 233,
+          "kind": "call",
+          "source": "canonical_agent(service, agent_bin=str(runtime / 'pi-comms-native'), agent_args=list(captured.retained.arguments or ()), auto_wake=False, runtime_enabled=True)"
+        },
+        {
+          "line": 342,
+          "kind": "call",
+          "source": "owner.shutdown()"
+        }
+      ]
+    }
+  ],
+  "scope": "Core test_mcp_acceptance original external qualifier and paired Toad472; other legacy test modules remain unqualified separate consumers",
+  "dynamic_limit": "AC_MCP_TOAD_ADAPTER selects an external module; source trace cannot enumerate future arbitrary values"
+}

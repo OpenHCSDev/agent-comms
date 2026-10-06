@@ -1,0 +1,26 @@
+{
+  "stage": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002",
+  "pins": {
+    "agent_comms": "3e109632e95dc15972d53d459dc5e19a99b16732",
+    "toad": "289f1c6cd7667abf985ddba265d6469a95e3ea48",
+    "textual": "d7337ee084f6dcda42cbd8a41c7417e87d60ae78",
+    "refactor_audit": "9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10"
+  },
+  "sdk": "0.12.1",
+  "textual_diff_view": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+  "native_package": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent",
+  "state": "Own private native qualifier DTO; original PREFIX activation immutable",
+  "staging_receipt": "/home/ts/.cache/agent-scratch/m687n01/candidate-source-proof.json",
+  "bins": {
+    "python": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+    "toad": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/toad",
+    "agent-comms": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/agent-comms-agent",
+    "pi-comms-native": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/pi-comms-native"
+  },
+  "native_cli": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+  "native_manifest": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+  "native_tree": "63f18710cb9329be6ade27bac3b4dd822e2b36f013756fa8e6717b8073a4592c",
+  "native_configuration_note": "Original4b FullTrust/source proof only; actual native execution requires separate new SchEXEC and Bohrrelease."
+}

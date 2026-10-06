@@ -1,0 +1,97 @@
+{
+  "state": "Actual25ce firstallow observer setupFAIL/other3UNRUN preserved; wholefloorREAD+EXECreturned; source correction only afterward",
+  "original_whole_sha256": "2c1f23e9441ffd8e2519258ad5b4670f188dee91b153767ebeea84a9069265f8",
+  "original_proposal_c389_unchanged": true,
+  "source_to_ad_correction": "afc657ef",
+  "metadata_source_sha256": "7a16afdb7ed4d95b943627ab70a6e7a6f505ad2b16af0bdba07678090a49ad29",
+  "correction": "Originalproducer.sessions.declare_thread(str(project)) only; cleanup/bind_owned/stop callbacks unchanged; bothrepo src/tests/tools originalNRA Package 1477Python modules0omissions; sole2argcall migrated",
+  "production_and_wheel": "Originalbee/355+360 unchanged; no build/production/pin delta",
+  "source_check": "compile + exactmoduleAST onePIDargument removal; no test/import/native acceptance",
+  "raw": [
+    {
+      "path": "evidence/current-native-mcp-qualifier-family-20261005/installed-native03/terminal.json",
+      "sha256": "6f372d35dc4d3dadf196010dbd1a288eb0f014ad7f3630dc784133b3b2107f31",
+      "bytes": 313,
+      "original": "/home/ts/.cache/agent-scratch/m687n01/terminal.json"
+    },
+    {
+      "path": "evidence/current-native-mcp-qualifier-family-20261005/installed-native03/native.xml",
+      "sha256": "bef438bdb458ef9b489d10789a114cfdf5ecf67380ddf8e5ac836bd55ca5c16c",
+      "bytes": 4718,
+      "original": "/home/ts/.cache/agent-scratch/m687n01/native.xml"
+    },
+    {
+      "path": "evidence/current-native-mcp-qualifier-family-20261005/installed-native03/stdout.log",
+      "sha256": "072772faed2c833c1d8e57924c92614d0fc45cd1a8ff1efce7be9f227e03f5b5",
+      "bytes": 7009,
+      "original": "/home/ts/.cache/agent-scratch/m687n01/stdout.log"
+    },
+    {
+      "path": "evidence/current-native-mcp-qualifier-family-20261005/installed-native03/stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "original": "/home/ts/.cache/agent-scratch/m687n01/stderr.log"
+    },
+    {
+      "path": "evidence/current-native-mcp-qualifier-family-20261005/installed-native03/native-operator-launch.json",
+      "sha256": "a6e74ad6edd815bb2a5d438ff7a818f161b5f83dae1c63021b50fef486ee5f6d",
+      "bytes": 662,
+      "original": "/home/ts/.cache/agent-scratch/m687n01/native-operator-launch.json"
+    },
+    {
+      "path": "evidence/current-native-mcp-qualifier-family-20261005/installed-native03/native-operator-terminal.json",
+      "sha256": "7e679e6801ee0fb08bafb43f8fba94de808c1da967a2696a3ff69adeb5e9d62f",
+      "bytes": 232,
+      "original": "/home/ts/.cache/agent-scratch/m687n01/native-operator-terminal.json"
+    },
+    {
+      "path": "evidence/current-native-mcp-qualifier-family-20261005/installed-native03/restore-terminal.json",
+      "sha256": "78864c185ece55caac6431984bb90d08432fbd8607675924ce7498290dfee56c",
+      "bytes": 1359,
+      "original": "/home/ts/.cache/agent-scratch/m687n01/restore-terminal.json"
+    },
+    {
+      "path": "evidence/current-native-mcp-qualifier-family-20261005/installed-native03/final-floor-readback.json",
+      "sha256": "f414f0bb99018ad2780b7d76aa7d221d4567542ac30cc773f889cd9ead2260ba",
+      "bytes": 6611,
+      "original": "/home/ts/.cache/agent-scratch/m687n01/final-floor-readback.json"
+    },
+    {
+      "path": "evidence/current-native-mcp-qualifier-family-20261005/installed-native03/whole-handback.json",
+      "sha256": "2c1f23e9441ffd8e2519258ad5b4670f188dee91b153767ebeea84a9069265f8",
+      "bytes": 21163,
+      "original": "/home/ts/.cache/agent-scratch/m687n01/whole-handback.json"
+    },
+    {
+      "path": "evidence/current-native-mcp-qualifier-family-20261005/installed-native03/original-failed-fixture-keepers.json",
+      "sha256": "0cb17be1882a3bc4784068fa1c51668fb7b357347ecca1d5a8e7d018b90e4fe8",
+      "bytes": 5799,
+      "original": "/home/ts/.cache/agent-scratch/m687n01/original-failed-fixture-keepers.json"
+    },
+    {
+      "path": "evidence/current-native-mcp-qualifier-family-20261005/installed-native03/proof-whole-join.json",
+      "sha256": "176c4e8d378f45024150023da87d2c130a13f4034cb58ecdd35a327a052c3a01",
+      "bytes": 4747,
+      "original": "/home/ts/.cache/agent-scratch/m687n01/proof-whole-join.json"
+    },
+    {
+      "path": "evidence/current-native-mcp-qualifier-family-20261005/installed-native03/candidate-source-proof.json",
+      "sha256": "58879e571ddcca7814ea78e291053c2d67c7c67eb27056f1dd626a1f9235b4f1",
+      "bytes": 9235,
+      "original": "/home/ts/.cache/agent-scratch/m687n01/candidate-source-proof.json"
+    },
+    {
+      "path": "evidence/current-native-mcp-qualifier-family-20261005/installed-native03/candidate-activation.json",
+      "sha256": "e89e9c7b6ff0749bbc7983e61df518188912cde82e0b836fad64b016ab6ad5f8",
+      "bytes": 2180,
+      "original": "/home/ts/.cache/agent-scratch/m687n01/candidate-activation.json"
+    },
+    {
+      "path": "evidence/current-native-mcp-qualifier-family-20261005/installed-native03/native-full-trust.json",
+      "sha256": "291b7adbed51d8b2c68e889e29ae741a38766fb66e36592dc6282db36fcf7068",
+      "bytes": 717,
+      "original": "/home/ts/.cache/agent-scratch/m687n01/native-full-trust.json"
+    }
+  ],
+  "remaining_boundary": "Corrected actualfourcase behavior UNQUALIFIED; no retry/newgrant/controller currentauthority inferred; originalBohr/Sch independent close-only follows whole actualreturn"
+}

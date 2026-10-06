@@ -1,0 +1,130 @@
+{
+  "state": "Firstallow observer-setupFAIL original authored files frozen after joinedterminal; no nativeprompt or replay",
+  "files": [
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/agent/mcp-trust.json",
+      "sha256": "18e68d02a3e2e1b33d5cdf312452cd2f6ee678cad5dc87946cb72770fc4928b3",
+      "bytes": 278
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/agent/settings.json",
+      "sha256": "07dcd3434d9d282dea27ec36472d964689b4126456f36a39ca3d8a783fc44922",
+      "bytes": 111
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/agent/trust.json",
+      "sha256": "ccd2c518c47bae707ba586af137d1a8e30d7d5df9191b71781e2776aa6ee5da5",
+      "bytes": 94
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/config/toad/toad.json",
+      "sha256": "c522692d319d39384f1e5c8a2db4d9e10dfaefa974974b6cdcbf864db859ccb1",
+      "bytes": 57
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/fixture.mjs",
+      "sha256": "2c4fc4fba6320ec47f8116a42d0f1856e253b2be31dc9bfde855cdc689b56206",
+      "bytes": 1331
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/launch.json",
+      "sha256": "fd525ece457d25825830a23e11bffece7516899fd99157213f41c9249ec4341e",
+      "bytes": 452
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/mcp-approval.command.json",
+      "sha256": "fe719db335dbfe80f5fee42ef265fca2725fb54e2abde2fb386e604a27fda434",
+      "bytes": 1579
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/mcp-approval.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/mcp-approval.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/mcp-boundaries/wire/.registry.json.lock",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/mcp-declaration.command.json",
+      "sha256": "686e47e74d787c3651e6273ffcc4110301b5140def470f6a2677e8917c0b74aa",
+      "bytes": 1501
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/mcp-declaration.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/mcp-declaration.stdout",
+      "sha256": "8beaf19e89a85c65daebe2148d287a12c27a8751d506a16acdf6f03eba488fe7",
+      "bytes": 65
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/project/.pi/mcp.json",
+      "sha256": "5bb227ba7e676fbaf56f51bafbbb29c575296856beeda7834dd1fc2c5fff200e",
+      "bytes": 275
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/project-trust.command.json",
+      "sha256": "7e0adb982db3131a535bd809a839863a16134c8bd3165638c7d1cb8387022b94",
+      "bytes": 1206
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/project-trust.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/project-trust.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/state/toad/toad.db",
+      "sha256": "e171376a49c9cb3bbc03a3fd7924ffc2ed3ecd7e41913cf09ad012841bfd771e",
+      "bytes": 12288
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/wire/.bus.jsonl.lock",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/wire/.bus_meta.json.lock",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/wire/.catalog.json.lock",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/wire/.read_ledger.json.lock",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/wire/.registry.json.lock",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/wire/.wire.lock",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/m687n01/n/test_real_pi_mcp_acp_link_allo0/wire/registry.json",
+      "sha256": "d7232fa6eb5fe5f46667ac6dcb394ed8dad2e1774f9d40f739f7222e4dbe770f",
+      "bytes": 932
+    }
+  ]
+}

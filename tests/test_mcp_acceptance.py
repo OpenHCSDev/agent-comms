@@ -19,43 +19,129 @@ import subprocess
 import sys
 import threading
 import time
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
+from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
 
-from agent_comms import backend
 from agent_comms.acp_extension import (
     McpClientReceiptUpdate,
-    TurnSettledUpdate,
-    TurnStartedUpdate,
+    TurnChangedUpdate,
     decode_updates,
 )
 from agent_comms.comms import wire
+from agent_comms.child_process import ParentedProcess
+from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime import RuntimeProxy
 from delivery_owner_fixture import canonical_agent
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX PTY acceptance")
-PACKAGE = Path(__file__).resolve().parents[1] / "extensions" / "pi-mcp-client"
 TIMEOUT = 40
 
 
-def _node_run(node, env, script, cwd):
-    result = subprocess.run(
-        [node, "--input-type=module", "-e", script],
-        cwd=cwd,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
-    assert result.returncode == 0, result.stderr
-    return result.stdout.strip()
+def _node_run(node, env, script, cwd, artifact):
+    native_package = Path(env["PI_COMPACTION_TEST_PACKAGE"])
+    command = [
+        node, "--no-global-search-paths",
+        "--import", str(native_package / "dist/agent-comms-import-fence.mjs"),
+        "--import", str(native_package / "dist/agent-comms-project-bootstrap.mjs"),
+        "--input-type=module", "-e", script,
+    ]
+    child = outcome = None
+    stdout = stderr = b""
+    error = None
+    try:
+        with ParentedProcess.launch(tuple(command), cwd=cwd, env=env, output=subprocess.PIPE) as child:
+            try:
+                stdout, stderr = child.process.communicate(timeout=15)
+                outcome = child.reap()
+            except subprocess.TimeoutExpired as failure:
+                stdout, stderr = failure.stdout or b"", failure.stderr or b""
+                raise
+    except BaseException as failure:
+        error = repr(failure)
+        raise
+    finally:
+        artifact.with_suffix(".stdout").write_bytes(stdout)
+        artifact.with_suffix(".stderr").write_bytes(stderr)
+        artifact.with_suffix(".command.json").write_text(json.dumps({
+            "argv": command, "cwd": str(cwd),
+            "identity": FieldCodec.encode(child.identity) if child else None,
+            "outcome": FieldCodec.encode(outcome) if outcome else None,
+            "error": error, "output_complete": outcome is not None,
+            "retired": child.retired if child else None,
+            "remaining_groups": [FieldCodec.encode(member) for member in
+                                 child.platform.group_members(child.identity)] if child else [],
+        }, indent=2))
+    assert outcome.successful, stderr.decode(errors="replace")
+    return stdout.decode().strip()
 
 
-def _prepare(root):
+def _qualify_origin(node, env, project, artifact):
+    """Reach the actual SDK cause before dispatch, using only loopback addresses."""
+    native_package = Path(env["PI_COMPACTION_TEST_PACKAGE"])
+    allowed = env["AGENT_COMMS_NATIVE_ORIGIN"]
+    # A different scheme is outside the exact allowed origin. Even a broken
+    # guard must not send this authored control toward an external network.
+    requested = "https:" + allowed.removeprefix("http:")
+    script = "\n".join((
+        "import assert from 'node:assert/strict';",
+        "import {channel} from 'node:diagnostics_channel';",
+        f"const allowed={json.dumps(allowed)},requested={json.dumps(requested)};",
+        "const dispatched=[], report={allowed_origin:allowed,requested_origin:requested};",
+        "let firstDispatcher;",
+        "const requests=channel('undici:request:create');",
+        "const observe=({request})=>dispatched.push({origin:new URL(String(request.origin)).origin,path:request.path});",
+        "requests.subscribe(observe);",
+        f"const {{configureHttpDispatcher}}=await import({json.dumps((native_package / 'dist/core/http-dispatcher.js').as_uri())});",
+        f"const {{getGlobalDispatcher}}=await import({json.dumps((native_package / 'node_modules/undici/index.js').as_uri())});",
+        "try {",
+        "  await configureHttpDispatcher();",
+        "  firstDispatcher=getGlobalDispatcher();",
+        "  const firstFetch=globalThis.fetch;",
+        "  const positive=await fetch(allowed+'/guard-positive');",
+        "  assert.equal(positive.status,200); await positive.text();",
+        "  assert(dispatched.some(row=>row.origin===allowed && row.path==='/guard-positive'));",
+        f"  const {{OpenAI}}=await import({json.dumps((native_package / 'node_modules/openai/client.mjs').as_uri())});",
+        "  const client=new OpenAI({baseURL:requested+'/v1',apiKey:'offline-fixture-no-real-key',maxRetries:0});",
+        "  await configureHttpDispatcher();",
+        "  assert.notEqual(globalThis.fetch,firstFetch);",
+        "  assert.notEqual(getGlobalDispatcher(),firstDispatcher);",
+        "  report.dispatcher_reconfigured=true; report.refusals=[];",
+        "  const replacement=new OpenAI({baseURL:requested+'/v1',apiKey:'offline-fixture-no-real-key',maxRetries:0});",
+        "  for (const sdk of [client,replacement]) {",
+        "    let failure;",
+        "    try { await sdk.chat.completions.create({model:'z-ai/glm-5.3-flash',messages:[{role:'user',content:'Authored origin refusal; never dispatched.'}]}); }",
+        "    catch(error) { failure=error; report.refusals.push({name:error.name,message:error.message,cause:{code:error.cause?.code,allowed_origin:error.cause?.allowed_origin,requested_origin:error.cause?.requested_origin}}); }",
+        "    assert.equal(failure?.cause?.code,'ERR_AGENT_COMMS_NATIVE_ORIGIN_REFUSED');",
+        "    assert.equal(failure.cause.allowed_origin,allowed);",
+        "    assert.equal(failure.cause.requested_origin,requested);",
+        "  }",
+        "  assert(!dispatched.some(row=>row.origin!==allowed));",
+        "  let redirected=false;",
+        "  try { const response=await fetch(allowed+'/guard-redirect'); await response.text(); redirected=true; }",
+        "  catch(error) { report.redirect_error={name:error.name,message:error.message,cause_message:error.cause?.message}; }",
+        "  assert.equal(redirected,false);",
+        "  assert(report.redirect_error);",
+        "  assert(dispatched.some(row=>row.origin===allowed && row.path==='/guard-redirect'));",
+        "  assert(!dispatched.some(row=>row.origin!==allowed));",
+        "  report.localhost_positive=true; report.sdk_origin_refused=true; report.redirect_refused=true;",
+        "} finally {",
+        "  report.dispatched=dispatched; console.log(JSON.stringify(report));",
+        "  requests.unsubscribe(observe);",
+        "  try { if(firstDispatcher) await firstDispatcher.close(); }",
+        "  finally { if(getGlobalDispatcher()!==firstDispatcher) await getGlobalDispatcher().close(); }",
+        "}",
+    ))
+    report = json.loads(_node_run(node, env, script, project, artifact))
+    artifact.with_suffix(".json").write_text(json.dumps(report, indent=2))
+
+
+def _prepare(root, native_package):
+    package = native_package / "agent-comms-extensions" / "pi-mcp-client"
     node = shutil.which("node")
     assert node
     agent, project = root / "agent", root / "project"
@@ -63,8 +149,8 @@ def _prepare(root):
     (project / ".pi").mkdir(parents=True)
     starts, calls = root / "server-starts", root / "server-calls"
     server = root / "fixture.mjs"
-    sdk = PACKAGE / "node_modules" / "@modelcontextprotocol" / "sdk" / "dist" / "esm"
-    zod = PACKAGE / "node_modules" / "zod" / "index.js"
+    sdk = package / "node_modules" / "@modelcontextprotocol" / "sdk" / "dist" / "esm"
+    zod = package / "node_modules" / "zod" / "index.js"
     server.write_text(
         "import {appendFileSync} from 'node:fs';\n"
         f"import {{McpServer}} from {json.dumps((sdk / 'server/mcp.js').as_uri())};\n"
@@ -92,33 +178,37 @@ def _prepare(root):
         "CI": "true",
         "NO_COLOR": "1",
         "PI_OFFLINE": "1",
+        "PI_COMPACTION_TEST_PACKAGE": str(native_package),
         "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
     }
-    api = PACKAGE / "node_modules/@earendil-works/pi-coding-agent/dist/index.js"
+    api = native_package / "dist" / "index.js"
     _node_run(
         node,
         env,
         f"import {{ProjectTrustStore}} from {json.dumps(api.as_uri())};"
         f"new ProjectTrustStore({json.dumps(str(agent))}).set({json.dumps(str(project))},true);",
         project,
+        root / "project-trust",
     )
     digest = _node_run(
         node,
         env,
         "import {declarationDigest,parseNativeConfig} from "
-        f"{json.dumps((PACKAGE / 'src/config.mjs').as_uri())};"
+        f"{json.dumps((package / 'src/config.mjs').as_uri())};"
         f"console.log(declarationDigest(parseNativeConfig({json.dumps(document)}).servers[0]));",
         project,
+        root / "mcp-declaration",
     )
     # Initial fixture setup uses the real package writer, never a Toad ledger.
     _node_run(
         node,
         env,
         "import {recordProjectDecision} from "
-        f"{json.dumps((PACKAGE / 'src/ledger-write.mjs').as_uri())};"
+        f"{json.dumps((package / 'src/ledger-write.mjs').as_uri())};"
         f"await recordProjectDecision({{agentDir:{json.dumps(str(agent))},"
         f"projectRoot:{json.dumps(str(project))},declaration:{json.dumps(declaration)},decision:'approve'}});",
         project,
+        root / "mcp-approval",
     )
     (agent / "settings.json").write_text(
         json.dumps(
@@ -128,10 +218,10 @@ def _prepare(root):
             }
         )
     )
-    return node, agent, project, digest, starts, calls, env
+    return package, node, agent, project, digest, starts, calls, env
 
 
-def _deny_via_simulated_user_pty(node, project, digest, env, artifact):
+def _deny_via_simulated_user_pty(package, node, project, digest, env, artifact):
     """Acceptance-owned simulated user; never production auto-confirmation."""
     master, slave = pty.openpty()
     process = None
@@ -140,7 +230,7 @@ def _deny_via_simulated_user_pty(node, project, digest, env, artifact):
         process = subprocess.Popen(
             [
                 node,
-                str(PACKAGE / "bin/pi-mcp.mjs"),
+                str(package / "bin/pi-mcp.mjs"),
                 "trust",
                 "deny",
                 "--id",
@@ -195,8 +285,24 @@ def _deny_via_simulated_user_pty(node, project, digest, env, artifact):
 @contextmanager
 def _mock_model(root, agent, receipt_seen, second_request, release_final):
     requests, errors = [], []
+    guard_requests = []
 
     class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            guard_requests.append({"path": self.path, "host": self.headers.get("Host")})
+            if self.path == "/guard-positive":
+                self.send_response(200)
+                self.send_header("Content-Length", "0")
+            elif self.path == "/guard-redirect":
+                self.send_response(302)
+                self.send_header("Location", f"https://127.0.0.1:{self.server.server_port}/guard-target")
+                self.send_header("Content-Length", "0")
+            else:
+                errors.append(f"Unexpected guard request: {self.path}")
+                self.send_response(500)
+                self.send_header("Content-Length", "0")
+            self.end_headers()
+
         def do_POST(self):
             try:
                 size = int(self.headers["Content-Length"])
@@ -263,16 +369,8 @@ def _mock_model(root, agent, receipt_seen, second_request, release_final):
     (agent / "models.json").write_text(
         json.dumps({"providers": {"openrouter": {"baseUrl": origin + "/v1"}}})
     )
-    guard = root / "local-only.cjs"
-    guard.write_text(
-        "const original=globalThis.fetch;globalThis.fetch=(url,...rest)=>{"
-        "const link=url instanceof Request?url.url:String(url);"
-        f"if(new URL(link).origin!=={json.dumps(origin)}) "
-        "throw new Error('BLOCKED_NONLOCAL_NETWORK');"
-        "return original(url,...rest);};"
-    )
     try:
-        yield requests, errors, guard
+        yield requests, errors, origin
     finally:
         receipt_seen.set()
         release_final.set()
@@ -281,6 +379,7 @@ def _mock_model(root, agent, receipt_seen, second_request, release_final):
         thread.join(timeout=3)
         (root / "model-requests.json").write_text(json.dumps(requests, indent=2))
         (root / "model-errors.json").write_text(json.dumps(errors))
+        (root / "guard-http-requests.json").write_text(json.dumps(guard_requests, indent=2))
 
 
 @asynccontextmanager
@@ -289,12 +388,16 @@ async def _observer(case, root):
     if not path:
         yield None
         return
-    spec = importlib.util.spec_from_file_location("mcp_toad_acceptance_adapter", path)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    async with module.open_observer(case, root) as observer:
-        yield observer
+    # The selected adapter owns its sibling test dependencies. Keep their
+    # resolution in the same lifetime as its external open_observer contract.
+    with pytest.MonkeyPatch.context() as imports:
+        imports.syspath_prepend(str(Path(path).resolve().parent))
+        spec = importlib.util.spec_from_file_location("mcp_toad_acceptance_adapter", path)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        async with module.open_observer(case, root) as observer:
+            yield observer
 
 
 @pytest.mark.parametrize("case", ["allow", "no_controller", "revoke_midturn", "disconnect"])
@@ -303,8 +406,10 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
     if not binary:
         pytest.skip("Set AC_MCP_NATIVE_BIN to an explicitly prepared native Pi launcher")
     assert binary == "pi" or (Path(binary).is_absolute() and os.access(binary, os.X_OK))
-    node, agent, project, digest, starts, calls, env = _prepare(tmp_path)
-    env["PI_COMPACTION_TEST_PACKAGE"] = os.environ["PI_COMPACTION_TEST_PACKAGE"]
+    native_package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package, node, agent, project, digest, starts, calls, env = _prepare(
+        tmp_path, native_package
+    )
     receipt_seen, second_request, release_final = (threading.Event() for _ in range(3))
     if case != "revoke_midturn":
         release_final.set()
@@ -318,21 +423,31 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
             {
                 "launcher": binary,
                 "nativePackage": env["PI_COMPACTION_TEST_PACKAGE"],
-                "package": str(PACKAGE),
+                "package": str(package),
                 "case": case,
             }
         )
     )
     async with _observer(case, tmp_path) as observer:
-        with _mock_model(tmp_path, agent, receipt_seen, second_request, release_final) as (
+        with monkeypatch.context() as environment, _mock_model(
+            tmp_path, agent, receipt_seen, second_request, release_final
+        ) as (
             requests,
             errors,
-            guard,
+            origin,
         ):
             env.update(
-                OPENROUTER_API_KEY="offline-fixture-no-real-key", NODE_OPTIONS=f"--require={guard}"
+                OPENROUTER_API_KEY="offline-fixture-no-real-key",
+                AGENT_COMMS_NATIVE_ORIGIN=origin,
             )
-            monkeypatch.setattr(backend.os, "environ", env)
+            if observer is not None:
+                # The mounted observer already selected its isolated UI paths.
+                for key in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"):
+                    if key in os.environ:
+                        env[key] = os.environ[key]
+            environment.setattr(os, "environ", env)
+            # The unchanged origin guard has its own retained SDK qualification.
+            # These four cases exercise MCP/ACP under that committed policy.
             args = [
                 "--offline",
                 "--no-extensions",
@@ -348,68 +463,74 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                 "--thinking",
                 "off",
                 "-e",
-                str(Path(env["PI_COMPACTION_TEST_PACKAGE"]) / "agent-comms-extensions/pi-mcp-client"),
+                str(package),
             ]
-            owner = canonical_agent(
-                wire(tmp_path / "wire"),
-                agent_bin=binary,
-                agent_args=args,
-                runtime_enabled=True,
-                auto_wake=False,
-            )
-
-            env.update(
-                AGENT_COMMS_ROOT=str(owner._comms.root),
-                AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=owner._private_nk_wire_root_id,
-                AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=env["PI_COMPACTION_TEST_PACKAGE"],
-                AGENT_COMMS_NATIVE_CONFIG_DIR=str(agent),
-            )
-
-            class Audit:
-                async def session_update(self, session_id, update):
-                    row = {
-                        "sessionId": session_id,
-                        "update": update.model_dump(by_alias=True, exclude_none=True),
-                    }
-                    updates.append(row)
-                    if any(
-                        isinstance(fact, McpClientReceiptUpdate)
-                        for fact in decode_updates(update.field_meta)
-                    ):
-                        receipt_seen.set()
-
-            class Attachment:
-                async def session_update(self, session_id, update):
-                    nonlocal attachment_turn
-                    if observer:
-                        await observer.session_update(session_id=session_id, update=update)
-                    for fact in decode_updates(update.get("_meta")):
-                        if isinstance(fact, TurnStartedUpdate):
-                            attachment_turn = fact.turn_id
-                        if (
-                            isinstance(fact, TurnSettledUpdate)
-                            and attachment_turn
-                            and attachment_turn == fact.turn_id
-                        ):
-                            attachment_settled.set()
-
-                async def request_permission(self, **kwargs):
-                    permissions.append(kwargs)
-                    entered.set()
-                    answer = (
-                        await observer.request_permission(**kwargs)
-                        if observer
-                        else {"outcome": {"outcome": "selected", "optionId": "allow-once"}}
-                    )
-                    await release.wait()
-                    return answer
-
-            owner.on_connect(Audit())  # Passive evidence sink, never a permission controller.
+            retirement = AsyncExitStack()
             try:
-                await owner.new_session(cwd=str(project), mcp_servers=[])
+                owner = canonical_agent(
+                    wire(tmp_path / "wire"),
+                    agent_bin=binary,
+                    agent_args=args,
+                    runtime_enabled=True,
+                    auto_wake=False,
+                )
+                retirement.push_async_callback(owner.shutdown)
+
+                env.update(
+                    AGENT_COMMS_ROOT=str(owner._comms.root),
+                    AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=owner._private_nk_wire_root_id,
+                    AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=env["PI_COMPACTION_TEST_PACKAGE"],
+                    AGENT_COMMS_NATIVE_CONFIG_DIR=str(agent),
+                )
+
+                class Audit:
+                    async def session_update(self, session_id, update):
+                        row = {
+                            "sessionId": session_id,
+                            "update": update.model_dump(mode="json", by_alias=True, exclude_none=True),
+                        }
+                        updates.append(row)
+                        if any(
+                            isinstance(fact, McpClientReceiptUpdate)
+                            for fact in decode_updates(update.field_meta)
+                        ):
+                            receipt_seen.set()
+
+                class Attachment:
+                    async def session_update(self, session_id, update):
+                        nonlocal attachment_turn
+                        if observer:
+                            await observer.session_update(session_id=session_id, update=update)
+                        for fact in decode_updates(update.get("_meta")):
+                            if isinstance(fact, TurnChangedUpdate):
+                                if fact.state.busy:
+                                    if attachment_turn is None:
+                                        attachment_turn = fact.state
+                                    else:
+                                        assert fact.state.matches(attachment_turn.managed_id)
+                                elif attachment_turn is not None:
+                                    assert fact.state.matches(attachment_turn.managed_id)
+                                    attachment_settled.set()
+
+                    async def request_permission(self, **kwargs):
+                        permissions.append(kwargs)
+                        entered.set()
+                        answer = (
+                            await observer.request_permission(**kwargs)
+                            if observer
+                            else {"outcome": {"outcome": "selected", "optionId": "allow-once"}}
+                        )
+                        await release.wait()
+                        return answer
+
+                owner.on_connect(Audit())  # Passive evidence sink, never a permission controller.
+                session = await owner.new_session(cwd=str(project), mcp_servers=[])
+                session_id = session.session_id
                 attached = canonical_agent(owner._comms, auto_wake=False)
+                retirement.push_async_callback(attached.shutdown)
                 attached.on_connect(Attachment())
-                proxy = RuntimeProxy(attached, "project", owner._runtime.path)
+                proxy = RuntimeProxy(attached, session_id, owner._runtime.path)
+                retirement.push_async_callback(proxy.close)
                 await proxy.subscribe()
                 assert not attachment_settled.is_set()  # Initial idle replay is not this turn.
                 if case == "no_controller":
@@ -417,7 +538,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                     try:
                         task = asyncio.create_task(
                             owner.prompt(
-                                "project", [{"type": "text", "text": "Run fixture echo once."}]
+                                session_id, [{"type": "text", "text": "Run fixture echo once."}]
                             )
                         )
                     finally:
@@ -429,17 +550,22 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                         )
                     )
                     await asyncio.wait_for(entered.wait(), TIMEOUT)
-                    assert owner.turns.turn_state("project").busy
+                    assert (await Coordination.run_worker(partial(
+                        owner.turns.turn_state, session_id
+                    ))).busy
                     if case == "revoke_midturn":
                         await asyncio.to_thread(
                             _deny_via_simulated_user_pty,
+                            package,
                             node,
                             project,
                             digest,
                             env,
                             tmp_path / "pty-deny.log",
                         )
-                        assert owner.turns.turn_state("project").busy  # Genuine mid-turn denial.
+                        assert (await Coordination.run_worker(partial(
+                            owner.turns.turn_state, session_id
+                        ))).busy  # Genuine mid-turn denial.
                     elif case == "disconnect":
                         if observer:
                             # Receipt of the RPC is not proof that the user saw
@@ -451,7 +577,10 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                     release.set()
                     if case == "revoke_midturn":
                         assert await asyncio.to_thread(second_request.wait, 12)
-                        assert owner.turns.turn_state("project").busy
+                        current = await Coordination.run_worker(partial(
+                            owner.turns.turn_state, session_id
+                        ))
+                        assert current.busy
                         # The final model response is still held at localhost:
                         # connection retirement cannot be Pi turn shutdown.
                         for pid in map(int, starts.read_text().splitlines()):
@@ -460,7 +589,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                         (tmp_path / "midturn-retired.json").write_text(
                             json.dumps(
                                 {
-                                    "turnId": owner.turns.turn_state("project").managed_id,
+                                    "turnId": current.managed_id,
                                     "finalModelResponseHeld": True,
                                     "mcpPidsAbsent": True,
                                 }
@@ -480,19 +609,24 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                 assert calls.exists() == (case == "allow")
                 if calls.exists():
                     assert calls.read_text().splitlines() == ["ACCEPTANCE_ECHO"]
-                active, receipts = None, []
+                active, receipts, settlements = None, [], []
                 for row in updates:
-                    assert row["sessionId"] == "project"
+                    assert row["sessionId"] == session_id
                     for fact in decode_updates(row["update"].get("_meta")):
-                        if isinstance(fact, TurnStartedUpdate):
-                            active = fact.turn_id
+                        if isinstance(fact, TurnChangedUpdate):
+                            if fact.state.busy:
+                                if active is None:
+                                    active = fact.state
+                                else:
+                                    assert fact.state.matches(active.managed_id)
+                            elif active is not None:
+                                assert fact.state.matches(active.managed_id)
+                                settlements.append(fact.state)
+                                active = None
                         if isinstance(fact, McpClientReceiptUpdate):
-                            assert active and fact.turn_id == active
+                            assert active is not None and active.matches(fact.turn_id)
                             receipts.append(fact.receipt)
-                        if isinstance(fact, TurnSettledUpdate):
-                            assert fact.turn_id == active
-                            active = None
-                assert active is None and len(receipts) == 1, updates
+                assert active is None and len(settlements) == len(receipts) == 1, updates
                 assert [FieldCodec.encode(server) for server in receipts[0].servers] == [
                     {
                         "id": "fixture",
@@ -529,14 +663,16 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                 release.set()
                 release_final.set()
                 receipt_seen.set()
-                if task and not task.done():
-                    task.cancel()
-                    await asyncio.gather(task, return_exceptions=True)
-                if proxy:
-                    await proxy.close()
-                await owner.shutdown()
-                (tmp_path / "acp-updates.json").write_text(json.dumps(updates, indent=2))
-                if starts.exists():
-                    for pid in map(int, starts.read_text().splitlines()):
-                        with pytest.raises(ProcessLookupError):
-                            os.kill(pid, 0)
+                try:
+                    if task and not task.done():
+                        task.cancel()
+                        await asyncio.gather(task, return_exceptions=True)
+                finally:
+                    try:
+                        await retirement.aclose()
+                    finally:
+                        (tmp_path / "acp-updates.json").write_text(json.dumps(updates, indent=2))
+                        if starts.exists():
+                            for pid in map(int, starts.read_text().splitlines()):
+                                with pytest.raises(ProcessLookupError):
+                                    os.kill(pid, 0)
