@@ -1,0 +1,68 @@
+{
+  "state": "PASS source and retained-wheel comparison only; no installed/native package reads or application imports",
+  "packages": [
+    {
+      "module": "agent_comms",
+      "head": "ddcdc422c7fe01453edb2469bcfa8303d771db67",
+      "wheel": {
+        "path": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/current-paired-core-20261006/wheel/agent_comms-0.1.0-py3-none-any.whl",
+        "sha256": "6b426d7ea31f4a6e30db2c2fdbd4eaa4d1be6dcea9aba3c6e599f7c063987b6b",
+        "bytes": 910730
+      },
+      "Git_ZIP_assets": 355,
+      "RECORD_rows": 360,
+      "full_RECORD_digest_size_equal": true
+    },
+    {
+      "module": "toad",
+      "head": "afae409d1cdf34e0a0fa06c8fb02dfba740ad229",
+      "wheel": {
+        "path": "/home/ts/wt/toad-current-installed-integration-20261006/.artifacts/current-paired-toad-reader-20261006/wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+        "sha256": "410c3ab0eee04e628d16fbbd11c591d7d7676f5c714ce82b273cfb0ad89acd8c",
+        "bytes": 2251240
+      },
+      "Git_ZIP_assets": 319,
+      "RECORD_rows": 324,
+      "full_RECORD_digest_size_equal": true
+    },
+    {
+      "module": "textual",
+      "head": "a2dd8a9a37825a828df0d8f651ca57d92db69e5f",
+      "wheel": {
+        "path": "/home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native70-71-filewheel-20261005/textual-8.2.8-py3-none-any.whl",
+        "sha256": "bc47c59ea7db78a9a443c5f5e3f10836660957f21bb998d2ffa3ae8e4a2ddbe3",
+        "bytes": 768804
+      },
+      "Git_ZIP_assets": 266,
+      "RECORD_rows": 270,
+      "full_RECORD_digest_size_equal": true
+    },
+    {
+      "module": "refactor_audit",
+      "head": "9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10",
+      "wheel": {
+        "path": "/home/ts/wt/nra-skill-publish-20261002/.artifacts/family-flattened-collector-20261004/wheels/nominal_refactor_audit-0.1.0-py3-none-any.whl",
+        "sha256": "8d489731728ebf9f7e0f90ef2b14e7e3b5d2f90ed82bd8b1482d735f82869886",
+        "bytes": 23532
+      },
+      "Git_ZIP_assets": 10,
+      "RECORD_rows": 14,
+      "full_RECORD_digest_size_equal": true
+    },
+    {
+      "module": "textual_diff_view",
+      "head": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+      "wheel": {
+        "path": "/home/ts/.cache/uv/sdists-v9/git/6a8a377ce2150d3f/8fa7d4d0db993ea3/textual_diff_view-0.1.5-py3-none-any.whl",
+        "sha256": "be7089c8f282e07e893b0254a0859e0f1b243a7ba591749f2053fa1fb775ad36",
+        "bytes": 25753
+      },
+      "Git_ZIP_assets": 3,
+      "RECORD_rows": 6,
+      "full_RECORD_digest_size_equal": true
+    }
+  ],
+  "installed_qualification": "UNRUN",
+  "selected_forced_resource": "native4b, unchanged retained package; not historical7a or main equality",
+  "native_package_body_read": false
+}
