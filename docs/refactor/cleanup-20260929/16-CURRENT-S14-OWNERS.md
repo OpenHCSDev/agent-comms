@@ -4,6 +4,22 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Affected native cases passed and693 merged — 2026-10-06
+
+Parent read original native.xml and joined terminals: no_controller37.731s,
+revoke_midturn42.931s, disconnect37.860s all passed. Original controller0 in
+123.047s and operator joined0 in124.221s; both recorded processes are absent.
+Accepted allow47.833s and standalone guard stayed excluded. This qualifies the
+three affected cases at their selected historical cohort, not the new configured
+pair or public installation. Original restoration/whole return/closure remain
+with Mendel/Bohr/Sch; source merge does not terminate that custody.
+
+Parent marked693 ready and normally merged exact2928ac1d on fork maina79d4aa0.
+Normal Parent join adds only four final operand evidence files; production,
+build inputs and selected retained Core artifact remain unchanged. No rebuild
+or runtime replay followed. Full configured UI and physical publication/recovery
+remain incomplete and keep their original owners.
+
 ### Superseded warm source PR reconciled — 2026-10-06
 
 Parent verified the entire published Toad476 head is an ancestor of active478
