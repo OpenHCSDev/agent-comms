@@ -16,8 +16,6 @@ from typing import TYPE_CHECKING
 from .errors import RelationViolationError
 from .owner_launch import RestartEnvironment, RetainedOwnerLaunch
 from .restart_refusals import OwnerBusyRefusal, OwnerSelectionChangedRefusal
-from .store_files import StoreLock, _store_lock
-from .thread_identity import AdmissionIdentity, OwnerIdentity
 from .owner_lifecycle import OwnerRestartSelection
 
 if TYPE_CHECKING:
@@ -39,8 +37,7 @@ class OwnerRestartRequest:
     def threads(self, snapshot: RegistrySnapshot) -> list[Thread]:
         if self.names is None:
             return [candidate for thread in snapshot.threads.values()
-                    for candidate in thread.execution.restart_candidates(
-                        thread, snapshot.statuses[thread.name])]
+                    for candidate in thread.restart_candidates(snapshot.statuses[thread.name])]
         return list({snapshot.require_active(name).name: snapshot.require_active(name)
                      for name in self.names}.values())
 
@@ -59,25 +56,17 @@ class OwnerRestartRequest:
 class RetiredOwnerLaunch:
     """Original stopped registry observation plus acquired launch resources."""
 
-    owner: OwnerIdentity
-    admission: AdmissionIdentity
+    selection: OwnerRestartSelection
     launch: RetainedOwnerLaunch
 
     @property
     def name(self) -> str:
-        return self.owner.incarnation.name
+        return self.selection.name
 
     def require_current(self, snapshot: RegistrySnapshot) -> Thread:
-        if snapshot.owner_identity(self.name) != self.owner:
-            raise RelationViolationError('Retired owner incarnation/generation changed')
-        if snapshot.admission_identity(self.name) != self.admission:
-            raise RelationViolationError('Retired owner admission changed')
-        thread = snapshot.threads[self.name]
-        thread.require_local_process(self.launch.process)
-        thread.require_idle()
-        snapshot.statuses[self.name].require_stopped()
-        if thread.process_alive:
-            raise RelationViolationError('Original owner survived retirement')
+        thread = self.selection.require_retired(snapshot)
+        if self.launch.process != self.selection.process:
+            raise RelationViolationError('Retired launch names another process')
         return thread
 
 
@@ -129,7 +118,7 @@ class StoppedOwnerBatch:
     """Only this acquired phase can finish installation and resume the batch."""
 
     lifecycle: OwnerLifecycle
-    wire: StoreLock
+    wire_descriptor: int
     handoff: OwnerRestartHandoff
     custody: ExitStack = field(default_factory=ExitStack, repr=False, compare=False)
 
@@ -138,6 +127,8 @@ class StoppedOwnerBatch:
         """Accept an ORIGINAL inherited wire OFD; never reacquire it by name."""
         import fcntl
 
+        if type(descriptor) is not int or descriptor < 0:
+            raise RelationViolationError('Retained wire requires an integer descriptor')
         opened = os.fstat(descriptor)
         named = (lifecycle.root / '.wire.lock').stat()
         if not stat.S_ISREG(opened.st_mode) or opened.st_uid != os.geteuid():
@@ -147,7 +138,7 @@ class StoppedOwnerBatch:
         fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if str(lifecycle.root) != handoff.root:
             raise RelationViolationError('Retained stopped batch names another root')
-        return cls(lifecycle, StoreLock(descriptor, None), handoff)
+        return cls(lifecycle, descriptor, handoff)
 
     def launch(self) -> tuple[OwnerRestartResult, ...]:
         return self.handoff.launch(self.lifecycle)
@@ -200,14 +191,14 @@ class FencedOwnerBatch:
         for thread, generation in self.captured:
             self.lifecycle._stop_process(thread, generation)
         with ExitStack() as acquired:
-            wire = acquired.enter_context(_store_lock(self.lifecycle.root / 'wire'))
+            wire = acquired.enter_context(self.lifecycle.restart_wire())
             for thread, generation in self.captured:
                 self.lifecycle._require_same_stop_owner(thread, generation)
                 if thread.process_alive:
                     raise RelationViolationError('Owner survived retirement')
             snapshot = self.lifecycle.registry.snapshot()
             owners = tuple(RetiredOwnerLaunch(
-                snapshot.owner_identity(thread.name), snapshot.admission_identity(thread.name), launch,
+                OwnerRestartSelection.capture_retired(snapshot, thread), launch,
             ) for (thread, _), launch in zip(self.captured, self.launches, strict=True))
             handoff = OwnerRestartHandoff(str(self.lifecycle.root), owners, self.runtime,
                                          self.request.agent_bin, self.request.agent_args)
@@ -226,7 +217,7 @@ class AdmittedOwnerBatch:
     @classmethod
     def restart(cls, lifecycle: OwnerLifecycle, request: OwnerRestartRequest,
                 cutover: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
-        with _store_lock(lifecycle.root / 'wire'):
+        with lifecycle.restart_wire():
             lifecycle.maintenance.assert_open_unlocked()
             snapshot = lifecycle.registry.snapshot()
             threads = request.threads(snapshot)
@@ -234,12 +225,8 @@ class AdmittedOwnerBatch:
             cutover.require_selection(snapshot, threads)
             captured = []
             for thread in threads:
-                thread.execution.require_native()
+                thread.require_restart_owner(snapshot.statuses[thread.name])
                 generation = snapshot.admission_generations[thread.name]
-                thread.role.require_executable()
-                snapshot.statuses[thread.name].require_active()
-                if thread.require_process().pid == os.getpid():
-                    raise RelationViolationError('Restart requires another live owner')
                 try:
                     thread.require_idle()
                 except RelationViolationError as error:
