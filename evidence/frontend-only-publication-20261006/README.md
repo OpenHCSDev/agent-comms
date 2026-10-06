@@ -1,0 +1,9 @@
+# Frontend-only publication
+
+A Toad-only update does not change backend process owners, native package or route. ReviewedFrontendCohort specializes the existing cohort: one Toad link, shared activation/source validation, original package provenance and source proof resource comparison. All other installed package bytes and backend command links must remain unchanged. This narrow member does not authorize changing Textual or other dependencies. Full runtime publication retains its original stopped-owner operation.
+
+The original shared route lease excludes a concurrent backend cutover without waiting for existing UIs to close. The actual command directory supplies exclusive frontend publication custody. The existing link replacement/fsync mechanism is shared. Failure restores only the Toad link when it still names this operation's target; unexpected link state is recorded as unknown. No agent stop/restart, native read, new codec, queue or registry.
+
+Frontend and backend published proofs retain independent identities: a later frontend update validates its current UI prefix while backend commands keep their original prefix. Link replacement and recovery use the acquired command-directory descriptor. The original high-level all-stopped publisher and stopped operation are unchanged.
+
+Actual candidate comparison passed: 953 exact selected assets, all 69 versions, unchanged backend resource trees and original FieldCodec roundtrip. Installed prepared-bars App passed. Existing artifact controls passed against the actual candidate. Full original Package parsed 324 production, 378 test and 54 tool modules, zero omissions. Real private-filesystem checks passed first publication, successor validation and second publication with unchanged backend defaults, then original-link restoration after a post-replacement failure. Source-only: no public default link switch or live acceptance yet.

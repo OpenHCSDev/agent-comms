@@ -1,0 +1,13 @@
+[features]
+hooks = true
+
+[hooks]
+managed_dir = "/etc/codex/hooks"
+
+[[hooks.PreToolUse]]
+matcher = "^Bash$"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "/usr/bin/python3 -I /etc/codex/hooks/duplicate_execution.py --lifecycle-dir /home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002"
+timeout = 3

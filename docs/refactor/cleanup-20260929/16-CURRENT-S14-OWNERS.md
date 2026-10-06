@@ -4,6 +4,203 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original objective remains incomplete. CI is deferred as a merge gate.
 
+
+### Next installed checkpoint
+
+Batch05 and matching READ/EXEC are independently CLOSED. Its initial Shift
+selection retained only batch-a instead of the admitted c,b,a range; actual
+click-time geometry was not recorded, so sole cause remains unproved. One
+original restoration/full floor and clear private census were verified. Raw
+files and both journals remain held.
+
+PR491 is merged as the working acceptance helper, not whole feature acceptance.
+PR496 is merged at e1a906da41d8b290e9a85ce851088294f4b4f464 and retains the production deletion of viewport clipping from logical Shift
+range acquisition and all five native mounted menu/dialog acquisitions.
+Native77 is merged at qualified2d45091584a7f9b386baa2a8edf8fb3a3ba8a3d6.
+Pilot borrows actual App FIFO admission/Click and Screen recipient rather than
+authoring synthetic clicks or caching the first hit; no Toad override migration
+is required. Qualified native source checks do not prove installed performance.
+
+Toad496 f61776f3 pins native77 in pyproject/lock. One serial cached build passed
+full Git/archive/ZIP and RECORD checks. Nativea59 is new; Toad1c14 is byte-identical
+to the retained wheel and is explicitly reused; Coreb55/d846 stays unchanged.
+SELECTED-WHEEL-READBACK.json in native77-selection-pair records selected paths.
+Batch06 initially passed exact Shift c,b,a and Ctrl mixed thread/channel
+selection. Mixed read-target menu Click returned false; later actions were not
+reached. The sole original restoration passed and the whole private return is
+independently CLOSED. Raw files and both journals remain held.
+
+PR496 ef600e4b3 now deletes the menu's competing MouseUp gesture decision:
+native Click owns activation; keyboard choice and outside dismissal remain.
+The source ordering defect is concrete but not proved to be the sole Batch06
+runtime cause. One serial offline Toad-only build713113 passed full319 Git/ZIP
+and324 RECORD checks; Coreb55/nativea59 remain unchanged. Batch07 is actually issued; its single stage and installed proof passed.
+Its one App passed the previous mixed menu boundary, then failed at off-screen disclosure acquisition during the60-row setup. One original restoration and whole return are complete; Batch07 is independently CLOSED. No public installation changed.
+Installed clipped60-row/range and later native batch acceptance,
+physical latency, continuous configured/loaded journeys and public cutover remain
+open. The full original objective remains active.
+
+### Current delivery checklist
+
+- [x] Original Core262/270/272 and Toad120/121/123/124 are merged; superseded271/53/116/122 are reconciled. Original scope/deletion evidence is retained below.
+- [x] Core696 batch commands and697 notification ownership, Toad486–491 selection/sidebar consumers, and native73–77 working source are merged. These source integrations do not establish public installation.
+- [x] Physical05 verified eleven saved-history/tab/draft/Undo checks with real42.7MB source and two private forks. Original restoration and explicit returns are independently closed.
+- [x] Batch06 verified initial Shift and mixed Ctrl selection. Its menu click failed; the one restoration and whole return are independently closed, with raw/twojournals held.
+- [x] PR496 is merged at e1a906da41d8b290e9a85ce851088294f4b4f464: canonical un-clipped Shift ranges, native Click menu activation and matching native77 pin. Source integration is complete.
+- [ ] Full installed selection/menu acceptance and delivery: Focused real native menu activation passed; full installed mixed actions/clipped60-row/native batch acceptance remains. Corrected Toad713113 is built; unchanged Coreb55/nativea59 are retained. Batch07 binds the fresh returned485 assessment; its one stage and installed proof passed and are consumed/disabled. Batch07 reached the60-row setup then native Pilot raised OutOfBounds at disclosure acquisition. Its original restoration and whole return are independently closed. Merged498 corrects the shared helper through native scroll_visible before the same click. Batch08 binds a new actual floor assessment and is issued separately: its one stage passed and joined. Its sole installed-source/FullTrust proof passed in3.242s; all953 assets/full69 and the typed Core member/13-file App map matched, and both proof processes joined and are absent. The sole released App crossed disclosure acquisition, then failed at selected_target_actions284: the clipped-range setup expected an off-screen anchor and visible endpoint. App56.917s/operator57.970s joined; later native batch is unqualified. One bound original restoration passed0/.207033s with exact1467/953/full69 floor and clear fresh private census. Whole return0079ee74 retains97rawrefs/52authoredfiles/twojournals/10absent identities and explicitly returns READ/EXEC; delivered to Bohr and Sch for independent closure. Native is_on_screen derives geometry-map membership through find_widget, whereas actual clipped paint belongs to the compositor visible_widgets mapping; this is a source consumer counterexample, not a recorded runtime geometry diagnosis. Batch08 and its matching authorities are independently CLOSED. PR499 merged34e919c corrects the assertion and four diagnostics through that original native paint cohort; all123 other assertions/seven sibling helpers/retained wheels stay unchanged. Published Batch09 preparation145dd023 uses the recycled finished physical-review checkout; the unnecessary extra checkout was removed with no borrowers and retained artifacts unchanged. Fresh returned485 assessment is personally read and all66 named references are hash/byte verified. Published final Batch09 tuple d8c1a5ea binds its actual immutable preimage/full69 origins/floor/census/classification and byteequal original three-package restoration. Both new output roots remain absent. The final tuple was delivered to Bohr for fresh at-issue checks and specific stage-only issue; issue and runtime remain unbound. The full original delivery goal is active, including public installation and actual latency acceptance.
+- [ ] Physical latency and response-burst acceptance remain incomplete. Original sidebar handler/writer timings are measured but not input-to-photon or a live-build comparison. Left overflow was not exercised by the two-row physical fixture. Parent owns the next affected installed/physical acceptance.
+- [ ] Native76 removes the competing full-map geometry requirement and is merged; actual installed latency improvement remains unproved. Arendt owns native geometry/callback semantics; Parent owns matching App acceptance.
+- [ ] Continuous configured/loaded journeys remain incomplete at their exact recorded scopes. Original consumer repairs and partial successes are preserved below; no whole-journey acceptance is inferred.
+- [ ] Complete remaining original/refactor deletion closure, coherent reviewed public pair, original safe publication/cutover and fresh live feature/attachment/response verification. The user's installed build is unchanged. Preserve durable wire/goals/decisions/native sessions and uncertain inputs.
+
+Configured334 (Heis497) independently binds the same corrected disclosure helper, original Core694 source producer and actual334 four-wheel return. Its stage-only issue is separate from Parent485; neither authorizes the other's prefix or runtime.
+
+The full original integration/refactor objective remains active. This checklist
+states current delivery; older phase snapshots below do not authorize replay.
+
+### Historical sidebar checkpoints retained from earlier summaries
+
+The following earlier checklist is preserved as dated evidence, not current status.
+
+### Current priority: sidebar and scrolling responsiveness
+
+- [x] Core696 batch declarations, Core697 notification ownership and Toad486–490 sidebar/selection fixes are merged. Native73 pointer FIFO, native74 real sender-task lifetime, native75 callback execution ownership and their Toad pins are merged. Toad494 capture entry/error receipts are merged. Historical source and negative results below remain evidence, not current phase authority.
+- [x] Physical05 exercised the explicitly selected Core696d846/Toad2f111/native75c1e installed wheels through one isolated st App with a real42.7MB original source and two new private SDK journals. All11 native saved-history/tab/draft/Undo checks passed. One original restoration and whole/source returns completed; the holder is independently CLOSED. Raw files and journals remain held.
+- [x] Native records prove transcript travel302→230→302→230 and right-context travel12→24→12. Right-sidebar handlers took1.50/3.90/5.27ms; next writer completions50.06/38.66/69.45ms. These are not input-to-photon measurements or a comparison against the live build. Timing review is published at9362dfb4a.
+- [ ] Left-sidebar scrolling remains unqualified: the physical fixture contained only two threads and fitted entirely. Full presentation/footage and many-agent response-burst review remain open. Parent owns this actual acceptance and public delivery.
+- [ ] Native arrangement work remains a measured latency risk: layout median/p9514.49/26.05ms and maximum73.47ms; an original TextArea reader triggered full_map arrangement96.39ms. Arendt owns the complete native geometry/map-validity consumer trace. Parent sent exact original stacks/records. The owner traced position/membership acquisition through the original committed scene and retained ancestry, deleting the competing full-map requirement; Textual76 is reviewed and merged at67af8df0. Original native HeadlessDriver Undo/removal/capture checks pass; no installed latency improvement is claimed. Toad495 pins the exact reviewed source8814c541 in pyproject/lock only and is merged at242da763. The built496 paired candidate selects it explicitly for the next installed check; closed batch01 keeps its immutable native75 evidence.
+- [ ] DraftToad491 composes the original selected menus and native start/stop in one SDK/ACP App, preserving118 assertions. Actual batch01 installed proof passed; its one App failed after22.57s at Shift selected-cohort assertion178, so later native batch/menu checks remain unqualified. Provider requests/errors were zero. One original three-package return passed0/.240653s and the1467/953/full69 original floor matched. Whole1415b8e9 retains93raw references/44fixture files/10original identities absent; fresh privileged private refs/gaps are clear. The holder is independently CLOSED; raw/journals remain held. No retry.
+- [ ] Parent traced the selection family and found SidebarNavigation independently removed clipped rows before Shift range acquisition. DraftToad496 deletes this filter and derives ranges from the original ordered projection; no new state or cache. Package parsed288production/403tests/40tools+249native modules with zero omissions. Its original native App control now includes60-row anchor-out-of-view selection, but that added control is unrun. The recorded batch failure did not save selection identities; no sole-cause claim. Native76 and its paired pin495 are merged. Toad3182/1c14c692 and native8814/f99a8749 are built once with full Git/ZIP/RECORD equality, Cored846/b55c reused. Only15.7MB verified unborrowed build extraction/archive scratch was removed; wheels/raw remain. Actual fresh returned485 batch02 assessmentd57fb9/preimagefb2bb is fullread/hash verified and bound in published tuplec21153af. The fixed control now records original SidebarState at both boundaries and verifies60 admitted stopped rows with a clipped anchor in the SAME SDK/ACP App. All118 original assertions/seven other helpers remain; only selected_target_actions changes. Assessment old8a8 bytes match historicalGit and remain preserved; current helper revision resolves explicitly in the final tuple. Same600s/provider0/scope/restoration. Specific batch02 grant693e4aa0 is issued; its sole three-wheel stage passed0/.231944s, and all three original identities are absent. Stage1/root preparation are consumed and disabled. Fresh private READf6890d09 and exact proofde580391/four-literal binding44b3ba67 were bound and the sole proof passed0/3.211342s. Original70689/b77050068 and70699/b77050157 joined and are absent. All953/full69 assets and origins match; exact Core member enters the13-file App map. Completed final-App-handoffa9f552b4 was bound with separate fresh private EXEC820eb12f and one original App ran. It failed0acceptance/exit1 after23.534157s at initial Shift tuple assertion183; originaloperatorjoined24.621240s. Raw snapshot records all three intended members selected c,b,a while the consumer expected declaration order a,b,c. Canonical ThreadSort.CREATED/ChannelView newest-first order explains this operand mismatch; no lost member is evidenced at that assertion. The60-row clipped-anchor and laternativebatch phases were unreached. Original one three-package restoration passed0/.233620s and full1467/953/full69 original floor matched; ten original identities absent, fresh206-process private refs/gaps clear. Whole8d5edecd retains90raw/45fixtures/twojsonl; holder independently CLOSED. Draft491 checkpoint95e501a8 corrects only selected_target_actions exact-order operands through SidebarProjection.rows:119 prior assertions unchanged, three changed order operands, two membership checks added; production/wheels unchanged, no rerun. FullPackage288/403/40+Core324+native249 parses0omissions; helper compilation/diff pass. Actual corrected App qualification, merge491/496 and public delivery remain. Fresh readonly returned485 batch03 assessment is personally fullread/hash bound in published tuple0ff6b919 at31e82ffaa, including actual immutable preimage/floor/69origins/census/exact3wheel return. Its historical helper descriptor is Git-byte verified separately from current7174 helper; no historical authority inherited. Same wheels/controller600/provider0, new batch03/pbatch03 destinations absent. Actual batch03 stage-only grant88ca6b7d is issued. Personally fullread grant/lifecycle before prefix access; original sole3wheelstage passed0/.246027s. Original91091/b77154399,91112/b77154503,91115/b77154514 joined and are directly absent. Stage join9ce3aa56 retains exact commands/raw, root0700. Original controller materialized only3 actualgrant/lifecycle/SHA literals, compile-only UNRUN. Stage1/root preparation consumed and disabled. Actual fresh private4b READ52a3366f39357B personally fullread/hash verified; original proof2c7ffa3f materialized onlyfour actualgrant/READ literals, tenoutputs absent. Exact binding81692c5e was bound and sole proof passed0/3.346625s; original95220/b77177302 and95230/b77177395 joined and directly absent. All953/full69/keepers/origins exact, typedCore member13-file App map verified. Completed finalhandoffc1e67bca delivered for proof consumption and separate fresh privateEXEC/finalrelease. Separate private EXECd9243b6e and finalrelease were bound; sole62481 App failed at first read-target menu enumeration after25.5s (exact original terminal retained), operator joined26.619478s. Initial canonical Shift/Ctrl order and unchanged-mode checks passed; menu action tuple was empty, mount flag unrecorded; clipped60-row/laternativebatch unreached. Original3wheel restoreONCE passed0/.238974s and full1467/953/full69 floor matched. Whole75410996 retains89raw/48fixtures/twojournals/tenrecorded identities absent, fresh206 private refs/gaps clear; holder independently CLOSED. Only three existing helper acquisition predicates now require original native Widget.is_mounted: open_menu, choose and journey reopen. Original App.push_screen can publish screen stack before Compose/Mount completes; no sole runtime-cause claim. All124 assertion ASTs and15/20/600 bounds identical; fullsource/native parsing0omissions, compile/diff pass without imports. Production/pins/wheels unchanged; corrected consumers unrun. Actual fresh qualification, merge491/496 and live delivery still remain. Disk/swap pressure retained with17.2GiB available for the small serial stage; no fleet/build/source capture. No repeated phases or authority inherited.
+- [ ] The user's live installation remains unchanged. Installed batch acceptance, final coherent pair/cutover and actual live attachment/feature/response-latency verification remain. Original durable history, native sessions, journals and UNKNOWN inputs must be preserved. The selected Core wheel is verified against actual current Core main d846 and already contains Core697 notification indexing; notification_assignment.py and presentation.py are byteequal in Git and ZIP. The earlier assumption that this fix was newer than the selected Core was wrong. No additional Core rebuild is required for that fix.
+- [ ] Configured and loaded continuous journeys remain incomplete at their recorded scopes. Their closed failures, partial successes and owned consumer repairs are retained below; neither a source repair nor the physical navigation pass supplies whole configured/loaded acceptance.
+
+
+- Core696 and Toad488 are merged together. Ctrl/Shift thread/channel selection,
+  retained right-click batch, original backend dialogs/read/archive and actual
+  partial refusal display passed in the real private App with native73 sources.
+  No public installed change or native start/stop acceptance is claimed yet.
+- Core697 and Toad486 are merged. The actual mounted menu preserves clipped-row
+  scroll/composer focus; keyboard traversal still reveals its row.
+- Toad487 is merged: CommsChat uses the original shared coordination observer
+  instead of independently polling every50ms. Matched source App comparison:
+  33 actual notification reads over2.2s idle before, four afterward; live updates
+  and retained-tab returns pass in both. This is a read-count reduction, not an
+  installed frame-time result. Public installation remains unchanged.
+- Parent's reused isolated sidebar-selected-targets checkout now owns complete
+  right-sidebar parking/eviction integration. Warm panel graph retention and
+  actual teardown are separated under existing native admission; conversation
+  and sidebar are independent resources in the same working-set budget.
+  Four-tab source App returns passed, including two identical warm panel graphs
+  and exact project-reader restoration after eviction. Draft489 retains an
+  earlier intermittent disclosure failure. The source race is now repaired by
+  synchronous RelationshipRows intent, deleting its delayed message/handler.
+  Toad489 and native73 are merged; native left/right drag/slider capture passed.
+  Current three-wheel candidate is built and all940 changed-package assets plus
+  complete RECORDs match Git. Paired pins Toad490 are merged. Actual installed and
+  physical latency remain unverified. Physical03 has now staged the matched
+  candidate once and its installed-source proof passed in 3.31 seconds. All953
+  assets/full69 matched, including the typed Core member. Private App/source
+  capture remain held for final receipts/release; public App is unchanged.
+  No repeat physical operation or source/provider input is authorized by that
+  source investigation.
+
+- Parent captured a second120-second profile of the actual running UI during
+  Tristan's #openhcs response burst. Notification reads/decoding and main-thread
+  route validation are concrete hotspots; substantial sampler losses preclude
+  CPU percentages or frame-time claims. Core697 deletes per-recipient full-window
+  receipt scans through the original NotificationAssignment owner. Four affected
+  real bus/SQLite checks pass. The clean checkpoint is715b69d22, source/database
+  verified only; live installation remains unchanged. Parent owns the remaining
+  route/read-consumer trace and measured installed responsiveness followthrough.
+- Parent owns Toad482: duplicate pointer refresh orchestration is deleted;
+  context projection uses the existing worker, and native Tree reconciliation
+  avoids recursive inspection equality and repeated descendant walks.
+- Toad482 now declares held mutation/paint roots instead of pausing the entire
+  frame. Native Textual72 owns geometry, retained damage, cut cells and sender
+  callback admission. Parent consumes the publication hook through the existing
+  writer/scene lifetime; the competing App-level dispatch is deleted.
+- Textual72 and Toad482 are merged: native4e3a877f and Toad6fd049622.
+  SideBar now uses displayed ancestry to defer parked-tab style/hydration/layout.
+  The competing conversation sidebar-padding subscriber is deleted.
+- Both new wheels are built: Toad6fd049622/nativee15. Complete wheel RECORDs
+  and all319 Toad/266 native source members match. Core remains the explicitly
+  reviewed ddcdc/6b426 artifact; no latest-Core equality claim. Exact build and
+  readback are under Parent's current-ui-publication-pair-20261006 artifact root.
+  The one physical purpose has run, restored the original floor and independently
+  closed; the live link remains unchanged. Parent's original physical recorder composes
+  sidebar/wheel/reversal/End and saved-return paths in one journey.
+- The prior integration queue had no open Core/Toad PRs at the fresh query.
+  Parent then published Toad485 (a39b5bcd), a physical-control checkpoint only:
+  original sidebar motion is promoted unchanged into a shared capability and
+  composed with saved-history wheels, context Tree motion and right hide/reopen.
+  Production/pins/wheels are unchanged; no second fixture or recorder.
+- Bohr's fresh returned485 contract confirms its original floor/69 origins and
+  exact three-package return, private refs/gaps clear, with actual new wheel
+  Git/RECORD relations. Parent binds that assessment/preimage in
+  evidence/sidebar-wheel-installed-20261006/FINAL-PHYSICAL-OPERANDS.json,
+  at the fixed sidebar WT. One real read-only source owner supplies two private
+  SDK saved forks; isolated st/native targets/raw frames remain original. The
+  concrete whole600/recording240 safety bounds preserve original history20 and
+  navigation2 checks. The exact three-wheel stage passed once in 0.223 seconds;
+  controller, root preparation and installer joined and are directly absent.
+  Fresh private READ is verified. The original proof/controller are materialized
+  with only their four/three issued literals. The sole installed-source proof
+  passed in 3.300 seconds: all953 assets/full69/origins and original keepers match,
+  original FullTrust passed, and both proof processes joined and are absent.
+  Final handoff includes the exact typed Core member and thirteen-file App map.
+  The subsequent sole physical App captured a real42.7MB source into two private
+  saved forks, reached left-sidebar and transcript wheel/reversal/End phases, then
+  refused a missing visible ContextTree target at138.79s. The saved frame shows
+  the right sidebar open with its earlier panels filling the small viewport; the
+  initial closed-sidebar explanation was wrong and is append-only corrected.
+  The existing recorder now wheels the native outer SidebarViewport before
+  targeting the tree. Strict target and saved-return checks remain; backend and
+  wheels are unchanged. Original three-package restoration passed once, full
+  floor/origins matched, and Bohr independently CLOSED the purpose after the
+  explicit private/source returns and clear census. Raw and both journals remain
+  held. Right/context and saved-return acceptance is incomplete; performance
+  review and fresh affected qualification remain, with no rerun authorized here.
+  The corrected physical02 tuple is now separately issued stage-only. Its one
+  three-wheel stage passed0.230s and all original stage processes joined/are
+  absent. The recorder scrolls the outer right panel before the visible tree;
+  useful-paint passes original --fit-window for a usable isolated message area.
+  Same built wheels,600/240/20/2 bounds. The one installed proof passed3.478s;
+  both processes joined/are absent, all953/full69 source assets match, and the
+  original typed Core member is included in the thirteen-file App map. Bohr
+  consumed/disabled that proof. Physical02 then passed its sole controller in
+  208.526s: saved-source/tab/editor/draft/Undo native checks and sidebar/context
+  gestures passed, using a real42.7MB source/two private SDK saved forks and zero
+  submitted inputs. Original restoration passed once0.272s; exact original
+  floor/origins, process absence and fresh private census are verified. Bohr
+  independently CLOSED the existing purpose and Sch's private/source closures
+  are preserved. Whole/raw/two journals remain held.
+  Footage review does not qualify transcript wheel motion: wheel-up widens the
+  right sidebar while history reflows at its bottom; down/reverse retain
+  scroll_y=maximum585 and produce no body outputs. Parent published the honest
+  result on Toad485 at2f2ffc209. Parent owns recorder motion acceptance; Arendt
+  owns the native queued press/move/release/capture source trace. No rerun or
+  fresh authority is inferred. Independently, Parent published Toad486 at
+  5abb6fd4: remove CommsRow.show_menu's unnecessary focus request, which can
+  scroll an unopened row before opening its explicit-target context menu.
+  Source compile/AST/diff pass; actual mounted right-click acceptance and live
+  publication remain outstanding.
+- Actual visible pointer App: right median50.4ms/p9558.5ms/max112.9ms; left
+  median54.5ms/p9571.6ms/max185.5ms, empty stderr. Earlier429/424ms measurements
+  selected a hidden zero-size sidebar and are invalid visible-toggle results,
+  not a speedup baseline. The matched held-body/modal App passed7.55s with
+  strict native damage/cut-cell/selection/draft/reentry checks. Physical saved
+  history, wheel scrolling, coherent staged packaging and live installation
+  remain outstanding; no smooth-scrolling or installed claim.
+- Toad483 loaded native-retirement witnesses and Toad484 native participant-cell
+  clicks are included in main through482; all478 commits are ancestors. Exact warm identity remains strict;
+  retirement gets separate credit. Neither source repair supplies mounted
+  qualification. Frozen wheels and original run evidence remain unchanged.
+- Configured03 reached real source paint, saved-channel return and peer busy
+  readiness, then peer selection timed out. Its owner reports the original
+  restoration and explicit whole return complete; independent holder/artifact
+  closure belongs to the original issuers. Cause beyond the wait is unproved.
+
+
 ### Consumer repairs integrated; second paired results — 2026-10-06
 
 Parent normally merged Heis's complete published consumer repair into Toad478.
@@ -5005,3 +5202,216 @@ and runtime9873 are bound; proof/App still require the actual new READ and
 proof/release. The immediately preceding6d265 return governs this continuation,
 not the older09bc descriptive record. No build, native execution, provider input
 or performance wait is required for this mounted worker check.
+
+## Current sidebar latency candidate, 2026-10-06
+
+Owned build output: /home/ts/wt/toad-sidebar-selected-targets-20261006/.artifacts/sidebar-latency-pair-20261006.
+BUILD-SOURCES.json / WHEEL-READBACK.json bind Core d8467b730 (696+697),
+Toad33dfcf15 (merged489 plus two-pin integration) and native1a12a186 (merged73).
+All355+319+266 changed-package assets and complete RECORD hashes/sizes match
+Git archives. Original Diff/NRA remain selected separately; no rebuilt-native
+Pi package, prefix stage or provider/source input was executed.
+The system Python missing Poetry backend refusal is retained. Cached declared
+backend built native once; all original build commands and raw are retained.
+Current owned source archive directories/tars are build scratch, not borrower
+inputs; release after the candidate is sealed. Wheels and receipts remain.
+Bohr fresh readonly485 request accepted on turn01a110a3-b354-7eb1-b711-9cf03891aa63
+through the existing daemon because the advertised MCP38151 transport is dead.
+Actual purpose and authorities remain unissued, pending concrete current floor
+and restore binding. Existing physical02/source/raw/journals remain unchanged.
+
+Fresh returned485 contract: /home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/485-Parent-sidebar-latency-physical-eligible-contract-readback.json.
+The final matched physical tuple now binds its actual preimage/floor/69 origins,
+clear private references and literal original three-wheel return.
+Publication: /home/ts/wt/toad-sidebar-selected-targets-20261006/evidence/sidebar-latency-physical-20261006/FINAL-PHYSICAL-OPERANDS.json.
+Fixed original physical/helper source root remains the Parent right-sidebar WT;
+all current helper hashes are bound. New physical03/pslp03 outputs are absent.
+Scope remains one isolated st, two new saved SDK forks, zero submitted inputs,
+600 outer/240 recording. Original source witness and private whole return remain
+separate. Specific purpose/native/source authorities are still unissued.
+Actual installed multiselect/backend outcomes require their own affected path
+acceptance; physical gesture footage is not batch backend acceptance.
+
+### Physical03 staging completed, 2026-10-06
+
+The physical03 purpose is now issued for the current paired wheels. Its one
+literal three-wheel stage passed in 0.244072075 seconds; root preparation and
+installer joined, and all three recorded identities are absent. Root mode is
+0700. No proof, source acquisition or App has run.
+Joined receipt:
+/home/ts/wt/toad-sidebar-selected-targets-20261006/.artifacts/sidebar-latency-physical03-20261006/485-installed-purpose/stage-whole-join.json.
+The original controller is prepared with only its three issued literals and
+compiled without imports. Bohr received the joined stage for same-purpose
+consumption; Sch received the matching fresh private READ request. Both daemon
+turn deliveries succeeded; neither receipt nor proof release is presumed.
+
+Remaining delivery checks:
+- [x] Merge the working sidebar, selection, notification and native pointer changes.
+- [x] Build and verify the coherent paired wheels against Git and complete RECORDs.
+- [x] Obtain the fresh holder/floor/return contract and perform its single stage.
+- [x] Verify the installed source with the matching READ and sole proof release.
+- [ ] Run and review the isolated saved-history sidebar/scroll recording.
+- [ ] Verify installed multi-selection and truthful backend partial outcomes.
+- [x] Complete Physical03 original package/source returns and independent holder closure; artifact closure stays with its issuer.
+- [ ] Deliver the reviewed pair to the actual local runtime and verify fresh attachment.
+Live PUBLIC475 packages and original saved histories remain unchanged. No
+performance improvement or completed integration goal is claimed from staging.
+
+Physical03 sole proof passed in3.310913287 seconds under the effective release
+and matching fresh READ. Both original processes joined/are absent; all17 raw
+references matched. All953 installed assets/full69 and protected originals
+matched. The exported Core InstalledSource equals the full-proof member and
+is included in the13-file App map. Final handoff:
+/home/ts/wt/toad-sidebar-selected-targets-20261006/.artifacts/sidebar-latency-physical03-20261006/485-installed-purpose/final-App-handoff.json.
+Bohr and Sch received the same completed tuple for proof consumption and
+separate private EXEC/source READ, respectively. Controller/App/source capture
+remain unrun; no footage or performance qualification follows from this proof.
+Removed916878867 bytes of completed build-only source archives/extractions after
+a privileged no-reference/no-gap census and confirming none of the issued
+inputs borrows those paths. Wheels, raw build logs, receipts, source Git commits,
+previous recordings and journals remain held; BUILD-SCRATCH-RELEASE.json records
+the exact removed paths and archive hashes.
+
+### Physical03 returned and independently closed; real input task defect assigned
+
+The sole physical recording stopped after 83.49 seconds when its native-cell
+lookup found no visible right-sidebar resize handle. It did not reach the later
+wheel/context-tree/saved-return phases; no smoothness acceptance is claimed.
+Original two saved SDK forks and source currentness were verified at use, and
+source custody returned separately after the authentic witness marker. No
+submitted input or original history replay occurred.
+The original three-package restoration passed once in 0.312 seconds. The whole
+handback retains 225 raw references and 31 authored fixture files including both
+journals; all recorded private processes and owned sockets are gone. Bohr's
+existing physical03 lifecycle is independently CLOSED, with the actual original
+floor, fresh private census and explicit private/source returns bound. The public
+installation remains unchanged. No second launch or duplicate restoration follows.
+Whole handback:
+/home/ts/wt/toad-sidebar-selected-targets-20261006/.artifacts/sidebar-latency-physical03-20261006/485-installed-purpose/whole-handback.json.
+
+A concrete native input ownership gap was found in selected native73 source:
+App.run_test assigns the message-pump task, but App.run_async does not. The new
+pointer-completion transfer compares against that task to avoid returning work
+to its waiting caller; the real entrypoint can therefore form a queue/wait cycle.
+Arendt received the exact source relationship and real-run_async acceptance
+requirement through the existing route. This is a source defect, not proof of
+the sole physical03 cause: no task stack was captured. Parent retains the
+recorder geometry trace and installed selected-target acceptance. Native task
+custody belongs to Arendt; no competing Toad override, queue or timing patch.
+
+### Selected action acceptance prepared; native real-entry repair published
+
+Draft Toad491 extends the existing declared-target installed control on clean
+main: native selected menus and private-store read/pin/partial archive/exact-tag
+outcomes, plus the existing zero-prompt SDK/ACP fixture's two-owner batch
+start/stop/dedup/reconnect and real active tag survivors. It changes no production
+module, wheel or pin. Full original Package census has zero omissions; changed
+helper compilation and diff check pass. Behavioral execution is UNRUN. The new
+modes keep the old ordinary/accepted MCP controls separate, and final PASS waits
+for original App and fixture shutdown. Actual native/package purpose remains a
+future bound operation, not permission from this source checkpoint.
+Stable helper and preparation:
+/home/ts/wt/toad-sidebar-selected-targets-20261006/tests/declared_target_actions_installed_pilot.py
+/home/ts/wt/toad-sidebar-selected-targets-20261006/evidence/selected-target-installed-20261006/PREPARED.md.
+
+Arendt published native74 at9b504468d. MessagePump owns actual task acquisition
+and release around the App/widget polymorphic processing body; run_test's
+separate task write and Screen's premature clear are removed. Parent reviewed
+the original App prelude/dispatch-loop AST as unchanged. The actual run_async
+FIFO/shutdown checks remain with that original native owner before integration.
+No missing-task exception, copied queue, timing change or Toad override is added.
+
+The partial physical03 capture measured layout refresh p95 19.99 ms/max37.31 ms,
+compositor refresh p95 3.29 ms/max27.03 ms, and writer completion p95 2.88 ms.
+These are captured work durations only. The failed gesture path and lack of task
+stacks prevent an input responsiveness, emulator paint, FPS or smoothness claim.
+The paired public installation and retained original histories remain unchanged.
+
+
+### Real-App input repair merged; physical04 preparation delivered
+
+- [x] Native74 merged at17817952. Four actual run_async controls passed, including routed pointer order and task cleanup. Original source negatives are retained; no physical03 sole-cause claim.
+- [x] Toad492 merged at2f111cbb, pinning that native source. Original 99-package lock relation is unchanged except the native reference.
+- [x] Normal new Textual/Toad wheels checked against selected Git assets and complete RECORDs. Core d846 is reused without rebuild. Toad package bytes equal the previous wheel while the Git pin inputs changed.
+- [x] Fresh physical04 operands published d4c2656c on the retained clean qualification branch. All71 file descriptors and39 fixed helpers match. Bohr received the exact tuple for fresh specific issue; the returned485 assessment and literal original three-package restore are bound.
+- [ ] Physical04 stage/proof/private and source authority, one actual isolated-st run and footage review. No purpose or operation is inferred from preparation.
+- [ ] Installed selected-target batch outcomes, separately prepared in Draft491.
+- [ ] Reviewed paired public delivery and actual fresh attachment.
+
+The physical04 command retains the original600/240 bounds, two new private saved forks and zero submitted inputs. Physical03 remains CLOSED with its failed gestures and footage retained. Current public installation is unchanged. The new proposal is evidence/real-app-pump-physical-20261006/FINAL-PHYSICAL-OPERANDS.json in the fixed Parent selected-target worktree.
+
+
+### Recorder integrated; physical04 stage complete
+
+Toad485 is merged at4cce8adc after source review and the actual Physical02 return/result check. Its saved-history/peer/draft/Undo assertions passed; footage did not qualify wheel delivery or latency. The PR body now states both facts and retains the later Physical03 failure. Native74 remains the separately reviewed real-App task fix.
+
+Physical04 actual grant98d868 permits only the new owned root and exact three-wheel stage. The stage passed once in0.265077274s; rootprepare/installer/controller are joined and directly absent. Joined receipt is `.artifacts/sidebar-latency-physical04-20261006/485-installed-purpose/stage-whole-join.json` in the fixed selected-target worktree. Bohr and Sch received the actual stage for consumption and the fresh matching READ. Proof, source capture and App are still held; no phase follows from this note.
+
+Two operator-interpreter refusals occurred before root/Popen: an absent developer interpreter and a stale developer environment lacking child_process. Both are held in parent-sidebar-physical04 scratch; the issued interpreter then ran the still-unused stage once. No product/helper/backend workaround or repeated install was introduced. PUBLIC475 remains unchanged. Physical04's exact original three-package return is mandatory after its terminal.
+
+
+### Physical04 installed proof completed
+
+The sole original installed-source proof passed0/3.424455784s under actual matching READ089ff9 and the same-purpose proof release. Original controller4086647 and child4086657 joined and are directly absent. All953 selected assets/full69 versions and truthful origins/keepers passed; the exported Core InstalledSource equals its original full-proof member. The final13-file App map and original600/240 controller are exact. Completed final-App-handoff.json is under the physical04 owned output; Bohr and Sch received it for consumed-proof binding, separate private EXEC/source READ and final release. Actual App/source capture remain UNRUN; no phase repeats.
+
+Completed build-only extracted sources/input archives were removed after a fresh privileged borrower census with no gaps/references. About15.7MB returned; wheels, build receipts/raw, old physical recordings and every held journal remain. This small cleanup does not remove the recorded disk/swap warning or qualify performance. Parent remains responsible for the physical recording/footage and installed selected-target acceptance, then actual public delivery.
+
+
+### Physical04 returned; pending capture is not absent paint
+
+Actual new-pair App ran once and failed72.099s at initial warm-ready state capture, before gesture acceptance. The original operator joined73.115s. The40-second video visibly shows saved transcript and Ready/Saved history available while sidebar Indexing remains; native state injection is pending. This contradicts a blank/no-paint interpretation but proves no cause or motion performance. Parent owns capture/viewport/writer consumer trace; original Arendt has the exact reproducer and owns native pump/publication/callback trace. No repeated App or speculative guard/timer fix.
+
+The authentic42.7MB source/two SDK forks/witness were returned separately. One normal original three-package restoration passed .264691s and exact1467/953/full69/keepers/PREFIX matched. All30 recorded identities are absent; owned sockets/display7852 are gone; fresh privileged208-process census has no references/gaps. Whole92fafd/35264B with120 raw/31 authored files/two journals is delivered to Bohr/Sch for independent closures. Raw and old failures are held; no current public installation or new loan follows. Physical result is published in the fixed selected-target branch under evidence/real-app-pump-physical-20261006/RESULT.md.
+
+### Native callback execution owner integrated
+
+- [x] Textual75 merged at c1e71864143e1bd832ea904fc1fd37fa128fba7d after reviewing the complete changed owner and its real-App checks. Screen admits callbacks after publication; the original sender message pump now executes them. The foreign-task invocation and repeated per-callback preparation were deleted. Five focused checks passed, including unrelated paint during a suspended sender callback and original held-root admission.
+- [ ] Paired installation and physical sidebar/scroll acceptance remain open. This merge does not change the installed packages or establish Physical04 causality. The missing capture DTO/error remains Parent's separate trace; frozen run, journals, wheels and whole return are unchanged.
+
+- [x] Toad493 pairs the merged Textual75 execution owner through the existing dependency pin. Only native revision changes in pyproject.toml/uv.lock; all other records are exact, both TOML files parse and uv lock --check resolves the same 99 packages. No developer environment sync or public installation occurred.
+- [x] Physical04 holder lifecycle independently records closed_at and disabled execution after one control and one restoration. Its capture failure/visible saved paint and held evidence are preserved.
+- [ ] Fresh paired installed/physical acceptance and public delivery remain open; the existing capture completion trace is still unresolved.
+
+### Remote capture boundary correction
+
+- [x] Toad494 publishes the existing capture helper correction: target entry is recorded before observer/exporter imports; original loader/invocation exceptions become existing error receipts and are re-raised. CPython remote_exec only acknowledges scheduling. An actual disposable CPython target confirmed entry plus a real import-refusal traceback rather than pending; target joined, five related helpers parse/compile.
+- [ ] Review/integrate494 and select its exact helper for fresh paired physical acceptance. Physical04 has no such entry receipt, so its missing DTO cannot prove an executed history wait or a sole callback cause. No readiness checks or deadlines were weakened, no public runtime changed, frozen roots/evidence remain held.
+
+### Callback pair ready for fresh physical acceptance
+
+- [x] Toad494 merged at d5cb2212308bf509e96878dee80243240fc223ab. The capture client records real target entry and original loader/invocation errors; original readiness and writer requirements remain.
+- [x] Native75 wheel built once offline; complete Git/ZIP/RECORD verification passed for all940 selected changed-package assets including Core declaration-derived forced resources. Original NRA/Diff13 complete953. Core and Toad wheels reused without rebuilding; selected Toad package subtree equals current d5cb without relabeling old build inputs.
+- [x] Physical05 preparation published 7c3c14a1 on qualification/sidebar-physical05-callbacks-20261006 in fixed toad-sidebar-context-pointer checkout. All42 actual helper descriptors parse, output roots are absent, original600/240/two-private-forks/zero-input scope unchanged. Bohr received a concrete fresh returned485 assessment request; no purpose/access inherited. Six MB of build-only extraction/archive removed after original privileged census confirmed no borrowers/gaps; wheels/raw retained.
+- [ ] Bind actual fresh floor/preimage/restore in final physical05 tuple, then original specific purpose/proof/runtime phases and recorded sidebar/scroll acceptance. Public install/performance remain unqualified; Physical04 and earlier journals/results remain closed and held.
+
+### Physical05 actual fresh contract bound
+
+- [x] Bohr delivered actual returned485 contract8fa41 with fresh original preimage/floor/69origins/clear private references/classification and exact original three-package restore. Parent full-read/hash verified87 unique named contract/helper references.
+- [x] Append-only FINAL-PHYSICAL-OPERANDS.json published608c34bd in fixed toad-sidebar-context-pointer checkout. Actual floor/return and selected candidates are bound; all outputs absent, original600/240/two-private-forks/zero-submitted-input scope unchanged. Final tuple delivered to Bohr for fresh at-issue specific purpose, not duplicate assessment or authority.
+- [ ] Actual specific issue/stage/proof/private EXEC/source READ/release, one isolated physical run and footage acceptance remain. No prefix operation follows from preparation; Physical04 closure and public installation remain unchanged.
+
+### Physical05 issued and staged once
+
+- [x] Actual stage-only purpose14df6d issued for Parent. Personally read immutable grant/effective lifecycle before the sole original three-wheel stage. Stage passed0/.248732210s, authentic root/installer/controller joined and absent, no error/drain/group members. Root0700 and joined receipt34f803/5281B are retained under the fixed physical05 owned output.
+- [x] Original controller reconstructed with only three issued literals, compile-only/unrun. Bohr received joined stage for consumption; Sch received actual holder for fresh matching private4b READ (same receipt if already issued).
+- [ ] Exact four-literal proof binding and sole proof release follow that actual READ; private EXEC/source READ/App are held. No stage repeat/public operation or old authority inherited. Original one three-package restoration and whole returns remain mandatory.
+
+### Physical05 installed proof complete
+
+- [x] Actual new private READ5dabae matched holder14df6d and all89 named metadata references. Four-literal original proof26bebc/binding1dd57b compiled and delivered; original stage remained consumed/disabled. Bohr's completed actual turn and effective5d14c proof release were read before the sole invocation.
+- [x] Installed proof passed0/3.303708055s, original controller4137606/child4137617 joined and directly absent, no timeout/error/drain/group. Original953 assets/full69/keepers/origins passed; typed Core member equals full proof and original13-file App map matches. Final-App-handoff5a9fe8/14570B preserves17raw/18final refs and exact original three-literal1173 controller600/240.
+- [ ] Actual private EXEC/separate PUBLIC475 source READ and Bohr final same-purpose release are requested from this completed handoff. App/source capture remain unrun and held; no stage/proof repeats, no public install/performance claim. Original three-package return remains mandatory.
+
+### Physical05 completed private installed journey
+
+Result published on retained Toad qualification branch at b816bc587. The single controller passed in 204.57 seconds and its operator joined in 205.56 seconds. All eleven recorded journey checks passed. Actual runtime imports came from the selected installed Core/Toad/Textual pair; public installation is unchanged.
+
+Source custody was explicitly returned after the original witness marker. The original three-package restoration passed once in .2433 seconds; original floor/origins matched, recorded processes were absent and private references were clear. Whole handback retains 523 raw references, 36 authored files and both journals. The authoritative holder lifecycle is independently CLOSED. No subsequent operation is authorized.
+
+Performance review remains open. Native enqueue-to-writer median is 3.26ms and p95 10.18ms, but these measure writer completion rather than visible response or presentation FPS. Wheel-phase intervals and footage still require review; left-sidebar wheel phases recorded no writer receipts, so the passing journey cannot establish left-sidebar scroll delivery. Installed selected-target batch acceptance and public delivery remain unfinished.
+
+### Recorded motion review and selected-target acceptance preparation
+
+Physical05 timing review published at9362dfb4a. Actual transcript travel302→230→302→230 and context travel12→24→12 are recorded. Right-sidebar handlers1.50/3.90/5.27ms; next writer completions50.06/38.66/69.45ms are not input-to-photon latency. The left-bar fixture had only two rows, so left scrolling remains unqualified; response-burst and full footage acceptance remain open.
+
+DraftToad491 now composes the unchanged selected_target_actions into its existing native batch App (bc4a0272f), preserving all117 prior assertions and the original zero-request SDK/ACP fixture. Original Package parsed1735 modules without omissions; production/pins/wheels unchanged. Actual fresh returned485 contract97e8f30 and explicit retained Core696d846/Toad2f111/native75c1e are bound in PROPOSED-BATCH-OPERANDS.json atfcef75f8c, delivered for specific fresh issue. One App, selected600s safety deadline, existing15s/20s phase checks and original normal three-package return. No stage/proof/native/App ran; public runtime unchanged.
