@@ -4,6 +4,31 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original objective remains incomplete. CI is deferred as a merge gate.
 
+### Consumer repairs integrated; fresh qualification preparing — 2026-10-06
+
+Parent normally merged Heis's complete published consumer repair into Toad478.
+Both loaded cursor checks and configured readiness now take the display cursor
+from the existing `TranscriptPresentation`; pages and source coverage remain
+with their histories. The configured proof exports its actual Core
+`InstalledSource` member, and both configured argument lists name that member.
+The strict parser, production files, pins and retained wheels are unchanged.
+No rebuild or fresh App run followed this source merge.
+
+The corrected loaded preparation and source relation are integrated in
+[evidence/loaded-history-consumer-repaired-20261006/PREPARED.md](../../../evidence/loaded-history-consumer-repaired-20261006/PREPARED.md).
+Bohr's fresh returned334 assessment finds the original floor/origins/restore and
+private references eligible. Mendel must bind that actual fresh preimage and
+assessment into the final mlh02 tuple before its specific issue. Configured02
+advances independently from its published corrected operand; it does not wait
+for loaded finalization. The original 2100/1800 outer bounds and inner checks
+remain unchanged, with configured provider processing separate from loaded's
+ten prospective localhost requests over two authored journals.
+
+Parent observed host pressure and identified the largest memory users in
+OpenHCS analysis workspaces. No unrelated process or held evidence was removed.
+The original operators refresh actual headroom at launch and coordinate measured
+concurrency, without new memory caps, queues, deadlines or build work.
+
 ### First paired App failures and owned repairs — 2026-10-06
 
 Both original App attempts are consumed and further execution is disabled.
