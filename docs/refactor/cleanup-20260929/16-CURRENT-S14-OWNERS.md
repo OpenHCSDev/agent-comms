@@ -30,8 +30,9 @@ admission/no pending observation; no final pointer geometry/cause is proved.
 Later menu/clipped60/native batch phases were unreached. One original restore
 passed0/.256676; full1467/953/69RAW origins/keepers/PREFIX exact,10 recorded IDs
 absent and fresh206 census refs/gaps0. Whole52221704 retains84raw/46files/2journals
-and explicitly returns private custody; independent closure requested.
-Arendt received the concrete native Pilot contract: documented final-event bool
+and explicitly returns private custody; holder and matching private READ/EXEC
+are independently CLOSED. Raw/journals and prior negatives remain held.
+Arendt has taken the concrete native Pilot contract correction: documented final-event bool
 caches first hit, whereas driver owns down/up Click admission. No backend fix or
 sole runtime cause is claimed. Parent owns Toad consumers and broader live
 performance/public delivery; the original objective remains incomplete.
