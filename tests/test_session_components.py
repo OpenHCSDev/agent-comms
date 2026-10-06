@@ -1,5 +1,6 @@
 """Session ownership, declaration extension and actual ACP boundary contracts."""
 
+import os
 from dataclasses import replace
 
 import pytest
@@ -7,7 +8,10 @@ from acp.agent.router import build_agent_router
 from acp.schema import SessionConfigSelectOption
 
 from agent_comms.acp import CommsClient
+from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.coordinator import Coordination
 from agent_comms.config_options import (
     CatalogConfigOption,
     ConfigOption,
@@ -55,6 +59,12 @@ async def test_state_is_owned_once_and_attachments_do_not_share_negotiation(owne
     await owner.initialize(1, {})
     await other.initialize(1, {})
     session = await owner.new_session(str(tmp_path / "project"))
+    thread = owner._comms.registry.require(session.session_id)
+    assert thread.process_identity == ProcessIdentity.capture(os.getpid())
+    with Coordination(str(owner._comms.root / "coordination.sqlite3")) as store:
+        participant = store.participants.get(stable_thread_lookup(thread.created_at))
+    assert participant.committed and participant.owner_thread == thread.name
+    assert participant.pointer.execution_id is None
     assert (
         owner.sessions.config.session_catalog_generation[session.session_id]
         == owner.sessions.config.catalog_generation
@@ -70,6 +80,25 @@ async def test_state_is_owned_once_and_attachments_do_not_share_negotiation(owne
         "_transcript_snapshots",
     }.intersection(vars(owner))
     await other.shutdown()
+
+
+async def test_attached_declaration_publishes_membership_without_acquiring_executor(owner, tmp_path):
+    attachment = CommsClient(owner._comms, agent_bin="pi", auto_wake=False)
+    try:
+        thread = await Coordination.run_worker(
+            lambda: attachment.sessions.declare_thread(str(tmp_path / "attached"))
+        )
+        assert type(attachment.sessions) is AttachedSessionLifecycle
+        assert thread.pid == 0 and thread.process_identity is None
+        assert owner._comms.registry.require(thread.name) == thread
+        assert owner._comms.registry.status(thread.name).active
+        assert not attachment.sessions.bindings and not attachment.sessions.proxies
+        with Coordination(str(owner._comms.root / "coordination.sqlite3")) as store:
+            participant = store.participants.get(stable_thread_lookup(thread.created_at))
+        assert participant.committed and participant.owner_thread == thread.name
+        assert participant.pointer.execution_id is None
+    finally:
+        await attachment.shutdown()
 
 
 async def test_native_observation_only_initializes_unset_configuration(owner, tmp_path):

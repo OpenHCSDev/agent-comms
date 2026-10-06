@@ -12,7 +12,7 @@ import os
 
 import pytest
 
-from agent_comms import cohort_foreground, coordinated_runtime
+from agent_comms import cohort_foreground, coordinated_runtime, native_pi
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     CursorAdvancedUpdate,
@@ -124,15 +124,14 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     monkeypatch.setattr(agent.sessions.config, "options", no_options)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     session = await agent.new_session(cwd=str(project), mcp_servers=[])
     owner = comms.registry.require(session.session_id)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        store.participants.register(
-            stable_thread_lookup(owner.created_at), owner.name, owner.name, committed=True
-        )
+        participant = store.participants.get(stable_thread_lookup(owner.created_at))
+    assert participant.committed and participant.owner_thread == owner.name
     invoke_tool(
         comms,
         "comms_send",
