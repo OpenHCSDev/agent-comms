@@ -4,6 +4,23 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Configured producer/consumer binding defect assigned — 2026-10-06
+
+Parent source review found configured_main in Heis's active consumer passes
+configured_saved_agent(auto_wake=True), while the actual merged691/selectedCore99
+producer declares no auto_wake keyword and constructs CommsAgent(auto_wake=False).
+The selected producer therefore cannot bind this new call. This was found by
+source/signature inspection, without importing, testing, stage or provider input.
+Heis owns the existing producer method and complete real callers: retain default
+wake-disabled compaction/S4 behavior, declare the configured journey's explicit
+wake selection through the original CommsAgent contract, and publish a clean
+current-main source checkpoint. No copied fixture, private-state mutation,
+external server bypass or peer-worktree edit is authorized by this finding.
+Parent delivered the exact call/declaration sites before consumer source freeze.
+Warm04 frozen helpers/purpose remain unchanged; configured mounted acceptance is
+still unrun. Einstein's canonical handoff family is actively uncommitted in its
+own source checkout and remains separate; Parent does not merge partial edits.
+
 ### Completed Parent scratch retired — 2026-10-06
 
 Parent removed only its completed two-test preflight scratch after matching all
