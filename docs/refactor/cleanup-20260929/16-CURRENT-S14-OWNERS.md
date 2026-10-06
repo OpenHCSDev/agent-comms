@@ -24,17 +24,17 @@ admission at every boundary through select_rows and all eight consumers. All124
 assertion predicates/actions/15/20/600 unchanged; production/wheels unchanged.
 Complete Package1735 modules parses0omissions;45 related modules/138 sites read.
 Source compilation/diff pass without imports; diagnostic App is unrun.
-Fresh readonly returned485 Batch05 assessment is verified and bound in published
-PROPOSED-BATCH05-OPERANDS.json at59ae8751. Same built wheels, provider0/public source excluded. Batch05 is now issued;
-its one cached three-wheel stage passed in0.238s, with original root/installer
-joined and all three recorded identities absent. Joined stage was delivered to
-Bohr and consumed/disabled. Fresh READ and sole proof release were personally
-verified; the installed proof passed0/3.506s with953/full69 matching and both
-original processes joined/absent. Exact final tuple was delivered to Bohr and
-Sch for proof consumption, separate EXEC and final App release. Controller is
-prepared but unrun; selection-boundary diagnostic and60-row acceptance remain
-unqualified. After affected acceptance, merge491/496 and complete
-local delivery. Broader continuous/performance and public runtime remain open.
+Batch05 sole App failed at initial Shift210: actual snapshot retains onlybatch-a,
+expected original projectionc,b,a. Preceding selection diagnostics record ready
+admission/no pending observation; no final pointer geometry/cause is proved.
+Later menu/clipped60/native batch phases were unreached. One original restore
+passed0/.256676; full1467/953/69RAW origins/keepers/PREFIX exact,10 recorded IDs
+absent and fresh206 census refs/gaps0. Whole52221704 retains84raw/46files/2journals
+and explicitly returns private custody; independent closure requested.
+Arendt received the concrete native Pilot contract: documented final-event bool
+caches first hit, whereas driver owns down/up Click admission. No backend fix or
+sole runtime cause is claimed. Parent owns Toad consumers and broader live
+performance/public delivery; the original objective remains incomplete.
 
 ### Current priority: sidebar and scrolling responsiveness
 
