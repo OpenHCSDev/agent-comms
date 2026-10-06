@@ -204,6 +204,13 @@ counterexample to preserve the existing attachment's declaration-only semantics
 through lifecycle capabilities; no participant injection or new native run is
 needed to establish that source defect.
 
+Parent reviewed final scoped Ready68584b47b5a, matched all17 named final
+references and verified no source/build change from frozen5c689. Exact685 was
+normally merged as6de443af on main and joined this integration branch. The
+original4b native commitment and5d wheel/source575db relation remain immutable;
+public475 and warm476 still use their separate selected7a/Core3931 relation.
+No new assembly, wheel build, package mutation or native input followed merge.
+
 The separately reached origin guard receipt6613ec67 and HTTP receipt03a4fba3
 show localhost positive, exact refused-origin causes before and after dispatcher
 reset, redirect refusal and exactly two localhost GET dispatches with no outside
@@ -215,8 +222,8 @@ preserve the raw failure and actual joins. Bohr independently closed9b320 at
 71fabd7e after matching the original1468/945/full69 RAW floor,428 protected,
 1883 other66/five environment nodes/PREFIX and fresh zero private references.
 Source-stage/proof/control/restore attempts are consumed once, all execution
-flags disabled. Sch's exact artifact-authority closure is separate; old issued
-bytes and every failed/NotSent input remain preserved.
+flags disabled. Sch's exact matching READ/EXEC closure11dc8004 is verified and published;
+old issued bytes and every failed/NotSent input remain preserved.
 
 S4 source683 is normally merged208b8f07 after review of complete arm acquisition,
 inputs/cuts/probes and cleanup clocks. Four authored orchestration controls and
