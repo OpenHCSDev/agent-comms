@@ -25,9 +25,12 @@ assertion predicates/actions/15/20/600 unchanged; production/wheels unchanged.
 Complete Package1735 modules parses0omissions;45 related modules/138 sites read.
 Source compilation/diff pass without imports; diagnostic App is unrun.
 Fresh readonly returned485 Batch05 assessment is verified and bound in published
-PROPOSED-BATCH05-OPERANDS.json at59ae8751. Same built wheels, new absent outputs,
-provider0/public source excluded. Delivered for fresh specific stage-only issue;
-no access from preparation. After affected acceptance, merge491/496 and complete
+PROPOSED-BATCH05-OPERANDS.json at59ae8751. Same built wheels, provider0/public source excluded. Batch05 is now issued;
+its one cached three-wheel stage passed in0.238s, with original root/installer
+joined and all three recorded identities absent. Joined stage was delivered to
+Bohr and consumed/disabled. The fresh READ is verified; exact four-literal proof
+materialization and binding were delivered for sole proof release. Controller
+and proof helpers are compile-only and unrun; App remains held. After affected acceptance, merge491/496 and complete
 local delivery. Broader continuous/performance and public runtime remain open.
 
 ### Current priority: sidebar and scrolling responsiveness
