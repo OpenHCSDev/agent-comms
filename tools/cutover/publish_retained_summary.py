@@ -15,10 +15,10 @@ import os
 from pathlib import Path
 import sys
 import time
-from typing import Annotated
+from typing import Annotated, ClassVar
 from urllib.parse import unquote, urlsplit
 
-from agent_comms.active_route import ActiveRoute, active_route_path, read_active_route, _publish_active_route_locked
+from agent_comms.active_route import ActiveRoute, active_route_path, read_active_route, _publish_active_route_locked, guard_default_route_write
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.input_disposition import InputDispositions
@@ -214,9 +214,52 @@ class InstalledSourceProof:
         if not self.native_full_trust or self.source_overlay or self.dependency_bypass:
             raise RuntimeError('Package/source/native trust is incomplete')
 
+    def require_frontend_successor(self, original: InstalledSourceProof):
+        """Preserve every installed package resource outside the Toad package."""
+        for proof in (original, self):
+            if (proof.native_package, proof.native_manifest, proof.native_tree) != (
+                    original.native_package, original.native_manifest, original.native_tree):
+                raise RuntimeError('Frontend publication cannot change native provenance')
+            if not proof.native_full_trust or proof.source_overlay or proof.dependency_bypass:
+                raise RuntimeError('Frontend publication requires original trusted packages')
+        if original.packages != self.packages or original.sdk != self.sdk:
+            raise RuntimeError('Frontend publication cannot change backend dependencies')
+        before = {source.module: source for source in original.sources}
+        after = {source.module: source for source in self.sources}
+        if before.keys() != after.keys() or 'toad' not in before:
+            raise RuntimeError('Frontend source membership changed')
+        for module in before.keys() - {'toad'}:
+            if before[module].head != after[module].head:
+                raise RuntimeError(f'Frontend publication changed backend source: {module}')
+        # Compare the actual installed resource trees, including dependencies
+        # and metadata. Different bin shebangs are outside these package trees.
+        for proof in (original, self):
+            for source in proof.sources:
+                if not Path(source.location).resolve().is_relative_to(proof.prefix.resolve()):
+                    raise RuntimeError('Installed source lies outside its declared prefix')
+                source.require_original(proof.archive_artifacts)
+        old_site = Path(before['toad'].location).parent
+        new_site = Path(after['toad'].location).parent
+        def resources(site):
+            return {path.relative_to(site): path for path in site.rglob('*')
+                    if path.is_file() and '__pycache__' not in path.parts
+                    and path.relative_to(site).parts[0] != 'toad'
+                    and not path.relative_to(site).parts[0].startswith('batrachian_toad-')}
+        old_files, new_files = resources(old_site), resources(new_site)
+        if old_files.keys() != new_files.keys():
+            raise RuntimeError('Frontend publication changed backend resource membership')
+        for relative, old in old_files.items():
+            if relative.name == 'RECORD' and relative.parent.name.endswith('.dist-info'):
+                # RECORD includes prefix-specific executable hashes; its
+                # package resource membership is already compared above.
+                continue
+            if old.read_bytes() != new_files[relative].read_bytes():
+                raise RuntimeError(f'Frontend publication changed backend resource: {relative}')
+
 
 @dataclass(frozen=True)
 class ReviewedRetainedSummaryCohort:
+    commands: ClassVar[tuple[str, ...]] = COMMANDS
     target: Annotated[Path, PathText]
     current_prefix: Annotated[Path, PathText]
     original_route: ActiveRoute
@@ -247,13 +290,16 @@ class ReviewedRetainedSummaryCohort:
             raise RuntimeError('Distinct reviewed actual installed journey gates are required')
         for gate in self.actual_gates:
             gate.require_original()
-        verify_native_package(self.native)
+        self.require_runtime()
         self.require_publication_originals()
+
+    def require_runtime(self):
+        verify_native_package(self.native)
 
     def require_publication_originals(self):
         if read_active_route() != self.original_route:
             raise RuntimeError('Original active route changed; recapture/review required')
-        for command in COMMANDS:
+        for command in self.commands:
             if (LINKS / command).readlink() != self.current_prefix / 'bin' / command:
                 raise RuntimeError('Original default changed; recapture/review required')
             if not (self.target / 'bin' / command).is_file():
@@ -264,10 +310,16 @@ class ReviewedRetainedSummaryCohort:
 
     def publish(self, directory: int):
         self.require_publication_originals()
+        self.publish_route(directory)
+        self.publish_links()
+
+    def publish_route(self, directory: int):
         target_route = replace(self.original_route, native_package=self.native)
         _publish_active_route_locked(target_route, active_route_path(), directory,
                                      expected=self.original_route)
-        for command in COMMANDS:
+
+    def publish_links(self):
+        for command in self.commands:
             link = LINKS / command
             if link.readlink() != self.current_prefix / 'bin' / command:
                 raise RuntimeError('Default changed during publication; remain stopped')
@@ -275,8 +327,84 @@ class ReviewedRetainedSummaryCohort:
             temporary.symlink_to(self.target / 'bin' / command)
             temporary.replace(link)
         fsync_directory(LINKS)
-        if read_active_route() != target_route:
+        if read_active_route() != replace(self.original_route, native_package=self.native):
             raise RuntimeError('Target route readback differs')
+
+
+@dataclass(frozen=True)
+class ReviewedFrontendCohort(ReviewedRetainedSummaryCohort):
+    """Publish only the UI when every imported backend byte stays unchanged."""
+
+    current_source_proof: ReviewedArtifact
+    commands: ClassVar[tuple[str, ...]] = ('toad',)
+
+    def require_runtime(self):
+        # This operation neither changes nor acquires the native package.
+        # Its trust comes from the original published proof, not a new read.
+        self.current_source_proof.require_original()
+        original = FieldCodec.decode(InstalledSourceProof,
+                                    json.loads(self.current_source_proof.path.read_text()))
+        target = FieldCodec.decode(InstalledSourceProof,
+                                  json.loads(self.source_proof.path.read_text()))
+        if original.prefix != self.current_prefix:
+            raise RuntimeError('Original published proof names another installation')
+        if self.original_route.native_package != self.native:
+            raise RuntimeError('Frontend publication cannot change the native route')
+        target.require_frontend_successor(original)
+        for command in COMMANDS:
+            if command not in self.commands and (LINKS / command).readlink() != self.current_prefix / 'bin' / command:
+                raise RuntimeError('Original backend default changed')
+
+    def publish_route(self, directory: int):
+        if read_active_route() != self.original_route:
+            raise RuntimeError('Original route changed during frontend publication')
+
+    def publish_frontend(self, receipt: Path):
+        """One link switch under original client custody; no owner stop/restart."""
+        if receipt.exists() or receipt.is_symlink():
+            raise RuntimeError('Original frontend attempt requires review; never repeat')
+        PrivateDirectoryRole.require(receipt.parent.lstat())
+        self.require_original()
+        with guard_default_route_write(self.original_route.root, blocking=False):
+            self._publish_frontend_links(receipt)
+
+    def _publish_frontend_links(self, receipt: Path):
+        directory = os.open(LINKS, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if os.fstat(directory).st_uid != os.geteuid():
+                raise RuntimeError('Default command directory is not owned')
+            self.require_original()
+            descriptor = os.open(receipt, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(descriptor, 'w') as opened:
+                json.dump({'phase': 'frontend-originals-verified', 'cohort': FieldCodec.encode(self),
+                           'started': time.time()}, opened, indent=2)
+                opened.flush()
+                os.fsync(opened.fileno())
+            fsync_directory(receipt.parent)
+            try:
+                self.publish(directory)
+                _atomic_write_text(receipt, json.dumps({'phase': 'frontend-published-live-ui-pending',
+                    'cohort': FieldCodec.encode(self), 'finished': time.time()}, indent=2)+'\n', fsync_parent=True)
+            except BaseException as cause:
+                # Recovery owns only the link this operation could change.
+                link = LINKS / 'toad'
+                if link.readlink() == self.target / 'bin/toad':
+                    temporary = LINKS / 'toad.retained-summary-publish'
+                    if temporary.exists() or temporary.is_symlink():
+                        raise RuntimeError('Frontend recovery has uncertain temporary link')
+                    temporary.symlink_to(self.current_prefix / 'bin/toad')
+                    temporary.replace(link)
+                    fsync_directory(LINKS)
+                phase = ('frontend-failed-original-link-restored'
+                         if link.readlink() == self.current_prefix / 'bin/toad'
+                         else 'frontend-failed-link-unknown')
+                _atomic_write_text(receipt, json.dumps({'phase': phase,
+                    'cohort': FieldCodec.encode(self), 'error': repr(cause),
+                    'finished': time.time()}, indent=2)+'\n', fsync_parent=True)
+                raise
+        finally:
+            os.close(directory)
 
 
 @dataclass(frozen=True)

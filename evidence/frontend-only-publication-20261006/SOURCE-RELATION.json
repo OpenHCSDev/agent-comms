@@ -1,0 +1,53 @@
+{
+  "coverage": {
+    "src/agent_comms": 324,
+    "tests": 378,
+    "tools": 54
+  },
+  "parse_omissions": [],
+  "consumers": [
+    {
+      "path": "tools/cutover/execute_retained_summary_foundation.py",
+      "line": 30,
+      "name": "ReviewedRetainedSummaryCohort"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 284,
+      "name": "ReviewedRetainedSummaryCohort"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 445,
+      "name": "ReviewedRetainedSummaryCohort"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 242,
+      "name": "InstalledSourceProof"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 467,
+      "name": "PublishRetainedSummary"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset_controls.py",
+      "line": 101,
+      "name": "ReviewedRetainedSummaryCohort"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset_controls.py",
+      "line": 104,
+      "name": "ReviewedRetainedSummaryCohort"
+    },
+    {
+      "path": "tools/cutover/retained_summary_stage_controls.py",
+      "line": 20,
+      "name": "InstalledSourceProof"
+    }
+  ],
+  "original_all_stopped_operation_ast_equal": true,
+  "existing_high_level_publisher_ast_equal": true,
+  "frontend_path": "ReviewedFrontendCohort.publish_frontend; original FieldCodec, shared source proof and link owner, unchanged native package provenance; no owner manager"
+}
