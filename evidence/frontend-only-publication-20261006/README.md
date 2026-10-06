@@ -47,3 +47,17 @@ activity bursts and pointer/multi-selection acceptance remain incomplete. The
 original result is retained at `.artifacts/sidebar-live-candidate-20261006/
 native-focus-wheel/live-entrypoint-check.json`; the recorder raw files are under
 `/home/ts/.cache/agent-scratch/sidebar-focus-live-entrypoint-20261006`.
+
+The subsequent full-damage renderer update is now the default for new UI launches.
+It removes redundant geometry comparison when the original damage already covers
+the whole screen. All nineteen backend owners stayed unchanged. The installed
+native selection control passed thread/channel Ctrl toggling and Shift ranges,
+offscreen range endpoints, right-click scroll preservation, archive and honest
+partial-failure notification. The actual default launcher then completed saved
+history up/down, reversal and End with exit zero and no cleanup remainder.
+799 native writer acknowledgements measured 6.27ms median and 24.21ms p95; these
+are not input-to-photon latency or a proven speedup. Inspected footage still has
+repeated frames. Response bursts, complete bulk action acceptance and general
+smoothness remain unresolved. The original result and raw recording are bound
+in `native-full-damage-wheel/live-entrypoint-check.json` under the existing artifact
+root. Existing windows keep their prior runtime until relaunched.
