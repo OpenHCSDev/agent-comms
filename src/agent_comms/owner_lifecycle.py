@@ -6,7 +6,7 @@ import logging
 import os
 import shlex
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -59,6 +59,30 @@ class OwnerRestartSelection:
         if snapshot.admission_generations[self.name] != self.admission_generation:
             raise OwnerGenerationChangedRefusal()
         return snapshot.require_active(self.name)
+
+    @classmethod
+    def capture_retired(cls, snapshot: RegistrySnapshot, original: Thread):
+        """Capture the post-fence generations without borrowing live admission."""
+        selection = cls(snapshot.owner_identity(original.name), original.require_process(),
+                        snapshot.admission_generations[original.name])
+        if selection.identity.incarnation != original.incarnation:
+            raise OwnerSelectionChangedRefusal()
+        selection.require_retired(snapshot)
+        return selection
+
+    def require_retired(self, snapshot: RegistrySnapshot) -> Thread:
+        """The complete stopped witness remains authority until replacement launch."""
+        if snapshot.owner_identity(self.name) != self.identity:
+            raise OwnerSelectionChangedRefusal()
+        if snapshot.admission_generations[self.name] != self.admission_generation:
+            raise OwnerGenerationChangedRefusal()
+        thread = snapshot.threads[self.name]
+        thread.require_local_process(self.process)
+        thread.require_idle()
+        snapshot.statuses[self.name].require_stopped()
+        if thread.process_alive:
+            raise RelationViolationError("Original owner survived retirement")
+        return thread
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +167,16 @@ class OwnerLifecycle:
         self.maintenance = MaintenanceBarrier(registry.store.path)
         self.releases = OwnerReleaseStore(root / "owner_release_receipts.json")
         self._private_nk_launch: PrivateNkLaunch | None = None
+
+    @contextmanager
+    def restart_wire(self) -> Iterator[int]:
+        """Borrow this declaration's wire lock as the inherited integer OFD.
+
+        StoreLock continues to own current durability resources. Restart phases
+        transport only its descriptor; the context retains the original lock.
+        """
+        with _store_lock(self._wire_lock_path) as lock:
+            yield lock.descriptor
 
     def pin_private_nk_launch(
         self, validated_root: Path, wire_root_id: str, native_package: Path

@@ -1,0 +1,100 @@
+{
+  "behavioral_results": [
+    {
+      "label": "current",
+      "argv": [
+        "/usr/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-o",
+        "addopts=",
+        "-q",
+        "tests/test_owner_restart_handoff.py"
+      ],
+      "cwd": "/home/ts/wt/comms-original-owner-admission-20261006",
+      "exit_code": 0,
+      "stdout_sha256": "79d6f42ec1e26a09aef604d854d71f04816dd414d46fad1f76e7bd6452203b71",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_only": true,
+      "root_acquisition": false,
+      "native_package_or_process": false
+    },
+    {
+      "label": "amended720",
+      "argv": [
+        "/usr/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-o",
+        "addopts=",
+        "-q",
+        "tests/test_owner_restart_handoff.py"
+      ],
+      "cwd": "/home/ts/wt/comms-amended720-owner-admission-20261006",
+      "exit_code": 0,
+      "stdout_sha256": "2a40ccb8ce5b291d87dfdd150f6212ac2d1c76b5a121e4830cfe51c2dec145fd",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_only": true,
+      "root_acquisition": false,
+      "native_package_or_process": false
+    }
+  ],
+  "changed_source_compilation": {
+    "current": {
+      "files": [
+        "src/agent_comms/owner_lifecycle.py",
+        "src/agent_comms/owner_restart.py",
+        "src/agent_comms/restart_queue.py",
+        "src/agent_comms/threads.py",
+        "tests/test_owner_restart_handoff.py",
+        "tools/cutover/cutover_child.py",
+        "tools/cutover/restart_original_thread_format.py",
+        "tools/cutover/restart_thread_format.py",
+        "tools/cutover/restore_stopped_owners.py",
+        "tools/cutover/thread_retirement_cutover.py"
+      ],
+      "parse_compile_omissions": []
+    },
+    "amended720": {
+      "files": [
+        "src/agent_comms/owner_cutover.py",
+        "src/agent_comms/owner_launch.py",
+        "src/agent_comms/owner_lifecycle.py",
+        "src/agent_comms/owner_restart.py",
+        "src/agent_comms/registration.py",
+        "src/agent_comms/restart_queue.py",
+        "src/agent_comms/thread_status.py",
+        "src/agent_comms/threads.py",
+        "tests/test_owner_restart_handoff.py",
+        "tests/test_registration_transitions.py",
+        "tests/test_restart_queue.py"
+      ],
+      "parse_compile_omissions": []
+    }
+  },
+  "shared_phase_launch_policy_byte_equal": true,
+  "original_Thread_fields_unchanged": true,
+  "original_store_lock_WireLog_FieldCodec_identity_registry_document_byte_unchanged": true,
+  "earlier_source_negatives": [
+    {
+      "environment": "originaldev Python3.11",
+      "result": "collection error: metaclass_registry unavailable; no test body ran"
+    },
+    {
+      "environment": "system Python3.14 amended720 source",
+      "result": "2FAIL1PASS: inherited current snapshot.require absent from original snapshot; corrected to declared canonical threads mapping"
+    },
+    {
+      "environment": "system Python3.14 amended720 source",
+      "result": "2FAIL1PASS: original ThreadStatus.require_stopped absent; added behavior to original ThreadStatus/StoppedThreadStatus without changing wire fields"
+    }
+  ],
+  "installed_qualification": false,
+  "central_batch_used": false,
+  "original_or_authored_root_operation": false,
+  "source_control_limits": "in-memory declared snapshot/codec witness controls only; OFD transport, fence/signal, launch/recovery are source-reviewed but not behaviorally exercised"
+}

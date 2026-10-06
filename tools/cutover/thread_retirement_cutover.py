@@ -101,9 +101,9 @@ class ThreadRetirementCutover(OwnerCutover):
                   'target_route': self.target_route, 'receipt': str(self.receipt)}
         result = run_cutover_child([
             str(self.target_python), str(Path(__file__).with_name('launch_thread_retirement.py')),
-            str(stopped.wire.descriptor), str(self.route_descriptor),
+            str(stopped.wire_descriptor), str(self.route_descriptor),
         ], packet=json.dumps(packet), environment=self.target_environment,
-            descriptors=(stopped.wire.descriptor, self.route_descriptor))
+            descriptors=(stopped.wire_descriptor, self.route_descriptor))
         from agent_comms.owner_lifecycle import OwnerRestartResult
 
         return FieldCodec.decode(tuple[OwnerRestartResult, ...], json.loads(result.stdout))
