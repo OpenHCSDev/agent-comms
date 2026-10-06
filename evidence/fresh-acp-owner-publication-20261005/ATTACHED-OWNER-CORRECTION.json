@@ -1,5 +1,5 @@
 {
-  "source_head": "8a530ad5a8747bfddfb613ea695f802b24b8a02b",
+  "source_head": "9027b7bbe142035414310a93f70b458fb1f5bb50",
   "normal_joined_main": "6de443afcf3ebba7a0f863358eb60af2c2660700",
   "corrects_initial_source_head": "2785377f906f8ded3814f11feb4a019f17bf14f2",
   "roots": [
@@ -92,7 +92,7 @@
     },
     {
       "path": "tests/test_session_components.py",
-      "sha256": "ec80b6b6591c1ba9533440e1717a69f801ed0aa9600c0bf346b688c0d80c37ec",
+      "sha256": "61c70041524692349ef028ecb4e19fcf45db477a1d91fe913794e7a0064022a4",
       "git_local_equal": true,
       "compile_only": true
     },
@@ -128,13 +128,13 @@
   "ownership": {
     "common": "SessionLifecycle.declare_thread claims the unique PID0 declaration and ThreadManagement.restore_stopped publishes committed private membership",
     "owning": "SessionLifecycle.acquire_declared_thread uses original OwnerLifecycle.acquire_thread with current process; new_session then binds and drains",
-    "attached": "AttachedSessionLifecycle.acquire_declared_thread preserves PID0; new_session/load_session use original SessionLoadAdmission to resolve a separate executor",
+    "attached": "AttachedSessionLifecycle.acquire_declared_thread preserves PID0; new_session/load_session use original SessionLoadAdmission to resolve a separate executor; matching registry incarnation remains active because restore_stopped preserves existing status, so ensure_owner remains the later launch authority",
     "saved_fixture": "NativeBackendFixture.attach_saved_owner consumes the same owning declaration then attaches original saved file",
     "removed_copy": "Fresh private ACP delivery test now reads the declared participant; deleted its post-new_session register write"
   },
   "source_controls": {
     "owned": "Existing test_state_is_owned_once_and_attachments_do_not_share_negotiation adds actual registry process identity and committed participant reads",
-    "attached": "test_attached_declaration_publishes_membership_without_acquiring_executor calls the real attached declaration, reads PID0/membership/no local binding; remote executor load is not simulated",
+    "attached": "test_attached_declaration_publishes_membership_without_acquiring_executor calls real attached declaration; reads PID0, committed membership, active status and no local binding/proxy; remote executor load is not simulated",
     "private_delivery": "Existing test_acp_new_session_owner_consumes_private_selected_source reads membership instead of injecting it",
     "execution": "UNRUN: source compile only; no imports/collection/app/native/test run/package/build or active holder purpose"
   },
