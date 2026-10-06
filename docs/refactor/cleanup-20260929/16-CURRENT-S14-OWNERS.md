@@ -4,6 +4,24 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Independent loaded acceptance assigned — 2026-10-06
+
+Mendel completed the original MCP return and published compact result evidence;
+Parent integrated that supplement. Bohr/Sch independently close its existing
+purpose only. No accepted case or input is repeated.
+
+Mendel now owns installed loaded4/16/32/64 operator preparation/qualification
+using Heis existing control and the repaired current pair. Heis remains the
+source/integration owner and continues configured485 preparation independently.
+Bohr assesses returned334 only after693 independent closure; neither assignment
+reserves a holder or grants access. Actual App phases refresh measured resources
+and preserve desktop headroom; no new caps or owner queue are introduced.
+
+Loaded logical views use two new native journals and the existing10 prospective
+localhost request relation. This cannot claim64 distinct journals or configured
+40MB acceptance. Existing source/cursor/paint/warm/eviction/editor/reader and
+resource witnesses remain mandatory. No competing implementation or rebuild.
+
 ### Affected native cases passed and693 merged — 2026-10-06
 
 Parent read original native.xml and joined terminals: no_controller37.731s,
