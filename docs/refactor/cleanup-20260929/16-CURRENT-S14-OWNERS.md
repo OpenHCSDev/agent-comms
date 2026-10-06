@@ -4,6 +4,32 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Paired source updated and native purpose independently closed — 2026-10-06
+
+Toad478 published129b016b, explicitly selecting Core99cdd707 in pyproject and all
+three lock locator occurrences. Both TOML files parse and all literal selections
+match; diff checking passes. This source pair now includes original d433 full
+journal/report preservation. No resolver, build, installed prefix or retained
+qualification artifact was changed. The coherent matched pair still needs actual
+build, installed acceptance and original safe publication/recovery ownership.
+
+Parent read/hash verified Bohr's actual3808 CLOSED40b25eca lifecycle and independent
+floor197d3fc5, privileged census678fcec2 and reference classificationdfcc3bb3.
+Wholecb8b6259 and explicit e7f829/9f522 returns are bound by that independent
+closure, with all phase attempts consumed once. The allow scoped pass stands;
+no-controller settlement remains a failed acceptance with source cause unproved.
+Sch's matching artifact closure is still its own responsibility. No new purpose,
+reservation, restore, native call or source-correction execution follows closure.
+
+Einstein's next canonical solution restores RetiredOwnerLaunch's original
+owner/admission/launch declaration and moves stopped capture/validation off live
+OwnerRestartSelection. Current/P migrate the complete family; amended P derives
+admission identity from original allocations without a stored-schema change.
+Authentic3931 recovery must strictly decode its original handoff and own its lock;
+same-format publication must avoid the genuine amended720 report-retirement path.
+No Parent writer overlaps this active source family. It is a concrete proposed
+source closure, not installed recovery acceptance or a changed frozen source.
+
 ### Goal-report source joined and mounted allow qualified — 2026-10-06
 
 Parent normally joined original689 d433189b at49cfcf34 without conflicts. All
