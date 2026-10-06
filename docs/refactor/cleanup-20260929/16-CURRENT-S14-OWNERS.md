@@ -4,6 +4,24 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Completed Parent scratch retired — 2026-10-06
+
+Parent removed only its completed two-test preflight scratch after matching all
+three published raw files and enumerating the original authored registry/catalog
+fixtures, empty locks and internal pytest links. The existing original privileged
+borrower checker inspected239 processes with no references or permission gaps.
+Published stdout/stderr/XML and original RESULT remain unchanged; CLEANUP.json
+retains the disposal record. Earlier incomplete-UID census remains historical,
+not rewritten. No source, installed holder, native session, UNKNOWN input or peer
+artifact was deleted. Initial metadata enumeration missed an empty original
+fixture lock and stopped before mutation; only the metadata reader was corrected.
+
+Warm04 sole two-wheel stage passed0.376155213 and original two identities are
+joined/absent. Parent relayed exact stage/binding/controller literals to Bohr and
+Sch. Stage consumption and a new matching READ precede the still-held proof;
+no duplicate stage, mounted launch or inherited authority follows that relay.
+Configured consumer and handoff/recovery source owners remain independently active.
+
 ### Publication storage relation reviewed — 2026-10-06
 
 Parent compared actual source3931f16fe with selected Core99cdd707 before choosing
