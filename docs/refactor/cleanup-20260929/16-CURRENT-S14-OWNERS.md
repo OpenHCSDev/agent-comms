@@ -1,8 +1,201 @@
-## Current delivery — 2026-10-05
+## Current delivery — 2026-10-06
 
 This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
-The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
+The original objective remains incomplete. CI is deferred as a merge gate.
+
+### Consumer repairs integrated; second paired results — 2026-10-06
+
+Parent normally merged Heis's complete published consumer repair into Toad478.
+Both loaded cursor checks and configured readiness now take the display cursor
+from the existing `TranscriptPresentation`; pages and source coverage remain
+with their histories. The configured proof exports its actual Core
+`InstalledSource` member, and both configured argument lists name that member.
+The strict parser, production files, pins and retained wheels are unchanged.
+No rebuild or fresh App run followed this source merge.
+
+The corrected loaded final tuple is integrated in
+[evidence/loaded-history-consumer-repaired-20261006/FINAL-PREPARED.md](../../../evidence/loaded-history-consumer-repaired-20261006/FINAL-PREPARED.md).
+Fresh configured02 and loaded02 purposes are issued separately. Their single
+stages and installed proofs passed. Configured's exported Core `InstalledSource`
+is the actual full-proof member and is included in its 13-file App map; its
+proof is recorded as consumed. Both original Apps subsequently ran once under
+their separate final releases and are terminal. No stage or proof was repeated.
+The original 2100/1800 outer bounds and inner checks remain unchanged, with
+configured provider processing separate from loaded's ten prospective localhost
+requests over two authored journals.
+
+Configured02 privately forked and painted the actual 42.7MB source and completed
+saved-channel opening and return. The original 20-second peer executing/busy
+wait then failed. Its real source witness and separate source READ return are
+recorded; the private whole return and one original three-package restoration
+are complete. Bohr independently closed this holder after checking its original
+floor, origins, recorded process absence and fresh private census. Heis found
+the private blank peer declaration points to a public parent absent from the
+private registry, and owns the complete producer/caller correction. The source
+finding does not establish the sole cause or whole configured acceptance.
+
+Loaded02 completed the four-view cohort, native answer paint and nine warm
+returns with zero raw page rereads. It reached sixteen views, then session-13
+failed the body-retention check with a missing body weak reference. Four actual
+localhost requests were recorded without provider errors; the sixteen,
+thirty-two and sixty-four cohorts remain unqualified. The one original
+four-wheel restoration and explicit whole READ/EXEC return are complete;
+Bohr independently closed the holder after checking the actual return, original
+floor and fresh private census. Sch closes the matching returned artifact
+receipts separately. Its compact
+result is integrated at
+[RESULT.md](../../../evidence/loaded-history-consumer-repaired-20261006/RESULT.md).
+Heis owns the separate native body/preparation/retirement lifetime trace.
+Parent identified a source counterexample where native retirement removes a
+Markdown child after capturing its parent's paint; this is not proof of the
+runtime failure's cause. Neither failure releases a retry or new loan. Raw
+results and journals remain held.
+
+Parent compared the retained historical MCP Core wheel with the selected
+current Core wheel. Native command/permission leaf code is unchanged, but
+transcript read identities, historical-source acquisition, notification/read
+projection, ACP page capture, codec schema and owner restart dependencies changed.
+The historical MCP pass remains a historical-cohort result. Current loaded and
+configured journeys exercise changed history owners; they do not automatically
+qualify current-pair MCP permission/revocation/disconnect behavior. Final live
+publication still needs affected fresh attachment verification. This review
+adds no backend patch, repeated guard invocation or extra release gate.
+
+Parent observed host pressure and identified the largest memory users in
+OpenHCS analysis workspaces. No unrelated process or held evidence was removed.
+The original operators refresh actual headroom at launch and coordinate measured
+concurrency, without new memory caps, queues, deadlines or build work.
+
+### First paired App failures and owned repairs — 2026-10-06
+
+Both original App attempts are consumed and further execution is disabled.
+Configured failed strict `InstalledSource` argument decoding before
+`configured_main`: the caller supplied the whole proof instead of its actual
+Core source member. The strict parser remains correct. Configured completed its
+one original three-package restoration and explicit private/source authority
+returns; Bohr independently closed its existing holder and verified the floor.
+
+Loaded reached two authored seed requests and two loaded views, then failed
+because the helper read `displayed_cursor` from `TranscriptHistory` rather than
+its canonical owner. Zero cohorts completed. The original four-wheel restoration
+passed once and the whole READ/EXEC return is complete. Bohr independently closed
+the existing loaded holder after verifying its original floor, joins and census.
+The compact original result is integrated at
+[evidence/loaded-history-current-pair-20261006/RESULT.md](../../../evidence/loaded-history-current-pair-20261006/RESULT.md).
+Neither closed purpose permits another run or restored-package operation.
+
+Heis owns both existing consumer repairs, preserving strict decoding and the
+page/admission/paint checks. Parent checked his actual source trace and Mendel's
+actual return work. Neither failure authorizes a rerun, new loan, backend
+compatibility patch or repeated build. The installed proofs passed (loaded
+7.900 seconds, configured 5.777 seconds); they do not establish App acceptance.
+Raw failures and original journals remain held.
+
+### S4 source checkpoint integrated — 2026-10-06
+
+Parent normally merged Arendt's published followthrough checkpoint. Its eight
+files are evidence only; production, tests, tools and build inputs are unchanged.
+Arendt found no concrete new source defect and did not manufacture a patch.
+Three-cut configured intervention, full-context capacity and provider study
+remain unqualified. The existing prospective TASK_MEMORY-versus-BOUNDED pair
+does not qualify a FULL_CONTEXT arm. A separately selected paid comparison
+needs Tristan's cost ceiling and whole-purpose walltime; no study has started.
+
+### Live publication still pending — 2026-10-06
+
+Parent read the actual once publisher and original owner-cutover methods.
+`ReviewedRetainedSummaryCohort` consumes the original activation/source proof
+and distinct immutable actual journey artifacts. `PublishRetainedSummary`
+acquires the complete original audience, preserves input/native/goal evidence,
+and delegates retirement, installation, launch and recovery to the original
+owners. Partial retirement cannot authorize complete-batch recovery. No new
+backend helper, gate or decoder is needed from this review.
+
+Private acceptance must finish with its bound original-floor restoration and
+whole return. That restored prefix is not a live installed candidate merely
+because its earlier proof passed. The publication target must have the selected
+pair and actual source proof at publication use, with original route/settings
+and same-format declaration relation freshly bound. Parent owns that final
+installation/publication and fresh affected attachment; no public operation
+has occurred during this source review.
+
+### Both repaired-pair stages issued — 2026-10-06
+
+Bohr fresh checks passed and both original owners received stage-only purposes:
+[Heis configured485 grant](/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/485-Heis481-configured-reader-pair-package-App-issued-grant.json)
+and [Mendel loaded334 grant](/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel-loaded-current-reader-pair-package-App-issued-grant.json).
+Configured binds2100 overall with original readiness20; loaded binds1800 with
+original20/10/25 phase checks and corrected handoff references. Each permits root
+preparation and one normal three-wheel stage. Both immutable grants match the
+[batched issue evidence](/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/configured485-loaded334-stage-only-issue-handoff.json).
+Both original stages passed and joined: configured in .286 seconds, loaded in
+.416 seconds. Configured staging is recorded as consumed and disabled; Bohr
+records the loaded joined stage in its existing lifecycle before proof release.
+Both fresh4b READ receipts are now present and were relayed to the original
+owners. Proof, source capture and App remain held pending their existing releases.
+No second stage or duplicate receipt is needed.
+Original floors, PUBLIC475, uncertain inputs and held journals remain preserved.
+
+Parent checked Bohr's actual turn: his floor/borrower verification completed
+successfully and grant writing progressed. The earlier blocked declaration from
+missing files was premature. Missing outputs alone do not establish a stalled
+owner; verify actual activity and concrete blockers before declaring an impasse.
+
+### Final duplicate warm PR reconciled — 2026-10-06
+
+Parent normally joined the entire published446 head into478, retaining its five
+original failure/source evidence files. The only conflict was an import already
+expanded by configured consumers; the current imports remain. Production, all
+tests/tools and build inputs are byte-identical before/after. PR446 is closed as
+superseded, with no checkout, branch, journal or raw result deleted. Heis keeps
+configured/reader/performance ownership; Mendel keeps independent loaded acceptance.
+Core has no open PRs; Toad478 is the remaining integration PR. Its current pair
+still needs actual private acceptance and live publication before goal completion.
+
+### Native closure complete; repaired-pair operators published — 2026-10-06
+
+Bohr independently closed693 and bound Sch matching READ/EXEC closure. All three
+remaining cases passed; accepted allow and guard were excluded. Original floor
+and restoration, recorded process joins, raw results and authored files remain
+verified and retained. No further693 operation is pending.
+
+Heis published Toad481 b4bf2355 with fixed operator helper paths and repaired
+410c/Core6b426/Textbc47 selection. Parent normally merged481 into478; GitHub
+records481 merged into that integration branch, not fork main. Production/tests/
+build inputs remain unchanged. Configured485 remains unissued. Parent traced
+the original configured producer: it selects the installed sibling native launcher
+and retains original provider/model settings; no backend correction is needed.
+Parent asked Heis to justify the newly proposed150-second outer bound against the
+full six-input configured journey, including automatic processing, large-source
+fork and reader/channel/DM phases. Inner readiness checks remain unchanged.
+
+Mendel received the published fixed loaded-helper handoff for returned334. Its
+original loaded acceptance is unchanged; the actual outer bound and complete
+fresh purpose remain to be bound. Configured and loaded work keep separate owners;
+no helper fork, rebuild, holder reservation or runtime authority follows preparation.
+
+Einstein append-only same-format publication selection now uses the same repaired
+410c artifact and is normally joined into Parent Core. Original proposals remain
+retained; source/target recovery checks and unbound runtime commands are unchanged.
+
+### Independent loaded acceptance assigned — 2026-10-06
+
+Mendel completed the original MCP return and published compact result evidence;
+Parent integrated that supplement. Bohr/Sch independently close its existing
+purpose only. No accepted case or input is repeated.
+
+Mendel now owns installed loaded4/16/32/64 operator preparation/qualification
+using Heis existing control and the repaired current pair. Heis remains the
+source/integration owner and continues configured485 preparation independently.
+Bohr assesses returned334 only after693 independent closure; neither assignment
+reserves a holder or grants access. Actual App phases refresh measured resources
+and preserve desktop headroom; no new caps or owner queue are introduced.
+
+Loaded logical views use two new native journals and the existing10 prospective
+localhost request relation. This cannot claim64 distinct journals or configured
+40MB acceptance. Existing source/cursor/paint/warm/eviction/editor/reader and
+resource witnesses remain mandatory. No competing implementation or rebuild.
 
 ### Affected native cases passed and693 merged — 2026-10-06
 

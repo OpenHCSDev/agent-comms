@@ -1,0 +1,126 @@
+{
+  "status": "Effective SOURCE-only candidate binding; independent arm executions UNRUN; not an issued purpose",
+  "frozen_proposal": {
+    "path": "evidence/s4-single-pair-operands-20261005/PROPOSED-SINGLE-PAIR.json",
+    "sha256": "7a498ac6adf7fe227a7eef5a67e9dc9224cc39124af74c979d4d34e8f64a23d4",
+    "head": "6a802e852d96e889612391f773948c09774f1561"
+  },
+  "frozen_preparation": {
+    "path": "evidence/s4-single-pair-operands-20261005/COHORT685-PREPARATION.json",
+    "sha256": "96a98674dcd3b7e3809a743025d4d0a287b0c8ed768dbdb3d5869bf63d798973",
+    "head": "56139e12934f0ad75f1d563711ef27d178d26b30"
+  },
+  "published_evidence": [
+    {
+      "revision": "5c68942c7718f15a0667d69c9b6717398af89dce",
+      "path": "evidence/native-bootstrap-origin-guard-20261005/deployment/ARTIFACT-HANDOFF.json",
+      "sha256": "179fd28a8310cbe3f86ab0c38733e4ff3ce4b54de979e9aa1d181d32818f0c1e"
+    },
+    {
+      "revision": "5c68942c7718f15a0667d69c9b6717398af89dce",
+      "path": "evidence/native-bootstrap-origin-guard-20261005/deployment/NORMAL683-JOINED-WHEEL-RELATION.json",
+      "sha256": "b1d97d222a9778a776e17a042e124f877127abda652a906ab1548110f7b70f49"
+    },
+    {
+      "revision": "5c68942c7718f15a0667d69c9b6717398af89dce",
+      "path": "evidence/native-bootstrap-origin-guard-20261005/deployment/WHOLE-SOURCE-BUILDER-RELATION.json",
+      "sha256": "3e145610ede996f4aa6dada06254526be3f06e7fa5668bbee14644e0a0d02978"
+    }
+  ],
+  "source_binding": {
+    "whole_head": "5c68942c7718f15a0667d69c9b6717398af89dce",
+    "normal_joined_main": "208b8f07b345728ceffde1cd62d4fabbf6393af1",
+    "original_wheel_source_head": "575db4a232d7736261dacd5bf0da4a750e885fdd",
+    "production_forced_resources_build_inputs_equal": true,
+    "Python_source_equal_to": "208b8f07b345728ceffde1cd62d4fabbf6393af1",
+    "runner_helpers_source_head": "56139e12934f0ad75f1d563711ef27d178d26b30",
+    "preserved_683_runner": [
+      {
+        "path": "tests/test_native_inspector_lifetime.py",
+        "sha256": "6f31ce81da317f2d9733763befacf4662425d43babb641342901dadd9339e6d8"
+      },
+      {
+        "path": "tests/three_cut_retention_configured_journey.py",
+        "sha256": "73fbc03eeddf6b999cd3d6f3edee9c69fa31dc58b2d2b94d5b27e94632a400a0"
+      }
+    ],
+    "new_build_required": false
+  },
+  "Core_archive": {
+    "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/core-wheel/wheel/agent_comms-0.1.0-py3-none-any.whl",
+    "sha256": "5d6617d99f43e5aabf44f985d9fbcf1847b4c6404f976143a9a38986b33f0137",
+    "bytes": 906547
+  },
+  "native": {
+    "package": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent",
+    "manifest_sha256": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+    "tree": "63f18710cb9329be6ade27bac3b4dd822e2b36f013756fa8e6717b8073a4592c",
+    "different_from_frozen_7a": true,
+    "different_from_086": true,
+    "authority": null,
+    "artifact_access_by_S4": false,
+    "qualification": "Published assembly/source proof only; no S4 native or installed acceptance inferred"
+  },
+  "InstalledSource": {
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/installed-source.private.json",
+    "sha256": null,
+    "declaration_owner": "Existing InstalledSource, ReviewedArtifact and InstalledSourceProof",
+    "required_source_revision": "575db4a232d7736261dacd5bf0da4a750e885fdd",
+    "origin": "Actual retained file-wheel URL; no VCS relabeling or source overlay",
+    "installed_equality": "Unacquired; exact Git/ZIP/installed source and truthful origin checked by existing proof owner only under a fresh purpose"
+  },
+  "prospective_command": {
+    "argv": [
+      "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+      "tests/three_cut_retention_configured_journey.py",
+      "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey",
+      "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent",
+      "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+      "--installed-source",
+      "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/installed-source.private.json",
+      "--archive",
+      "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/core-wheel/wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "5d6617d99f43e5aabf44f985d9fbcf1847b4c6404f976143a9a38986b33f0137",
+      "--paired-construction",
+      "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-single-pair-operands-20261005/single-pair-design.private.json",
+      "20261004",
+      "1"
+    ],
+    "cwd": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002",
+    "environment": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONPATH": "tests:tools/cutover",
+      "AGENT_COMMS_NATIVE_ORIGIN": null
+    },
+    "controller_output": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller",
+    "operation_bound_seconds": null,
+    "bound_scope": "Fresh grant must supply the whole functional-purpose walltime; never a native/provider retry or timeout policy change."
+  },
+  "origin_absence": {
+    "controller_binding": {
+      "AGENT_COMMS_NATIVE_ORIGIN": null
+    },
+    "controller_behavior": "Existing run-phase environment loop removes null entries",
+    "RetainedOwnerLaunch_evidence": null,
+    "required": "Actual selected original owner environment must lack the key independently; empty string is present, not absent. No runtime was acquired to establish this fact",
+    "provider_behavior": "Absent policy leaves original configured provider/model/auth/settings behavior unchanged; no localhost-policy inheritance or provider substitution"
+  },
+  "future_operations": {
+    "ordinary_inputs": 12,
+    "manual_compaction_commands": 6,
+    "ACP_prompts": 18,
+    "observed_executions": 0,
+    "one_pair_cost": null,
+    "operation_walltime_seconds": null,
+    "one_pair_authority": null,
+    "study_30pairs_USD75_authority": null,
+    "holder_stage_proof_execution_restore_authority": null,
+    "native_READ_EXEC_authority": null
+  },
+  "remaining_binding_fields": [
+    "Authenticated actual selected-source RetainedOwnerLaunch origin-key absence",
+    "Actual InstalledSource declaration/hash and fresh eligible holder floor/purpose",
+    "Explicit one-pair cost, whole-purpose walltime and input authority; separate immutable-native READ/EXEC authority"
+  ],
+  "scope": "Git/source metadata only. No original records, runtime, prefix, archive or native artifact filesystem read/import, SDK/provider/input/build/test execution. Frozen originals and prior proposal/preparation remain immutable; no old costs/clocks/capacity reconstructed"
+}

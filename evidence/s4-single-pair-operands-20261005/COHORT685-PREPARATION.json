@@ -1,0 +1,70 @@
+{
+  "status": "Source preparation only; no selected execution cohort or authority",
+  "original_proposal": {
+    "path": "evidence/s4-single-pair-operands-20261005/PROPOSED-SINGLE-PAIR.json",
+    "sha256": "7a498ac6adf7fe227a7eef5a67e9dc9224cc39124af74c979d4d34e8f64a23d4",
+    "head": "6a802e852d96e889612391f773948c09774f1561",
+    "unchanged": true
+  },
+  "candidate": {
+    "PR": 685,
+    "published_head_reviewed": "575db4a232d7736261dacd5bf0da4a750e885fdd",
+    "production_python_equal_to": "208b8f07b345728ceffde1cd62d4fabbf6393af1",
+    "production_change": "62 added lines in pi_project_bootstrap.mjs; optional default-fetch origin policy",
+    "manifest_sha256": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+    "tree": "63f18710cb9329be6ade27bac3b4dd822e2b36f013756fa8e6717b8073a4592c",
+    "package_operand_from_published_receipt": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent",
+    "published_receipt": "evidence/native-bootstrap-origin-guard-20261005/deployment/native-commitment-proof.json",
+    "payload_delta_from_original_7a": ["dist/agent-comms-project-bootstrap.mjs"],
+    "artifact_filesystem_read_or_execution_by_S4": false,
+    "native_acceptance": "Unrun in the reviewed published receipt; not inferred from assembly"
+  },
+  "integration": {
+    "existing_build_owner": "Sch",
+    "separate_S4_Core_or_native_build": false,
+    "required_join": "Normal merge actual main preserving #683 independent run_arm, cleanup clocks and source controls; the reviewed #685 branch predates #683",
+    "required_python_methods": [
+      "NativeForkCreation.recorded_ancestry",
+      "NativeForkCreation.require_inherited_creation",
+      "NativeForkCreation.inherits_recorded_entries",
+      "NativeForkCreation.common_recorded_source"
+    ],
+    "matching_whole_head": null,
+    "matching_Core_wheel": null,
+    "matching_Core_wheel_sha256": null,
+    "InstalledSource": null,
+    "source_to_archive_to_installed_owner": "InstalledSource / ReviewedArtifact / InstalledSourceProof; complete original Git assets, ZIP bytes and truthful direct_url origin",
+    "effective_selection": "Append only after actual whole-head/wheel/pin equality is available; do not alter the frozen 7a proposal or claim new commitment equals 7a"
+  },
+  "configured_origin_environment": {
+    "required": "AGENT_COMMS_NATIVE_ORIGIN ABSENT; an empty string is present and invalid",
+    "prospective_phase_environment": {"AGENT_COMMS_NATIVE_ORIGIN": null},
+    "controller_owner": "Existing run-phase.py environment loop removes null-valued entries before BoundedRun",
+    "selected_source_owner": "RetainedOwnerLaunch.capture reads the exact owner's environment; configured_saved_agent borrows it independently of the controller environment",
+    "original_source_environment_evidence": null,
+    "required_before_binding": "Establish absence in the selected original launch, not merely the controller. Preserve configured provider/model/auth/settings; do not silently remove an original selected owner's policy or inherit a localhost qualifier policy",
+    "native_boundary": "NativePiRpcLaunch.bootstrap passes the borrowed environment to the pinned bootstrap; absent origin bypasses the new guard completely",
+    "observer_boundary": "observe_native_requests adds AC_PREFIX observation operands and debugger argv; it does not choose an origin or provider",
+    "new_guard_or_environment_resolver": false
+  },
+  "source_evidence": {
+    "parser": "Existing refactor-audit Package",
+    "production_modules": 324,
+    "test_modules": 373,
+    "qualification_modules": 2,
+    "parse_omissions": [],
+    "dynamic_limits": "AST identifies declared consumers; borrowed process environment and runtime fetch replacement require their original acquisition/acceptance evidence. No process, installed package, SDK or artifact was imported or inspected"
+  },
+  "future_operations_if_separately_authorized": {
+    "ordinary_inputs": 12,
+    "manual_compaction_commands": 6,
+    "provider_cost": null,
+    "actual_model_steps": null,
+    "purpose_walltime_seconds": null,
+    "holder_authority": null,
+    "native_authority": null,
+    "one_pair_authority": null,
+    "study_30_pair_USD75_authority": null
+  },
+  "preservation": "Original proposal, shared historical clocks/costs, STARTED/UNKNOWN and source records remain untouched; no construction, capacity, independent workflow or provider acceptance is inferred"
+}

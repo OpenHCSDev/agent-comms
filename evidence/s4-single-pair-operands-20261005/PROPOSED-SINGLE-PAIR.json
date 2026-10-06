@@ -1,0 +1,165 @@
+{
+  "state": "SOURCE-PROPOSAL-NOT-ISSUED",
+  "source_checkout": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002",
+  "determining_source_head": "208b8f07b345728ceffde1cd62d4fabbf6393af1",
+  "original_record_holder_artifact_provider_operations": 0,
+  "requested_scope": "One coding case, one selected paired trajectory, separate three-cut source/summary/probe workflows; not the30-pair study",
+  "conditions": [
+    "task-memory",
+    "bounded"
+  ],
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "HIGH",
+  "model_and_effort_authority": "Original CurrentTypedCapture/RetainedOwnerLaunch plus actual native admission/completion/settings records. No forced route/model or credential copy.",
+  "oracle": {
+    "kind": "file",
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-single-pair-operands-20261005/coding-oracle.private.json",
+    "sha256": "06264176a3c69e2bc8ae94cc65c4782b94a50fd73482b355987e1f296f032d00"
+  },
+  "design": {
+    "kind": "file",
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-single-pair-operands-20261005/single-pair-design.private.json",
+    "sha256": "2f6fca3807ab51d2b0cf7cc069385387814eb1077efe2bb6132bc5aacec42451"
+  },
+  "construction_plan": {
+    "kind": "file",
+    "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-single-pair-operands-20261005/single-pair-plan.private.json",
+    "sha256": "4537efc28bc73d099b17568c28049a8e484b2b717796fe8d9401eff4d5e6cfbe"
+  },
+  "sampling_seed": 20261004,
+  "trajectory": 1,
+  "prospective_counts_not_observations": {
+    "paired_trajectories": 1,
+    "arms": 2,
+    "rounds_per_arm": 3,
+    "ordinary_source_inputs": 6,
+    "ordinary_recall_inputs": 6,
+    "ordinary_inputs": 12,
+    "manual_compaction_ACP_commands": 6,
+    "ACP_prompts": 18,
+    "managed_checkpoints": 6,
+    "private_Comms_roots": 3,
+    "zero_input_seed_roots": 1,
+    "source_arm_roots": 2,
+    "SDK_creation_records": 9,
+    "SDK_probe_forks": 6,
+    "minimum_original_assistant_terminals": 12,
+    "minimum_original_selected_summary_terminals": 6,
+    "minimum_recorded_completion_coordinates": 18,
+    "actual_model_steps_transport_attempts_child_births": null
+  },
+  "future_candidate": {
+    "build_argv": [
+      "/usr/bin/python",
+      "-m",
+      "build",
+      "--wheel",
+      "--no-isolation",
+      "--outdir",
+      "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/candidate-wheel"
+    ],
+    "cwd": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002",
+    "environment": {
+      "PYTHONDONTWRITEBYTECODE": "1"
+    },
+    "wheel": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/candidate-wheel/agent_comms-0.1.0-py3-none-any.whl",
+    "wheel_sha256": null,
+    "installed_source_declaration": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/installed-source.private.json",
+    "installed_source_sha256": null,
+    "proof_owner": "Original InstalledSourceProof/InstalledSource/PackageDirectUrl/ReviewedArtifact plus full Git/local/ZIP/installed byte comparison; no fabricated declaration."
+  },
+  "holder": {
+    "proposed_prefix": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002",
+    "access": null,
+    "needs": "Fresh Bohr floor/purpose and explicit Core-only stage, proof, execution and exact normal-floor restoration; not the closed READ03/662 loans."
+  },
+  "native": {
+    "package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent",
+    "manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+    "tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d",
+    "authority": null,
+    "scope": "Source-declared7a keeper identity only; canonical path/custody must be confirmed by Sch and FullTrust before actual use. No artifact filesystem accessed.086 is not matching this source declaration."
+  },
+  "command_template": {
+    "argv": [
+      "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+      "tests/three_cut_retention_configured_journey.py",
+      "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey",
+      "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent",
+      "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/bin/python",
+      "--installed-source",
+      "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/installed-source.private.json",
+      "--archive",
+      "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/candidate-wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "<ACTUAL_REVIEWED_WHEEL_SHA256>",
+      "--paired-construction",
+      "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/evidence/s4-single-pair-operands-20261005/single-pair-design.private.json",
+      "20261004",
+      "1"
+    ],
+    "cwd": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002",
+    "environment": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONPATH": "tests:tools/cutover"
+    },
+    "controller_output": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller",
+    "operation_bound_seconds": null,
+    "bound_scope": "Fresh grant must supply the whole functional-purpose walltime; never a native/provider retry or timeout policy change."
+  },
+  "root_outputs": {
+    "pair": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey",
+    "seed": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey/seed",
+    "arms": [
+      {
+        "condition": "task-memory",
+        "root": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey/arm-1",
+        "source_root": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey/arm-1/wire",
+        "workflow": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey/arm-1/receipt.json",
+        "recorded_run": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey/arm-1-run.private.json",
+        "cut_probes": [
+          "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey/arm-1/round-1/recall",
+          "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey/arm-1/round-2/recall",
+          "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey/arm-1/round-3/recall"
+        ]
+      },
+      {
+        "condition": "bounded",
+        "root": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey/arm-2",
+        "source_root": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey/arm-2/wire",
+        "workflow": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey/arm-2/receipt.json",
+        "recorded_run": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey/arm-2-run.private.json",
+        "cut_probes": [
+          "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey/arm-2/round-1/recall",
+          "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey/arm-2/round-2/recall",
+          "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey/arm-2/round-3/recall"
+        ]
+      }
+    ],
+    "measurement": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/s4-independent-pair-functional01/controller/journey/paired-measurements.private.json"
+  },
+  "control_sha256": {
+    "tests/three_cut_retention_configured_journey.py": "73fbc03eeddf6b999cd3d6f3edee9c69fa31dc58b2d2b94d5b27e94632a400a0",
+    "tests/compaction_retention_fixture.py": "7979b5854c8b88df17563f52ba3bf67546618fc6773d4c6f26f37e4c29db8eeb",
+    "tests/retained_native_fixture.py": "66f52623ac6ca7a29190f6c1df7e759d3b706e96a08a4e18e4dbfb70d10cedc0",
+    "tests/compaction_source_successor_installed_journey.py": "272453ec89460f3a7df71522ab4d2bc3dfd9eb1f06ee3bd8716a54d44a06da2c",
+    "tests/summary_prefix_configured_installed_journey.py": "357457189d441cbee9e8d07fca6f16769fdfac4b95ab46bbf71e5ba8bf0ccc95",
+    "tests/summary_prefix_native_observer.mjs": "5cdc053dfb214f4c08ff5865889acb3c8c8f14021de6aa52891ba4e0e7dfb39a",
+    "tests/retained_native_conditions.mjs": "fbc3f9ecae473a04f687366b04b9d2429b9c54c1de528a415f75211d1fe0c7ab",
+    "evidence/same-idle-owner-native-source-20261005/qualification/run-phase.py": "351bec68f3466d30ee72558ff27eb14155deacd28d5f0ae5ec1452f483f007f6",
+    "evidence/same-idle-owner-native-source-20261005/qualification/prove-installed.py": "98ce952a8588fc832ae3b041f35f6fadd3054b4ec35d03f1e9b38ca4234b9412",
+    "tools/cutover/publish_retained_summary.py": "025babf120563228d99920617d34f2e4142307d38e049405d4af49b2ecd7a960",
+    "src/agent_comms/compaction_records.py": "fc8e30b846e2bc3dea1690975b921f96128eaccb0d82bc946693ad2cf7376cc5",
+    "stack/pi-native.sha256": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+    "pyproject.toml": "000139ce7da800c73574db2cd2e99af5afb63795f94f38d532e03af4b1423ad7"
+  },
+  "known_source_obligations": {
+    "reader_runtime_dependency": "NativeForkCreation.recorded_ancestry,require_inherited_creation,inherits_recorded_entries,common_recorded_source added681; the original6763fe/current6565f Core cannot satisfy the current reader family.",
+    "provider_capacity": "Current full_history_sdk_admission may corroborate original selected and preserved prefix plus native estimated admission. It is not provider-token/HTTP capacity; full_context_capacity remains unavailable. This pair does not add a full-context arm.",
+    "accounting": "Original per-step PiUsage and selected SummaryUsage with actual completion coordinates, exact workflow_inputs and one joined arm receipt; all additional uncaptured work and billed spend remain unavailable.",
+    "shared_setup": "One zero-input seed resource spans nested arms; excluded from arm clocks, never divided or called measured setup-only.",
+    "runtime_lifecycle": "Original selected_native_fork/retire_selected and configured_saved_agent resource, no new state/collector/runner/codec.",
+    "study": "One pair cannot satisfy design.sample_count10, registered inferential/resource margins, independence, HTTP, intervention, capacity or fullS4 acceptance; USD75/30pairs remains unapproved."
+  },
+  "preservation": "Old shared source/summary/workflow records, every STARTED/UNKNOWN/refusal and closed holder lifecycle remain immutable. Fresh output only; stop at first failed/uncertain phase, no resend/replay. Join original controller/observer/native/process groups/sockets; original source hashes and exact restored floor require independent handback.",
+  "controller_scope": "The new journey is a child of the original controller output, so original output socket enumeration covers the owned journey tree. Non-tree socket custody still belongs to original fixture/runtime cleanup and independent handback; not inferred from an empty tree scan."
+}

@@ -1,0 +1,744 @@
+{
+  "state": "FINAL PREPARED loaded02 tuple: actual fresh eligible334 assessment bound; specific issue and all stage/READ/proof/EXEC/App authority still UNBOUND",
+  "recipient": "OriginalMendel sole operator/packagewriter/floorreturn; Heis sole loaded control/integration owner",
+  "holder": {
+    "candidate_prefix": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002",
+    "existing_nonlive_prefix": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002",
+    "application_python": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+    "eligibility": "Bohr fresh readonly assessment matched; no access, reservation or loan until actual specific immutable issue",
+    "assessment": {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel-loaded02-current-reader-pair-eligible-contract-readback.json",
+      "sha256": "bb777ae52b07e26bf8bce8fb4262d320ea94ae018aacff21db63773f3b7d98f0",
+      "bytes": 10885
+    },
+    "fresh_preimage": {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel-loaded02-current-reader-pair-fresh-CURRENT447-preimage.json",
+      "sha256": "d602df7582aa2921b8912815ce89461d37aa0ff63b54f79cbb4c571c81b0e875",
+      "bytes": 2266857
+    },
+    "floor_readback": {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel-loaded02-current-reader-pair-fresh-floor-readback.json",
+      "sha256": "ed455171ab2c4301f986dfb0f3380f2c3c4799906696b20772291393b470c377",
+      "bytes": 2660
+    },
+    "fresh_borrowers": {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel-loaded02-current-reader-pair-fresh-borrowers.json",
+      "sha256": "4ac00742f225d35df6a05a101bb97ca68a548a7ae57f153e437b88e68a07aed4",
+      "bytes": 2281
+    },
+    "reference_classification": {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel-loaded02-current-reader-pair-fresh-reference-classification.json",
+      "sha256": "54e2e56f428ebd5d283898567c55af76c331fde0cb1eec33a2d12785cd1337f3",
+      "bytes": 6065
+    },
+    "preceding_closed_purpose": {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel-loaded-current-reader-pair-package-App-lifecycle.json",
+      "sha256": "0254aafd5597bad048ef3200d8bf9e41bb1d382f3fc776d40a5a4963f6e7df06",
+      "bytes": 25626
+    },
+    "preceding_independent_return_check": {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel-loaded-current-reader-pair-independent-final-floor-readback.json",
+      "sha256": "152b72f139ccf7490a5c290c8f4cc3839967d0a6edd6cda162df7d782df57baf",
+      "bytes": 7866
+    },
+    "actual_floor": {
+      "nodes": 1468,
+      "assets": 945,
+      "versions": 69,
+      "other66": 1883,
+      "protected": 428,
+      "environment_nodes": 5,
+      "PREFIXactivation_sha256": "3381fc21fbf3da2c1526e8cede23559f0c4c94a5b8a90de5f345fe6227554684"
+    },
+    "original69_RAWorigins": {
+      "owner": {
+        "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel-loaded02-current-reader-pair-fresh-CURRENT447-preimage.json",
+        "sha256": "d602df7582aa2921b8912815ce89461d37aa0ff63b54f79cbb4c571c81b0e875",
+        "bytes": 2266857
+      },
+      "entry": "original69_origins",
+      "count": 69,
+      "raw_receipts_verified": true
+    },
+    "previous_artifact_authority_closure": {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/native-keeper-loaded-current-reader-pair-native4B-READ-EXEC-handback-20261006.json",
+      "sha256": "6d7905c1e547e32fa9ac66a47d82cdccc1401e31a6bd2f1b81de8e07bbb44499",
+      "bytes": 62937
+    },
+    "actual_primary_archive": {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/released-holder-originals/334-current447-before-joint458460/original-current447-1468.tar.gz",
+      "sha256": "41b065384c8fa6854f813f02a4eebb9fa619a0f823b836a65d1430902fa5762e",
+      "bytes": 4028512,
+      "members": 1468,
+      "mode": 384
+    }
+  },
+  "handoff": {
+    "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/evidence/configured-loaded-consumer-repair-20261006/LOADED-CONSUMER-HANDOFF.json",
+    "sha256": "18e56fc7622859ebd422ae735d9eef4087cb069a460a9589b5426267e1a0b3bd",
+    "bytes": 6185
+  },
+  "package_sources": [
+    {
+      "module": "agent_comms",
+      "package": "agent-comms",
+      "path": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/current-paired-core-20261006/wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "sha256": "6b426d7ea31f4a6e30db2c2fdbd4eaa4d1be6dcea9aba3c6e599f7c063987b6b",
+      "bytes": 910730,
+      "head": "ddcdc422c7fe01453edb2469bcfa8303d771db67",
+      "repo": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "source_root": "src/agent_comms",
+      "assets": 355
+    },
+    {
+      "module": "toad",
+      "package": "batrachian-toad",
+      "path": "/home/ts/wt/toad-current-installed-integration-20261006/.artifacts/current-paired-toad-reader-20261006/wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "sha256": "410c3ab0eee04e628d16fbbd11c591d7d7676f5c714ce82b273cfb0ad89acd8c",
+      "bytes": 2251240,
+      "head": "afae409d1cdf34e0a0fa06c8fb02dfba740ad229",
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "source_root": "src/toad",
+      "assets": 319
+    },
+    {
+      "module": "textual",
+      "package": "textual",
+      "path": "/home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native70-71-filewheel-20261005/textual-8.2.8-py3-none-any.whl",
+      "sha256": "bc47c59ea7db78a9a443c5f5e3f10836660957f21bb998d2ffa3ae8e4a2ddbe3",
+      "bytes": 768804,
+      "head": "a2dd8a9a37825a828df0d8f651ca57d92db69e5f",
+      "repo": "/home/ts/wt/textual-native-subtree-strips-20261002",
+      "source_root": "src/textual",
+      "assets": 266
+    },
+    {
+      "module": "refactor_audit",
+      "package": "nominal-refactor-audit",
+      "path": "/home/ts/wt/nra-skill-publish-20261002/.artifacts/family-flattened-collector-20261004/wheels/nominal_refactor_audit-0.1.0-py3-none-any.whl",
+      "sha256": "8d489731728ebf9f7e0f90ef2b14e7e3b5d2f90ed82bd8b1482d735f82869886",
+      "bytes": 23532,
+      "head": "9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10",
+      "repo": "/home/ts/wt/nra-skill-publish-20261002",
+      "source_root": "skills/refactor-audit/scripts/audit",
+      "assets": 10
+    },
+    {
+      "module": "textual_diff_view",
+      "package": "textual-diff-view",
+      "path": "/home/ts/.cache/uv/sdists-v9/git/6a8a377ce2150d3f/8fa7d4d0db993ea3/textual_diff_view-0.1.5-py3-none-any.whl",
+      "sha256": "be7089c8f282e07e893b0254a0859e0f1b243a7ba591749f2053fa1fb775ad36",
+      "bytes": 25753,
+      "head": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+      "repo": "/home/ts/wt/textual-diff-native-geometry-20261001",
+      "source_root": "src/textual_diff_view",
+      "assets": 3
+    }
+  ],
+  "native": {
+    "native_package": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent",
+    "native_manifest": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+    "native_tree": "63f18710cb9329be6ade27bac3b4dd822e2b36f013756fa8e6717b8073a4592c",
+    "installed_entrypoint": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/pi-comms-native",
+    "owner": "OwnerLifecycle.native_entrypoint selected interpreter; PrivateNkLaunch.current exact authored root/package route; no external stack wrapper runtime selection",
+    "guard_standalone_repeat": false
+  },
+  "source_helpers": {
+    "carry_history_provenance": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/carry_history_provenance.py",
+      "sha256": "44735bcdd6424af4203ac75e509f8a80cf41641882b249610ccadd0215c527b2",
+      "bytes": 4308
+    },
+    "cutover_child": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/cutover_child.py",
+      "sha256": "69a63c30a27ce6971d31e9669ff8c86b06579612c796f044126f629917e51966",
+      "bytes": 1207
+    },
+    "native_schema_carry": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/native_schema_carry.py",
+      "sha256": "08d5b673910f96634ad017eb7e8224cb440e5b5cfea7c07d597b3ddf0f209c2b",
+      "bytes": 43894
+    },
+    "original_owner_capture": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/original_owner_capture.py",
+      "sha256": "0505975196d438b2721d48efde97e777f124a34ea1fe6f05dd50751a29f2932f",
+      "bytes": 3846
+    },
+    "owner_read_projection": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/owner_read_projection.py",
+      "sha256": "c719ec35fa61942ee76b6aa8b87e1155e66235eb1d696736bd9597b1fa2caba7",
+      "bytes": 4645
+    },
+    "publish_openhcs_recovery": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_openhcs_recovery.py",
+      "sha256": "27516db16a4bec25bb37fb394e1c7bc04c567eb0a780fb1e0ed62235ca0ed9ff",
+      "bytes": 21793
+    },
+    "publish_retained_summary": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/publish_retained_summary.py",
+      "sha256": "025babf120563228d99920617d34f2e4142307d38e049405d4af49b2ecd7a960",
+      "bytes": 24056
+    },
+    "read_original_owner": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/read_original_owner.py",
+      "sha256": "c963d51ec834e7caef5a0a10b704773546f548cf967e5e8716e147db0a2557d9",
+      "bytes": 1057
+    },
+    "retained_summary_reset": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/retained_summary_reset.py",
+      "sha256": "86d28cc9f9c74c9156ee258d061168a17003ab94f6c9ba1fdaac2dd01eb8dd12",
+      "bytes": 8554
+    },
+    "routing_carry": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_carry.py",
+      "sha256": "44509029e1fb4c975f8bb5b6c14cd8ecb1e2c9697f24374883b02f26360a3b4c",
+      "bytes": 11939
+    },
+    "routing_recovery": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/routing_recovery.py",
+      "sha256": "af599ee91746123ed33606691973ef3a2a0e77e2d994cd158a1c5ddef2c2aafc",
+      "bytes": 2347
+    },
+    "runtime_installation": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/runtime_installation.py",
+      "sha256": "77841672b6d9d99e3cb4c724706ffdad7eefd604aab583743f2e4b341156224c",
+      "bytes": 3393
+    },
+    "thread_format_retirement": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tools/cutover/thread_format_retirement.py",
+      "sha256": "e31ca7198a19f0c7f92f65663adc82d3e10cd9194278951a77a936332ce25737",
+      "bytes": 3873
+    },
+    "l0a_native_installed_pilot": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/l0a_native_installed_pilot.py",
+      "sha256": "af0fb2d285ce9dddf728650809ab206b706000ed1d003e520d382b483b04e61a",
+      "bytes": 37666
+    },
+    "native_session_retention_pilot": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/native_session_retention_pilot.py",
+      "sha256": "b78fbe7375515965050ef7eebda89604edc9546204fb85d2e95d6332e5208c63",
+      "bytes": 34617
+    },
+    "runtime_fixture": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/runtime_fixture.py",
+      "sha256": "c34f37f450a02f09d344352466431744892a0c788953212da5ac434d912e3315",
+      "bytes": 18978
+    },
+    "saved_state_user_journey_pilot": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/saved_state_user_journey_pilot.py",
+      "sha256": "808025d777fe53499b25659c581a7f2945c42390b04cf5c7fcc2256850bebb4b",
+      "bytes": 46866
+    },
+    "thread_navigation_installed_journey": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/thread_navigation_installed_journey.py",
+      "sha256": "a23fbcb8578986949712cacc8d7b1af01b97808de225c9dbdf970177c4a6f4d2",
+      "bytes": 10668
+    },
+    "viewport_recent_tabs_pilot": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/viewport_recent_tabs_pilot.py",
+      "sha256": "2ea128c76d469c15e8e4633922110ccfaf200f86e2131eeb0d942129284ce030",
+      "bytes": 18068
+    },
+    "compaction_source_successor_installed_journey": {
+      "path": "/home/ts/wt/comms-configured-continuous-producer-20261006/tests/compaction_source_successor_installed_journey.py",
+      "sha256": "b086d7a5e5a3792e0b3ff19088b6b88cb9286dd76c9323d764d2dbb82920d0cf",
+      "bytes": 13064
+    },
+    "manual_live_turn_status": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/manual_live_turn_status.py",
+      "sha256": "f333da956fcc9e367f993853aa3daabbaea8d4278feed24eaa644d51c74e48fa",
+      "bytes": 7122
+    },
+    "readonly_saved_reader_pilot": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/readonly_saved_reader_pilot.py",
+      "sha256": "63c36b3cde89cf899995508cf73c4b193e385826e56a2f79e640349f6cc06c0e",
+      "bytes": 19357
+    },
+    "canonical_wire_conversation_installed_pilot": {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/canonical_wire_conversation_installed_pilot.py",
+      "sha256": "b8b4c67ea8bbdb2062d64b275de3cc5cce31d62471350eeca4441de105d10843",
+      "bytes": 31836
+    }
+  },
+  "exact_control": {
+    "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/native_session_retention_pilot.py",
+    "sha256": "b78fbe7375515965050ef7eebda89604edc9546204fb85d2e95d6332e5208c63",
+    "bytes": 34617
+  },
+  "source_relation": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/loaded-history-consumer-repaired-20261006/FINAL-SOURCE-RELATION.json",
+    "sha256": "51ecbb6b271f51c62337e83bcde2d6bf39498f13d9420999154a26312d8f7b84",
+    "bytes": 135690
+  },
+  "wheel_source_check": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/loaded-history-current-pair-20261006/SELECTED-ARTIFACT-SOURCE-CHECK.json",
+    "sha256": "a79511bbf729ed56b7221471b32efc5f1e48d1511119f3154dfb9635c34e67f6",
+    "bytes": 2746
+  },
+  "root_prepare": {
+    "path": "/home/ts/.cache/agent-scratch/mlh02",
+    "mode": "0700",
+    "attempt_limit": 1,
+    "argv": [
+      "mkdir",
+      "--mode=0700",
+      "/home/ts/.cache/agent-scratch/mlh02"
+    ]
+  },
+  "stage": {
+    "argv": [
+      "uv",
+      "pip",
+      "install",
+      "--python",
+      "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+      "--no-deps",
+      "--no-cache",
+      "--no-index",
+      "--link-mode",
+      "copy",
+      "--reinstall",
+      "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/current-paired-core-20261006/wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "/home/ts/wt/toad-current-installed-integration-20261006/.artifacts/current-paired-toad-reader-20261006/wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "/home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native70-71-filewheel-20261005/textual-8.2.8-py3-none-any.whl"
+    ],
+    "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+    "environment": {
+      "set": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "TOAD_TEST_ATTEMPT": "mendel-loaded-consumer-repaired-20261006-02"
+      },
+      "unset": [
+        "AGENT_COMMS_ROOT",
+        "AGENT_COMMS_THREAD",
+        "AGENT_COMMS_AGENT_BIN",
+        "AGENT_COMMS_AGENT_ARGS",
+        "AGENT_COMMS_AGENT_MODELS",
+        "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID",
+        "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE",
+        "AGENT_COMMS_DEBUG_LOG",
+        "PI_AGENT_ID",
+        "PI_PARENT_ID",
+        "PI_PROMPT",
+        "PI_SESSION_FILE",
+        "PI_CODING_AGENT_DIR",
+        "NODE_OPTIONS",
+        "NODE_PATH",
+        "NODE_COMPILE_CACHE",
+        "AGENT_COMMS_NATIVE_ORIGIN",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "PYTHONSTARTUP",
+        "PYTHONUSERBASE",
+        "VIRTUAL_ENV",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "WORKSPACE_SWITCH_PROFILE",
+        "AC_MCP_TOAD_ADAPTER",
+        "AC_MCP_NATIVE_BIN",
+        "AC_MCP_RETIRE_SURFACE",
+        "AC_MCP_PERMISSION_ANSWER",
+        "WORKSPACE_COHORTS",
+        "L0A_EVIDENCE",
+        "TMPDIR",
+        "NATIVE_RETENTION_RECEIPT",
+        "AC_NATIVE_COPIED_PACKAGE"
+      ]
+    },
+    "attempt_limit": 1,
+    "new_outputs": [
+      "stage-launch.json",
+      "stage-child.json",
+      "stage.stdout.log",
+      "stage.stderr.log",
+      "stage-terminal.json",
+      "stage-whole-join.json"
+    ]
+  },
+  "proof": {
+    "helper": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/loaded-history-current-pair-20261006/loaded334-proof.py",
+      "sha256": "1712a84472de6d1b0f7be1c41450205620c032889edb0169fbf1ab04d9a4d8e3",
+      "bytes": 11647
+    },
+    "argv_template": [
+      "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+      "-B",
+      "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/loaded-history-current-pair-20261006/loaded334-proof.py",
+      "UNISSUED_HOLDER_GRANT_PATH",
+      "UNISSUED_HOLDER_GRANT_SHA256"
+    ],
+    "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+    "environment": {
+      "set": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "TOAD_TEST_ATTEMPT": "mendel-loaded-consumer-repaired-20261006-02"
+      },
+      "unset": [
+        "AGENT_COMMS_ROOT",
+        "AGENT_COMMS_THREAD",
+        "AGENT_COMMS_AGENT_BIN",
+        "AGENT_COMMS_AGENT_ARGS",
+        "AGENT_COMMS_AGENT_MODELS",
+        "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID",
+        "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE",
+        "AGENT_COMMS_DEBUG_LOG",
+        "PI_AGENT_ID",
+        "PI_PARENT_ID",
+        "PI_PROMPT",
+        "PI_SESSION_FILE",
+        "PI_CODING_AGENT_DIR",
+        "NODE_OPTIONS",
+        "NODE_PATH",
+        "NODE_COMPILE_CACHE",
+        "AGENT_COMMS_NATIVE_ORIGIN",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "PYTHONSTARTUP",
+        "PYTHONUSERBASE",
+        "VIRTUAL_ENV",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "WORKSPACE_SWITCH_PROFILE",
+        "AC_MCP_TOAD_ADAPTER",
+        "AC_MCP_NATIVE_BIN",
+        "AC_MCP_RETIRE_SURFACE",
+        "AC_MCP_PERMISSION_ANSWER",
+        "WORKSPACE_COHORTS",
+        "L0A_EVIDENCE",
+        "TMPDIR",
+        "NATIVE_RETENTION_RECEIPT",
+        "AC_NATIVE_COPIED_PACKAGE"
+      ]
+    },
+    "new_outputs": [
+      "candidate-source-proof.json",
+      "candidate-activation.json",
+      "agent_comms-inventory.json",
+      "toad-inventory.json",
+      "textual-inventory.json",
+      "refactor_audit-inventory.json",
+      "textual_diff_view-inventory.json",
+      "wheel-installed-readback.json",
+      "forced-native-assets.json",
+      "metadata-origin-readback.json",
+      "retained-wheel-install.txt",
+      "unchanged-keepers-after.json",
+      "native-full-trust.json",
+      "proof-result.json"
+    ],
+    "attempt_limit": 1,
+    "release": "Bohr same lifecycle binds fresh Sch matching_native_READ, actual stage and resolved argv before sole proof",
+    "native_read_receipt_contract": "Original READ shape: holder_grant string/path+full SHA, personally_read_lifecycle string/same purpose, READtrue EXECfalse matching_native package/manifest/tree. Mutable lifecycle binds receipt, no immutable cyclic pointer."
+  },
+  "controller": {
+    "helper": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/loaded-history-current-pair-20261006/loaded334-controller.py",
+      "sha256": "b7907c2b12816453ac3e61c566e9082b241269ab08bb5211eed492ba6384bca9",
+      "bytes": 6105
+    },
+    "argv_template": [
+      "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+      "-B",
+      "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/loaded-history-current-pair-20261006/loaded334-controller.py",
+      "UNISSUED_HOLDER_GRANT_PATH",
+      "UNISSUED_HOLDER_GRANT_SHA256"
+    ],
+    "cwd": "/home/ts/wt/toad-warm-rendered-reader-20261006",
+    "environment": {
+      "set": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "TOAD_TEST_ATTEMPT": "mendel-loaded-consumer-repaired-20261006-02",
+        "WORKSPACE_COHORTS": "4,16,32,64",
+        "L0A_EVIDENCE": "/home/ts/.cache/agent-scratch/mlh02/f",
+        "TMPDIR": "/home/ts/.cache/agent-scratch/mlh02/f/tmp",
+        "NATIVE_RETENTION_RECEIPT": "/home/ts/.cache/agent-scratch/mlh02/f/loaded-histories.json",
+        "AC_NATIVE_COPIED_PACKAGE": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent"
+      },
+      "unset": [
+        "AGENT_COMMS_ROOT",
+        "AGENT_COMMS_THREAD",
+        "AGENT_COMMS_AGENT_BIN",
+        "AGENT_COMMS_AGENT_ARGS",
+        "AGENT_COMMS_AGENT_MODELS",
+        "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID",
+        "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE",
+        "AGENT_COMMS_DEBUG_LOG",
+        "PI_AGENT_ID",
+        "PI_PARENT_ID",
+        "PI_PROMPT",
+        "PI_SESSION_FILE",
+        "PI_CODING_AGENT_DIR",
+        "NODE_OPTIONS",
+        "NODE_PATH",
+        "NODE_COMPILE_CACHE",
+        "AGENT_COMMS_NATIVE_ORIGIN",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "PYTHONSTARTUP",
+        "PYTHONUSERBASE",
+        "VIRTUAL_ENV",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "WORKSPACE_SWITCH_PROFILE",
+        "AC_MCP_TOAD_ADAPTER",
+        "AC_MCP_NATIVE_BIN",
+        "AC_MCP_RETIRE_SURFACE",
+        "AC_MCP_PERMISSION_ANSWER"
+      ]
+    },
+    "attempt_limit": 1,
+    "release": "Actual final953/full69 proofDTOFullTrust and separate fresh Sch EXEC then Bohr same-purpose finalrelease; receipt delivery alone does not launch"
+  },
+  "command": {
+    "argv": [
+      "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+      "-B",
+      "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/native_session_retention_pilot.py",
+      "--loaded-histories-only"
+    ],
+    "cwd": "/home/ts/wt/toad-warm-rendered-reader-20261006",
+    "environment": {
+      "set": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "TOAD_TEST_ATTEMPT": "mendel-loaded-consumer-repaired-20261006-02",
+        "WORKSPACE_COHORTS": "4,16,32,64",
+        "L0A_EVIDENCE": "/home/ts/.cache/agent-scratch/mlh02/f",
+        "TMPDIR": "/home/ts/.cache/agent-scratch/mlh02/f/tmp",
+        "NATIVE_RETENTION_RECEIPT": "/home/ts/.cache/agent-scratch/mlh02/f/loaded-histories.json",
+        "AC_NATIVE_COPIED_PACKAGE": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent"
+      },
+      "unset": [
+        "AGENT_COMMS_ROOT",
+        "AGENT_COMMS_THREAD",
+        "AGENT_COMMS_AGENT_BIN",
+        "AGENT_COMMS_AGENT_ARGS",
+        "AGENT_COMMS_AGENT_MODELS",
+        "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID",
+        "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE",
+        "AGENT_COMMS_DEBUG_LOG",
+        "PI_AGENT_ID",
+        "PI_PARENT_ID",
+        "PI_PROMPT",
+        "PI_SESSION_FILE",
+        "PI_CODING_AGENT_DIR",
+        "NODE_OPTIONS",
+        "NODE_PATH",
+        "NODE_COMPILE_CACHE",
+        "AGENT_COMMS_NATIVE_ORIGIN",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "PYTHONSTARTUP",
+        "PYTHONUSERBASE",
+        "VIRTUAL_ENV",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "WORKSPACE_SWITCH_PROFILE",
+        "AC_MCP_TOAD_ADAPTER",
+        "AC_MCP_NATIVE_BIN",
+        "AC_MCP_RETIRE_SURFACE",
+        "AC_MCP_PERMISSION_ANSWER"
+      ]
+    },
+    "owned_output": "/home/ts/.cache/agent-scratch/mlh02"
+  },
+  "control_new_outputs": [
+    "controller.json",
+    "child.json",
+    "stdout.log",
+    "stderr.log",
+    "terminal.json",
+    "effective-release.json",
+    "f"
+  ],
+  "control_timeout_seconds": 1800,
+  "bounds": {
+    "outer_seconds": 1800,
+    "source": "First loaded-mode safety deadline, selected before any attempt. No historical warm150 inheritance or consumer timer change. Source expands62 views and traverses3x(4+16+32+64)=348 strict visit positions, plus54 preceding-view recaptures and owner returns. The loaded workload is not previously timed; this is a planning allowance, not measured speed acceptance or a sum of every sequential20s wait. Original small warm/MCP timings are not a loaded64 calibration.",
+    "seed_each_prompt_seconds": 20,
+    "readiness_seconds": 20,
+    "queue_seconds": 10,
+    "released_response_seconds": 25,
+    "first_failure_unknown_stop": true,
+    "no_retry": true,
+    "no_phase_filter_or_deadline_increase": true
+  },
+  "scope": {
+    "cohorts": [
+      4,
+      16,
+      32,
+      64
+    ],
+    "native_journals": 2,
+    "prospective_requests": {
+      "seed": 2,
+      "cohorts": 8,
+      "total": 10
+    },
+    "producer_http_maximum_default_unchanged": 12,
+    "requests_relation": "Original fixture default12 ceiling is not a10request claim. Original seed/percohort no-replay assertions plus final receipt must establish actual10.",
+    "acceptance": "Actual admitted pages/cursor and nonempty body paint; strict visit orders; original warm rendered identity/rawreads0, evicted editor/reader reconstruction, DocumentUndo/native owner/ACP identity, held/queued native response paint and resource snapshots.",
+    "not_claimed": [
+      "64distinct native journals",
+      "64simultaneously retained trees",
+      "configured40MB source",
+      "real paid provider workflow",
+      "physical terminal FPS",
+      "MCP allow/guard repetition",
+      "public client/source access"
+    ]
+  },
+  "socket": {
+    "formula": "L0A_EVIDENCE/native-fixture-{8chars}/private-root/wire/runtime/{pid}.sock",
+    "example": "/home/ts/.cache/agent-scratch/mlh02/f/native-fixture-12345678/private-root/wire/runtime/2147483647.sock",
+    "maximum_utf8_bytes_10digit_pid": 103,
+    "limit": 107,
+    "fixture_stage": "Original l0a mkdtemp owns stage; never precreate private fixture or copy producer"
+  },
+  "restoration": {
+    "argv": [
+      "uv",
+      "pip",
+      "install",
+      "--python",
+      "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+      "--no-deps",
+      "--no-cache",
+      "--no-index",
+      "--link-mode",
+      "copy",
+      "--reinstall",
+      "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+      "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/projected-prefetch443-current440-334-20261004/toad-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "/home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native59-filewheel-20261004/textual-8.2.8-py3-none-any.whl",
+      "/home/ts/wt/nra-skill-publish-20261002/.artifacts/family-flattened-collector-20261004/wheels/nominal_refactor_audit-0.1.0-py3-none-any.whl"
+    ],
+    "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+    "environment": {
+      "set": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "TOAD_TEST_ATTEMPT": "mendel-loaded-consumer-repaired-20261006-02"
+      },
+      "unset": [
+        "AGENT_COMMS_ROOT",
+        "AGENT_COMMS_THREAD",
+        "AGENT_COMMS_AGENT_BIN",
+        "AGENT_COMMS_AGENT_ARGS",
+        "AGENT_COMMS_AGENT_MODELS",
+        "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID",
+        "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE",
+        "AGENT_COMMS_DEBUG_LOG",
+        "PI_AGENT_ID",
+        "PI_PARENT_ID",
+        "PI_PROMPT",
+        "PI_SESSION_FILE",
+        "PI_CODING_AGENT_DIR",
+        "NODE_OPTIONS",
+        "NODE_PATH",
+        "NODE_COMPILE_CACHE",
+        "AGENT_COMMS_NATIVE_ORIGIN",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "PYTHONSTARTUP",
+        "PYTHONUSERBASE",
+        "VIRTUAL_ENV",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "WORKSPACE_SWITCH_PROFILE",
+        "AC_MCP_TOAD_ADAPTER",
+        "AC_MCP_NATIVE_BIN",
+        "AC_MCP_RETIRE_SURFACE",
+        "AC_MCP_PERMISSION_ANSWER",
+        "WORKSPACE_COHORTS",
+        "L0A_EVIDENCE",
+        "TMPDIR",
+        "NATIVE_RETENTION_RECEIPT",
+        "AC_NATIVE_COPIED_PACKAGE"
+      ]
+    },
+    "filewheels": [
+      {
+        "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/c4-queued-reservation656-wheel-20261004/agent_comms-0.1.0-py3-none-any.whl",
+        "sha256": "5f1667ce64c58d67e153850be91dfb669ea9e347218f8d845937a1c12c778a9c",
+        "bytes": 881624
+      },
+      {
+        "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/projected-prefetch443-current440-334-20261004/toad-wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+        "sha256": "7e6dccf2d5107900f783b3b43091d04c5bd37a1405c9dedeb071bc8a82637879",
+        "bytes": 2247178
+      },
+      {
+        "path": "/home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native59-filewheel-20261004/textual-8.2.8-py3-none-any.whl",
+        "sha256": "73d4ca971dd2891c2a2266a0c5c8629e3e0ff55e802456ae60d0fedfe72fdbaa",
+        "bytes": 768474
+      },
+      {
+        "path": "/home/ts/wt/nra-skill-publish-20261002/.artifacts/family-flattened-collector-20261004/wheels/nominal_refactor_audit-0.1.0-py3-none-any.whl",
+        "sha256": "8d489731728ebf9f7e0f90ef2b14e7e3b5d2f90ed82bd8b1482d735f82869886",
+        "bytes": 23532
+      }
+    ],
+    "attempt_limit": 1,
+    "floor": {
+      "members": 1468,
+      "assets": 945,
+      "versions": 69,
+      "protected": 428,
+      "unchanged_other66": 1883,
+      "environment_nodes": 5,
+      "source": "actual CURRENT447 normal Core5f347+Toad7e6d319+Text73d4266+NRA10+Diff3"
+    },
+    "required": "At terminal/firstFAILUNKNOWN: join original identities/groups/sockets, restore once, full1468byte-mode-link/945ZIP/69versionsRAWorigins/428+1883+5nodes/PREFIX exact, fresh census and explicit whole READ+EXEC return. Bohr independentclose/Sch artifactclose only after actual whole.",
+    "binding": "Actual fresh assessment exact four-wheel restore; one restoration after actual authorized stage/attempt. This proposal is not execution authority."
+  },
+  "required_authority": [
+    "new immutable Bohr package purpose before root/stage",
+    "fresh matching Sch4bREAD+same-purpose proof release",
+    "completed953/full69 proofDTOFullTrust",
+    "separate new Sch4bEXEC+same-purpose finalrelease"
+  ],
+  "preserve": "Original mlh01 failure, two authored journals and all raw/UNKNOWN evidence remain held. MCP allow/three cases and guard remain separate and are not repeated. Selected ddcdc/afae/Text wheels are unchanged; c737 integration helper relation does not relabel installed wheels as current-main equal.",
+  "operator_lifetime": {
+    "stage_proof_restore": "Original retained Mendel AttachedChild.start/communicate shield/actual child.wait/join_retirement family; at issue bind only actual grant path/SHA and effective lifecycle. Preserve stdout/stderr/terminal/identity/group receipts.",
+    "runtime": "Original ParentedProcess.launch and await child.wait owns the controller parent outcome. Controller alone uses installed BoundedRun.session1800, shielded exchange, child.wait and joined stop/drains. No ParentedProcess.reap-as-normal-wait or second timing owner.",
+    "operator_preparation": "No stage/operator/Popen invocation now; fresh issued immutable operand substitution and actual release must be read before each sole phase.",
+    "resources": "One serial phase, fresh agent-resource-check before runtime; preserve measured process-tree RSS and actual cohort resources. No per-run/fleet/swap cap, new environment, parallel build or copied fixture."
+  },
+  "prior_failed_purpose": {
+    "path": "/home/ts/.cache/agent-scratch/mlh01/whole-handback.json",
+    "sha256": "c899c065cde15207be83650fb1259953b85ad766c99d92ab0882d9aaf8a3f344",
+    "bytes": 60779
+  },
+  "operator_preparation": "Existing parent-wait operator and same BoundedRun/AttachedChild/drains/retirement owners. Resolve actual holder/grant/lifecycle only after fresh issue; no launch in preparation."
+}
