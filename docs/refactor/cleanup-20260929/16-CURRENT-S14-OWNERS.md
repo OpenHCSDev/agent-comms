@@ -4,6 +4,29 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original objective remains incomplete. CI is deferred as a merge gate.
 
+### Repaired-pair proofs passed; live publication still pending — 2026-10-06
+
+The original loaded proof passed in7.900 seconds and configured proof in5.777
+seconds. Both are installed-source/FullTrust results, not App acceptance. Their
+original owners retain final tuple, EXEC and same-purpose App release work.
+Parent relayed the loaded completed tuple to Bohr and Sch; no proof is repeated.
+
+Parent read the actual once publisher and original owner-cutover methods.
+`ReviewedRetainedSummaryCohort` consumes the original activation/source proof
+and distinct immutable actual journey artifacts. `PublishRetainedSummary`
+acquires the complete original audience, preserves input/native/goal evidence,
+and delegates retirement, installation, launch and recovery to the original
+owners. Partial retirement cannot authorize complete-batch recovery. No new
+backend helper, gate or decoder is needed from this review.
+
+Private acceptance must finish with its bound original-floor restoration and
+whole return. That restored prefix is not a live installed candidate merely
+because its earlier proof passed. The publication target must have the selected
+pair and actual source proof at publication use, with original route/settings
+and same-format declaration relation freshly bound. Parent owns that final
+installation/publication and fresh affected attachment; no public operation
+has occurred during this source review.
+
 ### Both repaired-pair stages issued — 2026-10-06
 
 Bohr fresh checks passed and both original owners received stage-only purposes:
