@@ -76,11 +76,29 @@ class DeleteThreadsTagDisposition(TagDisposition):
     def confirmation(self, tag: str) -> str:
         return f"Delete ALL inactive threads tagged #{tag} and close all their views? Active owners are refused; retained history and uncertain inputs are preserved."
 
+    def deletion_cohort(self, channels, tag, cohort) -> tuple[Thread, ...]:
+        return cohort
+
     def apply(self, channels, tag, cohort):
-        channels.threads._delete_unlocked(cohort)
-        with channels.catalog.editing() as document:
-            document.change_tag(tag, None)
-        return TagChangeResult(tag, True, tuple(thread.incarnation for thread in cohort))
+        selected = self.deletion_cohort(channels, tag, cohort)
+        channels.threads._delete_unlocked(selected)
+        channels._change_tag_unlocked(tag, None, tuple(thread for thread in cohort
+                                                     if thread not in selected))
+        return TagChangeResult(tag, True, tuple(thread.incarnation for thread in selected))
+
+
+class DeleteExclusiveInactiveThreadsTagDisposition(DeleteThreadsTagDisposition):
+    label = "Delete inactive single-tag threads; remove tag from others"
+
+    def confirmation(self, tag: str) -> str:
+        return (f"Delete only inactive threads whose sole tag is #{tag}, and remove #{tag} "
+                "from the remaining threads? Active owners, multitag threads, their other "
+                "tags, retained history and uncertain inputs remain.")
+
+    def deletion_cohort(self, channels, tag, cohort):
+        return tuple(thread for thread in cohort if thread.tags == frozenset({tag})
+                     and not channels.registry.status(thread.name).active
+                     and not thread.process_alive)
 
 
 class TagAction(Enum):
