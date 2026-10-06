@@ -164,13 +164,21 @@ class TargetField:
 
 @dataclass(frozen=True)
 class TargetAction:
-    """One command instance carries its target binding and editable declarations."""
-    bound: CliCommand
-    editable_fields: tuple[TargetField, ...]
+    """A selection projects original bound commands, never a permission copy."""
+    bound: tuple[CliCommand, ...]
+    targets: tuple[str, ...]
 
     @property
     def declaration(self) -> type[CliCommand]:
-        return type(self.bound)
+        member = type(self.bound[0])
+        return member.catalog_declaration() if len(self.targets) > 1 else member
+
+    @property
+    def editable_fields(self) -> tuple[TargetField, ...]:
+        command = self.bound[0]
+        hints = get_type_hints(type(command))
+        return tuple(TargetField(item, hints[item.name], getattr(command, item.name))
+                     for item in fields(command) if not item.metadata['target_bound'])
 
     @property
     def label(self) -> str:
@@ -178,10 +186,16 @@ class TargetAction:
 
     @property
     def confirmation(self) -> str:
-        return self.bound.confirmation()
+        return '\n'.join(dict.fromkeys(warning for command in self.bound
+                                      if (warning := command.confirmation())))
 
-    def edited(self, arguments: dict[str, str]) -> CliCommand:
-        return self.bound.edited(self.declaration.editor_arguments(arguments))
+    def edited(self, arguments: dict[str, str]) -> TargetAction:
+        return replace(self, bound=tuple(command.edited(type(command).editor_arguments(arguments))
+                                        for command in self.bound))
+
+    def with_confirmation(self, confirmed: bool) -> TargetAction:
+        return replace(self, bound=tuple(command.with_confirmation(confirmed)
+                                        for command in self.bound))
 
     def encode(self) -> dict[str, object]:
         """Only the CLI boundary requests the external catalog JSON shape."""
@@ -189,17 +203,57 @@ class TargetAction:
                 'parameters': {'type': 'object', 'additionalProperties': False,
                     'properties': {item.name: item.json_schema() for item in self.editable_fields},
                     'required': [item.name for item in self.editable_fields if item.required]},
-                'confirmation': self.confirmation}
+                'confirmation': self.confirmation, 'targets': list(self.targets),
+                'bound_count': len(self.bound)}
+
+
+class TargetOutcome:
+    """One attempted selection member; failure never claims absence of effects."""
+    successful: ClassVar[bool] = False
+
+    def reconnect_targets(self) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class TargetCompleted(TargetOutcome):
+    target: str
+    command: CliCommand
+    result: Any
+    successful: ClassVar[bool] = True
+
+    def reconnect_targets(self) -> tuple[str, ...]:
+        return type(self.command).reconnect_targets(self.result)
+
+
+@dataclass(frozen=True)
+class TargetFailed(TargetOutcome):
+    target: str
+    error_type: str
+    error: str
+
+
+@dataclass(frozen=True)
+class TargetBatchResult:
+    outcomes: tuple[TargetCompleted | TargetFailed, ...]
+
+    @property
+    def successful(self) -> bool:
+        return all(outcome.successful for outcome in self.outcomes)
+
+    def reconnect_targets(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(name for outcome in self.outcomes
+                                   for name in outcome.reconnect_targets()))
 
 
 @dataclass(frozen=True)
 class TargetEdit(Command):
     """Accepted editor values use the original declaration and fresh binding."""
     declaration: type[CliCommand]
-    target: str
+    target: str | tuple[str, ...]
     arguments: dict[str, str]
     confirmed: bool = False
-    channel: str | None = None
+    channel: str | dict[str, str | None] | None = None
 
     def apply(self, ctx: Comms) -> object:
         arguments = self.declaration.editor_arguments(self.arguments)
@@ -254,6 +308,25 @@ class ThreadPinnedResult:
 @dataclass(frozen=True, kw_only=True)
 class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
     help: ClassVar[str]
+    multiple_targets: ClassVar[bool] = False
+
+    @classmethod
+    def catalog_declaration(cls) -> type[CliCommand]:
+        """Concrete thread/channel variants declare their shared menu operation."""
+        return cls
+
+    @staticmethod
+    def selected_targets(target: str | tuple[str, ...]) -> tuple[str, ...]:
+        selected = (target,) if isinstance(target, str) else target
+        if not selected or not all(isinstance(name, str) and name for name in selected):
+            raise ValueError('Select at least one named target')
+        return tuple(dict.fromkeys(selected))
+
+    @staticmethod
+    def selection_channel(channel: str | dict[str, str | None] | None,
+                          target: str) -> str | None:
+        """Thread pins retain each selected row's original channel context."""
+        return channel.get(target) if isinstance(channel, dict) else channel
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None) -> tuple[Self, ...]:
@@ -262,6 +335,17 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
     @classmethod
     def channel_bindings(cls, comms, channel) -> tuple[Self, ...]:
         return ()
+
+    @classmethod
+    def member_bindings(cls, comms, channel) -> tuple[Self, ...]:
+        """Use original roster membership and each command's thread eligibility."""
+        from .presentation import ThreadView
+        snapshot = comms.registry.snapshot()
+        return tuple(bound for thread in snapshot.threads.values()
+                     if channel.matches(thread.tags) and ThreadView.visible(
+                         thread, snapshot, show_stopped=True, show_archived=False)
+                     for bound in cls.thread_bindings(
+                         comms, thread, snapshot.status(thread.name), channel.name))
 
     @classmethod
     def bindings(cls, comms: Comms, target: str, channel: str | None = None) -> tuple[Self, ...]:
@@ -273,38 +357,45 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return cls.thread_bindings(comms, thread, snapshot.status(thread.name), channel)
 
     @classmethod
-    def target_catalog(cls, comms: Comms, target: str, channel: str | None = None, *, project: str) -> tuple[TargetAction, ...]:
-        from .channel_targets import is_channel_target
-        if is_channel_target(target):
-            view = comms.channels.catalog.read().resolve(target)
-            bindings = ((member, member.channel_bindings(comms, view))
-                        for member in cls.members_with(cls))
-        else:
-            snapshot = comms.registry.snapshot()
-            thread = snapshot.require(target)
-            status = snapshot.status(thread.name)
-            bindings = ((member, member.thread_bindings(comms, thread,
-                        status, channel))
-                        for member in cls.members_with(cls))
-        return tuple(bound.describe(comms, target, project)
-                     for member, available in bindings for bound in available)
+    def target_catalog(cls, comms: Comms, target: str | tuple[str, ...],
+                       channel: str | dict[str, str | None] | None = None,
+                       *, project: str) -> tuple[TargetAction, ...]:
+        selected = cls.selected_targets(target)
+        grouped: dict[type[CliCommand], list[CliCommand]] = {}
+        for member in cls.members_with(cls):
+            if len(selected) > 1 and not member.multiple_targets:
+                continue
+            for name in selected:
+                try:
+                    available = member.bindings(comms, name, cls.selection_channel(channel, name))
+                except ValueError:
+                    if len(selected) == 1:
+                        raise
+                    continue
+                for command in available:
+                    declaration = member.catalog_declaration() if len(selected) > 1 else member
+                    commands = grouped.setdefault(declaration, [])
+                    bound = command.for_editor(comms, name, project)
+                    if bound not in commands:
+                        commands.append(bound)
+        return tuple(TargetAction(tuple(commands), selected) for commands in grouped.values())
 
     def for_editor(self, comms: Comms, target: str, project: str) -> Self:
         return self
 
     def describe(self, comms: Comms, target: str, project: str) -> TargetAction:
         bound = self.for_editor(comms, target, project)
-        hints = get_type_hints(type(bound))
-        return TargetAction(bound, tuple(
-            TargetField(declared, hints[declared.name], getattr(bound, declared.name))
-            for declared in fields(bound) if not declared.metadata['target_bound']))
+        return TargetAction((bound,), (target,))
 
     def encode_result(self, result: object) -> object:
         return FieldCodec.encode(result)
 
+    def result_exit_code(self, result: object) -> int:
+        return 0
+
     @classmethod
     def reconnect_targets(cls, result) -> tuple[str, ...]:
-        return ()
+        return result.reconnect_targets() if isinstance(result, TargetBatchResult) else ()
 
     @classmethod
     def editor_arguments(cls, values: dict[str, str]) -> dict[str, object]:
@@ -344,14 +435,48 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                                        **FieldCodec.encode(captured), **arguments})
 
     @classmethod
-    def execute_target(cls, comms: Comms, target: str, arguments: dict[str, object],
-                       *, confirmed: bool = False, channel: str | None = None) -> object:
-        bindings = cls.bindings(comms, target, channel)
-        if len(bindings) != 1:
-            raise ValueError('This action is no longer available for the target')
-        bound, = bindings
-        edited = bound.edited(arguments)
-        return edited.with_confirmation(confirmed).apply(comms)
+    def execute_target(cls, comms: Comms, target: str | tuple[str, ...], arguments: dict[str, object],
+                       *, confirmed: bool = False,
+                       channel: str | dict[str, str | None] | None = None) -> object:
+        selected = cls.selected_targets(target)
+        if isinstance(target, str):
+            bindings = cls.bindings(comms, target, cls.selection_channel(channel, target))
+            if len(bindings) == 1:
+                return bindings[0].edited(arguments).with_confirmation(confirmed).apply(comms)
+            if not bindings:
+                raise ValueError('This action is no longer available for the target')
+        if not cls.multiple_targets:
+            raise ValueError('This action requires a single target')
+        declarations = (tuple(member for member in CliCommand.members_with(CliCommand)
+                              if member.catalog_declaration() is cls)
+                        if cls.catalog_declaration() is cls else (cls,))
+        outcomes: list[TargetCompleted | TargetFailed] = []
+        planned: list[tuple[str, CliCommand]] = []
+        for name in selected:
+            try:
+                bindings = tuple(command for member in declarations
+                                 for command in member.bindings(
+                                     comms, name, cls.selection_channel(channel, name)))
+                if not bindings:
+                    raise ValueError('This action is no longer available for the target')
+            except Exception as error:
+                outcomes.append(TargetFailed(name, type(error).__name__, str(error)))
+                continue
+            for command in bindings:
+                if not any(command == previous for _, previous in planned):
+                    planned.append((name, command))
+        # Parameters and every existing warning are admitted before any write.
+        edited = tuple(command.edited(arguments).with_confirmation(confirmed)
+                       for _, command in planned)
+        for (name, original), command in zip(planned, edited, strict=True):
+            try:
+                if original not in type(original).bindings(
+                        comms, name, cls.selection_channel(channel, name)):
+                    raise ValueError('The original target binding changed; refresh the selection')
+                outcomes.append(TargetCompleted(name, command, command.apply(comms)))
+            except Exception as error:
+                outcomes.append(TargetFailed(name, type(error).__name__, str(error)))
+        return TargetBatchResult(tuple(sorted(outcomes, key=lambda outcome: selected.index(outcome.target))))
 
     @classmethod
     def add_parser(cls, subparsers: Any) -> None:
@@ -905,12 +1030,17 @@ class ActivityCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class StopCliCommand(CliCommand):
     help = "Mark thread stopped"
+    multiple_targets = True
     name: str = option("--name", target_bound=True)
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None):
         from .tools import CommsStopTool
         return (cls(name=thread.name),) if CommsStopTool.available_for_thread(thread, status) else ()
+
+    @classmethod
+    def channel_bindings(cls, comms, channel):
+        return cls.member_bindings(comms, channel)
 
     def apply(self, ctx: Comms) -> ThreadStoppedResult:
         ctx.owners.stop(self.name)
@@ -957,6 +1087,7 @@ class ReleaseCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class ArchiveCliCommand(CliCommand):
     help = "Archive a stopped thread"
+    multiple_targets = True
     name: str = option("--name", target_bound=True)
 
     @classmethod
@@ -1152,7 +1283,8 @@ class TargetActionsCliCommand(CliCommand, declared_name='target-actions'):
     project: str = option('--project', default_factory=os.getcwd)
     channel: str | None = option('--channel', default=None)
     help = 'List applicable operations and their declared parameters'
-    target: str = option('--target')
+    target: str | tuple[str, ...] = option('--target', '--targets', nargs='+',
+        normalize=lambda names: names[0] if len(names) == 1 else names)
 
     def apply(self, ctx: Comms) -> tuple[TargetAction, ...]:
         return CliCommand.target_catalog(ctx, self.target, self.channel, project=self.project)
@@ -1165,7 +1297,8 @@ class TargetActionsCliCommand(CliCommand, declared_name='target-actions'):
 class TargetActionCliCommand(CliCommand, declared_name='target-action'):
     channel: str | None = option('--channel', default=None)
     help = 'Execute a declared operation against its current target'
-    target: str = option('--target')
+    target: str | tuple[str, ...] = option('--target', '--targets', nargs='+',
+        normalize=lambda names: names[0] if len(names) == 1 else names)
     operation: str = option('--operation')
     arguments: dict[str, Any] = option('--arguments', default_factory=dict,
                                      parser_default='{}', normalize=_json_object)
@@ -1175,10 +1308,14 @@ class TargetActionCliCommand(CliCommand, declared_name='target-action'):
         return CliCommand.decode(self.operation).execute_target(
             ctx, self.target, self.arguments, confirmed=self.confirmed, channel=self.channel)
 
+    def result_exit_code(self, result: object) -> int:
+        return int(isinstance(result, TargetBatchResult) and not result.successful)
+
 
 @dataclass(frozen=True, kw_only=True)
 class StartCliCommand(CliCommand):
     help = 'Start thread'
+    multiple_targets = True
     name: str = option('--name', target_bound=True)
 
     @classmethod
@@ -1187,7 +1324,13 @@ class StartCliCommand(CliCommand):
         return (cls(name=thread.name),) if CommsStartTool.available_for_thread(thread, status) else ()
 
     @classmethod
-    def reconnect_targets(cls, result: OwnerStartResult) -> tuple[str, ...]:
+    def channel_bindings(cls, comms, channel):
+        return cls.member_bindings(comms, channel)
+
+    @classmethod
+    def reconnect_targets(cls, result: OwnerStartResult | TargetBatchResult) -> tuple[str, ...]:
+        if isinstance(result, TargetBatchResult):
+            return super().reconnect_targets(result)
         return (result.thread,) if result.launched else ()
 
     def apply(self, ctx: Comms) -> OwnerStartResult:
@@ -1258,8 +1401,13 @@ class DeleteTagCliCommand(ExactTagCliCommand, declared_name='delete-tag'):
 @dataclass(frozen=True, kw_only=True)
 class ArchiveChannelCliCommand(CliCommand, declared_name='archive-channel'):
     help = 'Archive channel'
+    multiple_targets = True
     name: str = option('--name', target_bound=True)
     archived: bool = option('--archived', default=True, target_bound=True)
+
+    @classmethod
+    def catalog_declaration(cls):
+        return ArchiveCliCommand
 
     @classmethod
     def channel_bindings(cls, comms, channel):
@@ -1277,6 +1425,10 @@ class ArchiveChannelCliCommand(CliCommand, declared_name='archive-channel'):
 class RestoreChannelCliCommand(ArchiveChannelCliCommand, declared_name='restore-channel'):
     help = 'Restore archived channel'
     archived: bool = option('--archived', default=False, target_bound=True)
+
+    @classmethod
+    def catalog_declaration(cls):
+        return cls
 
     @classmethod
     def channel_bindings(cls, comms, channel):
@@ -1303,8 +1455,13 @@ class DeleteViewCliCommand(CliCommand, declared_name='delete-view'):
 @dataclass(frozen=True, kw_only=True)
 class PinChannelCliCommand(CliCommand, declared_name='pin-channel'):
     help = 'Set channel pin'
+    multiple_targets = True
     name: str = option('--name', target_bound=True)
     pinned: bool = option('--pinned', default=False, target_bound=True)
+
+    @classmethod
+    def catalog_declaration(cls):
+        return PinThreadCliCommand
 
     @classmethod
     def channel_bindings(cls, comms, channel):
@@ -1340,6 +1497,7 @@ class TargetEditCliCommand(TargetActionCliCommand, declared_name='target-edit'):
 @dataclass(frozen=True, kw_only=True)
 class ReadTargetCliCommand(CliCommand, declared_name='read-target'):
     help = 'Mark view read'
+    multiple_targets = True
     target: str = option('--target', target_bound=True)
     worktree: str = option('--worktree', default_factory=os.getcwd)
 
@@ -1362,6 +1520,7 @@ class ReadTargetCliCommand(CliCommand, declared_name='read-target'):
 @dataclass(frozen=True, kw_only=True)
 class PinThreadCliCommand(CliCommand, declared_name='pin-thread'):
     help = 'Toggle thread pin in channel'
+    multiple_targets = True
     name: str = option('--name', target_bound=True)
     channel: str = option('--channel', target_bound=True)
     pinned: bool = option('--pinned', default=False, target_bound=True)
