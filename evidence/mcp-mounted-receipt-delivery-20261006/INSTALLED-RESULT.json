@@ -1,0 +1,115 @@
+{
+  "state": "PASS affected three original installed MCP cases; whole claim returned",
+  "source_head": "2928ac1d1f5725d5df6338311fab0d62e6b231ea",
+  "determining_control_head": "24bd65f717d42cc74a4773a4b66fa950df72d61e",
+  "cases": [
+    {
+      "case": "test_real_pi_mcp_acp_link[no_controller]",
+      "seconds": "37.731",
+      "result": "PASS"
+    },
+    {
+      "case": "test_real_pi_mcp_acp_link[revoke_midturn]",
+      "seconds": "42.931",
+      "result": "PASS"
+    },
+    {
+      "case": "test_real_pi_mcp_acp_link[disconnect]",
+      "seconds": "37.860",
+      "result": "PASS"
+    }
+  ],
+  "batch_seconds": 123.04688550299034,
+  "operator_seconds": 124.22139977104962,
+  "original_parent_outcomes": [
+    {
+      "kind": "exited",
+      "code": 0
+    },
+    {
+      "kind": "exited",
+      "code": 0
+    }
+  ],
+  "proof": {
+    "path": "/home/ts/.cache/agent-scratch/m682r01/proof-whole-join.json",
+    "sha256": "b4b09c263aafa178f802b3f643c7dcb24edd9c30e671e89cebca124e744fef55",
+    "bytes": 6345
+  },
+  "source_proof": {
+    "path": "/home/ts/.cache/agent-scratch/m682r01/candidate-source-proof.json",
+    "sha256": "58879e571ddcca7814ea78e291053c2d67c7c67eb27056f1dd626a1f9235b4f1",
+    "bytes": 9235
+  },
+  "DTO": {
+    "path": "/home/ts/.cache/agent-scratch/m682r01/candidate-activation.json",
+    "sha256": "c4bea80cb290b0e31e1cd5a6738ff63c93a3f18dd5ebc9b566e1c584bbf45a86",
+    "bytes": 2180
+  },
+  "FullTrust": {
+    "path": "/home/ts/.cache/agent-scratch/m682r01/native-full-trust.json",
+    "sha256": "0344668618a52b8bbe11b362552b480d12dcf9af98b62d1dfb77bf5bb8b0e087",
+    "bytes": 738
+  },
+  "controller_operands": {
+    "path": "/home/ts/.cache/agent-scratch/m682r01/resolved-controller-operands.json",
+    "sha256": "460d631b1d601f486c65810894b52c5c1542294afbbe5d0936ade45906617cdf",
+    "bytes": 5937
+  },
+  "whole_return": {
+    "path": "/home/ts/.cache/agent-scratch/m682r01/whole-handback.json",
+    "sha256": "f7322ec10de1154d7c46f84a41531452137ca9641ca0b978dbac4e6550ec828f",
+    "bytes": 166574
+  },
+  "restore": {
+    "receipt": {
+      "path": "/home/ts/.cache/agent-scratch/m682r01/restore-terminal.json",
+      "sha256": "72166e5fa2e66a9bb7e41290ada11582d4c2385a4d142d2d4969f50d8e7f661f",
+      "bytes": 1360
+    },
+    "attempts": 1,
+    "seconds": 0.4782933270325884,
+    "outcome": {
+      "kind": "exited",
+      "code": 0
+    }
+  },
+  "floor_readback": {
+    "path": "/home/ts/.cache/agent-scratch/m682r01/final-floor-readback.json",
+    "sha256": "1aad41640c486aac2284fc5a6e4667bf2ce4bd5e3a4f025de011caeb841d4eb5",
+    "bytes": 6620
+  },
+  "census": {
+    "path": "/home/ts/.cache/agent-scratch/m682r01/final-borrowers.json",
+    "sha256": "2b973a75786c010cb7042f8627fc081c90b18926a92d270505f0c9885d4331bf",
+    "bytes": 2109
+  },
+  "reference_classification": {
+    "path": "/home/ts/.cache/agent-scratch/m682r01/final-reference-classification.json",
+    "sha256": "f3bd25c4a16ec5ed666517a452021563844805dea68d576f85e3d51c870d9f65",
+    "bytes": 5022
+  },
+  "owned_recorded_identities_absent": 19,
+  "raw_keepers": 304,
+  "authored_files_preserved": 251,
+  "original_warnings": "Resource tracker relaunch warnings in revoke_midturn/disconnect retained; no recorded owned process, private/output/native references or socket remains.",
+  "accepted_allow_repeated": false,
+  "standalone_guard_repeated": false,
+  "historical_selected_cohort": {
+    "Core_source": "3e109632e95dc15972d53d459dc5e19a99b16732",
+    "Core_wheel": "bee0813b18f84df00595113eeb32283ef0051cdc5acf0315afcbc21247c7d6c6",
+    "Toad_source": "289f1c6cd7667abf985ddba265d6469a95e3ea48",
+    "Toad_wheel": "b2e420e5b2eed1aaa96d815b2abf38f990272a047417c2ca5082c01d9149a151",
+    "Textual_source": "d7337ee084f6dcda42cbd8a41c7417e87d60ae78",
+    "Textual_wheel": "16c9f5e7a1aca9f7a339fdb859c1743bbc0ba8f17327ba3debd4b13959ca927d",
+    "native_manifest": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+    "native_tree": "63f18710cb9329be6ade27bac3b4dd822e2b36f013756fa8e6717b8073a4592c",
+    "source_assets": 953,
+    "distributions": 69
+  },
+  "qualification_limit": "Original authored localhost real Pi/ACP/MCP/mounted Toad qualifier at selected historical installed cohort. No latest-main/new configured pair/public runtime/full real-provider workflow qualification.",
+  "READ_EXEC_returned": true,
+  "independent_holder_and_artifact_close": "Bohr/Sch close their existing purposes from original whole handback; no source merge closes custody",
+  "previous_failures_UNKNOWN_NotSent_authored_originals_preserved": true,
+  "no_run_build_newbackend_wrapper_state_or_compatibility_path": true
+}
