@@ -122,9 +122,12 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
         environment.pop(key, None)
     for name in ('source529','peer529'):
         if continuation is None:
+            session_file = fork.session_file if name == 'source529' else None
+            # Only the saved fork carries captured ancestry. The unopened peer
+            # is independent in this private registry, with no inherited source.
             service.registry.declare(Thread(name, frozenset({'source529'}), request.cwd,
-                parent=original.name,
-                session_file=fork.session_file if name=='source529' else None,
+                parent=original.name if session_file is not None else None,
+                session_file=session_file,
                 model=original.model, thinking_level=original.thinking_level),
                 status=StoppedThreadStatus())
         else:

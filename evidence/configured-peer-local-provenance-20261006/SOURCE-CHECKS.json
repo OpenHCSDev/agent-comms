@@ -1,0 +1,83 @@
+{
+  "base": "7ef9723e888d24f5e5d1ad54a629eb3110677d78",
+  "helper_before_sha256": "b086d7a5e5a3792e0b3ff19088b6b88cb9286dd76c9323d764d2dbb82920d0cf",
+  "helper_after_sha256": "4cdfe9eb035cac9a12fe0fab7c432210662b7258c311a41d8b3a2058a61e59f0",
+  "sole_changed_method": "configured_saved_agent",
+  "signature_imports_and_other_top_level_statements_unchanged": true,
+  "sole_changed_method_statement": "fresh private Thread declarations",
+  "direct_callers": [
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 199,
+      "keywords": [
+        "capture_source",
+        "observe_launch",
+        "core_source",
+        "core_artifacts"
+      ]
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 375,
+      "keywords": [
+        "capture_source",
+        "core_source",
+        "core_artifacts"
+      ]
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 153,
+      "keywords": [
+        "capture_source",
+        "observe_launch",
+        "core_source",
+        "core_artifacts"
+      ]
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 189,
+      "keywords": [
+        "capture_source",
+        "observe_launch",
+        "core_source",
+        "core_artifacts"
+      ]
+    },
+    {
+      "path": "tests/three_cut_retention_configured_journey.py",
+      "line": 240,
+      "keywords": [
+        "capture_source",
+        "observe_launch",
+        "core_source",
+        "core_artifacts"
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-warm-rendered-reader-20261006/tests/saved_state_user_journey_pilot.py",
+      "line": 805,
+      "keywords": [
+        "core_source",
+        "core_artifacts",
+        "capture_source",
+        "observe_launch",
+        "worktree",
+        "auto_wake"
+      ]
+    }
+  ],
+  "AST_parse_omissions": [],
+  "compilation": "PASS without importing helper",
+  "diff_check": "PASS",
+  "targeted_existing_transcript_checks": {
+    "state": "NOT RUN: conftest import failed before test entry",
+    "exit_code": 4,
+    "error": "ModuleNotFoundError: metaclass_registry",
+    "runtime_qualification": false,
+    "new_environment_or_dependency_install": false
+  },
+  "frozen_core_helper": "/home/ts/wt/comms-configured-continuous-producer-20261006/tests/compaction_source_successor_installed_journey.py",
+  "frozen_helper_sha256": "b086d7a5e5a3792e0b3ff19088b6b88cb9286dd76c9323d764d2dbb82920d0cf"
+}
