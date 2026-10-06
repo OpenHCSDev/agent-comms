@@ -1,0 +1,955 @@
+{
+  "status": "Source AST only through existing refactor-audit Package; no application imports or execution",
+  "parsed_production_modules": 324,
+  "parse_omissions": [],
+  "production_Python_changed": [],
+  "launch_policy_consumer_records": [
+    {
+      "path": "src/agent_comms/backend.py",
+      "sha256": "33570c46e13b80354c0707c297a413ca8162b5beea0638fbf34b60c1ca48b241",
+      "sites": [
+        {
+          "kind": "ImportFrom",
+          "line": 49,
+          "source": "from .native_pi import NativePiRpcLaunch, NativePiUnavailable"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 287,
+          "source": "def __init__(\n        self,\n        launch: NativePiRpcLaunch,\n        task: str,\n        steering_queue: asyncio.Queue[str | dict[str, Any]] | None = None,\n        finish_event: asyncio.Event | None = None,\n        images: Sequence[ImageInput] = (),\n        model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,\n        rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,\n        require_input_id: bool = True,\n        send_boundary: (\n            Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None\n        ) = None,\n        interrupt_boundary: (\n            Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None\n        ) = None,\n        native_start: Callable[[str | None, str, str], bool] | None = None,\n        persistent_session: PersistentPiSession | None = None,\n        ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,\n        startup: NativeStartupAdmission | None = None,\n        context_contributions: tuple[InputContributionCoordinates, ...] = (),\n        request_observer: Callable[[RequestProgress, ProcessIdentity], None] | None = None,\n    ):\n        self.launch = launch\n        self.task = task\n        self.finish_event = finish_event\n        self.images = images\n        self.context_contributions = context_contributions\n        self.request_observer = request_observer\n        self.watchdog = ProgressWatchdog(\n            model_wait_timeout, PROMPT_START_TIMEOUT_SECONDS, CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS\n        )\n        self.rpc_abort_grace = rpc_abort_grace\n        self.require_input_id = require_input_id\n        self.send_boundary = send_boundary\n        self.interrupt_boundary = interrupt_boundary\n        self.native_start = native_start\n        self.persistent_se"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/candidate_maintenance.py",
+      "sha256": "659de5fa0940827f5ba880c9fd43b12cbe5eb6e3f621d99d85a0560784503f01",
+      "sites": [
+        {
+          "kind": "FunctionDef",
+          "line": 50,
+          "source": "def _drain_candidate(root: Path) -> None:\n    try:\n        with _guard:\n            bus, _seq = _pending[root]\n        # Recheck source ownership off the producer path. Derived maintenance\n        # cannot create the protocol marker or authorize delivery.\n        with bus.log.locked():\n            metadata = bus.log._private_marker_unlocked()\n        root_id = metadata.root_id\n        index = WakeCandidateIndex(bus)\n        for _ in range(_MAX_BATCHES):\n            with _guard:\n                target = _pending[root][1]\n            hint = index.notify_committed_append(root_id=root_id, through_seq=target)\n            result = index.catch_up_committed_append(\n                hint, max_rows=64, max_bytes=256 * 1024, bootstrap_new=True\n            )\n            if result.caught_up:\n                with _guard:\n                    if _pending[root][1] <= result.checkpoint_seq:\n                        _pending.pop(root, None)\n                        return\n            elif not result.more_source_bytes:\n                return\n        _LOG.warning(\"Candidate maintenance stopped at its bounded batch budget\")\n    except Exception as error:\n        _LOG.warning(\"Candidate maintenance unavailable (%s)\", type(error).__name__)\n    with _guard:\n        _pending.pop(root, None)"
+        },
+        {
+          "kind": "Assign",
+          "line": 64,
+          "source": "result = index.catch_up_committed_append(\n                hint, max_rows=64, max_bytes=256 * 1024, bootstrap_new=True\n            )"
+        },
+        {
+          "kind": "Call",
+          "line": 64,
+          "source": "index.catch_up_committed_append(\n                hint, max_rows=64, max_bytes=256 * 1024, bootstrap_new=True\n            )"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "sha256": "6b7ca96a3f23eb74de9534d5c6c747486feae174333f227ae76e5515e2983ef4",
+      "sites": [
+        {
+          "kind": "ClassDef",
+          "line": 124,
+          "source": "class NamespaceContainment:\n    \"\"\"Linux namespace launch and typed, gated PID-1 readiness proof.\"\"\"\n\n    @staticmethod\n    def namespace_argv(launch: NamespaceLaunch, ready_fd: int, release_fd: int) -> tuple[str, ...]:\n        unshare = shutil.which(\"unshare\")\n        if unshare is None:\n            raise NotImplementedError(\"PID namespace containment requires unshare\")\n        return (\n            unshare,\n            \"--user\",\n            \"--map-root-user\",\n            \"--pid\",\n            \"--fork\",\n            \"--kill-child=SIGKILL\",\n            \"--\",\n            *NamespaceInitCommand(launch, ready_fd, release_fd).argv(),\n        )\n\n    @staticmethod\n    def namespace_alive(namespace: str) -> bool:\n        for entry in Path(\"/proc\").iterdir():\n            if not entry.name.isdecimal():\n                continue\n            try:\n                if os.readlink(entry / \"ns/pid\") != namespace:\n                    continue\n                state = (entry / \"stat\").read_text().rsplit(\") \", 1)[1].split()[0]\n                if state not in {\"Z\", \"X\"}:\n                    return True\n            except FileNotFoundError:\n                continue\n        return False"
+        },
+        {
+          "kind": "ClassDef",
+          "line": 1325,
+          "source": "class NamespacedChild(AttachedChild):\n    \"\"\"Attached shape with kernel containment and an independent hard deadline.\n\n    Lifted from the selected-Pi guardian: namespace PID1 attests readiness before\n    exec release, a pidfd watchdog arms before launch, and killing unshare kills\n    namespace PID1 (including descendants which escaped the process group).\n    Business input/UNKNOWN journals stay with the caller.\n    \"\"\"\n\n    def __init__(self, child: AttachedChild, watchdog: AttachedChild, namespace: str):\n        super().__init__(child.process, child.identity)\n        self.watchdog = watchdog\n        self.namespace = namespace\n\n    @classmethod\n    async def start(\n        cls,\n        command: tuple[str, ...],\n        *,\n        deadline: float,\n        cwd: str | Path | None = None,\n        env: dict[str, str] | None = None,\n    ) -> NamespacedChild:\n        platform = Platform.current()\n        if not isinstance(platform, NamespaceContainment) or not isinstance(platform, PidfdHandles):\n            raise NotImplementedError(\"Exact namespace deadline containment unavailable\")\n        if not math.isfinite(deadline) or deadline <= time.monotonic():\n            raise ValueError(\"A future finite monotonic deadline is required\")\n        launch = NamespaceLaunch(command, secrets.token_hex(16), deadline)\n        ready_r, ready_w = os.pipe()\n        release_r, release_w = os.pipe()\n        child = watchdog = None\n        descriptor = None\n        try:\n            child = await AttachedChild.start(\n                platform.namespace_argv(launch, ready_w, release_r),\n                cwd=cwd,\n                env=env,\n                pass_fds=(ready_w, release_r),\n            )\n            descriptor = platform.open_pidfd(child.pid)\n            watchdog = await AttachedChild.star"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 128,
+          "source": "def namespace_argv(launch: NamespaceLaunch, ready_fd: int, release_fd: int) -> tuple[str, ...]:\n        unshare = shutil.which(\"unshare\")\n        if unshare is None:\n            raise NotImplementedError(\"PID namespace containment requires unshare\")\n        return (\n            unshare,\n            \"--user\",\n            \"--map-root-user\",\n            \"--pid\",\n            \"--fork\",\n            \"--kill-child=SIGKILL\",\n            \"--\",\n            *NamespaceInitCommand(launch, ready_fd, release_fd).argv(),\n        )"
+        },
+        {
+          "kind": "AsyncFunctionDef",
+          "line": 1340,
+          "source": "async def start(\n        cls,\n        command: tuple[str, ...],\n        *,\n        deadline: float,\n        cwd: str | Path | None = None,\n        env: dict[str, str] | None = None,\n    ) -> NamespacedChild:\n        platform = Platform.current()\n        if not isinstance(platform, NamespaceContainment) or not isinstance(platform, PidfdHandles):\n            raise NotImplementedError(\"Exact namespace deadline containment unavailable\")\n        if not math.isfinite(deadline) or deadline <= time.monotonic():\n            raise ValueError(\"A future finite monotonic deadline is required\")\n        launch = NamespaceLaunch(command, secrets.token_hex(16), deadline)\n        ready_r, ready_w = os.pipe()\n        release_r, release_w = os.pipe()\n        child = watchdog = None\n        descriptor = None\n        try:\n            child = await AttachedChild.start(\n                platform.namespace_argv(launch, ready_w, release_r),\n                cwd=cwd,\n                env=env,\n                pass_fds=(ready_w, release_r),\n            )\n            descriptor = platform.open_pidfd(child.pid)\n            watchdog = await AttachedChild.start(\n                WatchDeadlineCommand(descriptor, deadline).argv(),\n                pass_fds=(descriptor,),\n            )\n            assert watchdog.stdout is not None\n            async with asyncio.timeout(max(0, deadline - time.monotonic())):\n                if await watchdog.stdout.readline() != b\"armed\\n\":\n                    raise RuntimeError(\"Independent child watchdog failed to arm\")\n                # Reading this dedicated pipe cannot consume provider stdout.\n                os.set_blocking(ready_r, False)\n                loop = asyncio.get_running_loop()\n                ready: asyncio.Future[bytes] = loop.create_future()\n                "
+        },
+        {
+          "kind": "Assign",
+          "line": 1359,
+          "source": "child = await AttachedChild.start(\n                platform.namespace_argv(launch, ready_w, release_r),\n                cwd=cwd,\n                env=env,\n                pass_fds=(ready_w, release_r),\n            )"
+        },
+        {
+          "kind": "Call",
+          "line": 1359,
+          "source": "AttachedChild.start(\n                platform.namespace_argv(launch, ready_w, release_r),\n                cwd=cwd,\n                env=env,\n                pass_fds=(ready_w, release_r),\n            )"
+        },
+        {
+          "kind": "Call",
+          "line": 1360,
+          "source": "platform.namespace_argv(launch, ready_w, release_r)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/context_tokens.py",
+      "sha256": "44906147b82836f90a78742009f4ce37bd1e10ab7bee8b75c028e787dbdac9fd",
+      "sites": [
+        {
+          "kind": "ImportFrom",
+          "line": 8,
+          "source": "from .native_package import verify_native_package"
+        },
+        {
+          "kind": "ClassDef",
+          "line": 29,
+          "source": "class NativeTokenCounter:\n    def __init__(self, package: Path):\n        self.package = package\n\n    def measure(self, segments: tuple[str, ...]) -> ContextTokenCounts:\n        verify_native_package(self.package)\n        return asyncio.run(\n            ContextTokensHelper.run(\n                ContextTokenRequest(str(self.package), segments), cwd=Path.cwd()\n            )\n        )"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 33,
+          "source": "def measure(self, segments: tuple[str, ...]) -> ContextTokenCounts:\n        verify_native_package(self.package)\n        return asyncio.run(\n            ContextTokensHelper.run(\n                ContextTokenRequest(str(self.package), segments), cwd=Path.cwd()\n            )\n        )"
+        },
+        {
+          "kind": "Call",
+          "line": 34,
+          "source": "verify_native_package(self.package)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "sha256": "f66df09c50b83aefd310fd26439f87f5779965e0ca06e26101e159f9e013406b",
+      "sites": [
+        {
+          "kind": "ImportFrom",
+          "line": 20,
+          "source": "from .native_pi import NativePiRpcLaunch, _private_session_dir"
+        },
+        {
+          "kind": "ClassDef",
+          "line": 31,
+          "source": "class SelectedExecution:\n    root: Path\n    wire_root_id: str\n    owner_name: str\n    native_package: Path\n    opt_in: bool = True\n    after_seq: int = 0\n    session_file: Path | None = None\n    fresh_private_enrollment: bool = False\n    selected_thinking_level: str | None = None\n    selected_existing_file_write: SelectedExistingFileWrite | None = None\n    selected_tool_intent: SelectedToolIntent | None = None\n    write_authority: SelectedWriteAuthority = field(default_factory=NoSelectedWritePlans)\n    _run_permit: threading.Lock = field(init=False, default_factory=threading.Lock)\n    _tracked_factory: Callable[..., NativePiRpcLaunch] = field(\n        init=False, repr=False, compare=False,\n    )\n\n    def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch:\n        \"\"\"Consume the original pre-claim acquisition for each stage's launch.\n\n        Every stage rebuilds its complete source/configuration through the\n        executable factory acquired by validate before selecting a participant;\n        no native child, input proof or readiness is borrowed from a prior turn.\n        \"\"\"\n        if package != self.native_package:\n            raise IdentityConflict(\"Selected launch differs from its execution package\")\n        return self._tracked_factory(**options)\n\n    def validate(self) -> None:\n        if not self.opt_in:\n            raise PublicationActivationBlocked(\"coordinated runtime requires explicit activation\")\n        _private_session_dir(self.root)\n        if type(self.fresh_private_enrollment) is not bool:\n            raise IdentityConflict(\"Fresh private enrollment requires an explicit boolean\")\n        if self.fresh_private_enrollment and self.session_file is not None:\n            raise IdentityConflict(\"Fresh private enrollment requires a new, expl"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 49,
+          "source": "def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch:\n        \"\"\"Consume the original pre-claim acquisition for each stage's launch.\n\n        Every stage rebuilds its complete source/configuration through the\n        executable factory acquired by validate before selecting a participant;\n        no native child, input proof or readiness is borrowed from a prior turn.\n        \"\"\"\n        if package != self.native_package:\n            raise IdentityConflict(\"Selected launch differs from its execution package\")\n        return self._tracked_factory(**options)"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 60,
+          "source": "def validate(self) -> None:\n        if not self.opt_in:\n            raise PublicationActivationBlocked(\"coordinated runtime requires explicit activation\")\n        _private_session_dir(self.root)\n        if type(self.fresh_private_enrollment) is not bool:\n            raise IdentityConflict(\"Fresh private enrollment requires an explicit boolean\")\n        if self.fresh_private_enrollment and self.session_file is not None:\n            raise IdentityConflict(\"Fresh private enrollment requires a new, explicit session\")\n        if self.selected_thinking_level is not None:\n            if not self.fresh_private_enrollment:\n                raise IdentityConflict(\n                    \"Selected level requires explicitly supported fresh enrollment\"\n                )\n            if type(\n                self.selected_thinking_level\n            ) is not str or not ThinkingLevel.supports_selected(self.selected_thinking_level):\n                raise IdentityConflict(\n                    \"Selected level requires explicitly supported fresh enrollment\"\n                )\n        if (\n            self.selected_existing_file_write is not None\n            and type(self.selected_existing_file_write) is not SelectedExistingFileWrite\n        ):\n            raise TypeError(\"selected write requires an explicit trusted plan\")\n        if self.selected_tool_intent is not None:\n            if type(self.selected_tool_intent) is not SelectedToolIntent:\n                raise TypeError(\"selected tool requires a nominal owner intent\")\n            if self.selected_existing_file_write is not None:\n                raise IdentityConflict(\"selected tool cannot share an operator file plan\")\n        self._tracked_factory = NativePiRpcLaunch.acquire_tracked(self.native_package)"
+        },
+        {
+          "kind": "Assign",
+          "line": 89,
+          "source": "self._tracked_factory = NativePiRpcLaunch.acquire_tracked(self.native_package)"
+        },
+        {
+          "kind": "Call",
+          "line": 89,
+          "source": "NativePiRpcLaunch.acquire_tracked(self.native_package)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "sha256": "10533afb11a256ebb43d1cfc3e3443684efaf34dfa8f5ef1fe7d30a8f7e6fa0f",
+      "sites": [
+        {
+          "kind": "ClassDef",
+          "line": 24,
+          "source": "class Coordination:\n    @staticmethod\n    async def run_worker(operation: Callable[[], Result]) -> Result:\n        \"\"\"Join an owned blocking operation before its enclosing custody exits.\n\n        The callback owns and closes every borrowed resource it opens. This\n        scheduling seam also supports registry-only acquisition/retirement;\n        those operations must not depend on opening a coordinator connection.\n        \"\"\"\n        pending = asyncio.get_running_loop().run_in_executor(None, operation)\n        return await join_retirement(pending)\n\n    @classmethod\n    async def run_async(\n        cls, path: str | Path, operation: Callable[[Self], Result], *,\n        clock_ms: Callable[[], int] | None = None, lock_timeout: float = 5.0,\n    ) -> Result:\n        \"\"\"Own a complete operation's connection in its resource worker.\n\n        Only the result crosses back to the event loop. The callback must not\n        export this connection or any resource borrowed from it. Cancellation\n        joins the acquired operation through connection close; it cannot leave\n        a later projection write after the caller releases its custody.\n        \"\"\"\n        return await cls.run_worker(\n            partial(cls._run_owned, path, operation, clock_ms, lock_timeout)\n        )\n\n    @classmethod\n    def _run_owned(\n        cls, path: str | Path, operation: Callable[[Self], Result],\n        clock_ms: Callable[[], int] | None, lock_timeout: float,\n    ) -> Result:\n        with cls(str(path), clock_ms=clock_ms, lock_timeout=lock_timeout) as store:\n            return operation(store)\n\n    def __init__(\n        self, path: str, *, clock_ms: Callable[[], int] | None = None, lock_timeout: float = 5.0\n    ):\n        self.session = CoordinationSession(path, clock_ms=clock_ms, lock_timeout=lock_tim"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 73,
+          "source": "def install_private_runtime(self) -> None:\n        \"\"\"Explicit protocol/owner bootstrap, never invoked by a reader.\"\"\"\n        # Load the canonical declarations before querying their existing family.\n        from . import cohort_schema, coordination_response, native_prompt_binding  # noqa: F401\n        from .native_runtime_input import NativeRuntimeSchemaMeta  # noqa: F401\n        from .typed_table import TypedTable\n\n        for schema in TypedTable.members_with(PrivateRuntimeSchema):\n            schema.install(self)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/fresh_private_session.py",
+      "sha256": "b69d17aea6c79b6effcd22b4ae09d5bf132eb329672e0d07a7c089f5a845e878",
+      "sites": [
+        {
+          "kind": "ClassDef",
+          "line": 92,
+          "source": "class UnwrittenBootstrapFileCheck(FreshFileCheck):\n    @property\n    def prewritten(self) -> bool:\n        return self.observed.st_size != self.source.bootstrap_size"
+        },
+        {
+          "kind": "ClassDef",
+          "line": 174,
+          "source": "class DetachedModelEntryRule(SelectedStartupRule):\n    @classmethod\n    def violated(cls, check):\n        return check.model.parent_id != check.source.bootstrap_leaf_id"
+        },
+        {
+          "kind": "ClassDef",
+          "line": 186,
+          "source": "class ReusedStartupEntryRule(SelectedStartupRule):\n    @classmethod\n    def violated(cls, check):\n        ids = (check.source.bootstrap_leaf_id, check.model.id, check.thinking.id)\n        return len(set(ids)) != len(ids)"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 443,
+          "source": "def create_fresh_private_session(\n    session_dir: Path, *, worktree: Path, selected_thinking_level: str | None = None\n) -> FreshPrivateSession:\n    \"\"\"Create a unique v3 header with O_EXCL, file fsync, then parent fsync.\n\n    Call only for explicit fresh-session enrollment. An existing path, reused\n    ID, failed fsync or uncertain return is not eligible, even if a header is\n    later visible. This API never opens an old saved session for enrollment.\n    \"\"\"\n    # Explicitly selected static model only; the level may not come from an\n    # arbitrary request or be silently clamped from an unsupported 'off'.\n    if selected_thinking_level is not None and (\n        type(selected_thinking_level) is not str or not ThinkingLevel.supports_selected(selected_thinking_level)\n    ):\n        raise ValueError(\"Explicit supported selected thinking level required\")\n    session_dir = Path(session_dir).absolute()\n    worktree = Path(worktree).absolute()\n    if not worktree.is_dir():\n        raise NativePiUnavailable(\"Fresh-session worktree is unavailable\")\n    _durable_private_session_dir(session_dir)\n    session_id = uuid4().hex\n    path = session_dir / f\"enrolled-{session_id}.jsonl\"\n    header_row = {\n        \"type\": \"session\",\n        \"version\": 3,\n        \"id\": session_id,\n        \"timestamp\": datetime.now(UTC).isoformat(timespec=\"milliseconds\").replace(\"+00:00\", \"Z\"),\n        \"cwd\": str(worktree),\n    }\n    if selected_thinking_level is not None:\n        # This is a denial marker, not authority to enroll or to dispatch.\n        # Omission on a later path-only reopen must not bypass the selected\n        # first-startup model/thinking gate.\n        header_row[\"agentCommsSelectedFresh\"] = SelectedFreshMarker(\n            1, selected_thinking_level\n        ).to_wire()\n    header = json"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 94,
+          "source": "def prewritten(self) -> bool:\n        return self.observed.st_size != self.source.bootstrap_size"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 176,
+          "source": "def violated(cls, check):\n        return check.model.parent_id != check.source.bootstrap_leaf_id"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 188,
+          "source": "def violated(cls, check):\n        ids = (check.source.bootstrap_leaf_id, check.model.id, check.thinking.id)\n        return len(set(ids)) != len(ids)"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 273,
+          "source": "def __init__(\n        self,\n        key: object,\n        path: Path,\n        session_id: str,\n        file_identity: FileIdentity,\n        header_sha256: str,\n        bootstrap_sha256: str,\n        bootstrap_size: int,\n        bootstrap_leaf_id: str | None,\n        selected_thinking_level: str | None,\n    ) -> None:\n        if key is not _MINT:\n            raise TypeError(\"Fresh-session enrollment cannot be reconstructed from a file\")\n        object.__setattr__(self, \"path\", path)\n        object.__setattr__(self, \"session_id\", session_id)\n        object.__setattr__(self, \"file_identity\", file_identity)\n        object.__setattr__(self, \"header_sha256\", header_sha256)\n        object.__setattr__(self, \"bootstrap_sha256\", bootstrap_sha256)\n        object.__setattr__(self, \"bootstrap_size\", bootstrap_size)\n        object.__setattr__(self, \"bootstrap_leaf_id\", bootstrap_leaf_id)\n        object.__setattr__(self, \"selected_thinking_level\", selected_thinking_level)\n        object.__setattr__(self, \"creator_pid\", os.getpid())"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 332,
+          "source": "def _verify_saved_identity(self, check_type: type[FreshFileCheck]) -> None:\n        if os.getpid() != self.creator_pid:\n            raise NativePiUnavailable(\"Fresh-session creator process changed\")\n        try:\n            info = self.path.lstat()\n            check_type(self, info, 1).require_valid(\n                \"Fresh-session saved inode changed\"\n            )\n            descriptor = os.open(self.path, os.O_RDONLY | getattr(os, \"O_NOFOLLOW\", 0))\n            try:\n                opened = os.fstat(descriptor)\n                FreshFileCheck(self, opened, self.bootstrap_size).require_valid(\n                    \"Fresh-session opened identity changed\"\n                )\n                bootstrap = bytearray()\n                while len(bootstrap) < self.bootstrap_size:\n                    chunk = os.read(descriptor, self.bootstrap_size - len(bootstrap))\n                    if not chunk:\n                        raise NativePiUnavailable(\"Fresh-session bootstrap became incomplete\")\n                    bootstrap.extend(chunk)\n            finally:\n                os.close(descriptor)\n            header = bytes(bootstrap).split(b\"\\n\", 1)[0] + b\"\\n\"\n            if (\n                not header.endswith(b\"\\n\")\n                or hashlib.sha256(header).hexdigest() != self.header_sha256\n                or hashlib.sha256(bootstrap).hexdigest() != self.bootstrap_sha256\n            ):\n                raise NativePiUnavailable(\"Fresh-session bootstrap changed\")\n            row = NativeEntry.from_evidence(json.loads(header))\n            after = self.path.lstat()\n            check_type(\n                self, after, self.bootstrap_size,\n            ).require_valid(\"Fresh-session path changed after bootstrap read\")\n            if (\n                not isinstance(row, SessionEntry)\n        "
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 385,
+          "source": "def verify_selected_startup(self) -> FileRevision:\n        \"\"\"Attest exactly Pi's two expected metadata appends, no raw messages.\n\n        Pinned createAgentSession appends its initial model and thinking entries\n        on a zero-message session, even when explicit launch flags are supplied.\n        This is a file observation, not provider/child/terminal authority.\n        \"\"\"\n        if not ThinkingLevel.supports_selected(self.selected_thinking_level) or not self.bootstrap_leaf_id:\n            raise NativePiUnavailable(\"Fresh source lacks explicit selected bootstrap\")\n        self.verify_saved_identity()\n        try:\n            info = self.path.lstat()\n            tail_size = info.st_size - self.bootstrap_size\n            if not 0 < tail_size <= _MAX_STARTUP_APPEND:\n                raise NativePiUnavailable(\"Selected startup has no exact metadata tail\")\n            descriptor = os.open(self.path, os.O_RDONLY | getattr(os, \"O_NOFOLLOW\", 0))\n            try:\n                opened = os.fstat(descriptor)\n                observed = FreshFileCheck(self, info, self.bootstrap_size)\n                StableFreshFileCheck(self, opened, self.bootstrap_size, observed.observed_revision).require_valid(\n                    \"Selected startup inode/revision changed\"\n                )\n                chunks = bytearray()\n                while len(chunks) < info.st_size:\n                    chunk = os.read(descriptor, info.st_size - len(chunks))\n                    if not chunk:\n                        raise NativePiUnavailable(\"Selected startup file became incomplete\")\n                    chunks.extend(chunk)\n                # Pi's startup appendFileSync alone is not a durable receipt.\n                # Fail closed on uncertain fsync before the raw prompt writer.\n                os.fsyn"
+        },
+        {
+          "kind": "Assign",
+          "line": 480,
+          "source": "bootstrap_leaf_id = None"
+        },
+        {
+          "kind": "Assign",
+          "line": 481,
+          "source": "bootstrap = header"
+        },
+        {
+          "kind": "Assign",
+          "line": 189,
+          "source": "ids = (check.source.bootstrap_leaf_id, check.model.id, check.thinking.id)"
+        },
+        {
+          "kind": "Assign",
+          "line": 484,
+          "source": "bootstrap_leaf_id = uuid4().hex[:8]"
+        },
+        {
+          "kind": "Assign",
+          "line": 527,
+          "source": "result = FreshPrivateSession(\n            _MINT,\n            path,\n            session_id,\n            FileIdentity.from_stat(info),\n            hashlib.sha256(header).hexdigest(),\n            hashlib.sha256(bootstrap).hexdigest(),\n            len(bootstrap),\n            bootstrap_leaf_id,\n            selected_thinking_level,\n        )"
+        },
+        {
+          "kind": "Call",
+          "line": 291,
+          "source": "object.__setattr__(self, \"bootstrap_sha256\", bootstrap_sha256)"
+        },
+        {
+          "kind": "Call",
+          "line": 292,
+          "source": "object.__setattr__(self, \"bootstrap_size\", bootstrap_size)"
+        },
+        {
+          "kind": "Call",
+          "line": 293,
+          "source": "object.__setattr__(self, \"bootstrap_leaf_id\", bootstrap_leaf_id)"
+        },
+        {
+          "kind": "Assign",
+          "line": 354,
+          "source": "header = bytes(bootstrap).split(b\"\\n\", 1)[0] + b\"\\n\""
+        },
+        {
+          "kind": "Assign",
+          "line": 397,
+          "source": "tail_size = info.st_size - self.bootstrap_size"
+        },
+        {
+          "kind": "Assign",
+          "line": 427,
+          "source": "lines = data[self.bootstrap_size :].splitlines(keepends=True)"
+        },
+        {
+          "kind": "Assign",
+          "line": 486,
+          "source": "bootstrap_leaf_id = uuid4().hex[:8]"
+        },
+        {
+          "kind": "Assign",
+          "line": 517,
+          "source": "pending = memoryview(bootstrap)"
+        },
+        {
+          "kind": "Call",
+          "line": 527,
+          "source": "FreshPrivateSession(\n            _MINT,\n            path,\n            session_id,\n            FileIdentity.from_stat(info),\n            hashlib.sha256(header).hexdigest(),\n            hashlib.sha256(bootstrap).hexdigest(),\n            len(bootstrap),\n            bootstrap_leaf_id,\n            selected_thinking_level,\n        )"
+        },
+        {
+          "kind": "Assign",
+          "line": 346,
+          "source": "bootstrap = bytearray()"
+        },
+        {
+          "kind": "Call",
+          "line": 363,
+          "source": "check_type(\n                self, after, self.bootstrap_size,\n            ).require_valid(\"Fresh-session path changed after bootstrap read\")"
+        },
+        {
+          "kind": "Call",
+          "line": 393,
+          "source": "NativePiUnavailable(\"Fresh source lacks explicit selected bootstrap\")"
+        },
+        {
+          "kind": "Assign",
+          "line": 403,
+          "source": "observed = FreshFileCheck(self, info, self.bootstrap_size)"
+        },
+        {
+          "kind": "Call",
+          "line": 427,
+          "source": "data[self.bootstrap_size :].splitlines(keepends=True)"
+        },
+        {
+          "kind": "Call",
+          "line": 435,
+          "source": "StableFreshFileCheck(self, after, self.bootstrap_size, revision).require_valid(\n                \"Selected startup revision changed after read\"\n            )"
+        },
+        {
+          "kind": "Call",
+          "line": 517,
+          "source": "memoryview(bootstrap)"
+        },
+        {
+          "kind": "Call",
+          "line": 533,
+          "source": "hashlib.sha256(bootstrap).hexdigest()"
+        },
+        {
+          "kind": "Call",
+          "line": 534,
+          "source": "len(bootstrap)"
+        },
+        {
+          "kind": "Call",
+          "line": 343,
+          "source": "FreshFileCheck(self, opened, self.bootstrap_size).require_valid(\n                    \"Fresh-session opened identity changed\"\n                )"
+        },
+        {
+          "kind": "Assign",
+          "line": 348,
+          "source": "chunk = os.read(descriptor, self.bootstrap_size - len(bootstrap))"
+        },
+        {
+          "kind": "Call",
+          "line": 360,
+          "source": "NativePiUnavailable(\"Fresh-session bootstrap changed\")"
+        },
+        {
+          "kind": "Call",
+          "line": 403,
+          "source": "FreshFileCheck(self, info, self.bootstrap_size)"
+        },
+        {
+          "kind": "Call",
+          "line": 404,
+          "source": "StableFreshFileCheck(self, opened, self.bootstrap_size, observed.observed_revision).require_valid(\n                    \"Selected startup inode/revision changed\"\n                )"
+        },
+        {
+          "kind": "Call",
+          "line": 417,
+          "source": "StableFreshFileCheck(\n                    self, synced, self.bootstrap_size, FileRevision.from_stat(opened),\n                ).require_valid(\"Selected startup changed across fsync\")"
+        },
+        {
+          "kind": "Call",
+          "line": 347,
+          "source": "len(bootstrap)"
+        },
+        {
+          "kind": "Call",
+          "line": 348,
+          "source": "os.read(descriptor, self.bootstrap_size - len(bootstrap))"
+        },
+        {
+          "kind": "Call",
+          "line": 351,
+          "source": "bootstrap.extend(chunk)"
+        },
+        {
+          "kind": "Call",
+          "line": 354,
+          "source": "bytes(bootstrap).split(b\"\\n\", 1)"
+        },
+        {
+          "kind": "Call",
+          "line": 358,
+          "source": "hashlib.sha256(bootstrap).hexdigest()"
+        },
+        {
+          "kind": "Call",
+          "line": 363,
+          "source": "check_type(\n                self, after, self.bootstrap_size,\n            )"
+        },
+        {
+          "kind": "Call",
+          "line": 423,
+          "source": "hashlib.sha256(\n                data[: self.bootstrap_size]\n            ).hexdigest()"
+        },
+        {
+          "kind": "Call",
+          "line": 435,
+          "source": "StableFreshFileCheck(self, after, self.bootstrap_size, revision)"
+        },
+        {
+          "kind": "Call",
+          "line": 521,
+          "source": "OSError(\"Fresh-session bootstrap write made no progress\")"
+        },
+        {
+          "kind": "Call",
+          "line": 533,
+          "source": "hashlib.sha256(bootstrap)"
+        },
+        {
+          "kind": "Call",
+          "line": 343,
+          "source": "FreshFileCheck(self, opened, self.bootstrap_size)"
+        },
+        {
+          "kind": "Call",
+          "line": 350,
+          "source": "NativePiUnavailable(\"Fresh-session bootstrap became incomplete\")"
+        },
+        {
+          "kind": "Call",
+          "line": 404,
+          "source": "StableFreshFileCheck(self, opened, self.bootstrap_size, observed.observed_revision)"
+        },
+        {
+          "kind": "Call",
+          "line": 417,
+          "source": "StableFreshFileCheck(\n                    self, synced, self.bootstrap_size, FileRevision.from_stat(opened),\n                )"
+        },
+        {
+          "kind": "Call",
+          "line": 348,
+          "source": "len(bootstrap)"
+        },
+        {
+          "kind": "Call",
+          "line": 354,
+          "source": "bytes(bootstrap)"
+        },
+        {
+          "kind": "Call",
+          "line": 358,
+          "source": "hashlib.sha256(bootstrap)"
+        },
+        {
+          "kind": "Call",
+          "line": 423,
+          "source": "hashlib.sha256(\n                data[: self.bootstrap_size]\n            )"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "sha256": "652fd158cd2221e61a8d8c7853c8473b9d3e98354e753e62391b5520e29fade4",
+      "sites": [
+        {
+          "kind": "ImportFrom",
+          "line": 18,
+          "source": "from .native_package import COMPACTION_HELPER, verify_native_package"
+        },
+        {
+          "kind": "ClassDef",
+          "line": 28,
+          "source": "class NativeCompactionWriter:\n    def __init__(self, package_dir: Path, *, native_launch: NativePiRpcLaunch | None = None):\n        BoundedRun.require_inherited_deadline()\n        self.package_dir = package_dir.resolve(strict=True)\n        self.helper = self.package_dir / \"dist/agent-comms-compaction-commit-child.mjs\"\n        self.import_fence = self.package_dir / \"dist/agent-comms-import-fence.mjs\"\n        node = shutil.which(\"node\")\n        if node is None:\n            raise ValueError(\"Node executable unavailable\")\n        self.node = node\n        environment_launcher = shutil.which(\"env\")\n        if environment_launcher is None:\n            raise ValueError(\"Isolated native environment launcher unavailable\")\n        self.environment_launcher = environment_launcher\n        # An independently acquired writer verifies its deployment. A bridge\n        # opened for the retained child borrows that child's original launch;\n        # neither route repeats acquisition under the mutation's bus guard.\n        self.verify(native_launch)\n\n    def verify(self, native_launch: NativePiRpcLaunch | None = None) -> None:\n        if native_launch is None:\n            verify_native_package(self.package_dir)\n        elif native_launch.package != self.package_dir:\n            raise ValueError(\"Compaction writer differs from its acquired native launch\")\n        copied_helper = self.package_dir / \"dist/agent-comms-compaction-commit-child.mjs\"\n        if (\n            not copied_helper.is_file()\n            or copied_helper.read_bytes() != COMPACTION_HELPER.read_bytes()\n        ):\n            raise ValueError(\"Trusted compaction helper differs from packaged resource\")\n        if not self.import_fence.is_file():\n            raise ValueError(\"Native import boundary unavailable\")\n\n\n    def exch"
+        },
+        {
+          "kind": "ImportFrom",
+          "line": 21,
+          "source": "from .native_pi import NativePiRpcLaunch"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 29,
+          "source": "def __init__(self, package_dir: Path, *, native_launch: NativePiRpcLaunch | None = None):\n        BoundedRun.require_inherited_deadline()\n        self.package_dir = package_dir.resolve(strict=True)\n        self.helper = self.package_dir / \"dist/agent-comms-compaction-commit-child.mjs\"\n        self.import_fence = self.package_dir / \"dist/agent-comms-import-fence.mjs\"\n        node = shutil.which(\"node\")\n        if node is None:\n            raise ValueError(\"Node executable unavailable\")\n        self.node = node\n        environment_launcher = shutil.which(\"env\")\n        if environment_launcher is None:\n            raise ValueError(\"Isolated native environment launcher unavailable\")\n        self.environment_launcher = environment_launcher\n        # An independently acquired writer verifies its deployment. A bridge\n        # opened for the retained child borrows that child's original launch;\n        # neither route repeats acquisition under the mutation's bus guard.\n        self.verify(native_launch)"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 47,
+          "source": "def verify(self, native_launch: NativePiRpcLaunch | None = None) -> None:\n        if native_launch is None:\n            verify_native_package(self.package_dir)\n        elif native_launch.package != self.package_dir:\n            raise ValueError(\"Compaction writer differs from its acquired native launch\")\n        copied_helper = self.package_dir / \"dist/agent-comms-compaction-commit-child.mjs\"\n        if (\n            not copied_helper.is_file()\n            or copied_helper.read_bytes() != COMPACTION_HELPER.read_bytes()\n        ):\n            raise ValueError(\"Trusted compaction helper differs from packaged resource\")\n        if not self.import_fence.is_file():\n            raise ValueError(\"Native import boundary unavailable\")"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 62,
+          "source": "def exchange(\n        self, fd: int, request: NativeRequest, timeout: float, retained_fds: tuple[int, ...] = ()\n    ) -> NativeOutcome:\n        encoded = FieldCodec.encode(request)\n        encoded[\"authority\"] = FieldCodec.encode(NativeAuthority.capture(fd))\n        if not math.isfinite(timeout) or not 0 < timeout <= 30:\n            raise ValueError(\"Compaction child deadline must be in (0, 30] seconds\")\n        payload = json.dumps(encoded, ensure_ascii=False, allow_nan=False).encode(\"utf-8\")\n        try:\n            result = BoundedRun.run_inherited(\n                (\n                    self.environment_launcher,\n                    \"-u\",\n                    \"NODE_OPTIONS\",\n                    \"-u\",\n                    \"NODE_PATH\",\n                    \"-u\",\n                    \"NODE_COMPILE_CACHE\",\n                    \"NODE_DISABLE_COMPILE_CACHE=1\",\n                    self.node,\n                    \"--no-global-search-paths\",\n                    \"--import\",\n                    str(self.import_fence),\n                    str(self.helper),\n                    str(self.package_dir),\n                    str(fd),\n                    str(len(payload)),\n                ),\n                input=payload,\n                pass_fds=tuple(dict.fromkeys((fd, *retained_fds))),\n                deadline=time.monotonic() + timeout,\n            )\n        except (OSError, RuntimeError) as error:\n            raise CompactionTransportUnknownError(\n                f\"Native commit transport UNKNOWN: {error}; never replay\"\n            ) from error\n        if isinstance(result.outcome, TimedOutOutcome):\n            raise CompactionTransportUnknownError(\"Native commit timed out; never replay\")\n        try:\n            evidence = json.loads(result.stdout)\n        except (ValueError, UnicodeErr"
+        },
+        {
+          "kind": "Assign",
+          "line": 71,
+          "source": "result = BoundedRun.run_inherited(\n                (\n                    self.environment_launcher,\n                    \"-u\",\n                    \"NODE_OPTIONS\",\n                    \"-u\",\n                    \"NODE_PATH\",\n                    \"-u\",\n                    \"NODE_COMPILE_CACHE\",\n                    \"NODE_DISABLE_COMPILE_CACHE=1\",\n                    self.node,\n                    \"--no-global-search-paths\",\n                    \"--import\",\n                    str(self.import_fence),\n                    str(self.helper),\n                    str(self.package_dir),\n                    str(fd),\n                    str(len(payload)),\n                ),\n                input=payload,\n                pass_fds=tuple(dict.fromkeys((fd, *retained_fds))),\n                deadline=time.monotonic() + timeout,\n            )"
+        },
+        {
+          "kind": "Call",
+          "line": 49,
+          "source": "verify_native_package(self.package_dir)"
+        },
+        {
+          "kind": "Call",
+          "line": 71,
+          "source": "BoundedRun.run_inherited(\n                (\n                    self.environment_launcher,\n                    \"-u\",\n                    \"NODE_OPTIONS\",\n                    \"-u\",\n                    \"NODE_PATH\",\n                    \"-u\",\n                    \"NODE_COMPILE_CACHE\",\n                    \"NODE_DISABLE_COMPILE_CACHE=1\",\n                    self.node,\n                    \"--no-global-search-paths\",\n                    \"--import\",\n                    str(self.import_fence),\n                    str(self.helper),\n                    str(self.package_dir),\n                    str(fd),\n                    str(len(payload)),\n                ),\n                input=payload,\n                pass_fds=tuple(dict.fromkeys((fd, *retained_fds))),\n                deadline=time.monotonic() + timeout,\n            )"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "sha256": "6c7993f9cf98b6404ffcd4bd9865b9ba405b48a412c87815fb8d1fb8af190b67",
+      "sites": [
+        {
+          "kind": "ImportFrom",
+          "line": 16,
+          "source": "from .native_pi import NativePiRpcLaunch, NativePiUnavailable"
+        },
+        {
+          "kind": "ClassDef",
+          "line": 31,
+          "source": "class PiSessionChild:\n    proc: AttachedChild\n    reader: PiRpcChannel\n    stderr_task: asyncio.Task[str]\n    key: tuple[NativePiRpcLaunch, tuple[int, int]]\n    attestation: NativeAttestation\n    sensitive_diagnostics: bool = False\n    resources: ExitStack = field(default_factory=ExitStack, repr=False)\n\n    def require_source_owner(self, identity: NativeSessionIdentity, binding: LiveThreadOwnerBinding,\n                             arguments: NativeArguments, worktree: Path) -> None:\n        \"\"\"Retirement consumes this actual child's original launch provenance.\"\"\"\n        from .runtime_requests import ProjectRuntimeRequest\n\n        launch, _ = self.key\n        launch.session.attest(identity)\n        request = ProjectRuntimeRequest.from_wire(json.loads(launch.env[\"AGENT_COMMS_PROJECT_REQUEST\"]))\n        if request.binding != binding:\n            raise NativePiUnavailable(\"Native child belongs to another original owner binding\")\n        actual = NativeArguments.parse(launch.argv)\n        if (actual.model, actual.thinking, launch.cwd) != (\n            arguments.model, arguments.thinking, worktree.resolve(strict=True)\n        ):\n            raise NativePiUnavailable(\"Native child belongs to another selected configuration\")\n\n    async def reply_ui(self, response) -> None:\n        await asyncio.wait_for(self.proc.write(self.reader.encode(response)), timeout=2)\n\n    @classmethod\n    async def start(cls, key, attestation):\n        launch, _ = key\n        with ExitStack() as resources:\n            environment = dict(launch.env)\n            if \"AGENT_COMMS_PROJECT_SOCKET\" in environment:\n                address = resources.enter_context(PrivateSocketRole.address(\n                    Path(environment[\"AGENT_COMMS_PROJECT_SOCKET\"])\n                ))\n                environment[\"AGE"
+        },
+        {
+          "kind": "ClassDef",
+          "line": 106,
+          "source": "class NativeCustody(ABC):\n    \"\"\"State owns the legal child capabilities, including its retirement successor.\"\"\"\n\n    @property\n    @abstractmethod\n    def available(self) -> bool: ...\n\n    retained = False\n\n    def managed_launch(self, command, arguments, *, worktree, environment, session_file):\n        return NativePiRpcLaunch.managed(command, arguments, worktree=worktree,\n            environment=environment, session_file=session_file)\n\n    def reuse(self, key) -> PiSessionChild | None:\n        return None\n\n    def idle(self) -> RetainedNative:\n        raise NativePiUnavailable(\"Selected idle Pi child is unavailable or stale\")\n\n    async def inspect(self, persistent, prepare, request):\n        \"\"\"Inspect through this custody's legal acquisition/receiver capability.\"\"\"\n        raise NativePiUnavailable(\"Native context requires an acquired native child\")\n\n    async def expected(self, launch, require_input_id) -> NativeAttestation:\n        return launch.session.attestation()\n\n    def retire(self, successor: NativeCustody | None = None) -> NativeCustody:\n        return successor if successor is not None else self\n\n    def retire_owned(self, identity: NativeSessionIdentity, binding: LiveThreadOwnerBinding,\n                     arguments: NativeArguments, worktree: Path) -> NativeCustody:\n        raise NativePiUnavailable(\"Native custody cannot retire the original selected child\")\n\n    async def closed(self) -> NativeCustody:\n        return self\n\n    def reopen(self, identity: NativeSessionIdentity) -> ReopenNative:\n        return ReopenNative(identity)"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 115,
+          "source": "def managed_launch(self, command, arguments, *, worktree, environment, session_file):\n        return NativePiRpcLaunch.managed(command, arguments, worktree=worktree,\n            environment=environment, session_file=session_file)"
+        },
+        {
+          "kind": "Call",
+          "line": 116,
+          "source": "NativePiRpcLaunch.managed(command, arguments, worktree=worktree,\n            environment=environment, session_file=session_file)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "sha256": "c0a8f207dcf4e6a743a5fadef8ab34166b68b35836594413c6f3cb41e62536cd",
+      "sites": [
+        {
+          "kind": "FunctionDef",
+          "line": 27,
+          "source": "def fork_native_session(file: str, worktree: str, launcher: str, *, private_inputs) -> NativeSessionIdentity:\n    \"\"\"Capture once under the caller's wire lock and native writer's source lock.\n\n    The native owner fsyncs the new history. An uncertain helper outcome is not\n    retried or inferred from an orphan file, and no input is sent.\n    \"\"\"\n    from .native_pi import NativePiRpcLaunch\n\n    package = NativePiRpcLaunch.package_for_command(launcher)\n    return asyncio.run(\n        private_inputs.fork(\n            ForkSessionRequest(str(package), file, worktree),\n            cwd=Path(worktree),\n        )\n    )"
+        },
+        {
+          "kind": "ImportFrom",
+          "line": 33,
+          "source": "from .native_pi import NativePiRpcLaunch"
+        },
+        {
+          "kind": "Assign",
+          "line": 35,
+          "source": "package = NativePiRpcLaunch.package_for_command(launcher)"
+        },
+        {
+          "kind": "Call",
+          "line": 35,
+          "source": "NativePiRpcLaunch.package_for_command(launcher)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_package.py",
+      "sha256": "f6832d49ee594855a1ad570bf5fb01ed1445c95c74c33f817bf3723c8fcc5c68",
+      "sites": [
+        {
+          "kind": "FunctionDef",
+          "line": 46,
+          "source": "def package_tree_digest(root: Path) -> str:\n    \"\"\"Hash sorted path/type/execute-mode/size/content records with bounded reads.\"\"\"\n    if os.name != \"posix\":\n        raise NativePackageError(\"Native package filesystem verification requires POSIX\")\n    digest = hashlib.sha256()\n    count, total = 1, 0\n\n    def identity(info: os.stat_result) -> tuple[int, ...]:\n        return (\n            info.st_dev,\n            info.st_ino,\n            info.st_mode,\n            info.st_nlink if info.st_mode & 0o222 else 0,\n            info.st_uid,\n            info.st_size,\n            info.st_mtime_ns,\n            info.st_ctime_ns if info.st_mode & 0o222 else 0,\n        )\n\n    def visit(path: Path, relative: str, depth: int) -> None:\n        nonlocal count, total\n        if count > MAX_ENTRIES or depth > MAX_DEPTH:\n            raise NativePackageError(\"Native package inventory limit exceeded\")\n        before = path.lstat()\n        if before.st_uid not in (0, os.getuid()) or before.st_mode & 0o022:\n            raise NativePackageError(\"Native package is not owner-controlled\")\n        if stat.S_ISDIR(before.st_mode):\n            record = [\"directory\", relative, before.st_mode & 0o111]\n            digest.update((json.dumps(record, ensure_ascii=True) + \"\\n\").encode())\n            names = []\n            with os.scandir(path) as entries:\n                for entry in entries:\n                    count += 1  # Include pending siblings before recursive descent.\n                    if count > MAX_ENTRIES:\n                        raise NativePackageError(\"Native package inventory limit exceeded\")\n                    names.append(entry.name)\n            for name in sorted(names):\n                visit(path / name, f\"{relative}/{name}\", depth + 1)\n        elif stat.S_ISREG(before.st_mode):\n         "
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 120,
+          "source": "def share_native_resources(root: Path, deployments: Path) -> dict[str, int]:\n    \"\"\"Seal a NEW patched package, then reuse matching frozen resource inodes.\n\n    The existing build lifetime calls this only after every patch. Old handed\n    packages have a different import fence and are never changed or borrowed.\n    No donor metadata becomes authority: every shared byte/mode must equal the\n    already built resource, and the resulting tree still requires its own pin.\n    \"\"\"\n    root = root.resolve(strict=True)\n    package_tree_digest(root)\n    fence = Path(\"dist/agent-comms-import-fence.mjs\")\n    current_fence = (root / fence).read_bytes()\n    donors = []\n    for deployment in sorted(deployments.glob(\".pi-native-*\")):\n        donor = deployment / \"node_modules/@earendil-works/pi-coding-agent\"\n        candidate = donor / fence\n        if not candidate.is_file() or candidate.is_symlink() or donor == root:\n            continue\n        info = candidate.lstat()\n        if info.st_mode & 0o222 or candidate.read_bytes() != current_fence:\n            continue\n        # Reject all foreign, mutable-shared and aliased filesystem shapes before\n        # any resource borrow. This remains content verification, not a cache.\n        package_tree_digest(donor)\n        donors.append(donor)\n    shared_files = shared_bytes = 0\n    for path in sorted(root.rglob(\"*\")):\n        before = path.lstat()\n        if not stat.S_ISREG(before.st_mode):\n            continue\n        path.chmod(stat.S_IMODE(before.st_mode) & ~0o222)\n        for donor in donors:\n            source = donor / path.relative_to(root)\n            if not source.is_file() or source.is_symlink():\n                continue\n            observed = source.lstat()\n            if observed.st_mode & 0o222 or observed.st_dev != before.st_"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 179,
+          "source": "def verify_native_package(root: Path) -> None:\n    \"\"\"Verify the entire copied package against the repository-owned commitment.\"\"\"\n    pins = [\n        line[len(TREE_PREFIX) :]\n        for line in MANIFEST.read_text().splitlines()\n        if line.startswith(TREE_PREFIX)\n    ]\n    if len(pins) != 1 or len(pins[0]) != 64 or any(c not in \"0123456789abcdef\" for c in pins[0]):\n        raise NativePackageError(\"Pinned native package tree commitment unavailable\")\n    if package_tree_digest(root) != pins[0]:\n        raise NativePackageError(\"Native package tree differs from pinned artifact\")"
+        },
+        {
+          "kind": "Call",
+          "line": 129,
+          "source": "package_tree_digest(root)"
+        },
+        {
+          "kind": "Call",
+          "line": 175,
+          "source": "package_tree_digest(root)"
+        },
+        {
+          "kind": "Call",
+          "line": 143,
+          "source": "package_tree_digest(donor)"
+        },
+        {
+          "kind": "Call",
+          "line": 188,
+          "source": "package_tree_digest(root)"
+        },
+        {
+          "kind": "Call",
+          "line": 196,
+          "source": "print(package_tree_digest(Path(sys.argv[2])))"
+        },
+        {
+          "kind": "Call",
+          "line": 196,
+          "source": "package_tree_digest(Path(sys.argv[2]))"
+        },
+        {
+          "kind": "Call",
+          "line": 198,
+          "source": "verify_native_package(Path(sys.argv[1]))"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "sha256": "fca8279de2bbd9fb7f28ba62a956385212ba9cf1acb5193bba9040e32db5af89",
+      "sites": [
+        {
+          "kind": "FunctionDef",
+          "line": 92,
+          "source": "def main() -> int:\n    \"\"\"Run the active route's pinned Pi for ordinary ACP owner sessions.\"\"\"\n    from .private_nk_entrypoint import PrivateNkLaunch\n\n    launch = PrivateNkLaunch.current()\n    if launch is None:\n        raise NativePiUnavailable(\"Native owner backend requires a configured private route\")\n    cli = launch.validate()\n    environment = dict(os.environ)\n    argv, environment = NativePiRpcLaunch.bootstrap(\n        cli, tuple(sys.argv[1:]), Path.cwd(), environment,\n        RestartEnvironment.inherit(environment),\n    )\n    os.execvpe(argv[0], list(argv), environment)\n    return 0"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 753,
+          "source": "def _trusted_package(package: Path) -> Path:\n    package = package.absolute()  # lexical: resolve() would hide a symlink component\n    if \"..\" in package.parts:\n        raise NativePiUnavailable(\"Pinned native Pi package path is not lexical\")\n    if package.parts[-3:] != (\n        \"node_modules\",\n        \"@earendil-works\",\n        \"pi-coding-agent\",\n    ):\n        raise NativePiUnavailable(\"Canonical native Pi package layout is required\")\n    for ancestor in (package, *package.parents):\n        info = ancestor.lstat()\n        failed = TrustedAncestorRole.violation(info)\n        if failed is not None:\n            raise NativePiUnavailable(f\"Native Pi package has unsafe ancestor: {failed.declared_name}\")\n    root = package.parents[2]\n    if PrivateDirectoryRole.violation(root.lstat()) is not None:\n        raise NativePiUnavailable(\"Disposable native Pi root must be owner-only\")\n    from .native_package import NativePackageError, verify_native_package\n\n    try:\n        verify_native_package(package)\n    except (OSError, NativePackageError) as error:\n        raise NativePiUnavailable(\"Pinned native Pi package differs from reviewed fork\") from error\n    return package / \"dist/cli.js\""
+        },
+        {
+          "kind": "Assign",
+          "line": 101,
+          "source": "argv, environment = NativePiRpcLaunch.bootstrap(\n        cli, tuple(sys.argv[1:]), Path.cwd(), environment,\n        RestartEnvironment.inherit(environment),\n    )"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 407,
+          "source": "def bootstrap(cls, cli, arguments, cwd, environment, configuration: RestartEnvironment):\n        \"\"\"Encode the held launch configuration at the native process boundary.\"\"\"\n        try:\n            instructions = OWNER_INSTRUCTIONS.resolve(strict=True)\n        except OSError as error:\n            raise NativePiUnavailable(\"Canonical owner instruction asset is unavailable\") from error\n        env = dict(environment)\n        for name in (\"NODE_OPTIONS\", \"NODE_PATH\", \"NODE_COMPILE_CACHE\"):\n            env.pop(name, None)\n        env[\"NODE_DISABLE_COMPILE_CACHE\"] = \"1\"\n        env[\"PI_WORKTREE\"] = str(cwd)\n        env[\"PATH\"] = os.pathsep.join(\n            (str(Path(sys.executable).parent), env.get(\"PATH\", os.defpath))\n        )\n        env.update(configuration.encode_native())\n        argv = (\n            \"node\", \"--no-global-search-paths\",\n            \"--import\", str(cli.with_name(\"agent-comms-import-fence.mjs\")),\n            \"--import\", str(cli.with_name(\"agent-comms-project-bootstrap.mjs\")),\n            str(cli), *arguments, \"--append-system-prompt\", str(instructions),\n        )\n        return argv, env"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 431,
+          "source": "def _build(cls, cli, arguments, cwd, environment, session, package, configuration):\n        argv, env = cls.bootstrap(cli, arguments, cwd, environment, configuration)\n        return cls(argv, cwd, env, session, package, configuration=configuration)"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 484,
+          "source": "def managed(\n        cls,\n        command: str,\n        arguments: tuple[str, ...],\n        *,\n        worktree: Path,\n        environment: dict[str, str] | None = None,\n        session_file: str | None = None,\n    ) -> NativePiRpcLaunch:\n        \"\"\"Prepare managed ACP/headless execution; native receipts remain separate.\"\"\"\n        try:\n            arguments = NativeArguments.parse(arguments).rpc()\n        except ValueError as error:\n            raise NativePiUnavailable(str(error)) from error\n        package = cls.package_for_command(command)\n        cwd = worktree.resolve(strict=True)\n        if not cwd.is_dir():\n            raise NativePiUnavailable(\"Native Pi worktree is unavailable\")\n        from .selected_session import SelectedSession, SavedSelectedSession\n        from .native_session_reopen import SessionIdentityHelper\n\n        saved = Path(session_file).absolute() if session_file is not None else None\n        directory = saved.parent if saved is not None else cwd\n        session = (SavedSelectedSession(directory,\n            identity=SessionIdentityHelper.locate(package, str(saved)))\n            if saved is not None else SelectedSession(directory))\n        return cls._managed(package, arguments, cwd, environment, session)"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 525,
+          "source": "def retained_managed(\n        self, command: str, arguments: tuple[str, ...], *, worktree: Path,\n        environment: dict[str, str] | None, session_file: str | None,\n    ) -> NativePiRpcLaunch | None:\n        \"\"\"Derive a candidate from this acquired immutable launch, not a path cache.\n\n        Only original child custody may consume it after comparing the complete\n        launch/auth key and checking its actual saved-source revision/liveness.\n        A different package or selected file needs its own fresh acquisition.\n        \"\"\"\n        package, _ = self._command_selection(command)\n        saved = Path(session_file).absolute() if session_file is not None else None\n        if package != self.package or saved != self.session.path:\n            return None\n        return self._managed(self.package, NativeArguments.parse(arguments).rpc(),\n            worktree, environment, self.session)"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 543,
+          "source": "def acquire_tracked(cls, package: Path) -> Callable[..., NativePiRpcLaunch]:\n        \"\"\"Acquire one immutable artifact's executable construction behavior.\n\n        The returned factory retains the original verified CLI for its owner's\n        lifetime. Every call still constructs a new complete source/auth launch;\n        it grants no child readiness, input admission or prior context proof.\n        \"\"\"\n        package = Path(package).absolute()\n        cli = _trusted_package(package)\n        return partial(cls._tracked, package, cli)"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 555,
+          "source": "def tracked(cls, package: Path, **options) -> NativePiRpcLaunch:\n        \"\"\"Acquire a fresh artifact for a standalone tracked execution.\"\"\"\n        return cls.acquire_tracked(package)(**options)"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 560,
+          "source": "def _tracked(\n        cls,\n        package: Path,\n        cli: Path,\n        *,\n        worktree: Path,\n        session: SelectedSession,\n        provider: str = \"openrouter\",\n        model: str = \"z-ai/glm-5.3-flash\",\n        thinking_level: str | None = None,\n        environment: dict[str, str] | None = None,\n        selected_tool_mode: NativeToolMode | None = None,\n    ) -> NativePiRpcLaunch:\n        \"\"\"Construct a complete launch through its acquired immutable artifact.\n\n        A backend must explicitly consume this launch, not guess Pi from a basename\n        or trust an RPC capability response from an arbitrary executable. This\n        only establishes the executable and its resources; native input, context,\n        and model-delivery proofs remain separate per-attempt observations.\n        \"\"\"\n        session_dir, session_file = session.directory, session.path\n        try:\n            for value in (provider, model):\n                FieldCodec.decode(str, value)\n                if re.fullmatch(r\"[^\\s-]\\S*\", value) is None:\n                    raise ValueError(\"Provider/model must be single non-option tokens\")\n        except (TypeError, ValueError) as error:\n            raise NativePiUnavailable(\"Native Pi requires an explicit provider and model\") from error\n        if selected_tool_mode is not None and not isinstance(selected_tool_mode, NativeToolMode):\n            raise NativePiUnavailable(\"Selected tool requires a trusted nominal mode\")\n        session.require_launch_tools(selected_tool_mode)\n        worktree = Path(worktree).absolute()\n        session_dir = Path(session_dir).absolute()\n        _durable_private_session_dir(session_dir)\n        if not worktree.is_dir():\n            raise NativePiUnavailable(\"Native Pi worktree is unavailable\")\n        session.re"
+        },
+        {
+          "kind": "ImportFrom",
+          "line": 771,
+          "source": "from .native_package import NativePackageError, verify_native_package"
+        },
+        {
+          "kind": "Call",
+          "line": 101,
+          "source": "NativePiRpcLaunch.bootstrap(\n        cli, tuple(sys.argv[1:]), Path.cwd(), environment,\n        RestartEnvironment.inherit(environment),\n    )"
+        },
+        {
+          "kind": "Assign",
+          "line": 422,
+          "source": "argv = (\n            \"node\", \"--no-global-search-paths\",\n            \"--import\", str(cli.with_name(\"agent-comms-import-fence.mjs\")),\n            \"--import\", str(cli.with_name(\"agent-comms-project-bootstrap.mjs\")),\n            str(cli), *arguments, \"--append-system-prompt\", str(instructions),\n        )"
+        },
+        {
+          "kind": "Assign",
+          "line": 432,
+          "source": "argv, env = cls.bootstrap(cli, arguments, cwd, environment, configuration)"
+        },
+        {
+          "kind": "Call",
+          "line": 421,
+          "source": "env.update(configuration.encode_native())"
+        },
+        {
+          "kind": "Call",
+          "line": 432,
+          "source": "cls.bootstrap(cli, arguments, cwd, environment, configuration)"
+        },
+        {
+          "kind": "Call",
+          "line": 774,
+          "source": "verify_native_package(package)"
+        },
+        {
+          "kind": "Call",
+          "line": 421,
+          "source": "configuration.encode_native()"
+        },
+        {
+          "kind": "Call",
+          "line": 425,
+          "source": "str(cli.with_name(\"agent-comms-project-bootstrap.mjs\"))"
+        },
+        {
+          "kind": "Call",
+          "line": 425,
+          "source": "cli.with_name(\"agent-comms-project-bootstrap.mjs\")"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "sha256": "553750de7a584de04b6e8e2901784985327a2b6e5f3a9fd27527147d46ffdc96",
+      "sites": [
+        {
+          "kind": "ImportFrom",
+          "line": 12,
+          "source": "from .native_package import verify_native_package"
+        },
+        {
+          "kind": "ClassDef",
+          "line": 25,
+          "source": "class NativeSessionIdentity:\n    \"\"\"SessionManager's observed saved-session identity.\"\"\"\n\n    session_id: str = field(metadata={\"wire_name\": \"sessionId\"})\n    session_file: str = field(metadata={\"wire_name\": \"sessionFile\"})\n\n    def __post_init__(self):\n        if not self.session_id or not Path(self.session_file).is_absolute():\n            raise NativeReopenError(\"Saved native session identity is incomplete\")\n\n    @property\n    def path(self) -> Path:\n        return Path(self.session_file)\n\n    def require_same_session(self, other: NativeSessionIdentity) -> None:\n        if not self.same_session(other):\n            raise NativeReopenError(\"Native saved source identity changed\")\n\n    def require_context(self, context) -> None:\n        self.require_same_session(NativeSessionIdentity(context.session_id, str(context.session_file)))\n\n    def same_session(self, other: NativeSessionIdentity) -> bool:\n        \"\"\"A cutpoint may extend this identity without changing its meaning.\"\"\"\n        return self.session_id == other.session_id and self.session_file == other.session_file\n\n    def require_session(self, canonical: str) -> None:\n        if self.session_file != canonical:\n            raise ValueError(\"Native identity differs from owner's canonical session\")\n\n    def covers(self, evidence: NativeEvidenceRead, revision: FileRevision,\n               *other_revisions: FileRevision) -> bool:\n        \"\"\"Corroborate this session and its recorded positions in a held source.\n\n        Revisions are the original prepared/returned observations, not freshly\n        reconstructed positions. Later appends are allowed; original bytes and\n        ancestry remain under the acquired evidence reader's validation. This\n        relation grants neither enrollment nor permission to replay an input.\n   "
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 74,
+          "source": "def locate(package: Path, session_file: str) -> NativeSessionIdentity:\n        \"\"\"Acquire a verified package before a standalone saved-header lookup.\"\"\"\n        try:\n            verify_native_package(package)\n            return SessionIdentityHelper.locate(package, session_file)\n        except (OSError, ValueError) as error:\n            if isinstance(error, NativeReopenError):\n                raise\n            raise NativeReopenError(\"Saved native session identity cannot be read\") from error"
+        },
+        {
+          "kind": "Call",
+          "line": 77,
+          "source": "verify_native_package(package)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "sha256": "4b74dff5799da4df356fc8584333a80d53cb903963dca1344637e33c9e99a24c",
+      "sites": [
+        {
+          "kind": "ClassDef",
+          "line": 57,
+          "source": "class NativeStartupAdmission:\n    \"\"\"OS lock leases disappear on crash; no PID roster or persisted busy counter.\"\"\"\n\n    def __init__(self, root: Path, policy: NativeStartupPolicy = NATIVE_STARTUP_POLICY,\n                 *, measurements: PublicationMeasurements | None = None):\n        self.root = root\n        self.policy = policy\n        self.fd: int | None = None\n        # One acquired observation resource. Optional borrowing is resolved here,\n        # never interpreted as a lifecycle state by downstream consumers.\n        self.measurements = measurements if measurements is not None else PublicationMeasurements()\n\n    @property\n    def directory(self) -> Path:\n        return self.root / \"runtime\" / \"native-startup\"\n\n    @classmethod\n    def for_launch(\n        cls, launch: NativePiRpcLaunch, *, root: Path | None = None,\n        measurements: PublicationMeasurements | None = None,\n    ) -> NativeStartupAdmission:\n        if root is not None:\n            return cls(root, measurements=measurements)\n        return cls(\n            Path(\n                launch.env.get(\"AGENT_COMMS_ROOT\")\n                or os.environ.get(\"AGENT_COMMS_ROOT\")\n                or str(Path(tempfile.gettempdir()) / f\"agent-comms-startup-{getpass.getuser()}\")\n            ).expanduser(), measurements=measurements,\n        )\n\n    async def acquire(self, finish_event: asyncio.Event | None = None) -> None:\n        with self.measurements.operation(\"startup_slot\"):\n            self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)\n            while True:\n                if finish_event is not None and finish_event.is_set():\n                    raise asyncio.CancelledError\n                for slot in range(self.policy.slots):\n                    fd = _open_lock(self.directory / f\"{slot}.lock\")\n "
+        },
+        {
+          "kind": "ImportFrom",
+          "line": 21,
+          "source": "from .native_pi import NativePiRpcLaunch"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 74,
+          "source": "def for_launch(\n        cls, launch: NativePiRpcLaunch, *, root: Path | None = None,\n        measurements: PublicationMeasurements | None = None,\n    ) -> NativeStartupAdmission:\n        if root is not None:\n            return cls(root, measurements=measurements)\n        return cls(\n            Path(\n                launch.env.get(\"AGENT_COMMS_ROOT\")\n                or os.environ.get(\"AGENT_COMMS_ROOT\")\n                or str(Path(tempfile.gettempdir()) / f\"agent-comms-startup-{getpass.getuser()}\")\n            ).expanduser(), measurements=measurements,\n        )"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "sha256": "069632ff084c1ee2c18d914e186e26cc6f6859ac4df798b298bb6b007295d7ca",
+      "sites": [
+        {
+          "kind": "ImportFrom",
+          "line": 30,
+          "source": "from .native_pi import NativePiRpcLaunch"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 45,
+          "source": "def __init__(self, registry_path: Path, package_dir: Path, *,\n                 future_queue: FutureInputQueue | None = None,\n                 native_reader: NativeEvidenceRead | None = None,\n                 native_launch: NativePiRpcLaunch | None = None):\n        root = registry_path.parent.resolve(strict=True)\n        self.native = NativeCompactionWriter(package_dir, native_launch=native_launch)\n        self.registry = Registration(registry_path)\n        self.inputs = InputDispositions(root / InputDispositions.filename)\n        self.boundary = CompactionBoundary(\n            self.registry, self.inputs, future_queue, native_reader=native_reader\n        )\n        self.journal = CompactionJournal(registry_path.with_name(\"compaction-commits.sqlite3\"))"
+        },
+        {
+          "kind": "AsyncFunctionDef",
+          "line": 60,
+          "source": "async def open(\n        cls, registry_path: Path, package_dir: Path, session_file: str, *,\n        future_queue: FutureInputQueue | None = None,\n        native_launch: NativePiRpcLaunch | None = None,\n    ) -> AsyncIterator[OwnerCompactionCommit]:\n        \"\"\"One acquired native reader for the original compaction operation.\n\n        The descriptor retains decoded entries, never source or turn authority.\n        Each held cut still verifies original bytes before global ingress locks.\n        Joined worker construction and caller teardown own cancellation as well\n        as normal completion; no reader escapes into the next native turn.\n        \"\"\"\n        with NativeEvidenceRead.open(Path(session_file)) as reader:\n            bridge = await Coordination.run_worker(partial(\n                cls, registry_path, package_dir,\n                future_queue=future_queue, native_reader=reader, native_launch=native_launch,\n            ))\n            yield bridge"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_prepare.py",
+      "sha256": "b380258a877de85db2d2325094b74109e459594b52c5e08c8d680ba7b0cb5b74",
+      "sites": [
+        {
+          "kind": "ImportFrom",
+          "line": 21,
+          "source": "from .native_package import verify_native_package"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 168,
+          "source": "def prepare_native_source(\n    package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int,\n    retained_text: str = \"\",\n) -> NativePreparationResult:\n    \"\"\"Derive Pi's actual cut point without a model call or a session mutation.\n\n    The caller supplies the actual selected window and effective settings.\n    The returned witness is not authority: the owner captures source and the\n    writer later CASes on disk.\n    \"\"\"\n    try:\n        package = package.resolve(strict=True)\n        verify_native_package(package)\n        file = Path(session_file).absolute()\n        if file != file.resolve(strict=True):\n            raise NativePreparationError(\"Native session path is not canonical\")\n        before = file.stat()\n        if (\n            not stat.S_ISREG(before.st_mode)\n            or before.st_nlink != 1\n            or before.st_uid not in (0, os.getuid())\n            or before.st_size <= 0\n        ):\n            raise NativePreparationError(\"Native session is not regular storage\")\n        result = asyncio.run(\n            PrepareCompactionHelper.run(\n                PreparationRequest(\n                    str(package),\n                    str(file),\n                    settings,\n                    context_window,\n                    retained_text,\n                ),\n                cwd=file.parent,\n            )\n        )\n        after = file.stat()\n\n        revision = FileRevision.from_stat(before)\n        if revision != FileRevision.from_stat(after):\n            raise NativePreparationError(\"Native preparation failed or changed\")\n        return result.checked(file, revision)\n    except (OSError, ValueError, TypeError) as error:\n        if isinstance(error, NativePreparationError):\n            raise\n        raise NativePreparationError(\"Nat"
+        },
+        {
+          "kind": "Call",
+          "line": 180,
+          "source": "verify_native_package(package)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "sha256": "4c547681bb1f645571aaf1986c90dd6690d5de5cc4368a2f315b280dd0641b7a",
+      "sites": [
+        {
+          "kind": "ClassDef",
+          "line": 25,
+          "source": "class RestartEnvironment:\n    \"\"\"Declared inheritance policy for the credential-free resident watcher.\n\n    Private launch variable spellings belong to PrivateNkLaunch. Owner credentials\n    stay in /proc and are read only from the exact selected process at execution.\n    \"\"\"\n\n    home: str | None = field(\n        default=None, metadata={\"wire_omit_default\": True, \"wire_name\": \"HOME\"}\n    )\n    path: str | None = field(\n        default=None, metadata={\"wire_omit_default\": True, \"wire_name\": \"PATH\", \"runtime\": True}\n    )\n    pythonpath: str | None = field(\n        default=None,\n        metadata={\"wire_omit_default\": True, \"wire_name\": \"PYTHONPATH\", \"runtime\": True},\n    )\n    virtual_env: str | None = field(\n        default=None,\n        metadata={\"wire_omit_default\": True, \"wire_name\": \"VIRTUAL_ENV\", \"runtime\": True},\n    )\n    config: str | None = field(\n        default=None, metadata={\"wire_omit_default\": True, \"wire_name\": \"XDG_CONFIG_HOME\"}\n    )\n    root: str | None = field(\n        default=None,\n        metadata={\"wire_omit_default\": True, \"wire_name\": \"AGENT_COMMS_ROOT\", \"runtime\": True},\n    )\n    root_id: str | None = field(\n        default=None,\n        metadata={\"wire_omit_default\": True, \"wire_name\": ROOT_ID_ENV, \"runtime\": True},\n    )\n    package: str | None = field(\n        default=None,\n        metadata={\"wire_omit_default\": True, \"wire_name\": PACKAGE_ENV, \"runtime\": True},\n    )\n    default_agent_directory: ClassVar[Path] = Path(\"~/.pi/agent\")\n    native_config: Annotated[Path, PathText] = field(\n        default=default_agent_directory,\n        metadata={\"wire_name\": \"AGENT_COMMS_NATIVE_CONFIG_DIR\", \"native\": True},\n    )\n    agent_directory: Annotated[Path, PathText] = field(\n        default=default_agent_directory,\n        metadata={\"wire_name\": \"PI_"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 96,
+          "source": "def encode_native(self) -> dict[str, str]:\n        encoded = self.encode()\n        return {f.metadata[\"wire_name\"]: encoded[f.metadata[\"wire_name\"]]\n                for f in fields(self) if f.metadata.get(\"native\")}"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "sha256": "95659a5d2a2cf7d4bf694160be5f1a991bcca1bfdedec91a99986185c1f9f4f6",
+      "sites": [
+        {
+          "kind": "ClassDef",
+          "line": 288,
+          "source": "class CatalogQuery(NativeQuery):\n    \"\"\"Catalog discovery uses the shared typed query transaction.\"\"\"\n\n    async def discover(self, agent_bin: str, arguments: Sequence[str]) -> PiResponseData:\n        from .child_process import BoundedRun\n        from .native_pi import NativePiRpcLaunch, NativePiUnavailable\n        from .pi_rpc import PiRpcChannel\n\n        try:\n            launch = await asyncio.to_thread(\n                NativePiRpcLaunch.managed,\n                agent_bin,\n                (\n                    *arguments,\n                    \"--no-extensions\",\n                    \"--no-skills\",\n                    \"--no-context-files\",\n                    \"--no-session\",\n                ),\n                worktree=Path.cwd(),\n            )\n            async with BoundedRun.session(\n                launch.argv, cwd=launch.cwd, env=launch.env, timeout=10\n            ) as child:\n                stderr = asyncio.create_task(child.discard_stderr())\n                try:\n                    response = await self.exchange(PiRpcChannel(child.stdout), child.stdin)\n                    if response.success is True:\n                        return response.data.require_payload()\n                finally:\n                    stderr.cancel()\n                    await asyncio.gather(stderr, return_exceptions=True)\n        except (TimeoutError, EOFError, ValueError, OSError, NativePiUnavailable):\n            pass\n        return self.response_payload()"
+        },
+        {
+          "kind": "AsyncFunctionDef",
+          "line": 291,
+          "source": "async def discover(self, agent_bin: str, arguments: Sequence[str]) -> PiResponseData:\n        from .child_process import BoundedRun\n        from .native_pi import NativePiRpcLaunch, NativePiUnavailable\n        from .pi_rpc import PiRpcChannel\n\n        try:\n            launch = await asyncio.to_thread(\n                NativePiRpcLaunch.managed,\n                agent_bin,\n                (\n                    *arguments,\n                    \"--no-extensions\",\n                    \"--no-skills\",\n                    \"--no-context-files\",\n                    \"--no-session\",\n                ),\n                worktree=Path.cwd(),\n            )\n            async with BoundedRun.session(\n                launch.argv, cwd=launch.cwd, env=launch.env, timeout=10\n            ) as child:\n                stderr = asyncio.create_task(child.discard_stderr())\n                try:\n                    response = await self.exchange(PiRpcChannel(child.stdout), child.stdin)\n                    if response.success is True:\n                        return response.data.require_payload()\n                finally:\n                    stderr.cancel()\n                    await asyncio.gather(stderr, return_exceptions=True)\n        except (TimeoutError, EOFError, ValueError, OSError, NativePiUnavailable):\n            pass\n        return self.response_payload()"
+        },
+        {
+          "kind": "ImportFrom",
+          "line": 293,
+          "source": "from .native_pi import NativePiRpcLaunch, NativePiUnavailable"
+        },
+        {
+          "kind": "Assign",
+          "line": 297,
+          "source": "launch = await asyncio.to_thread(\n                NativePiRpcLaunch.managed,\n                agent_bin,\n                (\n                    *arguments,\n                    \"--no-extensions\",\n                    \"--no-skills\",\n                    \"--no-context-files\",\n                    \"--no-session\",\n                ),\n                worktree=Path.cwd(),\n            )"
+        },
+        {
+          "kind": "Call",
+          "line": 297,
+          "source": "asyncio.to_thread(\n                NativePiRpcLaunch.managed,\n                agent_bin,\n                (\n                    *arguments,\n                    \"--no-extensions\",\n                    \"--no-skills\",\n                    \"--no-context-files\",\n                    \"--no-session\",\n                ),\n                worktree=Path.cwd(),\n            )"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/pi_helper.py",
+      "sha256": "7067f76257c51c180b59fe034ade709c257ded2d4a3e8c97de5b4440b9c109fc",
+      "sites": [
+        {
+          "kind": "ClassDef",
+          "line": 27,
+          "source": "class PiHelper(DeclaredFamily, affix=\"Helper\"):\n    \"\"\"A helper declares only its packaged program and input/output records.\n\n    The existing native fence intentionally refuses scripts outside its pinned\n    deployment. Reading our shipped module as an eval entry retains that fence;\n    imports still resolve exclusively inside the caller-verified Pi package.\n    \"\"\"\n\n    script: ClassVar[Path]\n    request: ClassVar[type]\n    result: ClassVar[type]\n    timeout_seconds: ClassVar[float] = 10\n\n    @classmethod\n    async def run(cls, request, *, cwd: Path, env: dict[str, str] | None = None):\n        from .owner_launch import RestartEnvironment\n\n        node = shutil.which(\"node\")\n        if node is None:\n            raise PiHelperError(\"Pi helper needs Node\")\n        environment = dict(os.environ if env is None else env)\n        configuration = RestartEnvironment.inherit(environment)\n        environment.update(configuration.encode_native())\n        for key in (\"NODE_OPTIONS\", \"NODE_PATH\", \"NODE_COMPILE_CACHE\"):\n            environment.pop(key, None)\n        environment[\"NODE_DISABLE_COMPILE_CACHE\"] = \"1\"\n        environment[\"PI_OFFLINE\"] = \"1\"\n        package = Path(request.package)\n        command = (node, \"--no-global-search-paths\")\n        # Every current caller supplies the verified native deployment.\n        fence = package / \"dist/agent-comms-import-fence.mjs\"\n        command += (\"--import\", str(fence))\n        payload = json.dumps(FieldCodec.encode(request), separators=(\",\", \":\"), allow_nan=False)\n        outcome = await BoundedRun.run(\n            (*command, \"--input-type=module\", \"--eval\", cls.script.read_text()),\n            input=payload.encode(),\n            timeout=cls.timeout_seconds,\n            cwd=cwd,\n            env=environment,\n        )\n        if not o"
+        },
+        {
+          "kind": "AsyncFunctionDef",
+          "line": 41,
+          "source": "async def run(cls, request, *, cwd: Path, env: dict[str, str] | None = None):\n        from .owner_launch import RestartEnvironment\n\n        node = shutil.which(\"node\")\n        if node is None:\n            raise PiHelperError(\"Pi helper needs Node\")\n        environment = dict(os.environ if env is None else env)\n        configuration = RestartEnvironment.inherit(environment)\n        environment.update(configuration.encode_native())\n        for key in (\"NODE_OPTIONS\", \"NODE_PATH\", \"NODE_COMPILE_CACHE\"):\n            environment.pop(key, None)\n        environment[\"NODE_DISABLE_COMPILE_CACHE\"] = \"1\"\n        environment[\"PI_OFFLINE\"] = \"1\"\n        package = Path(request.package)\n        command = (node, \"--no-global-search-paths\")\n        # Every current caller supplies the verified native deployment.\n        fence = package / \"dist/agent-comms-import-fence.mjs\"\n        command += (\"--import\", str(fence))\n        payload = json.dumps(FieldCodec.encode(request), separators=(\",\", \":\"), allow_nan=False)\n        outcome = await BoundedRun.run(\n            (*command, \"--input-type=module\", \"--eval\", cls.script.read_text()),\n            input=payload.encode(),\n            timeout=cls.timeout_seconds,\n            cwd=cwd,\n            env=environment,\n        )\n        if not outcome.outcome.successful or len(outcome.stdout) > 4096:\n            raise PiHelperError(f\"{cls.declared_name} failed or exceeded its output bound\")\n        try:\n            return FieldCodec.decode(cls.result, json.loads(outcome.stdout))\n        except (TypeError, ValueError, UnicodeError) as error:\n            raise PiHelperError(f\"{cls.declared_name} returned invalid evidence\") from error"
+        },
+        {
+          "kind": "Call",
+          "line": 49,
+          "source": "environment.update(configuration.encode_native())"
+        },
+        {
+          "kind": "Call",
+          "line": 49,
+          "source": "configuration.encode_native()"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "sha256": "e1472c40995706b7d3b3797b450b92f86f38e323d3ce815bab1a1e795516670a",
+      "sites": [
+        {
+          "kind": "ClassDef",
+          "line": 38,
+          "source": "class RegistryStore(LockedStore[RegistryDocument]):\n    json_indent = 2\n    cache: RegistryCache = field(default_factory=RegistryCache, compare=False)\n\n    @property\n    def record_type(self) -> type[RegistryDocument]:\n        return RegistryDocument\n\n    def empty(self) -> RegistryDocument:\n        return RegistryDocument()\n\n    def _read_unlocked(self) -> RegistryDocument:\n        self.private_guard_unlocked()  # before even a cache hit\n        revision = file_revision(self.path)\n        if revision is not None and revision == self.cache.revision:\n            return self.cache.document\n        self.cache.revision = None\n        document = (\n            self._decode(json.loads(self.path.read_text()))\n            if revision is not None\n            else self.empty()\n        )\n        self.cache.document = document\n        self.cache.revision = revision\n        return document\n\n    def _encode(self, value: RegistryDocument) -> dict:\n        return FieldCodec.encode(value)\n\n    def _decode(self, data: object) -> RegistryDocument:\n        return self.record_type.from_wire(data)\n\n    @contextmanager\n    def editing(self) -> Iterator[RegistryEdit]:\n        with self.locked():\n            original = self._read_unlocked()\n            yield RegistryEdit(self, original.copy(), original)\n\n    def save_unlocked(self, document: RegistryDocument) -> None:\n        self._write_unlocked(json.dumps(self._encode(document), indent=2))\n        self.cache.document = document.copy()\n\n    def _write_unlocked(self, text: str) -> None:\n        # The two-file private guard protocol cannot use A8's rollback writer:\n        # a pending guard after any failed write MUST remain fail-closed.\n        from . import store_files\n\n        self.cache.revision = None\n        guard = self.private_guard_unloc"
+        },
+        {
+          "kind": "FunctionDef",
+          "line": 95,
+          "source": "def private_guard_unlocked(self) -> PrivateRegistryGuard | None:\n        \"\"\"Validate the private marker/guard BEFORE even a cached registry read.\n\n        The directory, guard file and registry are one private root. A marker\n        without its committed guard (or a guard without a marker) is an\n        uncertain migration, never an invitation to bootstrap old metadata.\n        \"\"\"\n        from .private_registry_guard import PrivateRegistryGuard\n\n        marker_path = self.path.parent / \"bus_meta.json\"\n        guard_path = self.path.parent / \".registry-owner-guard\"\n        guard_present = guard_path.exists() or guard_path.is_symlink()\n        if not marker_path.exists() and not marker_path.is_symlink():\n            if guard_present:\n                raise RelationViolationError(\"Private registry guard has no protocol marker\")\n            return None\n        from .wire_log import WireLog\n\n        marker = WireLog(self.path.with_name(\"bus.jsonl\")).read_metadata_unlocked(required=True)\n        if not marker.private:\n            if guard_present:\n                raise RelationViolationError(\"Private registry guard marker is absent\")\n            return None\n        guard = PrivateRegistryGuard(self.path, marker.root_id)\n        guard.verify()\n        return guard"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "sha256": "fd69e286f9e0e688a4fb3be7a74f8f97ce61a0e4016f73baa4c2f2ca37912afc",
+      "sites": [
+        {
+          "kind": "ImportFrom",
+          "line": 25,
+          "source": "from .native_pi import (\n    NativeContextProof,\n    NativePiPromptRejected,\n    NativePiRpcLaunch,\n    NativePiTerminalFailure,\n    NativePiUnavailable,\n    NativeTurnResult,\n    _verify_context,\n)"
+        },
+        {
+          "kind": "AsyncFunctionDef",
+          "line": 183,
+          "source": "async def execute(\n        cls,\n        package: Path,\n        *,\n        input_id: str,\n        prompt: str,\n        context_contributions: tuple[InputContributionCoordinates, ...] = (),\n        worktree: Path,\n        session: SelectedSession,\n        provider: str = \"openrouter\",\n        model: str = \"z-ai/glm-5.3-flash\",\n        thinking_level: str | None = None,\n        environment: dict[str, str] | None = None,\n        model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,\n        prompt_send_boundary: PrivateSendAdmission | None = None,\n        maintenance_root: Path | None = None,\n        selected_tool_mode: NativeToolMode | None = None,\n        observe_event: Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]] | None = None,\n        acquisition_measurements: PublicationMeasurements | None = None,\n        request_observer: Callable[[RequestProgress, ProcessIdentity], None] | None = None,\n        launch_owner: SelectedExecution | None = None,\n    ) -> NativeTurnResult:\n        if type(input_id) is not str or re.fullmatch(r\"[0-9a-f]{32}\", input_id) is None:\n            raise ValueError(\"A native turn requires a 128-bit lowercase hex input ID\")\n        if not prompt or not isinstance(prompt, str):\n            raise ValueError(\"A native turn requires a nonempty prompt\")\n        if model_wait_timeout is not None and (\n            not math.isfinite(model_wait_timeout) or model_wait_timeout <= 0\n        ):\n            raise ValueError(\"A model progress wait must be positive and finite\")\n        measurements = (acquisition_measurements if acquisition_measurements is not None\n                        else PublicationMeasurements())\n        # Independent execution acquires a fresh artifact. A selected stage\n        # derives from its executio"
+        },
+        {
+          "kind": "Assign",
+          "line": 219,
+          "source": "launch = await Coordination.run_worker(partial(\n                NativePiRpcLaunch.tracked if launch_owner is None else launch_owner.tracked_launch,\n                package,\n                worktree=worktree,\n                session=session,\n                provider=provider,\n                model=model,\n                thinking_level=thinking_level,\n                environment=environment,\n                selected_tool_mode=selected_tool_mode,\n            ))"
+        },
+        {
+          "kind": "Call",
+          "line": 219,
+          "source": "Coordination.run_worker(partial(\n                NativePiRpcLaunch.tracked if launch_owner is None else launch_owner.tracked_launch,\n                package,\n                worktree=worktree,\n                session=session,\n                provider=provider,\n                model=model,\n                thinking_level=thinking_level,\n                environment=environment,\n                selected_tool_mode=selected_tool_mode,\n            ))"
+        },
+        {
+          "kind": "Call",
+          "line": 219,
+          "source": "partial(\n                NativePiRpcLaunch.tracked if launch_owner is None else launch_owner.tracked_launch,\n                package,\n                worktree=worktree,\n                session=session,\n                provider=provider,\n                model=model,\n                thinking_level=thinking_level,\n                environment=environment,\n                selected_tool_mode=selected_tool_mode,\n            )"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "sha256": "8f8a96ab371ab8689f6368eba12e59d939ed49da9bf1bee32f6e261dca351aa7",
+      "sites": [
+        {
+          "kind": "FunctionDef",
+          "line": 423,
+          "source": "def catch_up_committed_append(\n        self,\n        hint: CommittedAppendHint,\n        *,\n        max_rows: int = 64,\n        max_bytes: int = 256 * 1024,\n        bootstrap_new: bool = False,\n    ) -> CandidateCatchUp:\n        \"\"\"Replay at most ONE bounded batch after a durable append notification.\n\n        Run outside publisher locks and off its latency path. An absent\n        derived index may be explicitly bootstrapped in bounded batches; an\n        mismatched schema, missing checkpoint, changed/truncated source or corrupt\n        WAL never gets an implicit rebuild. If ``caught_up`` is false and\n        ``more_source_bytes`` is true, a deferred worker may schedule another\n        finite batch. Pages remain unavailable for required high-water until\n        the index catches up. This\n        contains no seal, owner, claim or native proof and never retries work.\n        \"\"\"\n        if type(hint) is not CommittedAppendHint:\n            raise ValueError(\"candidate catch-up requires the original append hint\")\n        hint = hint.validated()\n        bootstrap_new = FieldCodec.decode(bool, bootstrap_new)\n        self._validate_limits(max_rows, max_bytes)\n        if self.bus.log._private_marker_unlocked().root_id != hint.root_id:\n            raise ProjectionRebuildRequiredError(\"candidate append hint belongs to another root\")\n        if self.path.exists():\n            prior = self._verified_checkpoint(hint.root_id)\n            if prior >= hint.through_seq:\n                return CandidateCatchUp(prior, True, False)\n            rebuild = False\n        elif bootstrap_new:\n            prior = 0\n            rebuild = True\n        else:\n            raise ProjectionRebuildRequiredError(\"candidate index needs explicit initial build\")\n        more_source_bytes = not self.maintain(\n "
+        },
+        {
+          "kind": "Assign",
+          "line": 445,
+          "source": "bootstrap_new = FieldCodec.decode(bool, bootstrap_new)"
+        },
+        {
+          "kind": "Call",
+          "line": 445,
+          "source": "FieldCodec.decode(bool, bootstrap_new)"
+        }
+      ]
+    }
+  ]
+}
