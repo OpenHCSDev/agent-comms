@@ -59,6 +59,7 @@ from agent_comms.native_pi import (
     _fresh_selected_revision,
 )
 from agent_comms.native_source_cursor import NativeSourceCursor
+from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.context_segments.optional_awareness import OmittedAwareness
 from agent_comms.publisher import Publisher
@@ -209,10 +210,13 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         # Model only admission in its dedicated thread, not native receipt.
         def admitted():
             admission = _kwargs["prompt_send_boundary"]
+            identity = NativeSessionIdentity(
+                json.loads(session_file.read_text().splitlines()[0])["id"], str(session_file)
+            )
             with (
-                admission(session_file, revision)
+                admission(identity, revision)
                 if selected is not None
-                else admission(session_file)
+                else admission(identity)
             ):
                 calls.append((input_id, prompt))
 
