@@ -58,6 +58,40 @@ async def test_mro_specific_before_shared_and_consumer_override():
     assert Diamond.__mro__.count(events.AgentEvent) == 1
 
 
+def test_unannotated_c3_override_masks_handler_and_instance_binding_remains_live():
+    @dataclass(frozen=True)
+    class Value(events.AgentEvent):
+        pass
+
+    seen = []
+
+    class Left(MroDispatch):
+        @handles(Value)
+        def masked(self, value):
+            raise AssertionError("The unannotated override must suppress this handler")
+
+    class Right(MroDispatch):
+        @handles(Value)
+        def masked(self, value):
+            raise AssertionError("C3 must not fall through to another base declaration")
+
+        @handles(Value, events.AgentEvent)
+        def kept(self, value):
+            seen.append("declared")
+
+    class Consumer(Left, Right):
+        masked = None
+
+    first, second = Consumer(), Consumer()
+    # Instance behavior still binds at invocation. A borrowed instance method
+    # need not repeat the class's handler-membership declaration.
+    first.kept = lambda value: seen.append("borrowed")
+    value = Value()
+    assert first.dispatch_sync(value) is value
+    assert second.dispatch_sync(value) is value
+    assert seen == ["borrowed", "borrowed", "declared", "declared"]
+
+
 @pytest.mark.parametrize("synchronous", [False, True])
 async def test_selected_handlers_preserve_replacements_and_identity(synchronous):
     @dataclass(frozen=True)

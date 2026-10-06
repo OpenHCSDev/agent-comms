@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from typing import Any, TypeVar
+from typing import Any, ClassVar, TypeVar
 
 Handler = TypeVar("Handler", bound=Callable[..., Any])
 
@@ -26,14 +26,27 @@ class MroDispatch:
     visited once by Python's MRO. A returned replacement flows to later handlers.
     """
 
-    def handlers_for(self, value: Any):
+    _handler_declarations: ClassVar[tuple[tuple[str, tuple[type, ...]], ...]] = ()
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        # Select effective declarations once, including unannotated overrides
+        # which suppress an inherited handler. Keep names rather than bound
+        # methods: each invocation still borrows its own instance's behavior.
         methods: dict[str, Any] = {}
-        for owner in type(self).__mro__:
+        for owner in cls.__mro__:
             for name, method in vars(owner).items():
                 methods.setdefault(name, method)
+        cls._handler_declarations = tuple(
+            (name, classes)
+            for name, method in methods.items()
+            if (classes := getattr(method, "__handled_classes__", ()))
+        )
+
+    def handlers_for(self, value: Any):
         for capability in type(value).__mro__:
-            for name, method in methods.items():
-                if capability in getattr(method, "__handled_classes__", ()):
+            for name, classes in type(self)._handler_declarations:
+                if capability in classes:
                     yield getattr(self, name)
 
     async def dispatch(self, value: Any, *args, **kwargs) -> Any:
