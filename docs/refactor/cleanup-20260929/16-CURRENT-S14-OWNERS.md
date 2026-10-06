@@ -255,9 +255,18 @@ source control or build repeated. Qualifier682c5a966aa normally includes687 and
 merged685, retains all four case assertions/bounds/joins and omits only the
 already accepted standalone guard invocation. Final future proposalc389ee09
 and source binding9432962d were personally hash-matched and relayed to original
-Sch through the working Parent route. Existing334 is only a candidate pending
-fresh Bohr floor/purpose; rootm687n01 and new READ/EXEC/release remain unbound.
-No authority from closed9b is inherited and no runtime success is claimed.
+Sch through the working Parent route. Bohr issued fresh25cee9a6 on genuinely
+nonlive334 after actual1468/945/full69 floor and zero-private-reference checks.
+Mendel personally read the immutable issue, prepared m687n01 at0700 and staged
+bee/b2e/16c9 once: exit0 in0.322s. Parent hash-matched stage terminald7a5d074,
+whole joined stagec5be8ff0 and resolved proof operandsfb5fc3c1; the owner records
+all three original stage identities absent and both child groups joined.
+Current lifecycle56600d94 consumes stage1 and disables staging. Bohr bound NEW
+matching4b READ8bcfff47 and released the sole original8c8f installed proof;
+proof attempts remain0 at this read. Native EXEC, four-case control and public
+source operations remain false. Original closed9b authority is not inherited.
+Actual installed proof/DTO/FullTrust, separate NEW EXEC and same-purpose release
+still precede any four-case launch; no runtime acceptance is claimed.
 
 Parent reviewed final scoped Ready68584b47b5a, matched all17 named final
 references and verified no source/build change from frozen5c689. Exact685 was
