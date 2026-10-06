@@ -43,6 +43,16 @@ waits remain unchanged; compile/diff checks pass, affected control still unrun.
 The sole production delta is still deletion of viewport clipping from logical
 range acquisition. Arendt has confirmed both native Pilot contract problems and
 is moving delivery onto the original App input owner; no parallel native edit.
+Published native77 c18ea16ad is source-reviewed: Pilot no longer authors Click
+or caches its first hit. Original App admission returns its matched Click;
+original Screen fills MouseEvent.widget from actual capture/geometry and the
+existing dispatch completion carries that delivered message. Raw App completion
+is kept separate from the routed offset event; release consumes its press.
+No Toad production on_event override needs migration. Native changed-path App
+checks are underway; this is not Batch05 causality or installed acceptance.
+Public publisher review confirms the existing same-format owner installation,
+complete audience/witness and evidence preservation remain final delivery
+requirements; private restored floor is not public candidate activation.
 Arendt has taken the concrete native Pilot contract correction: documented final-event bool
 caches first hit, whereas driver owns down/up Click admission. No backend fix or
 sole runtime cause is claimed. Parent owns Toad consumers and broader live
