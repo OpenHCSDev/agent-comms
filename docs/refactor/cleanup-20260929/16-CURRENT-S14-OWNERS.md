@@ -4,22 +4,39 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original objective remains incomplete. CI is deferred as a merge gate.
 
-### Independent S4 followthrough active — 2026-10-06
+### First paired App failures and owned repairs — 2026-10-06
 
-Original Arendt is continuing the unfinished S4 full-history condition/arm
-selection source family in her existing isolated checkout. The original recall
-result remains descriptive; full intervention/capacity/study is not certified.
-She checks current published owners before any change and coordinates shared
-configured-producer seams directly with Heis. This assignment authorizes source
-followthrough, not new SDK/provider inputs, builds, holder access or the
-unapproved30-pair/USD75 study. Frozen successes, failures and UNKNOWN stay held.
+Both original App attempts are consumed and further execution is disabled.
+Configured failed strict `InstalledSource` argument decoding before
+`configured_main`: the caller supplied the whole proof instead of its actual
+Core source member. The strict parser remains correct. Configured completed its
+one original three-package restoration and explicit private/source authority
+returns; Bohr independently closed its existing holder and verified the floor.
 
-### Repaired-pair proofs passed; live publication still pending — 2026-10-06
+Loaded reached two authored seed requests and two loaded views, then failed
+because the helper read `displayed_cursor` from `TranscriptHistory` rather than
+its canonical owner. Zero cohorts completed. The original operator is finishing
+its return checks; its lifecycle remains return-only pending the actual whole
+handback and independent closure. Preserve the existing restoration attempt.
 
-The original loaded proof passed in7.900 seconds and configured proof in5.777
-seconds. Both are installed-source/FullTrust results, not App acceptance. Their
-original owners retain final tuple, EXEC and same-purpose App release work.
-Parent relayed the loaded completed tuple to Bohr and Sch; no proof is repeated.
+Heis owns both existing consumer repairs, preserving strict decoding and the
+page/admission/paint checks. Parent checked his actual source trace and Mendel's
+actual return work. Neither failure authorizes a rerun, new loan, backend
+compatibility patch or repeated build. The installed proofs passed (loaded
+7.900 seconds, configured 5.777 seconds); they do not establish App acceptance.
+Raw failures and original journals remain held.
+
+### S4 source checkpoint integrated — 2026-10-06
+
+Parent normally merged Arendt's published followthrough checkpoint. Its eight
+files are evidence only; production, tests, tools and build inputs are unchanged.
+Arendt found no concrete new source defect and did not manufacture a patch.
+Three-cut configured intervention, full-context capacity and provider study
+remain unqualified. The existing prospective TASK_MEMORY-versus-BOUNDED pair
+does not qualify a FULL_CONTEXT arm. A separately selected paid comparison
+needs Tristan's cost ceiling and whole-purpose walltime; no study has started.
+
+### Live publication still pending — 2026-10-06
 
 Parent read the actual once publisher and original owner-cutover methods.
 `ReviewedRetainedSummaryCohort` consumes the original activation/source proof
