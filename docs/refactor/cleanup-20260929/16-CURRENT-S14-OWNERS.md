@@ -36,7 +36,13 @@ PR491 is now merged as the working acceptance helper and retained diagnostics,
 not a production/readiness claim. Normal join included current main/pin495;
 production/pins have no determining delta. Changed control/template compile;
 retained literal template-diff whitespace and finally-return warning are honest
-source limitations, not altered evidence. PR496's production range remains open.
+source limitations, not altered evidence. PR496's production range remains open. Current f9bba21a normally joins491/main
+and migrates all five menu/dialog acquisitions in its original range control to
+native is_mounted before reading children. All assertion predicates/actions and
+waits remain unchanged; compile/diff checks pass, affected control still unrun.
+The sole production delta is still deletion of viewport clipping from logical
+range acquisition. Arendt has confirmed both native Pilot contract problems and
+is moving delivery onto the original App input owner; no parallel native edit.
 Arendt has taken the concrete native Pilot contract correction: documented final-event bool
 caches first hit, whereas driver owns down/up Click admission. No backend fix or
 sole runtime cause is claimed. Parent owns Toad consumers and broader live
