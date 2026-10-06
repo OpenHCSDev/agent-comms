@@ -5,11 +5,8 @@ import os
 from pathlib import Path
 import subprocess
 
-from agent_comms.field_codec import FieldCodec
-from agent_comms.owner_lifecycle import OwnerReleaseReceipt
-from agent_comms.registry_document import RegistryDocument
 from original_owner_capture import OriginalTypedCapture
-from thread_format_retirement import GoalReportMemberRetirement
+from agent_comms.goal_history import GoalHistoryStore
 
 
 def digest(path):
@@ -39,6 +36,7 @@ def main():
         assert json.loads(ready)['pid'] == process.pid
         original_registry = digest(root / 'registry.json')
         original_releases = digest(root / 'owner_release_receipts.json')
+        original_history = digest(root / 'goal_history.sqlite3')
         reader = OriginalTypedCapture(root, original_python)
         captured = reader.read('captured-original')
         assert captured.retained.process.pid == process.pid
@@ -47,11 +45,10 @@ def main():
         assert captured.require_current().incarnation == captured.source.incarnation
         assert original_registry == digest(root / 'registry.json')
         assert original_releases == digest(root / 'owner_release_receipts.json')
-        document = json.loads((root / 'registry.json').read_text())
-        target = RegistryDocument.from_wire(GoalReportMemberRetirement.threads(document))
-        releases = FieldCodec.decode(dict[str, OwnerReleaseReceipt],
-            GoalReportMemberRetirement.releases(json.loads(
-                (root / 'owner_release_receipts.json').read_text())))
+        assert original_history == digest(root / 'goal_history.sqlite3')
+        observed = reader.observe('captured-original')
+        target, releases = observed.document, observed.releases
+        assert observed.goal_history == GoalHistoryStore.acquire_read_only(root / 'registry.json')
         assert target.threads[captured.source.name] == captured.source
         assert releases['retired-original'].before == 1
         assert releases['retired-original'].after == 2

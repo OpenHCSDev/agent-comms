@@ -102,7 +102,7 @@ def main():
         originals = [FieldCodec.decode(ProcessIdentity, item) for item in source['owners']]
         expected = [FieldCodec.decode(Thread, item) for item in source['original_threads']]
         expected[1] = replace(expected[1], active_turn=None)
-        protected = [root/'bus.jsonl', root/'protected-native.jsonl', root/InputDispositions.filename,
+        protected = [root/'bus.jsonl', root/'goal_history.sqlite3', root/'protected-native.jsonl', root/InputDispositions.filename,
                      root/'diagnostics'/f"{source['historical_input_id']}.json"]
         hashes = {str(path.relative_to(root)): digest(path) for path in protected}
         assert prompt_count(root) == 0
@@ -154,7 +154,9 @@ def main():
         assert hashes == {str(path.relative_to(root)): digest(path) for path in protected}
         assert read_active_route(route).native_package == Path(os.environ['AC_NATIVE_COPIED_PACKAGE'])
         proof = json.loads(receipt.read_text())
-        assert proof['target_validation'] == {'threads': 4, 'releases': 2}
+        assert proof['target_validation']['threads'] == 4
+        assert proof['target_validation']['releases'] == 2
+        assert proof['target_validation']['goal_history_rows'] > 0
         assert proof['phase'] == 'target_owners_launched' and proof['route_published_before_first_launch']
         proof.update(busy_refusal_without_stops=True, retained_distinct_settings=True,
                      renamed_owner_retained=True, both_thread_carriers_retired=True,

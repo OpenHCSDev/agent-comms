@@ -14,7 +14,8 @@ from typing import ClassVar
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_launch import RetainedOwnerLaunch
-from agent_comms.owner_lifecycle import OwnerRestartSelection
+from agent_comms.owner_lifecycle import OwnerReleaseReceipt, OwnerRestartSelection
+from agent_comms.goal_history import GoalHistoryEntry
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.historical_views import HistorySource
@@ -29,6 +30,8 @@ from owner_read_projection import (
 class OriginalOwnerRead:
     document: RegistryDocument
     selection: OwnerRestartSelection
+    releases: dict[str, OwnerReleaseReceipt] = field(default_factory=dict)
+    goal_history: tuple[GoalHistoryEntry, ...] = ()
 
 
 @dataclass(frozen=True)
