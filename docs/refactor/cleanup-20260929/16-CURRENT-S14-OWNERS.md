@@ -5332,3 +5332,11 @@ The authentic42.7MB source/two SDK forks/witness were returned separately. One n
 - [x] Actual new private READ5dabae matched holder14df6d and all89 named metadata references. Four-literal original proof26bebc/binding1dd57b compiled and delivered; original stage remained consumed/disabled. Bohr's completed actual turn and effective5d14c proof release were read before the sole invocation.
 - [x] Installed proof passed0/3.303708055s, original controller4137606/child4137617 joined and directly absent, no timeout/error/drain/group. Original953 assets/full69/keepers/origins passed; typed Core member equals full proof and original13-file App map matches. Final-App-handoff5a9fe8/14570B preserves17raw/18final refs and exact original three-literal1173 controller600/240.
 - [ ] Actual private EXEC/separate PUBLIC475 source READ and Bohr final same-purpose release are requested from this completed handoff. App/source capture remain unrun and held; no stage/proof repeats, no public install/performance claim. Original three-package return remains mandatory.
+
+### Physical05 completed private installed journey
+
+Result published on retained Toad qualification branch at b816bc587. The single controller passed in 204.57 seconds and its operator joined in 205.56 seconds. All eleven recorded journey checks passed. Actual runtime imports came from the selected installed Core/Toad/Textual pair; public installation is unchanged.
+
+Source custody was explicitly returned after the original witness marker. The original three-package restoration passed once in .2433 seconds; original floor/origins matched, recorded processes were absent and private references were clear. Whole handback retains 523 raw references, 36 authored files and both journals. The authoritative holder lifecycle is independently CLOSED. No subsequent operation is authorized.
+
+Performance review remains open. Native enqueue-to-writer median is 3.26ms and p95 10.18ms, but these measure writer completion rather than visible response or presentation FPS. Wheel-phase intervals and footage still require review; left-sidebar wheel phases recorded no writer receipts, so the passing journey cannot establish left-sidebar scroll delivery. Installed selected-target batch acceptance and public delivery remain unfinished.
