@@ -2,9 +2,12 @@
 from dataclasses import dataclass
 from pathlib import Path
 import os
+import json
 from typing import ClassVar
 
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec
+from agent_comms.registry_provenance import RegistryProvenance
 from retained_index_cutover import RetainedIndexCutover
 
 
@@ -16,10 +19,10 @@ class RetainedRoutingCutover(RetainedIndexCutover):
 
     @property
     def operation_arguments(self) -> tuple[str, ...]:
-        return (str(self.receipt),)
+        return (str(self.receipt), json.dumps(FieldCodec.record_schema(RegistryProvenance)))
 
-    def require_selection(self, snapshot, owners) -> None:
-        super().require_selection(snapshot, owners)
+    def require_source(self) -> None:
+        super().require_source()
         if not self.receipt.is_absolute() or self.receipt.exists() or self.receipt.is_symlink():
             raise RelationViolationError('Routing carry requires a fresh persistent receipt path.')
         if not self.receipt.parent.is_dir() or self.receipt.parent.is_symlink():

@@ -1,5 +1,6 @@
 """Target-format transaction, held under the inherited original writer custody."""
 from contextlib import closing, nullcontext
+from dataclasses import replace
 import json
 import os
 from pathlib import Path
@@ -7,7 +8,8 @@ import sqlite3
 import sys
 
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
-from agent_comms.store_files import _atomic_write_text
+from agent_comms.store_files import _atomic_write_text, file_revision
+from agent_comms.field_codec import FieldCodec
 from agent_comms.registry_store import RegistryStore
 from agent_comms.transcript_routes import _assert_schema
 from install_retained_index import require_retained_writer
@@ -32,7 +34,7 @@ def main():
         if connection is not None:
             connection.execute('PRAGMA synchronous=FULL')
             connection.execute('BEGIN IMMEDIATE')
-        document = plan.require_target(root, connection)
+        document, source = plan.require_target(root, connection)
         try:
             for cell in plan.cells:
                 table = next(table for table in tables() if table.declared_name == cell.table)
@@ -77,6 +79,10 @@ def main():
         raise ValueError('Carry changed original nonrouting registry state.')
     if database.exists() and file_witness(database)['mode'] != plan.database['mode']:
         raise ValueError('Carry changed annotation storage mode.')
+    # Only declared routing changed. The original typed namespace is bound to
+    # that verified post-image; the old codec never parses target routing cells.
+    carried_source = replace(source, snapshot_registry_revision=file_revision(root / 'registry.json'))
+    carried_source.require_original(root)
     result = {'root_id': root_id, 'through_seq': witness.through_seq,
               'original_writer_descriptor_verified': True,
               'routing_cells': len(plan.cells), 'registry_routings': len(plan.turns),
@@ -86,6 +92,7 @@ def main():
               'original_annotation_database': plan.database,
               'carried_annotation_database': file_witness(database),
               'nonrouting_annotations_unchanged': True, 'nonrouting_registry_unchanged': True,
+              'recorded_source': FieldCodec.encode(carried_source),
               'original_input_replays': 0, 'provider_calls': 0}
     _atomic_write_text(receipt, json.dumps(result, indent=2) + '\n', fsync_parent=True)
     print(json.dumps({'receipt': str(receipt), 'routing_cells': len(plan.cells),
