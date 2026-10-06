@@ -144,8 +144,13 @@ terminal1ee75449 passed3.924s with its original child joined and absent. Parent
 matched all21 final handoff references210a0ba1, source proof and FullTrust
 receipts. Bohr released the sole warm App at93638d95 with NEW7a EXEC471ec3cd.
 Parent read the original warm handle and verified controller2433857/b72325800
-and child2433903/b72325879 live at those exact births. No warm terminal or
-behavioral result is available at this checkpoint; retain the same attempt.
+and child2433903/b72325879 live at those exact births. The same attempt then
+failed1 after40.182s without timeout, drain errors or remaining owned groups;
+both identities are now absent. Original stderr locates the failure at the
+warm control's mounted-history/displayed-cursor precondition, before either
+warm-return or eviction restoration checks. These behaviors remain unqualified.
+Heis owns exact cleanup/floor return and subsequent source cause tracing; no
+product defect or automatic retry is inferred from this assertion.
 No public decoder,
 configured fork, loaded cohort, accepted07/466 replay or new build is included.
 Normal return is actual CURRENT471 ToAdb2e+Text16c9 once; all original floor,
