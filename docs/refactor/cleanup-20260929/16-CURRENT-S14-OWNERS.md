@@ -6,6 +6,14 @@ The original objective remains incomplete. CI is deferred as a merge gate.
 
 ### Current priority: sidebar and scrolling responsiveness
 
+- Parent captured a second120-second profile of the actual running UI during
+  Tristan's #openhcs response burst. Notification reads/decoding and main-thread
+  route validation are concrete hotspots; substantial sampler losses preclude
+  CPU percentages or frame-time claims. Core697 deletes per-recipient full-window
+  receipt scans through the original NotificationAssignment owner. Four affected
+  real bus/SQLite checks pass. The clean checkpoint is715b69d22, source/database
+  verified only; live installation remains unchanged. Parent owns the remaining
+  route/read-consumer trace and measured installed responsiveness followthrough.
 - Parent owns Toad482: duplicate pointer refresh orchestration is deleted;
   context projection uses the existing worker, and native Tree reconciliation
   avoids recursive inspection equality and repeated descendant walks.
