@@ -28,8 +28,10 @@ The original objective remains incomplete. CI is deferred as a merge gate.
   Toad489 and native73 are merged; native left/right drag/slider capture passed.
   Current three-wheel candidate is built and all940 changed-package assets plus
   complete RECORDs match Git. Paired pins Toad490 are merged. Actual installed and
-  physical latency remain unverified. Fresh Bohr returned485 assessment is delivered;
-  no prefix or public App has been changed.
+  physical latency remain unverified. Physical03 has now staged the matched
+  candidate once and its installed-source proof passed in 3.31 seconds. All953
+  assets/full69 matched, including the typed Core member. Private App/source
+  capture remain held for final receipts/release; public App is unchanged.
   No repeat physical operation or source/provider input is authorized by that
   source investigation.
 
@@ -5178,10 +5180,25 @@ Remaining delivery checks:
 - [x] Merge the working sidebar, selection, notification and native pointer changes.
 - [x] Build and verify the coherent paired wheels against Git and complete RECORDs.
 - [x] Obtain the fresh holder/floor/return contract and perform its single stage.
-- [ ] Verify the installed source with the matching READ and sole proof release.
+- [x] Verify the installed source with the matching READ and sole proof release.
 - [ ] Run and review the isolated saved-history sidebar/scroll recording.
 - [ ] Verify installed multi-selection and truthful backend partial outcomes.
 - [ ] Complete original package/source returns and independent closures.
 - [ ] Deliver the reviewed pair to the actual local runtime and verify fresh attachment.
 Live PUBLIC475 packages and original saved histories remain unchanged. No
 performance improvement or completed integration goal is claimed from staging.
+
+Physical03 sole proof passed in3.310913287 seconds under the effective release
+and matching fresh READ. Both original processes joined/are absent; all17 raw
+references matched. All953 installed assets/full69 and protected originals
+matched. The exported Core InstalledSource equals the full-proof member and
+is included in the13-file App map. Final handoff:
+/home/ts/wt/toad-sidebar-selected-targets-20261006/.artifacts/sidebar-latency-physical03-20261006/485-installed-purpose/final-App-handoff.json.
+Bohr and Sch received the same completed tuple for proof consumption and
+separate private EXEC/source READ, respectively. Controller/App/source capture
+remain unrun; no footage or performance qualification follows from this proof.
+Removed916878867 bytes of completed build-only source archives/extractions after
+a privileged no-reference/no-gap census and confirming none of the issued
+inputs borrows those paths. Wheels, raw build logs, receipts, source Git commits,
+previous recordings and journals remain held; BUILD-SCRATCH-RELEASE.json records
+the exact removed paths and archive hashes.
