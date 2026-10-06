@@ -4,6 +4,28 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original objective remains incomplete. CI is deferred as a merge gate.
 
+### Current priority: sidebar and scrolling responsiveness
+
+- Parent owns Toad482: duplicate pointer refresh orchestration is deleted;
+  context projection uses the existing worker, and native Tree reconciliation
+  avoids recursive inspection equality and repeated descendant walks.
+- Toad482 now declares held mutation/paint roots instead of pausing the entire
+  frame. Native Textual72 owns geometry, retained damage, cut cells and sender
+  callback admission. Parent consumes the publication hook through the existing
+  writer/scene lifetime; the competing App-level dispatch is deleted.
+- Matching source App verification is underway. Existing right-sidebar p95
+  429.5ms remains a demonstrated problem, not a passing responsiveness claim.
+  Physical UI and installed delivery remain outstanding.
+- Toad483 loaded native-retirement witnesses and Toad484 native participant-cell
+  clicks are normally merged into Toad478. Exact warm identity remains strict;
+  retirement gets separate credit. Neither source repair supplies mounted
+  qualification. Frozen wheels and original run evidence remain unchanged.
+- Configured03 reached real source paint, saved-channel return and peer busy
+  readiness, then peer selection timed out. Its owner reports the original
+  restoration and explicit whole return complete; independent holder/artifact
+  closure belongs to the original issuers. Cause beyond the wait is unproved.
+
+
 ### Consumer repairs integrated; second paired results — 2026-10-06
 
 Parent normally merged Heis's complete published consumer repair into Toad478.
