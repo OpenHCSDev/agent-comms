@@ -61,7 +61,7 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
         """Restore this saved declaration before acquiring its live process."""
         def acquire():
             comms = agent._comms
-            owned = agent.sessions.declare_thread(str(project), os.getpid())
+            owned = agent.sessions.declare_thread(str(project))
             return comms.threads.attach_session(owned, str(session))
 
         thread = await Coordination.run_worker(acquire)

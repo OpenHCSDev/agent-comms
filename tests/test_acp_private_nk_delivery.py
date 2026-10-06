@@ -130,9 +130,8 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     session = await agent.new_session(cwd=str(project), mcp_servers=[])
     owner = comms.registry.require(session.session_id)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        store.participants.register(
-            stable_thread_lookup(owner.created_at), owner.name, owner.name, committed=True
-        )
+        participant = store.participants.get(stable_thread_lookup(owner.created_at))
+    assert participant.committed and participant.owner_thread == owner.name
     invoke_tool(
         comms,
         "comms_send",

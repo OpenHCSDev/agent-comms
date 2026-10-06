@@ -147,8 +147,8 @@ class SessionLifecycle:
                 }
             )
 
-    def declare_thread(self, cwd: str, owner_pid: int) -> Thread:
-        """Publish the declared participant before acquiring its live process."""
+    def declare_thread(self, cwd: str) -> Thread:
+        """Publish the participant before this lifecycle resolves execution custody."""
         thread = self.comms.threads.claim_thread(
             self.thread_name_for(cwd),
             tags=frozenset({"acp"}),
@@ -159,7 +159,11 @@ class SessionLifecycle:
             auto_title_pending=True,
         )
         self.comms.threads.restore_stopped(self.comms.registry.snapshot(), (thread.name,))
-        return self.comms.owners.acquire_thread(thread.name, owner_pid=owner_pid)
+        return self.acquire_declared_thread(thread)
+
+    def acquire_declared_thread(self, thread: Thread) -> Thread:
+        """An owning ACP lifecycle acquires its calling process after publication."""
+        return self.comms.owners.acquire_thread(thread.name, owner_pid=os.getpid())
 
     def validated_thread(self, cwd: str, session_id: str) -> Thread:
         thread = self.comms.registry.require(session_id)
@@ -251,7 +255,7 @@ class SessionLifecycle:
     ) -> NewSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
         await Coordination.run_worker(self.effects._private_nk_marker)
-        thread = await Coordination.run_worker(partial(self.declare_thread, cwd, os.getpid()))
+        thread = await Coordination.run_worker(partial(self.declare_thread, cwd))
         await self.bind_owned(thread, thread.name)
         self.effects.inputs.ensure_live_drain(thread.name)
         options = await self.config.session_options(thread.name, thread.name)
@@ -417,11 +421,15 @@ class SessionLifecycle:
 class AttachedSessionLifecycle(SessionLifecycle):
     """A stdio attachment requests a separate executor; it never claims ownership."""
 
+    def acquire_declared_thread(self, thread: Thread) -> Thread:
+        """Leave the published declaration for the original load admission."""
+        return thread
+
     async def new_session(
         self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
     ) -> NewSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
-        thread = await Coordination.run_worker(partial(self.declare_thread, cwd, 0))
+        thread = await Coordination.run_worker(partial(self.declare_thread, cwd))
         loaded = await self.load_session(cwd, thread.name, mcp_servers, **kwargs)
         return NewSessionResponse(
             session_id=thread.name,
