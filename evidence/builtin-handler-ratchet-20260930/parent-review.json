@@ -1,0 +1,32 @@
+{
+  "nra_pr": 15,
+  "nra_reviewed_head": "ce73370c254bc1841b4d0ca8fa2b763d2f9e8839",
+  "nra_code_pin": "d392c5e4cd189ce1203127a746337ad498a0330d",
+  "nra_base": "checkpoint/native-proof-performance-20260914",
+  "nra_merge": "c6f156089bf65b74584506ca4b52153445aabb07",
+  "core_pr": 466,
+  "core_reviewed_head": "e863bbbc174910aec4faeb6e67497a88b95b3b4e",
+  "core_merge": "07fff8c107d8e11200c85943af2012eac0dffdfb",
+  "review": "Full shared collector, declaration-owned Measure hooks, package dependency, specimen tests and installed receipt inspected. Installed/source collector and original421 Git fixture bytes independently verified. Archive collector equals the installed source.",
+  "historical_primitive_growth": {
+    "before": 0,
+    "after": 6,
+    "installed_command_exit": 1
+  },
+  "original_receipt": "/home/ts/wt/comms-builtin-handler-ratchet-20260930/docs/refactor/builtin-handler-installed-receipt.json",
+  "production_deletions": {
+    "nra": 1,
+    "core": 1
+  },
+  "additional_test_deletions": {
+    "nra": 1
+  },
+  "patterns": [
+    "IMPL-3",
+    "IMPL-12",
+    "BOUND-2"
+  ],
+  "scope": "Actual affected installed debt-ratchet command; no whole UI/ACP or downstream OpenHCS installation claim",
+  "public_runtime_defaults_changed": false,
+  "initial_merge_attempt": "Exact head fencing rejected when owner published documentation-only ce73370c; parent inspected the complete new delta before merging that head."
+}

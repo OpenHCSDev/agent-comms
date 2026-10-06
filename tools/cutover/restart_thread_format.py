@@ -25,7 +25,6 @@ from agent_comms.active_route import read_active_route
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_pi import _trusted_package
 from agent_comms.owner_launch import RestartEnvironment
-import agent_comms.owner_restart
 from cutover_child import run_cutover_child
 
 
@@ -69,7 +68,7 @@ def main():
         result = run_cutover_child([
             str(arguments.original_python),
             str(Path(__file__).with_name('restart_original_thread_format.py')),
-            str(Path(agent_comms.owner_restart.__file__).parent), str(descriptor),
+            str(descriptor),
         ], packet=json.dumps(packet), environment=authentic, descriptors=(descriptor,))
         print(result.stdout.strip(), flush=True)
     finally:

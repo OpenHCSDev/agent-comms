@@ -1,0 +1,33 @@
+{
+  "actual_joined_main": "208b8f07b345728ceffde1cd62d4fabbf6393af1",
+  "actual_source_head": "43b4051f1a82c6aec1673af068f9e7f1af111612",
+  "wheel_source_head": "575db4a232d7736261dacd5bf0da4a750e885fdd",
+  "production_forced_resources_and_build_inputs_delta": [],
+  "retained_wheel": {
+    "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/core-wheel/wheel/agent_comms-0.1.0-py3-none-any.whl",
+    "sha256": "5d6617d99f43e5aabf44f985d9fbcf1847b4c6404f976143a9a38986b33f0137",
+    "bytes": 906547
+  },
+  "normal683_test_runner_source_equal": true,
+  "preserved_runner_files": [
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/tests/test_native_inspector_lifetime.py",
+      "sha256": "6f31ce81da317f2d9733763befacf4662425d43babb641342901dadd9339e6d8",
+      "bytes": 22353
+    },
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/tests/three_cut_retention_configured_journey.py",
+      "sha256": "73fbc03eeddf6b999cd3d6f3edee9c69fa31dc58b2d2b94d5b27e94632a400a0",
+      "bytes": 25272
+    }
+  ],
+  "native_pin": {
+    "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/pi-native.sha256",
+    "sha256": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+    "bytes": 6969
+  },
+  "native_tree": "63f18710cb9329be6ade27bac3b4dd822e2b36f013756fa8e6717b8073a4592c",
+  "assembly_and_wheel_builds_consumed": 1,
+  "no_rebuild_or_run": true,
+  "configured_pair_origin_policy": "UNBOUND: requires absent policy in the actual RetainedOwnerLaunch environment as well as controller; no provider substitution or execution authority here."
+}

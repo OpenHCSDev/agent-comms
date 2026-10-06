@@ -14,7 +14,7 @@ def transcript(path, count):
         + "\n"
         + "".join(
             json.dumps(
-                {"type": "message", "message": {"role": "assistant", "content": f"Record {i}"}}
+                {"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": f"Record {i}"}]}}
             )
             + "\n"
             for i in range(count)
@@ -41,7 +41,7 @@ def test_pages_reach_beginning_and_return_to_tail_without_duplicates(tmp_path):
     # New live output must not leak into the frozen replay window and duplicate ACP input.
     with path.open("a") as output:
         output.write(
-            json.dumps({"type": "message", "message": {"role": "assistant", "content": "LIVE"}})
+            json.dumps({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": "LIVE"}]}})
             + "\n"
         )
     seen = [event.text for event in page.events]
@@ -57,7 +57,7 @@ def test_oversized_message_and_file_identity(tmp_path):
     path = tmp_path / "session.jsonl"
     text = "x" * 200000
     path.write_text(
-        json.dumps({"type": "message", "message": {"role": "assistant", "content": text}}) + "\n"
+        json.dumps({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}}) + "\n"
     )
     comms = wire(tmp_path / "wire")
     thread = Thread("worker", frozenset(), str(tmp_path), session_file=str(path))
@@ -109,7 +109,7 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
 
     child_path = tmp_path / "child.jsonl"
     transcript(child_path, 1)
-    comms.threads.attach_session("child", str(child_path))
+    comms.threads.attach_session(comms.registry.require("child"), str(child_path))
     assert [event.text for event in comms.transcripts.thread_transcript_page("child").events] == [
         "Record 0"
     ]
@@ -129,7 +129,7 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
     through = page.after
     own_path = tmp_path / "child.jsonl"
     transcript(own_path, 1)
-    comms.threads.attach_session("child", str(own_path))
+    comms.threads.attach_session(comms.registry.require("child"), str(own_path))
     seen = [event.text for event in page.events if event.declared_name == "assistant"]
     while page.has_older:
         page = comms.transcripts.thread_transcript_page(

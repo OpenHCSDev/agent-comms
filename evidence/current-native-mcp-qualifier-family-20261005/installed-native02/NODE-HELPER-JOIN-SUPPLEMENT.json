@@ -1,0 +1,66 @@
+{
+  "append_only_to_whole1279": "Original whole birth evidence limit corrected by actual four *.command.json originals. No new import/run/nativeuse.",
+  "node_helper_identities": [
+    {
+      "raw": "/home/ts/.cache/agent-scratch/m682n02/n/test_real_pi_mcp_acp_link_allo0/mcp-approval.command.json",
+      "sha256": "3ea7a039cca89277e6a854ee2da3d15d5762f9109c2032828dc586dd08fe28d8",
+      "identity": {
+        "pid": 2338711,
+        "start_time": 72160759
+      },
+      "proc_absent": true,
+      "outcome": {
+        "kind": "exited",
+        "code": 0
+      },
+      "original_retired": true,
+      "remaining_groups": []
+    },
+    {
+      "raw": "/home/ts/.cache/agent-scratch/m682n02/n/test_real_pi_mcp_acp_link_allo0/project-trust.command.json",
+      "sha256": "e0749ff8479e2d0ce99c3387caea2af9d14fa88ce65264cda7b50fd684266731",
+      "identity": {
+        "pid": 2338674,
+        "start_time": 72160560
+      },
+      "proc_absent": true,
+      "outcome": {
+        "kind": "exited",
+        "code": 0
+      },
+      "original_retired": true,
+      "remaining_groups": []
+    },
+    {
+      "raw": "/home/ts/.cache/agent-scratch/m682n02/n/test_real_pi_mcp_acp_link_allo0/origin-guard.command.json",
+      "sha256": "16c158d621043e731cce1563fe44a4339eb9c525f5ef003800e1c3c4dca038fb",
+      "identity": {
+        "pid": 2339072,
+        "start_time": 72161992
+      },
+      "proc_absent": true,
+      "outcome": {
+        "kind": "exited",
+        "code": 0
+      },
+      "original_retired": true,
+      "remaining_groups": []
+    },
+    {
+      "raw": "/home/ts/.cache/agent-scratch/m682n02/n/test_real_pi_mcp_acp_link_allo0/mcp-declaration.command.json",
+      "sha256": "f0e935a091fc73798c5fbd416f268c77d6dde2c6caedead0088eb4b012df7a55",
+      "identity": {
+        "pid": 2338700,
+        "start_time": 72160733
+      },
+      "proc_absent": true,
+      "outcome": {
+        "kind": "exited",
+        "code": 0
+      },
+      "original_retired": true,
+      "remaining_groups": []
+    }
+  ],
+  "raw_whole_handback_unchanged": "1279b93f25c3646f1bb9c41f595af104be4b70f5caabfd85f928302338c1bf93"
+}

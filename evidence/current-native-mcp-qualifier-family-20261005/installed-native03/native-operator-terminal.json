@@ -1,0 +1,13 @@
+{
+  "outcome": {
+    "kind": "exited",
+    "code": 1
+  },
+  "controller": {
+    "pid": 2534989,
+    "start_time": 72490067
+  },
+  "duration_seconds": 12.152502191020176,
+  "original_parent_wait": true,
+  "controller_alive": false
+}

@@ -1,0 +1,14 @@
+{
+  "owner": "parent integration432",
+  "purpose": "dispose retired reviewed recovery package only; source/proofs/originalpreimages retained",
+  "prefix": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/runtime-openhcs-recovery-cohort-20261001",
+  "prefix_allocated_bytes": 94818304,
+  "process_references": [],
+  "launcher_references": [],
+  "originals_preserved": "/home/ts/wt/comms-cleanup-live-integration-20260929/.release-private",
+  "retired_package_source_proof": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/staging-openhcs-recovery-cohort-20261001/source-proof.json",
+  "before_available_bytes": 5472768000,
+  "after_available_bytes": 5507657728,
+  "observed_available_change_bytes": 34889728,
+  "completed": true
+}

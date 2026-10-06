@@ -1,0 +1,68 @@
+{
+  "controller_exit": 1,
+  "duration_seconds": 63.72686986299232,
+  "junit_cases": 1,
+  "failed": "allow/permission entered wait timeout",
+  "other_cases": "UNRUN firstfailurestop",
+  "source_error": "IdentityConflict participant aggregate is not registered in original backend diagnostic",
+  "source_owner": "OwnedTurn.prepare_native/InputDrain.private_observation_revision/ParticipantStore.get; no nativefault claim",
+  "input_dispositions": {
+    "rows": {
+      "acp:5956d811994c45999ad5f371bc1e10b3": {
+        "admission": 2,
+        "key": "acp:5956d811994c45999ad5f371bc1e10b3",
+        "kind": "not_sent",
+        "owner": "project",
+        "sequence": null,
+        "source_text": "Run fixture echo once.",
+        "target": "project"
+      }
+    },
+    "version": 1
+  },
+  "model_requests": [],
+  "guard_boundary": {
+    "allowed_origin": "http://127.0.0.1:42117",
+    "requested_origin": "https://127.0.0.1:42117",
+    "dispatcher_reconfigured": true,
+    "refusals": [
+      {
+        "name": "Error",
+        "message": "Connection error.",
+        "cause": {
+          "code": "ERR_AGENT_COMMS_NATIVE_ORIGIN_REFUSED",
+          "allowed_origin": "http://127.0.0.1:42117",
+          "requested_origin": "https://127.0.0.1:42117"
+        }
+      },
+      {
+        "name": "Error",
+        "message": "Connection error.",
+        "cause": {
+          "code": "ERR_AGENT_COMMS_NATIVE_ORIGIN_REFUSED",
+          "allowed_origin": "http://127.0.0.1:42117",
+          "requested_origin": "https://127.0.0.1:42117"
+        }
+      }
+    ],
+    "redirect_error": {
+      "name": "TypeError",
+      "message": "fetch failed",
+      "cause_message": "unexpected redirect"
+    },
+    "localhost_positive": true,
+    "sdk_origin_refused": true,
+    "redirect_refused": true,
+    "dispatched": [
+      {
+        "origin": "http://127.0.0.1:42117",
+        "path": "/guard-positive"
+      },
+      {
+        "origin": "http://127.0.0.1:42117",
+        "path": "/guard-redirect"
+      }
+    ]
+  },
+  "scope": "Guard narrowdefaultfetch positive; no complete MCP/native workflow/fullprocess egress isolation"
+}

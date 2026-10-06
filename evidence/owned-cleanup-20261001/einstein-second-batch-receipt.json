@@ -1,0 +1,1105 @@
+{
+  "started_epoch": 1790896948.125591,
+  "before_available_bytes": 7625998336,
+  "removed": [
+    {
+      "path": "/home/ts/wt/toad-t2-boundary-20260928/.artifacts/nra-cache",
+      "bytes": 176005120,
+      "wt": "/home/ts/wt/toad-t2-boundary-20260928",
+      "pr": 262,
+      "branch": "refactor/t2-acp-boundary-20260928",
+      "kind": "computed_cache",
+      "refs": [],
+      "allocated_bytes": 176005120,
+      "exclusive_allocated_bytes": 176005120,
+      "preserved_metadata": []
+    },
+    {
+      "path": "/home/ts/wt/comms-wire-record-ownership-20260929/.installed",
+      "bytes": 125423616,
+      "wt": "/home/ts/wt/comms-wire-record-ownership-20260929",
+      "pr": 391,
+      "branch": "refactor/wire-record-ownership-20260929",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 125423616,
+      "exclusive_allocated_bytes": 108277760,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/comms-wire-record-ownership-20260929/.installed/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/01-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-foreground-readiness-remainder-20260930/.artifacts/runtime-reader-geometry-254-20261001",
+      "bytes": 89886720,
+      "wt": "/home/ts/wt/toad-foreground-readiness-remainder-20260930",
+      "pr": 254,
+      "branch": "perf/foreground-readiness-remainder-20260930",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 89886720,
+      "exclusive_allocated_bytes": 29995008,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-foreground-readiness-remainder-20260930/.artifacts/runtime-reader-geometry-254-20261001/activation.json",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/02-activation.json",
+          "sha256": "60958f5eb895486560d0b2cc41bbd8d4b12f95f9024e699af35a088272b96d16"
+        },
+        {
+          "original": "/home/ts/wt/toad-foreground-readiness-remainder-20260930/.artifacts/runtime-reader-geometry-254-20261001/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/02-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-foreground-readiness-sidebar-followup-20260930/.artifacts/installed-body-readiness-253",
+      "bytes": 87339008,
+      "wt": "/home/ts/wt/toad-foreground-readiness-sidebar-followup-20260930",
+      "pr": 253,
+      "branch": "perf/foreground-readiness-sidebar-followup-20260930",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 87339008,
+      "exclusive_allocated_bytes": 27578368,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-foreground-readiness-sidebar-followup-20260930/.artifacts/installed-body-readiness-253/activation.json",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/03-activation.json",
+          "sha256": "4944686af522721c7cb6210d7370f868223788f993e8a4f44cba97431af1fcfb"
+        },
+        {
+          "original": "/home/ts/wt/toad-foreground-readiness-sidebar-followup-20260930/.artifacts/installed-body-readiness-253/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/03-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-historical-admission-resource-followup-20261001/.artifacts/runtime-resource-admission-269-20261001",
+      "bytes": 86294528,
+      "wt": "/home/ts/wt/toad-historical-admission-resource-followup-20261001",
+      "pr": 269,
+      "branch": "perf/historical-admission-resource-followup-20261001",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 86294528,
+      "exclusive_allocated_bytes": 26398720,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-historical-admission-resource-followup-20261001/.artifacts/runtime-resource-admission-269-20261001/activation.json",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/04-activation.json",
+          "sha256": "a4026c78c2825e50f262006d5260c6054ae64c748b335c611ff4cbff48865754"
+        },
+        {
+          "original": "/home/ts/wt/toad-historical-admission-resource-followup-20261001/.artifacts/runtime-resource-admission-269-20261001/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/04-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-foreground-layout-cache-followup-20261001/.artifacts/runtime-retained-end-266-20261001",
+      "bytes": 86261760,
+      "wt": "/home/ts/wt/toad-foreground-layout-cache-followup-20261001",
+      "pr": 266,
+      "branch": "perf/foreground-layout-cache-followup-20261001",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 86261760,
+      "exclusive_allocated_bytes": 26370048,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-foreground-layout-cache-followup-20261001/.artifacts/runtime-retained-end-266-20261001/activation.json",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/05-activation.json",
+          "sha256": "373d456c44aa1ac0a907727baed3d9d4f8ed0a75c494679fdda620953b8ad04b"
+        },
+        {
+          "original": "/home/ts/wt/toad-foreground-layout-cache-followup-20261001/.artifacts/runtime-retained-end-266-20261001/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/05-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-workspace-readiness-sidebar-continuation-20260930/.artifacts/installed-sidebar-custody-249",
+      "bytes": 86188032,
+      "wt": "/home/ts/wt/toad-workspace-readiness-sidebar-continuation-20260930",
+      "pr": 249,
+      "branch": "perf/workspace-readiness-sidebar-continuation-20260930",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 86188032,
+      "exclusive_allocated_bytes": 26451968,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-workspace-readiness-sidebar-continuation-20260930/.artifacts/installed-sidebar-custody-249/activation.json",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/06-activation.json",
+          "sha256": "41d535e37fe0912c4e5461ace6f4ececc0b305057554ef06651c845ecd7eeeaa"
+        },
+        {
+          "original": "/home/ts/wt/toad-workspace-readiness-sidebar-continuation-20260930/.artifacts/installed-sidebar-custody-249/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/06-pyvenv.cfg",
+          "sha256": "f160526df53b7b83a4c24a7471a911151f624521e495c1d5a9dc23db425a3f29"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-foreground-layout-resource-followup-20261001/.artifacts/runtime-height-contract-264-20261001",
+      "bytes": 85925888,
+      "wt": "/home/ts/wt/toad-foreground-layout-resource-followup-20261001",
+      "pr": 264,
+      "branch": "perf/foreground-layout-resource-followup-20261001",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 85925888,
+      "exclusive_allocated_bytes": 26034176,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-foreground-layout-resource-followup-20261001/.artifacts/runtime-height-contract-264-20261001/activation.json",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/07-activation.json",
+          "sha256": "159684c8948b10a2d8c39b7bf761a3f0c39fccf23c207a6c98ba8720b734da55"
+        },
+        {
+          "original": "/home/ts/wt/toad-foreground-layout-resource-followup-20261001/.artifacts/runtime-height-contract-264-20261001/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/07-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-foreground-resource-residency-continuation-20261001/.artifacts/runtime-native-width-271-20261001",
+      "bytes": 85831680,
+      "wt": "/home/ts/wt/toad-foreground-resource-residency-continuation-20261001",
+      "pr": 271,
+      "branch": "perf/foreground-resource-residency-continuation-20261001",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 85831680,
+      "exclusive_allocated_bytes": 25907200,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-foreground-resource-residency-continuation-20261001/.artifacts/runtime-native-width-271-20261001/activation.json",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/08-activation.json",
+          "sha256": "7dec7987aebf797b997d2f523958588d38098f17c7102f401cdedbd238ab940e"
+        },
+        {
+          "original": "/home/ts/wt/toad-foreground-resource-residency-continuation-20261001/.artifacts/runtime-native-width-271-20261001/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/08-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-workspace-native-residency-continuation-20260930/.artifacts/installed-native-residency-248",
+      "bytes": 85815296,
+      "wt": "/home/ts/wt/toad-workspace-native-residency-continuation-20260930",
+      "pr": 248,
+      "branch": "perf/workspace-native-residency-continuation-20260930",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 85815296,
+      "exclusive_allocated_bytes": 26079232,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-workspace-native-residency-continuation-20260930/.artifacts/installed-native-residency-248/activation.json",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/09-activation.json",
+          "sha256": "802fc3e080f4fa008a859a834b8c3d00846a2d07030db8fb944ddad835c49d84"
+        },
+        {
+          "original": "/home/ts/wt/toad-workspace-native-residency-continuation-20260930/.artifacts/installed-native-residency-248/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/09-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-workspace-foreground-layout-continuation-20260930/.artifacts/installed-body-cost-245",
+      "bytes": 85811200,
+      "wt": "/home/ts/wt/toad-workspace-foreground-layout-continuation-20260930",
+      "pr": 245,
+      "branch": "perf/workspace-foreground-layout-continuation-20260930",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 85811200,
+      "exclusive_allocated_bytes": 26075136,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-workspace-foreground-layout-continuation-20260930/.artifacts/installed-body-cost-245/activation.json",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/10-activation.json",
+          "sha256": "988c0b1496f3f8a557673f8ba29e36d54d2d4f646b4241ab3ea50396100b6186"
+        },
+        {
+          "original": "/home/ts/wt/toad-workspace-foreground-layout-continuation-20260930/.artifacts/installed-body-cost-245/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/10-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-foreground-resource-residency-continuation-20261001/.artifacts/runtime-native-flow-271-20261001",
+      "bytes": 85741568,
+      "wt": "/home/ts/wt/toad-foreground-resource-residency-continuation-20261001",
+      "pr": 271,
+      "branch": "perf/foreground-resource-residency-continuation-20261001",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 85741568,
+      "exclusive_allocated_bytes": 25817088,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-foreground-resource-residency-continuation-20261001/.artifacts/runtime-native-flow-271-20261001/activation.json",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/11-activation.json",
+          "sha256": "d56c371bce75f2528db2bc69f0edfd7d450402f7d75dd862bb58675ec2d79857"
+        },
+        {
+          "original": "/home/ts/wt/toad-foreground-resource-residency-continuation-20261001/.artifacts/runtime-native-flow-271-20261001/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/11-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-workspace-foreground-resource-continuation-20260930/.artifacts/installed-history-projection-242",
+      "bytes": 85553152,
+      "wt": "/home/ts/wt/toad-workspace-foreground-resource-continuation-20260930",
+      "pr": 242,
+      "branch": "perf/workspace-foreground-resource-continuation-20260930",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 85553152,
+      "exclusive_allocated_bytes": 25829376,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-workspace-foreground-resource-continuation-20260930/.artifacts/installed-history-projection-242/activation.json",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/12-activation.json",
+          "sha256": "9f4e1c4a065f9bc3ca211945422f038b75f232670efa07cfefe58b6a8fcce46b"
+        },
+        {
+          "original": "/home/ts/wt/toad-workspace-foreground-resource-continuation-20260930/.artifacts/installed-history-projection-242/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/12-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-workspace-warm-raster-followup-20260930/.artifacts/installed-bounded-admission-239",
+      "bytes": 85516288,
+      "wt": "/home/ts/wt/toad-workspace-warm-raster-followup-20260930",
+      "pr": 239,
+      "branch": "perf/workspace-warm-raster-followup-20260930",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 85516288,
+      "exclusive_allocated_bytes": 25800704,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-workspace-warm-raster-followup-20260930/.artifacts/installed-bounded-admission-239/activation.json",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/13-activation.json",
+          "sha256": "b471ea6ccdf8e0a9832ee482dbedab11e63033ab25800502d81b9b86f8dec4e0"
+        },
+        {
+          "original": "/home/ts/wt/toad-workspace-warm-raster-followup-20260930/.artifacts/installed-bounded-admission-239/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/13-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-foreground-resource-residency-continuation-20261001/.artifacts/runtime-native-diff-271-20261001",
+      "bytes": 85168128,
+      "wt": "/home/ts/wt/toad-foreground-resource-residency-continuation-20261001",
+      "pr": 271,
+      "branch": "perf/foreground-resource-residency-continuation-20261001",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 85168128,
+      "exclusive_allocated_bytes": 25243648,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-foreground-resource-residency-continuation-20261001/.artifacts/runtime-native-diff-271-20261001/activation.json",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/14-activation.json",
+          "sha256": "e84590010ee60a35d70f46831990c18e636cfde6ac69e43f6590549dfa65f85f"
+        },
+        {
+          "original": "/home/ts/wt/toad-foreground-resource-residency-continuation-20261001/.artifacts/runtime-native-diff-271-20261001/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/14-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-retained-outer-history-first-paint-20260929/.artifacts/current-pair-package/runtime",
+      "bytes": 81461248,
+      "wt": "/home/ts/wt/toad-retained-outer-history-first-paint-20260929",
+      "pr": 217,
+      "branch": "fix/reader-lazy-end-workspace-continuation-20260929",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 81461248,
+      "exclusive_allocated_bytes": 81461248,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-retained-outer-history-first-paint-20260929/.artifacts/current-pair-package/runtime/activation.json",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/15-activation.json",
+          "sha256": "f102c019012bc603bd6a3eb1fe7612129178568e05217d5200bee527a72f8810"
+        },
+        {
+          "original": "/home/ts/wt/toad-retained-outer-history-first-paint-20260929/.artifacts/current-pair-package/runtime/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/15-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-pr95-finish-codex-20260927/.test-artifacts/nra-cache",
+      "bytes": 66932736,
+      "wt": "/home/ts/wt/comms-pr95-finish-codex-20260927",
+      "pr": 135,
+      "branch": "codex/pr95-finish-20260927",
+      "kind": "computed_cache",
+      "refs": [],
+      "allocated_bytes": 66932736,
+      "exclusive_allocated_bytes": 66932736,
+      "preserved_metadata": []
+    },
+    {
+      "path": "/home/ts/wt/toad-terminal-execution-custody-20261001/.artifacts/runtime-terminal-custody-480-274-20261001",
+      "bytes": 65282048,
+      "wt": "/home/ts/wt/toad-terminal-execution-custody-20261001",
+      "pr": 274,
+      "branch": "refactor/terminal-execution-custody-20261001",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 65282048,
+      "exclusive_allocated_bytes": 5341184,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-terminal-execution-custody-20261001/.artifacts/runtime-terminal-custody-480-274-20261001/activation.json",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/17-activation.json",
+          "sha256": "d25ef9a2198a531182c85cd8fdb4c9ad4ed511f1dbb25d7b52ddfc0e5cae5e1d"
+        },
+        {
+          "original": "/home/ts/wt/toad-terminal-execution-custody-20261001/.artifacts/runtime-terminal-custody-480-274-20261001/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/17-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/native-token-acceptance",
+      "bytes": 63574016,
+      "wt": "/home/ts/wt/comms-acp-saved-session-startup-20260928",
+      "pr": 393,
+      "branch": "integrate/selected-admission-app-live-20260929",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 63574016,
+      "exclusive_allocated_bytes": 13361152,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/native-token-acceptance/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/18-pyvenv.cfg",
+          "sha256": "e9b44cd3256312f4498f3d298a05d97484af7357417af8a64f2abc2f7c205401"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed",
+      "bytes": 30191616,
+      "wt": "/home/ts/wt/toad-context-measurement-sol-20260929",
+      "pr": 155,
+      "branch": "refactor/context-measurement-sol-20260929",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 30191616,
+      "exclusive_allocated_bytes": 22597632,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-context-measurement-sol-20260929/.artifacts/installed/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/19-pyvenv.cfg",
+          "sha256": "e9b44cd3256312f4498f3d298a05d97484af7357417af8a64f2abc2f7c205401"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-t2-boundary-sol-20260928/.artifacts/paired-installed",
+      "bytes": 29016064,
+      "wt": "/home/ts/wt/comms-t2-boundary-sol-20260928",
+      "pr": 319,
+      "branch": "refactor/typed-compaction-results-20260928",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 29016064,
+      "exclusive_allocated_bytes": 21422080,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/comms-t2-boundary-sol-20260928/.artifacts/paired-installed/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/20-pyvenv.cfg",
+          "sha256": "2b3efd893e5e5f09e2836819ea3fd3f7085deef71b536fd89dcc23dbcef99dc7"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/input-wake-lifetime/runtime",
+      "bytes": 28905472,
+      "wt": "/home/ts/wt/comms-selected-cold-compaction-native-20260928",
+      "pr": 390,
+      "branch": "refactor/input-wake-lifetime-20260929",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 28905472,
+      "exclusive_allocated_bytes": 13197312,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/input-wake-lifetime/runtime/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/21-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/attempt-ownership/runtime",
+      "bytes": 28860416,
+      "wt": "/home/ts/wt/comms-selected-cold-compaction-native-20260928",
+      "pr": 390,
+      "branch": "refactor/input-wake-lifetime-20260929",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 28860416,
+      "exclusive_allocated_bytes": 13152256,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/attempt-ownership/runtime/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/22-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/input-drain-lifecycle/runtime",
+      "bytes": 28856320,
+      "wt": "/home/ts/wt/comms-selected-cold-compaction-native-20260928",
+      "pr": 390,
+      "branch": "refactor/input-wake-lifetime-20260929",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 28856320,
+      "exclusive_allocated_bytes": 13148160,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/input-drain-lifecycle/runtime/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/23-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-proof-checkpoint/runtime",
+      "bytes": 28815360,
+      "wt": "/home/ts/wt/comms-selected-cold-compaction-native-20260928",
+      "pr": 390,
+      "branch": "refactor/input-wake-lifetime-20260929",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 28815360,
+      "exclusive_allocated_bytes": 13107200,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-proof-checkpoint/runtime/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/24-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/runtime",
+      "bytes": 28659712,
+      "wt": "/home/ts/wt/comms-selected-cold-compaction-native-20260928",
+      "pr": 390,
+      "branch": "refactor/input-wake-lifetime-20260929",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 28659712,
+      "exclusive_allocated_bytes": 12951552,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/runtime/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/25-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-native-admission-epoch-20261001/.observations/installed",
+      "bytes": 20107264,
+      "wt": "/home/ts/wt/comms-native-admission-epoch-20261001",
+      "pr": 470,
+      "branch": "refactor/native-admission-epoch-20261001",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 20107264,
+      "exclusive_allocated_bytes": 8785920,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/comms-native-admission-epoch-20261001/.observations/installed/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/26-pyvenv.cfg",
+          "sha256": "e1f419b981bde3d0b8d73f041a2a1fd5ddf35c621ab3527a636e85090da74f85"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-private-source-proof-s14-20260930/.artifacts/source-check",
+      "bytes": 19185664,
+      "wt": "/home/ts/wt/comms-private-source-proof-s14-20260930",
+      "pr": 459,
+      "branch": "refactor/private-source-proof-s14-20260930",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 19185664,
+      "exclusive_allocated_bytes": 3432448,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/comms-private-source-proof-s14-20260930/.artifacts/source-check/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/27-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-openhcs-channel-delivery-20261001/.observations/candidate",
+      "bytes": 18673664,
+      "wt": "/home/ts/wt/comms-openhcs-channel-delivery-20261001",
+      "pr": 476,
+      "branch": "fix/openhcs-channel-delivery-20261001",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 18673664,
+      "exclusive_allocated_bytes": 7344128,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/comms-openhcs-channel-delivery-20261001/.observations/candidate/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/28-pyvenv.cfg",
+          "sha256": "e1f419b981bde3d0b8d73f041a2a1fd5ddf35c621ab3527a636e85090da74f85"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-viewport-demand-20260929/.venv",
+      "bytes": 18612224,
+      "wt": "/home/ts/wt/toad-viewport-demand-20260929",
+      "pr": 221,
+      "branch": "perf/viewport-demand-followup-20260929",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 18612224,
+      "exclusive_allocated_bytes": 15482880,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-viewport-demand-20260929/.venv/activation.json",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/29-activation.json",
+          "sha256": "7f6fc58aaaf0c87fa2b080ade402c5170d6b84d5cec9f1ffe61163470bdf2eef"
+        },
+        {
+          "original": "/home/ts/wt/toad-viewport-demand-20260929/.venv/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/29-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/history-installed",
+      "bytes": 16199680,
+      "wt": "/home/ts/wt/comms-wire-receipt-identity-20260929",
+      "pr": 389,
+      "branch": "refactor/history-view-owner-closure-20260929",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 16199680,
+      "exclusive_allocated_bytes": 16199680,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/history-installed/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/30-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-original-turn-resource-native-20260929/.runtime436",
+      "bytes": 14426112,
+      "wt": "/home/ts/wt/toad-original-turn-resource-native-20260929",
+      "pr": 223,
+      "branch": "test/original-turn-resource-native-20260929",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 14426112,
+      "exclusive_allocated_bytes": 14426112,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-original-turn-resource-native-20260929/.runtime436/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/31-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-pr48-production-20260926/.mypy_cache",
+      "bytes": 10747904,
+      "wt": "/home/ts/wt/comms-pr48-production-20260926",
+      "pr": 95,
+      "branch": "feat/pr48-production-20260926",
+      "kind": "computed_cache",
+      "refs": [],
+      "allocated_bytes": 10747904,
+      "exclusive_allocated_bytes": 10747904,
+      "preserved_metadata": []
+    },
+    {
+      "path": "/home/ts/wt/comms-pr17-proven-binding/.mypy_cache",
+      "bytes": 10579968,
+      "wt": "/home/ts/wt/comms-pr17-proven-binding",
+      "pr": 94,
+      "branch": "feat/pr17-proven-prompt-binding",
+      "kind": "computed_cache",
+      "refs": [],
+      "allocated_bytes": 10579968,
+      "exclusive_allocated_bytes": 10579968,
+      "preserved_metadata": []
+    },
+    {
+      "path": "/home/ts/wt/comms-refactor-s4-read-routing-20260927/.mypy_cache",
+      "bytes": 10403840,
+      "wt": "/home/ts/wt/comms-refactor-s4-read-routing-20260927",
+      "pr": 137,
+      "branch": "codex/refactor-s4-read-routing-20260927",
+      "kind": "computed_cache",
+      "refs": [],
+      "allocated_bytes": 10403840,
+      "exclusive_allocated_bytes": 10403840,
+      "preserved_metadata": []
+    },
+    {
+      "path": "/home/ts/wt/comms-pr95-finish-codex-20260927/.mypy_cache",
+      "bytes": 10293248,
+      "wt": "/home/ts/wt/comms-pr95-finish-codex-20260927",
+      "pr": 135,
+      "branch": "codex/pr95-finish-20260927",
+      "kind": "computed_cache",
+      "refs": [],
+      "allocated_bytes": 10293248,
+      "exclusive_allocated_bytes": 10293248,
+      "preserved_metadata": []
+    },
+    {
+      "path": "/home/ts/wt/comms-acp-direct-owner-boundary/.mypy_cache",
+      "bytes": 10063872,
+      "wt": "/home/ts/wt/comms-acp-direct-owner-boundary",
+      "pr": 104,
+      "branch": "fix/acp-direct-owner-boundary-20260926",
+      "kind": "computed_cache",
+      "refs": [],
+      "allocated_bytes": 10063872,
+      "exclusive_allocated_bytes": 10063872,
+      "preserved_metadata": []
+    },
+    {
+      "path": "/home/ts/wt/comms-turn-context-phase1-20261001/.artifacts/turn-context-phase1/nra-cache",
+      "bytes": 9486336,
+      "wt": "/home/ts/wt/comms-turn-context-phase1-20261001",
+      "pr": 473,
+      "branch": "feat/turn-context-phase1-20261001",
+      "kind": "computed_cache",
+      "refs": [],
+      "allocated_bytes": 9486336,
+      "exclusive_allocated_bytes": 9486336,
+      "preserved_metadata": []
+    },
+    {
+      "path": "/home/ts/wt/toad-retained-outer-history-first-paint-20260929/.artifacts/editor-focus-217/package/runtime",
+      "bytes": 8245248,
+      "wt": "/home/ts/wt/toad-retained-outer-history-first-paint-20260929",
+      "pr": 217,
+      "branch": "fix/reader-lazy-end-workspace-continuation-20260929",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 8245248,
+      "exclusive_allocated_bytes": 3522560,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-retained-outer-history-first-paint-20260929/.artifacts/editor-focus-217/package/runtime/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/38-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-first-fork-startup-sol-20260929/.artifacts/installed",
+      "bytes": 8159232,
+      "wt": "/home/ts/wt/toad-first-fork-startup-sol-20260929",
+      "pr": 153,
+      "branch": "fix/first-fork-startup-sol-20260929",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 8159232,
+      "exclusive_allocated_bytes": 8159232,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/toad-first-fork-startup-sol-20260929/.artifacts/installed/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/39-pyvenv.cfg",
+          "sha256": "e9b44cd3256312f4498f3d298a05d97484af7357417af8a64f2abc2f7c205401"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-compaction-live-fix-20260928/.artifacts/runtime",
+      "bytes": 6770688,
+      "wt": "/home/ts/wt/comms-compaction-live-fix-20260928",
+      "pr": 242,
+      "branch": "fix/compaction-native-history-20260928",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 6770688,
+      "exclusive_allocated_bytes": 6770688,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/comms-compaction-live-fix-20260928/.artifacts/runtime/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/40-pyvenv.cfg",
+          "sha256": "e9b44cd3256312f4498f3d298a05d97484af7357417af8a64f2abc2f7c205401"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-original-turn-custody-20260929/.routing-carry-runtime",
+      "bytes": 6385664,
+      "wt": "/home/ts/wt/comms-original-turn-custody-20260929",
+      "pr": 441,
+      "branch": "tools/retained-routing-carry-20260930",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 6385664,
+      "exclusive_allocated_bytes": 6385664,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/comms-original-turn-custody-20260929/.routing-carry-runtime/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/41-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/comms-pr95-finish-codex-20260927/.test-artifacts/recovery-wheel-env",
+      "bytes": 3842048,
+      "wt": "/home/ts/wt/comms-pr95-finish-codex-20260927",
+      "pr": 135,
+      "branch": "codex/pr95-finish-20260927",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 3842048,
+      "exclusive_allocated_bytes": 3842048,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/comms-pr95-finish-codex-20260927/.test-artifacts/recovery-wheel-env/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/42-pyvenv.cfg",
+          "sha256": "e9b44cd3256312f4498f3d298a05d97484af7357417af8a64f2abc2f7c205401"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-message-formatting/.mypy_cache",
+      "bytes": 2572288,
+      "wt": "/home/ts/wt/toad-message-formatting",
+      "pr": 51,
+      "branch": "fix/goal-bar-collapse",
+      "kind": "computed_cache",
+      "refs": [],
+      "allocated_bytes": 2572288,
+      "exclusive_allocated_bytes": 2572288,
+      "preserved_metadata": []
+    },
+    {
+      "path": "/home/ts/wt/comms-native-admission-epoch-20261001/.venv-admission",
+      "bytes": 98304,
+      "wt": "/home/ts/wt/comms-native-admission-epoch-20261001",
+      "pr": 470,
+      "branch": "refactor/native-admission-epoch-20261001",
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 98304,
+      "exclusive_allocated_bytes": 98304,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/wt/comms-native-admission-epoch-20261001/.venv-admission/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/44-pyvenv.cfg",
+          "sha256": "871792d81c8c1aa4c3c04607b017d7468e30280eae8a8e6820cb1a4fe4e8b83d"
+        }
+      ]
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-native-tracked-lifecycle-wait-20260929/installed",
+      "wt": null,
+      "pr": 431,
+      "kind": "obsolete_python_environment",
+      "refs": [],
+      "allocated_bytes": 126709760,
+      "exclusive_allocated_bytes": 113274880,
+      "preserved_metadata": [
+        {
+          "original": "/home/ts/.cache/agent-scratch/comms-native-tracked-lifecycle-wait-20260929/installed/pyvenv.cfg",
+          "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-einstein-20261001/second-preserved-environment-metadata/45-pyvenv.cfg",
+          "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+        }
+      ]
+    }
+  ],
+  "protected": [
+    {
+      "path": "/home/ts/wt/toad-text18-library-pair-20261001/.artifacts/runtime-text18-library-only-20261001",
+      "bytes": 86036480,
+      "wt": "/home/ts/wt/toad-text18-library-pair-20261001",
+      "reason": "no merged PR verified",
+      "branch": "pair/text18-library-only-20261001"
+    },
+    {
+      "path": "/home/ts/wt/toad-fork-current-main-baseline-20260930/.artifacts/installed-core421-baseline",
+      "bytes": 82288640,
+      "wt": "/home/ts/wt/toad-fork-current-main-baseline-20260930",
+      "reason": "no merged PR verified",
+      "branch": "test/fork-current-main-core421-20260930"
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-write-successor-20260926/.mypy_cache",
+      "bytes": 10551296,
+      "wt": "/home/ts/wt/comms-selected-write-successor-20260926",
+      "reason": "no merged PR verified",
+      "branch": "feat/selected-tool-runner-hook"
+    },
+    {
+      "path": "/home/ts/wt/comms-pr112-ci-baseline/.mypy_cache",
+      "bytes": 10514432,
+      "wt": "/home/ts/wt/comms-pr112-ci-baseline",
+      "reason": "no merged PR verified",
+      "branch": "fix/pr112-ci-baseline"
+    },
+    {
+      "path": "/home/ts/wt/comms-maintenance-gate-20260926/.mypy_cache",
+      "bytes": 10383360,
+      "wt": "/home/ts/wt/comms-maintenance-gate-20260926",
+      "reason": "no merged PR verified",
+      "branch": "prototype/maintenance-protected-reader-20260926"
+    },
+    {
+      "path": "/home/ts/wt/comms-pr17-injected-harness/.mypy_cache",
+      "bytes": 10346496,
+      "wt": "/home/ts/wt/comms-pr17-injected-harness",
+      "reason": "no merged PR verified",
+      "branch": "feat/pr17-injected-harness"
+    },
+    {
+      "path": "/home/ts/wt/comms-persistent-selected-pr112-20260927/.mypy_cache",
+      "bytes": 10141696,
+      "wt": "/home/ts/wt/comms-persistent-selected-pr112-20260927",
+      "reason": "no merged PR verified",
+      "branch": "feat/persistent-selected-pr112-20260927"
+    },
+    {
+      "path": "/home/ts/wt/comms-native-retirement-proof/.mypy_cache",
+      "bytes": 10137600,
+      "wt": "/home/ts/wt/comms-native-retirement-proof",
+      "reason": "no merged PR verified",
+      "branch": "feat/native-pi-retirement-proof"
+    },
+    {
+      "path": "/home/ts/wt/comms-pr17-admission-20260926/.mypy_cache",
+      "bytes": 10047488,
+      "wt": "/home/ts/wt/comms-pr17-admission-20260926",
+      "reason": "no merged PR verified",
+      "branch": "feat/pr17-selected-claim-awareness-20260926"
+    },
+    {
+      "path": "/home/ts/wt/toad-canonical-wire-transcript-20260929/.artifacts/installed-native06",
+      "bytes": 85954560,
+      "wt": "/home/ts/wt/toad-canonical-wire-transcript-20260929",
+      "pr": 215,
+      "branch": "fix/canonical-wire-conversation-publication-20260929",
+      "kind": "obsolete_python_environment",
+      "refs": [
+        {
+          "path": "/home/ts/wt/comms-original-turn-custody-20260929/.routing-carry-runtime/lib/python3.14/site-packages/paired-dependencies.pth",
+          "kind": "installed_or_reverse_git_reference"
+        }
+      ],
+      "reason": "external borrower or manifest reference"
+    },
+    {
+      "path": "/home/ts/wt/toad-first-ui-end-keypad-20260930/.artifacts/installed-first-ui-end-keypad",
+      "bytes": 85340160,
+      "wt": "/home/ts/wt/toad-first-ui-end-keypad-20260930",
+      "pr": 231,
+      "branch": "integrate/first-ui-end-keypad-20260930",
+      "kind": "obsolete_python_environment",
+      "refs": [
+        {
+          "path": "/home/ts/wt/toad-foreground-layout-cache-followup-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-comms450-paired-pin-20260930/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-native-publication-read-cut-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-late-native-notification-publication-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-regression-widget-cost-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-workspace-readiness-sidebar-continuation-20260930/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-native-custody-pair-20260930/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-s5-receiving-coherence-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-foreground-readiness-sidebar-followup-20260930/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-workspace-warm-raster-followup-20260930/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-foreground-layout-resource-followup-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-terminal-execution-custody-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-workspace-native-residency-continuation-20260930/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-foreground-readiness-remainder-20260930/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-compaction-outcome-coverage-20260930/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-foreground-layout-resource-after-271-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-web-completion-20260928/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-workspace-foreground-layout-continuation-20260930/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-archived-history-open-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-compaction-switch-admission-20260930/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-native-publication-pair-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-retained-input-origin-s2-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-text18-library-pair-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-workspace-growing-end-continuity-20260930/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-s2-s5-context-pair-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-retained-history-buffer-20260930/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-worker-static-native-size-20260930/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-first-ui-end-keypad-20260930/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-historical-admission-resource-followup-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-native-applied-cohort-pair-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-foreground-resource-residency-continuation-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-openhcs-channel-delivery-pair-20261001/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-native-response-resource-custody-20260930/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        },
+        {
+          "path": "/home/ts/wt/toad-workspace-foreground-resource-continuation-20260930/evidence/first-ui-end-keypad-20260930/staging-receipt.json",
+          "kind": "installed_or_reverse_git_reference"
+        }
+      ],
+      "reason": "external borrower or manifest reference"
+    }
+  ],
+  "source_trees_removed": 0,
+  "qualifying_fixtures_removed": 0,
+  "provider_or_public_input": 0,
+  "finished_epoch": 1790896950.6917963,
+  "after_available_bytes": 8802091008,
+  "removed_allocated_bytes": 2234880000,
+  "removed_exclusive_allocated_bytes": 1176408064,
+  "measured_df_delta_bytes": 1176092672,
+  "scope": "NEW batch after8502bc47 only; earlier reclamation excluded",
+  "canonical_fixture_preservation": "ac49808/09 triage ignore terminal receipts inspected; native_runtime_input session_file still references appended journals. Kept journals, sidecars, SQL. No fixture removal in this batch.",
+  "preserved_current": "default498 prefix; candidate499; native5184 canonicalfork/qualifiers; publicroot; current17owners; native53b8 donors; parent receiving sources and currentcapture",
+  "current_available_bytes": 8798613504
+}

@@ -1,0 +1,119 @@
+....FFFFF......FFF                                                       [100%]
+=================================== FAILURES ===================================
+__ test_report_survives_goal_replacement_and_strict_target_decodes[reported] ___
+../comms-original-owner-admission-20261006/tests/test_goal_report_preservation.py:56: in test_report_survives_goal_replacement_and_strict_target_decodes
+    packet = acquired.project()
+             ^^^^^^^^^^^^^^^^^^
+../comms-original-owner-admission-20261006/tools/cutover/thread_format_retirement.py:75: in project
+    'goal_history': FieldCodec.encode(self.history)}
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:249: in encode
+    return [cls.encode(item) for item in value]
+            ^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:218: in encode
+    for field, key in cls._fields(type(value))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:182: in _fields
+    raise TypeError("Conflicting wire field names.")
+E   TypeError: Conflicting wire field names.
+____ test_report_survives_goal_replacement_and_strict_target_decodes[clear] ____
+../comms-original-owner-admission-20261006/tests/test_goal_report_preservation.py:56: in test_report_survives_goal_replacement_and_strict_target_decodes
+    packet = acquired.project()
+             ^^^^^^^^^^^^^^^^^^
+../comms-original-owner-admission-20261006/tools/cutover/thread_format_retirement.py:75: in project
+    'goal_history': FieldCodec.encode(self.history)}
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:249: in encode
+    return [cls.encode(item) for item in value]
+            ^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:218: in encode
+    for field, key in cls._fields(type(value))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:182: in _fields
+    raise TypeError("Conflicting wire field names.")
+E   TypeError: Conflicting wire field names.
+___ test_report_survives_goal_replacement_and_strict_target_decodes[replace] ___
+../comms-original-owner-admission-20261006/tests/test_goal_report_preservation.py:56: in test_report_survives_goal_replacement_and_strict_target_decodes
+    packet = acquired.project()
+             ^^^^^^^^^^^^^^^^^^
+../comms-original-owner-admission-20261006/tools/cutover/thread_format_retirement.py:75: in project
+    'goal_history': FieldCodec.encode(self.history)}
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:249: in encode
+    return [cls.encode(item) for item in value]
+            ^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:218: in encode
+    for field, key in cls._fields(type(value))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:182: in _fields
+    raise TypeError("Conflicting wire field names.")
+E   TypeError: Conflicting wire field names.
+____ test_report_survives_goal_replacement_and_strict_target_decodes[edit] _____
+../comms-original-owner-admission-20261006/tests/test_goal_report_preservation.py:56: in test_report_survives_goal_replacement_and_strict_target_decodes
+    packet = acquired.project()
+             ^^^^^^^^^^^^^^^^^^
+../comms-original-owner-admission-20261006/tools/cutover/thread_format_retirement.py:75: in project
+    'goal_history': FieldCodec.encode(self.history)}
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:249: in encode
+    return [cls.encode(item) for item in value]
+            ^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:218: in encode
+    for field, key in cls._fields(type(value))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:182: in _fields
+    raise TypeError("Conflicting wire field names.")
+E   TypeError: Conflicting wire field names.
+_ test_report_survives_goal_replacement_and_strict_target_decodes[older_release] _
+../comms-original-owner-admission-20261006/tests/test_goal_report_preservation.py:56: in test_report_survives_goal_replacement_and_strict_target_decodes
+    packet = acquired.project()
+             ^^^^^^^^^^^^^^^^^^
+../comms-original-owner-admission-20261006/tools/cutover/thread_format_retirement.py:75: in project
+    'goal_history': FieldCodec.encode(self.history)}
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:249: in encode
+    return [cls.encode(item) for item in value]
+            ^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:218: in encode
+    for field, key in cls._fields(type(value))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:182: in _fields
+    raise TypeError("Conflicting wire field names.")
+E   TypeError: Conflicting wire field names.
+__ test_changed_owner_after_release_refuses_escalation_and_replacement[birth] __
+tests/test_owner_release_restart.py:122: in test_changed_owner_after_release_refuses_escalation_and_replacement
+    wait_for(comms.root / "released")
+tests/test_owner_release_restart.py:26: in wait_for
+    assert time.monotonic() < deadline, f"Owner did not produce {path.name}"
+E   AssertionError: Owner did not produce released
+E   assert 730636.03561354 < 730636.027225823
+E    +  where 730636.03561354 = <built-in function monotonic>()
+E    +    where <built-in function monotonic> = time.monotonic
+_ test_changed_owner_after_release_refuses_escalation_and_replacement[admission] _
+tests/test_owner_release_restart.py:122: in test_changed_owner_after_release_refuses_escalation_and_replacement
+    wait_for(comms.root / "released")
+tests/test_owner_release_restart.py:26: in wait_for
+    assert time.monotonic() < deadline, f"Owner did not produce {path.name}"
+E   AssertionError: Owner did not produce released
+E   assert 730641.827252887 < 730641.820233656
+E    +  where 730641.827252887 = <built-in function monotonic>()
+E    +    where <built-in function monotonic> = time.monotonic
+_ test_changed_owner_after_release_refuses_escalation_and_replacement[receipt] _
+tests/test_owner_release_restart.py:122: in test_changed_owner_after_release_refuses_escalation_and_replacement
+    wait_for(comms.root / "released")
+tests/test_owner_release_restart.py:26: in wait_for
+    assert time.monotonic() < deadline, f"Owner did not produce {path.name}"
+E   AssertionError: Owner did not produce released
+E   assert 730647.615137943 < 730647.608833248
+E    +  where 730647.615137943 = <built-in function monotonic>()
+E    +    where <built-in function monotonic> = time.monotonic
+=========================== short test summary info ============================
+FAILED ../comms-original-owner-admission-20261006/tests/test_goal_report_preservation.py::test_report_survives_goal_replacement_and_strict_target_decodes[reported]
+FAILED ../comms-original-owner-admission-20261006/tests/test_goal_report_preservation.py::test_report_survives_goal_replacement_and_strict_target_decodes[clear]
+FAILED ../comms-original-owner-admission-20261006/tests/test_goal_report_preservation.py::test_report_survives_goal_replacement_and_strict_target_decodes[replace]
+FAILED ../comms-original-owner-admission-20261006/tests/test_goal_report_preservation.py::test_report_survives_goal_replacement_and_strict_target_decodes[edit]
+FAILED ../comms-original-owner-admission-20261006/tests/test_goal_report_preservation.py::test_report_survives_goal_replacement_and_strict_target_decodes[older_release]
+FAILED ../comms-original-owner-admission-20261006::test_changed_owner_after_release_refuses_escalation_and_replacement[birth]
+FAILED ../comms-original-owner-admission-20261006::test_changed_owner_after_release_refuses_escalation_and_replacement[admission]
+FAILED ../comms-original-owner-admission-20261006::test_changed_owner_after_release_refuses_escalation_and_replacement[receipt]
+8 failed, 10 passed in 19.38s

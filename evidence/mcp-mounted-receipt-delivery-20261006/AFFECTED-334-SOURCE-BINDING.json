@@ -1,0 +1,59 @@
+{
+  "state": "SOURCE ONLY holder-specific assessed334 binding; no prefix/package/native access",
+  "source_head": "24bd65f717d42cc74a4773a4b66fa950df72d61e",
+  "original_affected_proposal": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/mcp-mounted-receipt-delivery-20261006/AFFECTED-QUALIFICATION-PROPOSAL.json",
+    "sha256": "96258057239adf0f23b53b1b5a8bbf563382c5e7d648756d9f14895c615116a5",
+    "bytes": 12497
+  },
+  "changed_control": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_mcp_acceptance.py",
+    "sha256": "64ac8f5389fe2539ef92fda7266a0638161e0c7b1946888f51a6061777b33a29",
+    "bytes": 31662
+  },
+  "source_checks": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/mcp-mounted-receipt-delivery-20261006/SOURCE-CHECKS.json",
+    "sha256": "875d7ec78e5efa7dad884f75faa20f54e53c0a08d04abdad45abe015f1bd0ddf",
+    "bytes": 3069
+  },
+  "actual_floor": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel693-mounted-receipt-fresh-assessment-floor-readback.json",
+    "sha256": "bcdd1793157f574fce5e1840831807d6e1a425b230f8713bd21129f8b35302ff",
+    "bytes": 27733
+  },
+  "actual_census": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel693-mounted-receipt-fresh-assessment-borrowers.json",
+    "sha256": "23d17932cfc4e9f809d50ac7c5896ea93d2f28e4e85826a3c6e922d0649c266e",
+    "bytes": 2110
+  },
+  "actual_reference_classification": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel693-mounted-receipt-fresh-assessment-reference-classification.json",
+    "sha256": "6e8de7c59cd285dc01e93f7f8759005fb121d18300fc296103d4f05985d94f2c",
+    "bytes": 5246
+  },
+  "original_floor_records_source": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel687-installed-entrypoint-native-fourcase-issued-grant.json",
+    "sha256": "380897ee04568731303207f7b3fbf3558aa7358d718c9a33bdcc7309593aeaa4",
+    "bytes": 1915617
+  },
+  "previous_closed_lifecycle": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel687-installed-entrypoint-native-fourcase-lifecycle.json",
+    "sha256": "40b25eca13c830e3a4b755b51f9ff117e768a66c9e0d8c4994f49a6191b7d3d0",
+    "bytes": 22042
+  },
+  "previous_whole_handback": {
+    "path": "/home/ts/.cache/agent-scratch/m687n03/whole-handback.json",
+    "sha256": "cb8b62590c3848873d5c2ae2750870791b8fba633e35fe0185cbc0b72b30211d",
+    "bytes": 99630
+  },
+  "operative_resolution": [
+    "assessed334 interpreter and OwnerLifecycle sibling native entrypoint",
+    "three selected normal filewheel stage argv",
+    "same 8c8f proof and 5d595 controller with fresh holder path/SHA placeholders",
+    "m682r01 owned outputs and per-prefix suffix0 sockets",
+    "actual CURRENT447 original floor/69 RAW origins/428+1883+5nodes/PREFIX and exact four restore argv/cwd/env"
+  ],
+  "source_relation": "Normal joined source includes main432 forced APPEND_SYSTEM and notification production changes; frozen bee3e/b2e/16c9 remains a historical selected runtime, not full current-main equality. This checkpoint changes only qualifier test consumer source; no wheel/native build requested.",
+  "authority_unbound": true,
+  "no_existing_closed_authority_inherited": true
+}

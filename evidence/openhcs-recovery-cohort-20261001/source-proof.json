@@ -1,0 +1,32 @@
+{
+  "sources": [
+    {
+      "module": "agent_comms",
+      "head": "cac7bdf337d9e4dba888ce7c2093ddcc55802bc3",
+      "files": 297,
+      "comparison": "exact pinned Git blobs",
+      "byte_equal": true
+    },
+    {
+      "module": "toad",
+      "head": "7572b7b7856b1ac99f7bda5dac760c87c586a73d",
+      "files": 274,
+      "comparison": "exact pinned Git blobs",
+      "byte_equal": true
+    },
+    {
+      "module": "textual",
+      "head": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+      "files": 249,
+      "comparison": "verified stage05 same-pinned installed donor",
+      "byte_equal": true
+    }
+  ],
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "native_manifest": "593b978a717ae8f6ab4300a1a107b615c8ced52e767ef4cad0596f827041a218",
+  "native_full_trust": true,
+  "sdk": "0.12.1",
+  "package_count": 69,
+  "requirements_sha256": "96e73018bf1a2780266b1a451ac0cd4d8ea7f552b8c2954d6073a339a5d39a12",
+  "public_install_changed": false
+}

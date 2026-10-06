@@ -1,0 +1,20 @@
+{
+  "owner": "parent latest OOPSLA reasoning",
+  "record": 22782549,
+  "title": "Semantic Completeness for Correct Maintenance: A Strict Hierarchy of Typing and Inheritance",
+  "publication_date": "2026-09-29",
+  "files": [
+    {
+      "file": "/home/ts/.cache/agent-scratch/oopsla-zenodo-latest-20261001/paper1_oopsla_submission.pdf",
+      "bytes": 937287,
+      "checksum": "md5:8925bcf68e0d19cb86cc201cf82d1c89",
+      "verified": true
+    },
+    {
+      "file": "/home/ts/.cache/agent-scratch/oopsla-zenodo-latest-20261001/paper1_oopsla_supplementary.pdf",
+      "bytes": 904353,
+      "checksum": "md5:5df349e9ac3a70414a0a982b3cb81d3c",
+      "verified": true
+    }
+  ]
+}

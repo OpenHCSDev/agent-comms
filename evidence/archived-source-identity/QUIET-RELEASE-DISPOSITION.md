@@ -34,7 +34,7 @@ No broader whole-bus_meta hash is substituted for this declared seal authority.
 
 ## One-use sequence, executed only by parent
 
-1. Under the existing writer custody (`with WireLog(bus).locked()`), validate the
+1. Under the existing ORIGINAL-SCHEMA writer custody (`with WireLog(bus).locked()`), validate the
    source's original bus+registry revisions against HistorySource. Preserve the
    exact old checkpoint database and bus_meta.json preimages outside both archive
    directories, with original ownership/mode, hashes and manifest/source facts.
@@ -44,7 +44,11 @@ No broader whole-bus_meta hash is substituted for this declared seal authority.
    checkpoint_version/checkpoint_seal, then retire ONLY the derived checkpoint DB
    (preimage retained). Publish that marker through its existing writer. This is
    the declared quiet reset; no live decoder of historical Thread is involved.
-3. Invoke install_private_bus_checkpoint(log, _bus_locked=True). It builds all
+3. The new installed child inherits that SAME opened bus lock descriptor through
+   the existing retained_index_writer/install_retained_index handoff. Its
+   require_retained_writer verifies the original named lock inode and root_id;
+   it never reacquires the writer lock. Invoke
+   install_private_bus_checkpoint(log, _bus_locked=True). It builds all
    current CheckpointTable declarations off-path, verifies every original wire
    row and frozen audience, and commits the original physical prefix and new DB
    inode into the existing FinalSeal. Do not supply or copy a new source identity.
@@ -68,3 +72,10 @@ The installed private journey rebuilds ONLY copied checkpoint/registry inode
 custody (copied registry bytes remain exact). It demonstrates the reader against
 real original histories; it does not establish public runtime readiness before
 parent executes this quiet sequence.
+
+Important: the target _store_lock validates the current checkpoint schema before
+yielding. Acquiring target WireLog.locked() against either original old checkpoint
+would fail before reset. The original-schema writer is required for the existing
+handoff; the parent selects its reviewed retained interpreter. A generic new-reader
+lock acquisition or raw independent flock is not the release procedure. The exact
+invocation/preimage checklist is in PARENT-CARRY-INVOKE.md.

@@ -1,0 +1,162 @@
+{
+  "state": "default installed and actual saved-history Ready inspected",
+  "publication_sha256": "9b9354c0c95a599598fd4cf9bbacbe13ea643fd8cc5113d8a18a7b6afe8016ec",
+  "publication_path": "/home/ts/wt/comms-cleanup-live-integration-20260929/.release-private/merged297-505-certified508-20261002/publication.json",
+  "default_capture_sha256": "95c88987746a90a89cfc2a12c8144f710c66c413902773a813cebcbbd2169f19",
+  "default_capture_path": "/home/ts/.cache/agent-scratch/parent-certified508-default-ui-20261002/receipt.json",
+  "pins": {
+    "agent_comms": "74877f2dd108ed211871a098064178eaf3a4fdb5",
+    "toad": "8b24f308e5385ea94bfcc163c5c0a9b8e0364cf9",
+    "textual": "68a0d1cf62fdde8aeef9834836ecf0caf7b169c7"
+  },
+  "native_package": "/home/ts/wt/comms-selected-native-compaction-budget-20261001/stack/.pi-native-5184ffa6d842fe23/node_modules/@earendil-works/pi-coding-agent",
+  "owners_restarted": 19,
+  "protected_originals_byte_invariant": 38,
+  "runtime": {
+    "classification": "runtime/preserve",
+    "original_files": [
+      {
+        "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/compaction-commits.sqlite3",
+        "sha256": "296e6da164bd7e16fc086e83a9f509dccdf12c4e33876c1f854b26a78d9132b1",
+        "revision": {
+          "identity": {
+            "device": 2083,
+            "inode": 3996791
+          },
+          "size": 446464,
+          "mtime_ns": 1790910154623581934,
+          "ctime_ns": 1790910154623581934
+        }
+      }
+    ],
+    "retired": [],
+    "copied_bytes": 0
+  },
+  "normal_close": {
+    "pid": 2932308,
+    "start_ticks": 38538123,
+    "draft_lengths": [],
+    "outstanding_submissions": 0,
+    "normal_quit_requested": true
+  },
+  "actual_default": {
+    "command": [
+      "/home/ts/bin/toad-comms",
+      "openhcs-helper"
+    ],
+    "completed": true,
+    "original_owner_before": {
+      "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "mode": "existing_thread",
+      "name": "openhcs-helper",
+      "identity": {
+        "pid": 3085175,
+        "start_time": 39028411
+      },
+      "original_owner_alive": true
+    },
+    "original_owner_after": {
+      "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "mode": "existing_thread",
+      "name": "openhcs-helper",
+      "identity": {
+        "pid": 3085175,
+        "start_time": 39028411
+      },
+      "original_owner_alive": true
+    },
+    "cleanup": {
+      "remaining_owned_pids": [],
+      "errors": [],
+      "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+      "processes": [
+        {
+          "pid": 3087246,
+          "start_ticks": 39031872,
+          "returncode": 0
+        },
+        {
+          "pid": 3087299,
+          "start_ticks": 39032037,
+          "returncode": 0
+        },
+        {
+          "pid": 3087301,
+          "start_ticks": 39032048,
+          "returncode": 0
+        },
+        {
+          "pid": 3087302,
+          "start_ticks": 39032054,
+          "custody": "verified launch identity transferred to installed ObservedProcess"
+        },
+        {
+          "pid": 3087387,
+          "start_ticks": 39032121,
+          "returncode": 0
+        },
+        {
+          "pid": 3087388,
+          "start_ticks": 39032133,
+          "returncode": 0
+        },
+        {
+          "pid": 3087389,
+          "start_ticks": 39032142,
+          "returncode": 0
+        },
+        {
+          "pid": 3087390,
+          "start_ticks": 39032152,
+          "returncode": 255
+        },
+        {
+          "pid": 3087813,
+          "start_ticks": 39033354,
+          "returncode": 0
+        },
+        {
+          "pid": 3087819,
+          "start_ticks": 39033382,
+          "returncode": 0
+        },
+        {
+          "pid": 3088039,
+          "start_ticks": 39033954,
+          "returncode": 0
+        },
+        {
+          "pid": 3088044,
+          "start_ticks": 39033982,
+          "returncode": 0
+        },
+        {
+          "pid": 3088050,
+          "start_ticks": 39034027,
+          "returncode": 0
+        },
+        {
+          "pid": 3088163,
+          "start_ticks": 39034191,
+          "returncode": 0
+        },
+        {
+          "pid": 3088236,
+          "start_ticks": 39034403,
+          "returncode": 0
+        }
+      ]
+    },
+    "personal_visual_review": "after.png retained messages, selected openhcs-helper, Ready status; startup only, not whole performance or compaction acceptance"
+  },
+  "unfinished": {
+    "Arendt": "489 native lifecycle plus509 full async bus",
+    "Einstein": "506 selected/manual/adaptive preparation, same tracked child and protected format carry",
+    "Kepler": "503 pending batching and507 receiving",
+    "Singer": "507 cursor producer projection",
+    "Heisenberg": "298/Text21 public profiling/scrolling",
+    "Schrodinger": "302 accepted model/mode original Agent owner"
+  },
+  "input_replays": 0,
+  "runtime_resets": 0
+}

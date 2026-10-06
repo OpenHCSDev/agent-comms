@@ -1,0 +1,31 @@
+[
+  {
+    "phase": "accepted_pending",
+    "input_id": "e69c4537b59a4aabb7fb2960f1a2163e",
+    "queue": {
+      "kind": "available",
+      "items": [
+        {
+          "input_id": "e69c4537b59a4aabb7fb2960f1a2163e",
+          "text": "VISIBILITY_QUEUED_FOLLOWUP"
+        }
+      ],
+      "restored": []
+    }
+  },
+  {
+    "phase": "native_started",
+    "input_id": "e69c4537b59a4aabb7fb2960f1a2163e",
+    "native_id": "06a11fdd9439e575ab2a9c6109397798"
+  },
+  {
+    "phase": "cancelled_after_native_start",
+    "delivery": {
+      "inputs": [],
+      "historicalCount": 0,
+      "dismissedHistoricalCount": 0,
+      "historicalInputs": [],
+      "currentScope": "owner_queue"
+    }
+  }
+]

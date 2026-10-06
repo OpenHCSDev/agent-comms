@@ -1,0 +1,54 @@
+{
+  "state": "FIVE-DEFAULTS-PUBLISHED-ORDINARY-ACCEPTANCE-PASS",
+  "target": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930",
+  "pins": {
+    "agent-comms": "6feb634ba184d94d763028406152fff07027cccc",
+    "batrachian-toad": "98bab35f834abb0793d0e066489b751a59393011",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "ready_receipt": "/home/ts/.cache/agent-scratch/sidebar-native-custody-stage-20260930/paired-ready-receipt.json",
+  "ready_sha256": "8272ad74f3e7ee50231938b1988461555148073d8d2e5c15cf6b0a7e2efbbb66",
+  "route_before": {
+    "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "version": 1,
+    "wire_root_id": "e206f3766e60451a989ca34df0e2a94b"
+  },
+  "previous_defaults": {
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-viewport-native-residency-20260930/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-viewport-native-residency-20260930/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-viewport-native-residency-20260930/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-viewport-native-residency-20260930/bin/agent-comms-nk-foreground",
+    "toad": "/home/ts/.local/share/agent-comms/runtime-viewport-native-residency-20260930/bin/toad"
+  },
+  "owners_restarted": 0,
+  "schema_resets": 0,
+  "native_inputs": 0,
+  "paid_calls": 0,
+  "ordinary_default_acceptance": {
+    "state": "PASS",
+    "receipt": "/home/ts/wt/toad-first-ui-end-keypad-20260930/evidence/default-sidebar-native-custody-20260930/joint-ready-receipt.json",
+    "duration_seconds": 16.67832007299876,
+    "parent_personally_viewed_physical_frame": true,
+    "fresh_protocol_errors": 0,
+    "original_source_and_owner_unchanged": true,
+    "cleanup_errors": []
+  },
+  "started": 1790798608.3707855,
+  "route_after": {
+    "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "version": 1,
+    "wire_root_id": "e206f3766e60451a989ca34df0e2a94b"
+  },
+  "defaults": {
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/agent-comms-nk-foreground",
+    "toad": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/toad"
+  },
+  "finished": 1790798608.3718426
+}

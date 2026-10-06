@@ -1,0 +1,31 @@
+{
+  "frames": 2731,
+  "drivers": [
+    "LinuxDriver"
+  ],
+  "headless": [
+    false
+  ],
+  "native_painted_request_ids": [
+    "19f43748986c4dbb9088afec75cbd06f",
+    "24525ac8a6ef4781b8bcffe0808e86f9",
+    "7185a6a7473c4b759e7b0ecb3ad53bb1",
+    "bb587506eb1740ffbcb16edb6a83d50c",
+    "e69c4537b59a4aabb7fb2960f1a2163e"
+  ],
+  "before_delivery_paint_ns": {
+    "19f43748986c4dbb9088afec75cbd06f": 300980611162801,
+    "bb587506eb1740ffbcb16edb6a83d50c": 301013759346151,
+    "7185a6a7473c4b759e7b0ecb3ad53bb1": 301024788715705,
+    "e69c4537b59a4aabb7fb2960f1a2163e": 301035974883882,
+    "24525ac8a6ef4781b8bcffe0808e86f9": 301050979515477
+  },
+  "source_to_first_paint_ns": {
+    "19f43748986c4dbb9088afec75cbd06f": 0,
+    "bb587506eb1740ffbcb16edb6a83d50c": 0,
+    "7185a6a7473c4b759e7b0ecb3ad53bb1": 0,
+    "e69c4537b59a4aabb7fb2960f1a2163e": 0,
+    "24525ac8a6ef4781b8bcffe0808e86f9": 0
+  },
+  "scope": "original selected queue and native chat viewport; excludes status captions"
+}

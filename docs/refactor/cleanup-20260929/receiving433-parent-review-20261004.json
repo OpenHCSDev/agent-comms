@@ -1,0 +1,71 @@
+{
+  "reviewed_at": 1791122759.7615914,
+  "head": "b8784052878fb2e0690e2368f0b34125fc80562c",
+  "merged": "b522a9eff8661a664430456f70ca1cc53e162674",
+  "ready": {
+    "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/context637-tool430-native59-receiving-20261004/new-publication433/ready-receipt.json",
+    "sha256": "9b29dd6e8f22e709b3fa3ccbdd1571147a5c33fed48675b0c67a3aed16e48e6d"
+  },
+  "frozen_artifacts": {
+    "count": 114,
+    "mismatches": []
+  },
+  "canonical_operators": {
+    "count": 51,
+    "source": "9dfc1de3ffb9f80d06106c6f1b630ac49dd963af",
+    "git_byte_mismatches": []
+  },
+  "original_gate_files": {
+    "count": 22,
+    "sha_mismatches": []
+  },
+  "previous_installed_asset_readback": {
+    "Git_assets": 942,
+    "forced_native_assets": 3,
+    "original_wheels": 4,
+    "old431protected_files": 159,
+    "mismatches": [],
+    "imports_or_writes": 0
+  },
+  "reviewed_operation": {
+    "typed_target_and_candidate_DTO": true,
+    "receipt_storage_outside_prefix": true,
+    "source_proof_and_archive_origins": true,
+    "native_checkpoint_schemas_equal": true,
+    "runtime": "PreserveRuntimeInstallation",
+    "owner": "PreserveOwnerRuntime",
+    "publication_receipt_preimages_absent": true,
+    "public_commands_executed": 0,
+    "fresh_public_guard_attempts": 0
+  },
+  "old_user_client": {
+    "pid": 1240175,
+    "present": false,
+    "scope": "one read-only ps snapshot; no replacement-client or idle-audience proof"
+  },
+  "disposition": {
+    "original433_operation": "superseded for execution by new436; keep head/114/Ready byteequal",
+    "prefix": "actual433 floor must be archived and explicitly granted before new package changes",
+    "new_receiving": "merge638/640/633 runtime into one receiving successor",
+    "retained190ace_representing_new_runtime": false,
+    "verified_runtime_asset_changes": [
+      "backend.py",
+      "native_input_owner.py",
+      "native_startup.py",
+      "owned_send_admission.py",
+      "registration.py",
+      "registry_document.py",
+      "turn_inputs.py"
+    ],
+    "merged_Core_wheel": "58a11a611069326b50b97e20f1080ce786b916e90be307495a4e4306157492f6",
+    "build_source": "1a520528dfa8d5e5e1ebb13913fed3ccb3514376",
+    "retained_combined2b_wheel_equal": true,
+    "further_build_needed": false
+  },
+  "not_proved": [
+    "actual public publication/default acceptance",
+    "physical performance/smoothness/CPU improvement",
+    "whole S4/capacity/study",
+    "W1/W6/W7/W8"
+  ]
+}

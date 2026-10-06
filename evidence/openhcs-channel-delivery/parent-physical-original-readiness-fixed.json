@@ -1,0 +1,21 @@
+{
+  "assessment": "PASS original receiver readiness projection; not recovered input or full history acceptance",
+  "duration_seconds": 33.31357872101944,
+  "pins": {
+    "agent-comms": "0a76958a2d43c505f3ca4f959f5aab5b99e069e6",
+    "batrachian-toad": "f76f2f252e83e7661c756d7cfdf258df0464e23b",
+    "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+  },
+  "originals_unchanged": true,
+  "remaining_owned_pids": [],
+  "cleanup_errors": [],
+  "video_full_decode_exit": 0,
+  "observations": [
+    "Actual physical receiver tab shows Needs attention and Inbox unavailable matching original sidebar readiness.",
+    "Receiver history is still loading at the captured phase; no full history readiness claim.",
+    "Actual channel return shows Waiting for recovery for three original failed receivers.",
+    "No prompt, provider call, restart, public installation or original input replay."
+  ],
+  "raw_receipt": "/home/ts/.cache/agent-scratch/parent-channel-recovery-476-20261001-physical02/capture/receipt.json",
+  "raw_sha256": "4f57cff24e906da2c17001a557d54cd320f8929b0ac2e83f5bb409ba378b0a54"
+}

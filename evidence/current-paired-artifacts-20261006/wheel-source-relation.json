@@ -1,0 +1,13 @@
+{
+  "source_head": "ddcdc422c7fe01453edb2469bcfa8303d771db67",
+  "wheel": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/current-paired-core-20261006/wheel/agent_comms-0.1.0-py3-none-any.whl",
+  "sha256": "6b426d7ea31f4a6e30db2c2fdbd4eaa4d1be6dcea9aba3c6e599f7c063987b6b",
+  "bytes": 910730,
+  "package_assets": 355,
+  "record_rows": 360,
+  "git_local_zip_equal": true,
+  "no_package_extras": true,
+  "complete_RECORD": true,
+  "native_manifest_sha256": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+  "installed": false
+}

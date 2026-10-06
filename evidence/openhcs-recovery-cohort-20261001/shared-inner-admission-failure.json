@@ -1,0 +1,16 @@
+{
+  "original_diagnostic": "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/d0c838af6ca8f8f592fcc976cfdd5dd6.json",
+  "original_sha256": "68e60ed398b604dfa7246b35c71402dbf958074f56dcc7334b6d36668b8a55e1",
+  "thread": "nra-domain-mapping",
+  "sequences": [
+    273
+  ],
+  "input_disposition": "not_sent",
+  "failure_location": "private_send_stage.require_binding -> native_prompt_binding.read_expected_prompt_binding -> private_sidecar._locked_directory LOCK_EX|LOCK_NB",
+  "underlying_error": "BlockingIOError EAGAIN",
+  "one_use_already_acquired_before_lock": true,
+  "new_failure_on_default_cac7": true,
+  "owner": "Kepler / new admission closure PR",
+  "original_replays": 0,
+  "queue_install_independent": true
+}

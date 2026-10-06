@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from dataclasses import replace
 import hashlib
 from importlib.metadata import distribution
 import json
@@ -27,10 +26,7 @@ from acp.agent.router import build_agent_router
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import CompactRequest, CompactionChangedUpdate, decode_updates, encode_request
 from agent_comms.agent_events import CompactionSummaryProgress
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.comms import Comms, wire
-from agent_comms.coordinator import Coordination
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.field_codec import FieldCodec
@@ -40,6 +36,7 @@ from agent_comms.native_package import verify_native_package
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.pi_vocabulary import ThinkingLevel
 from agent_comms.threads import Thread
+from agent_comms.thread_status import StoppedThreadStatus
 
 
 def digest(path):
@@ -63,6 +60,8 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
                                  core_source: InstalledSource,
                                  capture_source=ordinary_source, observe_launch=unchanged_launch,
                                  continuation=None,
+                                 worktree: Path | None = None,
+                                 auto_wake: bool = False,
                                  core_artifacts: tuple[ReviewedArtifact, ...] = ()):
     """Acquire one configured saved fork and close its original child on every exit."""
     import agent_comms
@@ -96,10 +95,15 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
     verify_native_package(package)
     service = Comms(stage/'wire')
     journal = CompactionJournal(service.root/'compaction-commits.sqlite3')
+    request = ForkSessionRequest(
+        str(package), str(source_file),
+        str(worktree.resolve()) if worktree is not None else original.worktree,
+        str(stage/'forks'))
     if continuation is None:
-        fork = await journal.private_inputs.fork(ForkSessionRequest(
-            str(package), str(source_file), original.worktree, str(stage/'forks')),
-            cwd=Path(original.worktree), env=dict(launch.environment))
+        if worktree is not None:
+            Path(request.cwd).mkdir(mode=0o700, exist_ok=True)
+        fork = await journal.private_inputs.fork(
+            request, cwd=Path(request.cwd), env=dict(launch.environment))
         root_id = service.messaging.initialize_private_initial_protocol()
     else:
         fork = continuation.resume_fork(journal, InputDispositions(service.root/InputDispositions.filename))
@@ -116,39 +120,39 @@ async def configured_saved_agent(stage, package, source_file, receiver, receipt,
     for key in ('PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK', 'PI_AGENT_ID',
                 'AGENT_COMMS_THREAD', 'AGENT_COMMS_STARTUP_INPUT_KEY', 'PYTHONPATH'):
         environment.pop(key, None)
-    identity = ProcessIdentity.capture(os.getpid())
     for name in ('source529','peer529'):
         if continuation is None:
-            service.registry.declare(Thread(name, frozenset({'source529'}), original.worktree,
-                parent=original.name, process_identity=identity,
+            service.registry.declare(Thread(name, frozenset({'source529'}), request.cwd,
+                parent=original.name,
                 session_file=fork.session_file if name=='source529' else None,
-                model=original.model, thinking_level=original.thinking_level))
+                model=original.model, thinking_level=original.thinking_level),
+                status=StoppedThreadStatus())
         else:
             prior = service.registry.require(name)
             prior.require_idle()
             assert not prior.process_alive
             assert (prior.model, prior.thinking_level, prior.worktree) == (
-                original.model, original.thinking_level, original.worktree)
-            service.registry.register(replace(prior, process_identity=identity), new_owner=True)
+                original.model, original.thinking_level, request.cwd)
+    # Publish private inbox membership through the same owner as ACP declaration,
+    # then acquire only this calling process through its original birth authority.
+    service.threads.restore_stopped(service.registry.snapshot(), ('source529', 'peer529'))
+    for name in ('source529', 'peer529'):
+        service.owners.acquire_thread(name, owner_pid=os.getpid())
     owner = service.registry.require('source529')
-    # In-process fixture owners use the same participant store registration as
-    # OwnerLifecycle launch. Registry presence alone is not inbox membership.
-    with Coordination(str(service.root / 'coordination.sqlite3')) as store:
-        for name in ('source529', 'peer529'):
-            thread = service.registry.require(name)
-            store.participants.register(stable_thread_lookup(thread.created_at),
-                                        thread.name, thread.name, committed=True)
     environment.update(owner.native_environment(service.root, service.registry.snapshot(), owner.worktree))
     observe_launch(environment)
     # Borrow the configured process environment for this resource only.
     # A nested arm returns the parent root/identity after joined shutdown.
     with patch.dict(os.environ, environment, clear=True):
         agent = CommsAgent(service, agent_bin=str(binary), agent_args=list(launch.arguments or ()),
-            runtime_enabled=True, auto_wake=False, private_nk_native_package=package,
+            runtime_enabled=True, auto_wake=auto_wake, private_nk_native_package=package,
             private_nk_wire_root_id=root_id)
         agent.on_connect(receiver)
         try:
-            await agent.sessions.bind_owned(owner, owner.name)
+            for name in ('source529', 'peer529'):
+                await agent.sessions.bind_owned(service.registry.require(name), name)
+                if auto_wake:
+                    agent.inputs.ensure_live_drain(name)
             receipt.update(model=original.model, thinking=ThinkingLevel.optional_name(original.thinking_level),
                 source_bytes=source_file.stat().st_size, original_sha256=original_hash,
                 fork_bytes=Path(fork.session_file).stat().st_size)

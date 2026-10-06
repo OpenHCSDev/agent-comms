@@ -14,11 +14,15 @@ from typing import ClassVar
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_launch import RetainedOwnerLaunch
-from agent_comms.owner_lifecycle import OwnerRestartSelection
+from agent_comms.owner_lifecycle import OwnerReleaseReceipt, OwnerRestartSelection
+from agent_comms.goal_history import GoalHistoryEntry
 from agent_comms.registry_document import RegistryDocument
+from agent_comms.registry_provenance import RegistryProvenance
+from agent_comms.historical_views import HistorySource
 from agent_comms.threads import Thread
 from owner_read_projection import (
-    CurrentThreadProjection, OwnerReadProjection, RetiredGoalReportProjection,
+    CurrentThreadProjection, LiveOwnerReadProjection, RetiredGoalReportProjection,
+    RecordedRegistryProjection,
 )
 
 
@@ -26,23 +30,37 @@ from owner_read_projection import (
 class OriginalOwnerRead:
     document: RegistryDocument
     selection: OwnerRestartSelection
+    releases: dict[str, OwnerReleaseReceipt] = field(default_factory=dict)
+    goal_history: tuple[GoalHistoryEntry, ...] = ()
 
 
 @dataclass(frozen=True)
 class OriginalTypedCapture:
     root: Path
     original_python: Path
-    projection: ClassVar[type[OwnerReadProjection]] = RetiredGoalReportProjection
+    projection: ClassVar[type[LiveOwnerReadProjection]] = RetiredGoalReportProjection
 
-    def observe(self, name: str, expected: OwnerRestartSelection | None = None) -> OriginalOwnerRead:
+    def _acquire(self, projection, name, request):
         environment = dict(os.environ)
         environment.pop('PYTHONPATH', None)
         packet = subprocess.run([
             str(self.original_python), str(Path(__file__).with_name('read_original_owner.py')),
-            str(self.root), name, self.projection.declared_name,
-        ], input=json.dumps(FieldCodec.encode(expected)) if expected is not None else '',
+            str(self.root), name, projection.declared_name,
+        ], input=json.dumps(request) if request is not None else '',
             env=environment, capture_output=True, text=True, check=True)
-        return FieldCodec.decode(OriginalOwnerRead, json.loads(packet.stdout))
+        return json.loads(packet.stdout)
+
+    def observe(self, name: str, expected: OwnerRestartSelection | None = None) -> OriginalOwnerRead:
+        return FieldCodec.decode(OriginalOwnerRead, self._acquire(
+            self.projection, name, FieldCodec.encode(expected) if expected is not None else None,
+        ))
+
+    def recorded(self) -> HistorySource:
+        source = FieldCodec.decode(HistorySource, self._acquire(
+            RecordedRegistryProjection, '', FieldCodec.record_schema(RegistryProvenance),
+        ))
+        source.require_original(self.root)
+        return source
 
     def read(self, name: str) -> CapturedOriginalOwner:
         observed = self.observe(name)

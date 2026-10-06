@@ -1,0 +1,26 @@
+{
+  "argv": [
+    "/usr/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-o",
+    "addopts=",
+    "--basetemp",
+    "/home/ts/.cache/agent-scratch/einstein-goal-report-source-controls-resolved-20261006/amended720",
+    "-q",
+    "--tb=short",
+    "/home/ts/wt/comms-original-owner-admission-20261006/tests/test_goal_report_preservation.py",
+    "tests/test_owner_release_restart.py::test_changed_owner_after_release_refuses_escalation_and_replacement"
+  ],
+  "cwd": "/home/ts/wt/comms-amended720-owner-admission-20261006",
+  "source_pythonpath": "/home/ts/wt/comms-amended720-owner-admission-20261006/src:/home/ts/wt/comms-original-owner-admission-20261006/tools/cutover:/home/ts/.cache/uv/archive-v0/mNatOBGB9uuf-bXB",
+  "returncode": 1,
+  "elapsed_seconds": 22.46206756902393,
+  "pid": 2883380,
+  "joined": true,
+  "scope": "P-authored goal action/journal and strict current source postimage; source-owned changed-owner refusal, no complete restart/OFD/native/provider/install claim",
+  "stdout_sha256": "6a278090411ada1c6454d35c6f901c47556907fa4cfab700a3bc5188a33aa2b0",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

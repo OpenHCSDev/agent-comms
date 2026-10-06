@@ -1,0 +1,44 @@
+                                                  ┌──────────────────────────────────────────────────────────┐                                                  
+  ☰     <──    ──>   ✓ beta Indexing… ×          │                                                          │                                                  
+                      ━━━━━━━━━━━━━━━━            │  Fork from @beta                                         │                                                  
+▼ Channels                                        │  Name                                                    │                                                  
++ New Session                                     │  ▊▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▎  │                                                  
+▾ #any                                       Date │  ▊  child-name                                        ▎  │                                                  
+  Indexing… ✓ beta                                │  ▊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▎  │lementation.md.                                   
+    Ready                                         │  Task / goal / prompt (optional)                         │                                                  
+▸ #none                                      Date │  ▊▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▎  │                                                  
+▸ #all                                       Date │  ▊                                                    ▎  │                                                  
+▾ #team                                      Date │  ▊                                                    ▎  │                                                  
+  Indexing… ✓ beta                                │  ▊                                                    ▎  │s.md (+0, -1)                                     
+    Ready                                         │  ▊                                                    ▎  │╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍         
+                                                  │  ▊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▎  │                                                  
+                                                  │  Leave empty to start ready. Enter adds a line;          │ation, and prove the measure first.** In          
+                                                  │  Ctrl+Enter forks.                                       │                                                  
+                                                  │  Tags (comma-separated; edit to add or remove)           │ting its alternatives.** The plans for tw         
+                                                  │  ▊▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▎  │                                                  
+                                                  │  ▊  team                                              ▎  │                                                  
+                                                  │  ▊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▎  │factor-audit/references/principles.md.            
+                                                  │                                                          │                                                  
+                                                  │  ▊▔▔▔▔▔▔▔▔▔▔▔▔▔▔▎                                        │                                                  
+                                                  │  ▊     Fork     ▎                                        │                                                < 
+                                                  │  ▊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▎                                        │                                                  
+                                                  │                                                          │                                                  
+                                                  │                                                          │                                                  
+                                                  │                                                          │                                                  
+                                                  │                                                          │                                            ▂▂    
+                                                  │                                                          │                                                  
+                                                  │                                                          │7:14:47 ───────────────────────────────────       
+                                                  │                                                          │s, and rebuilt skills/refactor-audit.skill.       
+                                                  │                                                          │                                                  
+                                                  │                                                          │tive-proof-performance-20260914. Tests pass       
+                                                  │                                                          │too. Unrelated changes untouched.                 
+                                                  │                                                          │                                                  
+                                                  │                                                          │                                                  
+                                                  │                                                          │                                                  
+                                                  │                                                          │ilable                                            
+                                                  │                                                          │                                                  
+                                                  │                                                          │▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▎   
+                                                  │                                                          │                                              ▎   
+40% ───────────────────────────────────────●──────│                                                          │▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▎   
+  ──>   Float                                     │                                                          │available · Native owner has not reported cont    
+↑ Previous ↓ Next esc Dismiss sidebar ^s Channels └──────────────────────────────────────────────────────────┘                                      ▏^p palette 

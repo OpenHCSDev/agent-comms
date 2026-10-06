@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="60.869" timestamp="2026-10-05T20:19:25.593654-04:00" hostname="desktop"><testcase classname="tests.test_mcp_acceptance" name="test_real_pi_mcp_acp_link[allow]" time="59.935"><failure message="TimeoutError">fut = &lt;coroutine object Event.wait at 0x7f2d9bcc7a00&gt;, timeout = 40
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout &lt;= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout &lt;= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+&gt;           return await fut
+                   ^^^^^^^^^
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;asyncio.locks.Event object at 0x7f2d9a5b0050 [unset]&gt;
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+&gt;           await fut
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+case = 'allow'
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/m682n02/n/test_real_pi_mcp_acp_link_allo0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f2d9a6b5480&gt;
+
+    @pytest.mark.parametrize("case", ["allow", "no_controller", "revoke_midturn", "disconnect"])
+    async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
+        binary = os.environ.get("AC_MCP_NATIVE_BIN")
+        if not binary:
+            pytest.skip("Set AC_MCP_NATIVE_BIN to an explicitly prepared native Pi launcher")
+        assert binary == "pi" or (Path(binary).is_absolute() and os.access(binary, os.X_OK))
+        native_package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+        package, node, agent, project, digest, starts, calls, env = _prepare(
+            tmp_path, native_package
+        )
+        receipt_seen, second_request, release_final = (threading.Event() for _ in range(3))
+        if case != "revoke_midturn":
+            release_final.set()
+        attachment_settled = asyncio.Event()
+        attachment_turn = None
+        updates, permissions = [], []
+        entered, release = asyncio.Event(), asyncio.Event()
+        task = proxy = owner = None
+        (tmp_path / "launch.json").write_text(
+            json.dumps(
+                {
+                    "launcher": binary,
+                    "nativePackage": env["PI_COMPACTION_TEST_PACKAGE"],
+                    "package": str(package),
+                    "case": case,
+                }
+            )
+        )
+        async with _observer(case, tmp_path) as observer:
+            with monkeypatch.context() as environment, _mock_model(
+                tmp_path, agent, receipt_seen, second_request, release_final
+            ) as (
+                requests,
+                errors,
+                origin,
+            ):
+                env.update(
+                    OPENROUTER_API_KEY="offline-fixture-no-real-key",
+                    AGENT_COMMS_NATIVE_ORIGIN=origin,
+                )
+                if observer is not None:
+                    # The mounted observer already selected its isolated UI paths.
+                    for key in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"):
+                        if key in os.environ:
+                            env[key] = os.environ[key]
+                environment.setattr(os, "environ", env)
+                if case == "allow":
+                    await Coordination.run_worker(partial(
+                        _qualify_origin, node, env, project, tmp_path / "origin-guard",
+                    ))
+                args = [
+                    "--offline",
+                    "--no-extensions",
+                    "--no-skills",
+                    "--no-prompt-templates",
+                    "--no-themes",
+                    "--no-context-files",
+                    "--no-builtin-tools",
+                    "--provider",
+                    "openrouter",
+                    "--model",
+                    "z-ai/glm-5.3-flash",
+                    "--thinking",
+                    "off",
+                    "-e",
+                    str(package),
+                ]
+                retirement = AsyncExitStack()
+                try:
+                    owner = canonical_agent(
+                        wire(tmp_path / "wire"),
+                        agent_bin=binary,
+                        agent_args=args,
+                        runtime_enabled=True,
+                        auto_wake=False,
+                    )
+                    retirement.push_async_callback(owner.shutdown)
+    
+                    env.update(
+                        AGENT_COMMS_ROOT=str(owner._comms.root),
+                        AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=owner._private_nk_wire_root_id,
+                        AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=env["PI_COMPACTION_TEST_PACKAGE"],
+                        AGENT_COMMS_NATIVE_CONFIG_DIR=str(agent),
+                    )
+    
+                    class Audit:
+                        async def session_update(self, session_id, update):
+                            row = {
+                                "sessionId": session_id,
+                                "update": update.model_dump(mode="json", by_alias=True, exclude_none=True),
+                            }
+                            updates.append(row)
+                            if any(
+                                isinstance(fact, McpClientReceiptUpdate)
+                                for fact in decode_updates(update.field_meta)
+                            ):
+                                receipt_seen.set()
+    
+                    class Attachment:
+                        async def session_update(self, session_id, update):
+                            nonlocal attachment_turn
+                            if observer:
+                                await observer.session_update(session_id=session_id, update=update)
+                            for fact in decode_updates(update.get("_meta")):
+                                if isinstance(fact, TurnChangedUpdate):
+                                    if fact.state.busy:
+                                        if attachment_turn is None:
+                                            attachment_turn = fact.state
+                                        else:
+                                            assert fact.state.matches(attachment_turn.managed_id)
+                                    elif attachment_turn is not None:
+                                        assert fact.state.matches(attachment_turn.managed_id)
+                                        attachment_settled.set()
+    
+                        async def request_permission(self, **kwargs):
+                            permissions.append(kwargs)
+                            entered.set()
+                            answer = (
+                                await observer.request_permission(**kwargs)
+                                if observer
+                                else {"outcome": {"outcome": "selected", "optionId": "allow-once"}}
+                            )
+                            await release.wait()
+                            return answer
+    
+                    owner.on_connect(Audit())  # Passive evidence sink, never a permission controller.
+                    session = await owner.new_session(cwd=str(project), mcp_servers=[])
+                    session_id = session.session_id
+                    attached = canonical_agent(owner._comms, auto_wake=False)
+                    retirement.push_async_callback(attached.shutdown)
+                    attached.on_connect(Attachment())
+                    proxy = RuntimeProxy(attached, session_id, owner._runtime.path)
+                    retirement.push_async_callback(proxy.close)
+                    await proxy.subscribe()
+                    assert not attachment_settled.is_set()  # Initial idle replay is not this turn.
+                    if case == "no_controller":
+                        context = owner._runtime.controller.set(None)
+                        try:
+                            task = asyncio.create_task(
+                                owner.prompt(
+                                    session_id, [{"type": "text", "text": "Run fixture echo once."}]
+                                )
+                            )
+                        finally:
+                            owner._runtime.controller.reset(context)
+                    else:
+                        task = asyncio.create_task(
+                            proxy.request(
+                                "prompt", prompt=[{"type": "text", "text": "Run fixture echo once."}]
+                            )
+                        )
+&gt;                       await asyncio.wait_for(entered.wait(), TIMEOUT)
+
+tests/test_mcp_acceptance.py:554: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:487: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;Timeout [expired]&gt;
+exc_type = &lt;class 'asyncio.exceptions.CancelledError'&gt;
+exc_val = CancelledError(), exc_tb = &lt;traceback object at 0x7f2d78e05900&gt;
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -&gt; bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() &lt;= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+&gt;                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError</failure></testcase></testsuite></testsuites>

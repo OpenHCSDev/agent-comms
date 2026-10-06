@@ -1,0 +1,94 @@
+{
+  "state": "FIVE-DEFAULTS-PUBLISHED-ORDINARY-ACCEPTANCE-PASS",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930",
+  "pins": {
+    "agent-comms": "6feb634ba184d94d763028406152fff07027cccc",
+    "batrachian-toad": "ade1496216bab216fbc8f52b69ab7eaec376f030",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "previous_defaults": {
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/agent-comms-nk-foreground",
+    "toad": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/toad"
+  },
+  "ready_receipt": "/home/ts/.cache/agent-scratch/body-readiness-stage-20260930/paired-ready-receipt.json",
+  "ready_sha256": "ade9ef233d35f7fe14d762d35ca1892477502f196419c77df3ba51c85c783a11",
+  "original_route_sha256": "ea0bf1c06564cac1b4e7d55ac0a18540566f129b4a3c91dc4985a9b1771ca579",
+  "owners_restarted": 0,
+  "stores_reset": 0,
+  "native_inputs": 0,
+  "paid_calls": 0,
+  "started": 1790805066.4659245,
+  "defaults": {
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930/bin/agent-comms-nk-foreground",
+    "toad": "/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930/bin/toad"
+  },
+  "finished": 1790805353.6036544,
+  "ordinary_default_acceptance": {
+    "duration_seconds": 34.63263702200493,
+    "receipt": "/home/ts/.cache/agent-scratch/body-readiness-stage-20260930/ordinary-default-capture/receipt.json",
+    "sha256": "5e29cb0819b3b7b0e403e8c852cbe1bbf58dc85922c5a0fa150efaa499970212",
+    "physical_frame_reviewed": "after.png",
+    "selected_original_thread": "nra-architecture",
+    "saved_history_loaded_pages": 1,
+    "fresh_protocol_errors": 0,
+    "canonical_goal": {
+      "kind": "goal_changed",
+      "goal": null,
+      "execution": null
+    },
+    "canonical_queue": {
+      "kind": "queue_changed",
+      "scope": {
+        "session_id": "nra-architecture",
+        "admission": {
+          "incarnation": {
+            "name": "nra-architecture",
+            "created_at": 1790049182.3907015
+          },
+          "admission_generation": 1078
+        },
+        "owner_pid": 3697925
+      },
+      "revision": 20,
+      "projection": {
+        "kind": "available",
+        "items": [],
+        "restored": []
+      }
+    },
+    "canonical_turn": {
+      "kind": "turn_changed",
+      "state": {
+        "active": null,
+        "finished_turn_id": "6cfdff5d9a2bfb4226320d69d34a58fb"
+      }
+    },
+    "canonical_coordination": {
+      "kind": "coordination_changed",
+      "thread": {
+        "name": "nra-architecture",
+        "created_at": 1790049182.3907015
+      },
+      "wire_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "owner_pid": 3697925,
+      "worktree": "/home/ts/code/projects/nominal-refactor-advisor",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking_level": "off",
+      "title": "nra-architecture",
+      "context_usage": {
+        "used": 94579,
+        "size": 272000
+      }
+    },
+    "runtime_override": false,
+    "original_owner_unchanged": true,
+    "owned_cleanup_errors": []
+  },
+  "remaining_scope": "Bus/lifecycle/native-read changes are staged separately; Core6feb remains installed. No instant warm raster/50ms or overall CPU performance claim. Existing Toad windows retain their loaded version until restarted."
+}

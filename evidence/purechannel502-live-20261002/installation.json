@@ -1,0 +1,88 @@
+{
+  "state": "default installed; actual ordinary default saved-history startup inspected; original-wave configured3-owner channel journey qualified",
+  "prefix": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-purechannel502-20261002",
+  "pins": {
+    "agent_comms": "5c74f0ec700e4d83886e2f6fdaea4e1e19ad0d77",
+    "toad": "7df5e61cb81fc47ddfef35ec17c09f989533e224",
+    "textual": "68a0d1cf62fdde8aeef9834836ecf0caf7b169c7"
+  },
+  "merged": {
+    "core502": "1282a4228c7fa2841fab99443478c0f9b3d28a07",
+    "toad294": "b9ebd4c0baf2495e2d74c87c2696458cf4826a87",
+    "toad284": "01d93a5ae9eeb05cd2b3b7d5fca128373a586975",
+    "textual19": "68a0d1cf62fdde8aeef9834836ecf0caf7b169c7"
+  },
+  "production_core_delta": {
+    "files": 7,
+    "deleted_lines": 137,
+    "added_lines": 201
+  },
+  "publisher": "/home/ts/wt/comms-cleanup-live-integration-20260929/.release-private/purechannel502-foreground284-20261002/publication.json",
+  "publisher_sha256": "ed85a12a71a9754a60b2e87a6506a5d6e85c9b4f97d5c7a96bafc92f6ea3ce44",
+  "publication_exitcode": 0,
+  "retained_owner_configurations_verified": 19,
+  "protected_original_files_byte_invariant": 38,
+  "runtime_installation": {
+    "classification": "runtime/preserve",
+    "original_files": [
+      {
+        "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/compaction-commits.sqlite3",
+        "sha256": "d1fed493faaf71e68048c9f0c47e12bd02bcac596a266ec0ee2ca2f9c2171dbd",
+        "revision": {
+          "identity": {
+            "device": 2083,
+            "inode": 3996791
+          },
+          "size": 446464,
+          "mtime_ns": 1790906246689870721,
+          "ctime_ns": 1790906246689870721
+        }
+      }
+    ],
+    "retired": [],
+    "copied_bytes": 0
+  },
+  "whole_original_wire_stopped_verification": "/home/ts/wt/comms-cleanup-live-integration-20260929/.release-private/purechannel502-foreground284-20261002/stopped-original-and-startup.log",
+  "stopped_saved_startup": {
+    "saved_session_bytes": 42932905,
+    "network": "kernel-denied",
+    "provider_prompts": 0,
+    "success": true
+  },
+  "configured_channel_gate": {
+    "receipt": "/home/ts/wt/p502c02/receipt.json",
+    "sha256": "fdcbeb69000563179e1a208b978f8babc56d426fce5f01c91523fa680db6698b",
+    "elapsed_seconds": 21.120126006018836,
+    "original_recipients": 3,
+    "original_triage_proofs": 3,
+    "original_full_proofs": 3,
+    "canonical_replies_and_receipts": 3,
+    "acp_facts": 25,
+    "triage_provider_overlap_ms": 1611,
+    "full_provider_overlap_ms": 2276,
+    "extras_preserved_unproven": 3,
+    "normal_channel_reply_fanout": "expected behavior; user explicitly clarified; not itself a defect"
+  },
+  "actual_default_ui": {
+    "receipt": "/home/ts/.cache/agent-scratch/parent-purechannel502-default-ui-20261002/receipt.json",
+    "receipt_sha256": "0e46f0f3353cd118ce8315eceabecb32454f81f0539d6b9f84938519254d606d",
+    "image": "/home/ts/.cache/agent-scratch/parent-purechannel502-default-ui-20261002/before.png",
+    "image_sha256": "0a3d56c1d44c7840e370e23b48d7fc42ad4cc47994081049bc48a2a56b0e985f",
+    "personally_viewed": true,
+    "thread": "openhcs-helper",
+    "status": "Ready with preserved historical Needs attention/Paused notices",
+    "capture_completed": true,
+    "original_owner_unchanged": true,
+    "cleanup_remaining": [],
+    "cleanup_errors": []
+  },
+  "original_input_replays": 0,
+  "runtime_resets": 0,
+  "limitations": [
+    "Original seq326 provedFULL/Deferred and historical UNKNOWN dispositions remain; no reclassification or replay. Recovery gap is assigned to existing489 owner.",
+    "Actualconfigured3-owner pure-channel reply journey proves original wave, not all12 live recipients or long-run latency.",
+    "Qualified284 physical03 proves source-equal foreground/warm/paging checkpoint; highCPU/full performance remains open in295/Text21.",
+    "Defaultactualstartup/savedhistory is verified; no new public channel message submitted by parent.",
+    "Normal additional relevance processing for channel replies is preserved."
+  ]
+}

@@ -1,0 +1,192 @@
+{
+  "observed_utc": "2026-10-01T22:04:47Z",
+  "reads": "SQLite mode=ro/query_only; original typed declarations; no Coordination/bootstrap/RPC/recovery/write calls",
+  "records": [
+    {
+      "thread": "openhcs-audit-merged-boundaries",
+      "input_id": "8f71f8d42eb047fa9f580cb5ebc92f94",
+      "source_seq": 319,
+      "source_message_id": "6c367634bfc0",
+      "assignment_id": "cohort-v1:679fdd5cc62f6ede5a44421c5c10a132fe2ecd0d299992d3eb5526680fddd7a2",
+      "assignment_state": "ignored",
+      "assignment_revision": 4,
+      "stage": "triage",
+      "verdict": "IGNORE",
+      "execution_id": null,
+      "attempt_ordinal": null,
+      "current_execution": null,
+      "proof_exact": true,
+      "binding_identity_exact": true,
+      "prompt_digest_exact": true,
+      "native_terminals": [
+        {
+          "entry_id": "e47a4c9f",
+          "successful": true,
+          "decision": "IGNORE"
+        }
+      ],
+      "related_input_dispositions": [],
+      "registry_active_turn": null,
+      "registry_pid": 2276107,
+      "files_unchanged": true,
+      "session_file": "/var/tmp/agent-comms-live-20260927-wzjtqhza/native-sessions/0a1fa053928146e8f7cee2c0db9f66dd/2026-10-01T21-13-03-853Z_01a0f950-4a69-722e-a5a5-434b7c48953f.jsonl",
+      "session_entry_id": "c8f14161",
+      "llm_context_digest": "49e0eb32261aafe24737773b6b9731475aea67bcc4d03d39c4fafd913eb49af7"
+    },
+    {
+      "thread": "openhcs-pr159-viewer-bind-owner",
+      "input_id": "a2eb1f0b63dc1c17cc0e8a0ef5bd5281",
+      "source_seq": 319,
+      "source_message_id": "6c367634bfc0",
+      "assignment_id": "cohort-v1:b4a5a819f8765937f2973828fe95d013cad818b4212d13d588c6530e1bf55aa4",
+      "assignment_state": "ignored",
+      "assignment_revision": 4,
+      "stage": "triage",
+      "verdict": "IGNORE",
+      "execution_id": null,
+      "attempt_ordinal": null,
+      "current_execution": null,
+      "proof_exact": true,
+      "binding_identity_exact": true,
+      "prompt_digest_exact": true,
+      "native_terminals": [
+        {
+          "entry_id": "7b424732",
+          "successful": true,
+          "decision": "IGNORE"
+        }
+      ],
+      "related_input_dispositions": [],
+      "registry_active_turn": null,
+      "registry_pid": 2275742,
+      "files_unchanged": true,
+      "session_file": "/var/tmp/agent-comms-live-20260927-wzjtqhza/native-sessions/a3bbc1471d219185bac3cc36155c21c4/2026-10-01T21-13-05-471Z_01a0f950-50bd-733d-b6ae-1b3789e69601.jsonl",
+      "session_entry_id": "6c5a348e",
+      "llm_context_digest": "037e24b216f030862ea800369755b3d227ba1973fafd43457bd640270eed899b"
+    },
+    {
+      "thread": "openhcs-audit-open-prs",
+      "input_id": "3e7d11443ce31ca737a529b54be86b35",
+      "source_seq": 319,
+      "source_message_id": "6c367634bfc0",
+      "assignment_id": "cohort-v1:144cfbcd469b75a77937875735c21a5d9e8ee2aa5e9d3d70858a49e8df3dece7",
+      "assignment_state": "ignored",
+      "assignment_revision": 4,
+      "stage": "triage",
+      "verdict": "IGNORE",
+      "execution_id": null,
+      "attempt_ordinal": null,
+      "current_execution": null,
+      "proof_exact": true,
+      "binding_identity_exact": true,
+      "prompt_digest_exact": true,
+      "native_terminals": [
+        {
+          "entry_id": "ecb3c409",
+          "successful": true,
+          "decision": "IGNORE"
+        }
+      ],
+      "related_input_dispositions": [],
+      "registry_active_turn": null,
+      "registry_pid": 2276187,
+      "files_unchanged": true,
+      "session_file": "/var/tmp/agent-comms-live-20260927-wzjtqhza/native-sessions/10b77e63c20459481de58adb6a1f8525/2026-10-01T21-13-04-292Z_01a0f950-4c1e-71f8-b974-faf17efb67f5.jsonl",
+      "session_entry_id": "2433a522",
+      "llm_context_digest": "726ce4281e48ce866a9a6103522b5756b9509676b31d239374c405eb893a286c"
+    },
+    {
+      "thread": "openhcs-audit-merged-runtime",
+      "input_id": "b7e4bd81cc1979b4281e2a1a221cb1a9",
+      "source_seq": 319,
+      "source_message_id": "6c367634bfc0",
+      "assignment_id": "cohort-v1:5580922888ef3a38ccc1ef2e4a0bb84a922f56b0495caceb2029cd9e629366b8",
+      "assignment_state": "ignored",
+      "assignment_revision": 4,
+      "stage": "triage",
+      "verdict": "IGNORE",
+      "execution_id": null,
+      "attempt_ordinal": null,
+      "current_execution": null,
+      "proof_exact": true,
+      "binding_identity_exact": true,
+      "prompt_digest_exact": true,
+      "native_terminals": [
+        {
+          "entry_id": "4816267e",
+          "successful": true,
+          "decision": "IGNORE"
+        }
+      ],
+      "related_input_dispositions": [],
+      "registry_active_turn": null,
+      "registry_pid": 2276082,
+      "files_unchanged": true,
+      "session_file": "/var/tmp/agent-comms-live-20260927-wzjtqhza/native-sessions/173276ec0a7001bc216bd5ebeb5f7800/2026-10-01T21-13-04-782Z_01a0f950-4e0c-7035-9ca5-d9d5ffa80eb7.jsonl",
+      "session_entry_id": "d1c24f9a",
+      "llm_context_digest": "e9cbbb1f845fd47340b4b3c76035e538d2ee593e8bb64bd1513c6e9178a594b0"
+    },
+    {
+      "thread": "openhcs-architecture-memory",
+      "input_id": "17120a171c1852cebf305d9f447c39bb",
+      "source_seq": 319,
+      "source_message_id": "6c367634bfc0",
+      "assignment_id": "cohort-v1:f6a6ff8d6caa15b6c6faf5f7979f30c19a7b44300ca81f1f4d73c54eea48bdf0",
+      "assignment_state": "ignored",
+      "assignment_revision": 4,
+      "stage": "triage",
+      "verdict": "IGNORE",
+      "execution_id": null,
+      "attempt_ordinal": null,
+      "current_execution": null,
+      "proof_exact": true,
+      "binding_identity_exact": true,
+      "prompt_digest_exact": true,
+      "native_terminals": [
+        {
+          "entry_id": "cc52beec",
+          "successful": true,
+          "decision": "IGNORE"
+        }
+      ],
+      "related_input_dispositions": [],
+      "registry_active_turn": null,
+      "registry_pid": 2275733,
+      "files_unchanged": true,
+      "session_file": "/var/tmp/agent-comms-live-20260927-wzjtqhza/native-sessions/39e58aa7061c0dbf1ae9ae519a031fb0/2026-10-01T21-13-04-827Z_01a0f950-4e3a-76b2-9b4d-ce568aecc8f5.jsonl",
+      "session_entry_id": "438dc772",
+      "llm_context_digest": "ebed79e989982e28c03df91d78ae386f400cebfd54f8643e5d3aab044f69b3f5"
+    },
+    {
+      "thread": "openhcs-audit-merged-models",
+      "input_id": "2364d8396a32d69b0f9fe0b5ed3badd3",
+      "source_seq": 319,
+      "source_message_id": "6c367634bfc0",
+      "assignment_id": "cohort-v1:2d854fc8b1c3484e7f422bb9e49df162c358cfdfe276239443415ab02da6014d",
+      "assignment_state": "ignored",
+      "assignment_revision": 4,
+      "stage": "triage",
+      "verdict": "IGNORE",
+      "execution_id": null,
+      "attempt_ordinal": null,
+      "current_execution": null,
+      "proof_exact": true,
+      "binding_identity_exact": true,
+      "prompt_digest_exact": true,
+      "native_terminals": [
+        {
+          "entry_id": "8455ec25",
+          "successful": true,
+          "decision": "IGNORE"
+        }
+      ],
+      "related_input_dispositions": [],
+      "registry_active_turn": null,
+      "registry_pid": 2276105,
+      "files_unchanged": true,
+      "session_file": "/var/tmp/agent-comms-live-20260927-wzjtqhza/native-sessions/6ee0563dc2e5a3cb54a6deef1ed5b4b2/2026-10-01T21-13-04-147Z_01a0f950-4b93-7587-96ad-2c5a578f66a2.jsonl",
+      "session_entry_id": "e001d350",
+      "llm_context_digest": "8ebef9b8359fe0ef37c6ecc8f33acaa2d003954ccbf4f7cad3284c2ad3c8b857"
+    }
+  ]
+}

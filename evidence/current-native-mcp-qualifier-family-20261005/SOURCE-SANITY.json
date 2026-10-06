@@ -1,0 +1,33 @@
+{
+  "scope": "source compilation/AST only; no application import, collection, tests, installed/native/provider execution",
+  "python": "3.14.7 (main, Aug 10 2026, 07:46:56) [GCC 16.1.1 20260728]",
+  "base": "38a0533e5efa12ae0be9266e6b842ac07e3769ab",
+  "source_sha256": "e4219b8b6d696c9c6d4e81fcf33ef364e182438f5126144112ec58dbc96bdf16",
+  "unchanged_real_producers": {
+    "_node_run": true,
+    "_prepare": true,
+    "_deny_via_simulated_user_pty": true,
+    "_mock_model": true
+  },
+  "compiled": [
+    {
+      "path": "tests/test_mcp_acceptance.py",
+      "sha256": "e4219b8b6d696c9c6d4e81fcf33ef364e182438f5126144112ec58dbc96bdf16"
+    },
+    {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/mcp_observation_fixture.py",
+      "sha256": "63fabd727fa12c0dafdac992a5ee0bc653915c3a89ec07ce9838791c76ecc4cc"
+    },
+    {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/native_permission_ui.py",
+      "sha256": "8e9d11da1538b82f24595e5db6285d99f6ff1dc970d46f55030e0a026857536b"
+    },
+    {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/typed_comms_command_pilot.py",
+      "sha256": "e783896329e4616a44e8dac320916eb6302293cbf496b5b222d1f8c6453345a3"
+    }
+  ],
+  "retired_core_qualifier_updates": [],
+  "permission_outbound_contract": "original mock model, fetch guard, PTY ledger producer AST unchanged; allow/no-controller/revoke/disconnect and actual PID assertions remain",
+  "future_gate": "four original native MCP cases with paired Toad472 mounted permission and retirement; UNRUN until separate exact holder/artifact/input purpose"
+}

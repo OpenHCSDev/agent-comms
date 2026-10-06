@@ -1,0 +1,12 @@
+{
+  "state": "Proof-only correction; no repeat build",
+  "original_script_sha256": "49f436c4f0c4ad770ca78474396b58573275bd938bdaf0edd4e3c89f662de374",
+  "actual_wheel": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/retained-routing-provenance-20261005/wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+  "actual_requires_dist": [
+    "Requires-Dist: agent-comms[acp]"
+  ],
+  "cause": "Normal wheel METADATA declares agent-comms[acp] dependency; uv source Git revision belongs to original pyproject/uv build inputs, not wheel METADATA. All319 asset and RECORD checks preceded the false assertion.",
+  "raw_exception": "AssertionError at build-and-proof.py:83",
+  "build_receipt": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/retained-routing-provenance-20261005/wheel/build-receipt.json",
+  "build_attempts": 1
+}

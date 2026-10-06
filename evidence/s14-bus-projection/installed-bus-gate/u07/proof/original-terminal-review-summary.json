@@ -1,0 +1,19 @@
+{
+  "original_frames": 5789,
+  "apps": 3,
+  "painted_answer_bodies": [
+    "CONTROLLED_RETURN_0",
+    "RECIPIENT_RESPONSE_PROOF",
+    "SENDER_SENT_CONFIRMATION"
+  ],
+  "duplicate_frame_count": 109,
+  "first_duplicate": {
+    "frame": 5166,
+    "source": "CONTROLLED_RETURN_0",
+    "copies": 2
+  },
+  "first_duplicate_driver": "LinuxDriver",
+  "first_duplicate_headless": false,
+  "review_result": "FAILED original duplicate assertion; unattempted RETURN1/RETURN2 remain unproven",
+  "boundary": "Original admitted incremental ANSI replayed through existing pyte; exact fixture answer lines, never prompt substring dedup"
+}

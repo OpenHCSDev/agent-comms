@@ -1,0 +1,7 @@
+erresc: unknown csi ESC[>25u
+erresc: unknown csi ESC[?2026$p
+erresc: unknown csi ESC[?2048$p
+erresc: unknown str ESC]22
+erresc: unknown str ESC]22
+erresc: unknown csi ESC[<u
+couldn't read from shell: Input/output error

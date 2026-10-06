@@ -1,0 +1,34 @@
+{
+  "source_head": "ddcdc422c7fe01453edb2469bcfa8303d771db67",
+  "argv": [
+    "/usr/bin/python",
+    "-B",
+    "-m",
+    "build",
+    "--wheel",
+    "--no-isolation",
+    "--outdir",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/current-paired-core-20261006/wheel"
+  ],
+  "cwd": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+  "environment_overrides": {
+    "PYTHONPATH": "/home/ts/.cache/uv/archive-v0/RgcgNn7xR1Zs9HSF",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "build_inputs": {
+    "pyproject.toml": "000139ce7da800c73574db2cd2e99af5afb63795f94f38d532e03af4b1423ad7",
+    "README.md": "b77c9e4f95fe3b1c0cbf84f70f429ff07673308099688796b24bda7e339f84a6",
+    "LICENSE": "1fe81c33f0cdfbcea8ce2fa4bf5cc98604be54a954ff7c59cea0ff02e3c15741",
+    ".pi/APPEND_SYSTEM.md": "dd239e7334300a4bcefee3f4727f67cc80583c30c1b1b98e1d49be70da86b940",
+    "stack/pi-native.sha256": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+    "stack/native-compaction-commit-child.mjs": "186abb2f107b40327ff6410749727e83c9dd9df1487ade76051565544ec0a2a8"
+  },
+  "pid": 2987134,
+  "start_time": 73282158,
+  "exit_code": 0,
+  "elapsed_seconds": 0.5577540240483359,
+  "joined": true,
+  "pid_absent": true,
+  "build_attempts": 1,
+  "install_or_native_operation": false
+}

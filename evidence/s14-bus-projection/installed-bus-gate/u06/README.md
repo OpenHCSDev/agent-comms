@@ -10,7 +10,13 @@ Read-only post-terminal source inspection confirms one canonical Assistant for e
 
 The original SVGs contain the expected answers and cold user at actual screen coordinates. Their app glyph/background colors are both black; direct rsvg conversion is therefore unreadable. The current inherited environment contains NO_COLOR=1 and TERM=dumb. The installed pure Monochrome filter maps ANSI white/default to black on black, and Kepler identifies this as the previously observed capture-environment failure. The complete original launch environment was not recorded, so this does not retrospectively establish every filter setting in u06.
 
-Original SVGs/PNGs remain untouched. **No physically readable colored UI claim is made.** Resource/geometry/compositor-text and scripted journey acceptance are distinct from that remaining visual qualification. Kepler owns isolated recorder environment normalization. No fresh UI/provider run or recolored substitute was used to erase the limit.
+Original SVGs/PNGs remain untouched. **Those original exports establish no physically readable colored UI claim.** Resource/geometry/compositor-text and scripted journey acceptance are distinct from that visual qualification. Kepler owns isolated recorder environment normalization. Original artifact inspection involved no fresh UI/provider run or recolored substitute.
+
+### Subsequent bounded physical qualification
+
+At the parent's explicit authorization, one provider-free physical saved-source observation was completed in a fresh private fixture. The installed native SessionManager fork owns the new working-directory/header relation; every original native message row and ID is retained. The existing recorder's private/observe path launched the same installed pair in real st and its own Xvfb, with NO_COLOR absent and TERM=xterm-256color. The actual after.png was personally viewed: CONTROLLED_RETURN_0 and CONTROLLED_RETURN_2 are readable, each with one answer body and Agent header, and the session is Ready. Recording duration17.269s, runtime unchanged, recorder cleanup empty; the fresh private owner was stopped canonically. Native input/execution counts, new bus bytes and ACP prompt-call count are all zero. Original u06 registry/bus/native hashes remain unchanged.
+
+This closes **fresh retained-native-source physical readability**, without pretending the original hot headless exports have readable colors. No original wire/handling state was recreated. The first two setup failures remain in physical-v01/physical-v02: plain copy had an invalid saved cwd; then SDK fork corrected that relation but the recorder launch cwd still differed from the declaration. The corrected launch uses the existing normal project-cwd recipe; no decoder, source-header patch or admission bypass was added. See physical-v03/assessment.json and the exact original PNGs/recorder receipt. The unmodified raw video remains at its manifest-recorded scratch path.
 
 ## Remaining scope
 

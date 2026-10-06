@@ -61,17 +61,7 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
         """Restore this saved declaration before acquiring its live process."""
         def acquire():
             comms = agent._comms
-            arguments = agent.sessions.agent_args
-            original = comms.threads.claim_thread(
-                agent.sessions.thread_name_for(str(project)), tags=frozenset({"acp"}),
-                worktree=str(project), start_at_latest=True,
-                model=arguments.model, thinking_level=arguments.thinking,
-                auto_title_pending=True,
-            )
-            # This original stopped-restoration producer commits membership;
-            # a reader or an active fixture must never invent participant rows.
-            comms.threads.restore_stopped(comms.registry.snapshot(), (original.name,))
-            owned = comms.owners.acquire_thread(original.name, owner_pid=os.getpid())
+            owned = agent.sessions.declare_thread(str(project))
             return comms.threads.attach_session(owned, str(session))
 
         thread = await Coordination.run_worker(acquire)

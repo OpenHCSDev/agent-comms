@@ -1,0 +1,752 @@
+{
+  "kind": "installed-source-resource-scope-census",
+  "installed_core": "74877f2dd108ed211871a098064178eaf3a4fdb5",
+  "root": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-certified508-corrected-candidate-20261002/lib/python3.14/site-packages/agent_comms",
+  "method": "AST enumerates resource scope syntax in named path modules; scope await/yield is structural, not runtime lock timing or proof that every lock spans the await",
+  "files": [
+    {
+      "file": "store_files.py",
+      "sha256": "dd51cc0f49c5eee39ea18ef6bbcf3f5eab900ffbcc52b8f883fc7e8d243006f7"
+    },
+    {
+      "file": "wire_log.py",
+      "sha256": "b784f7b3e183c652ef4388252be4f2a4bfb669305bd9c23b13a871de9632bf9b"
+    },
+    {
+      "file": "locked_store.py",
+      "sha256": "565b488ada15b8b89f4e27c199f51d2392cae62ddaf179d6487e2bdc5c29a827"
+    },
+    {
+      "file": "coordination_session.py",
+      "sha256": "d08e586f8896220a57265a0fc5c32a1c96428af0a526fe5336c22442823dd453"
+    },
+    {
+      "file": "coordination_database.py",
+      "sha256": "5ba333b09f3eacbae690605fde8fcf8a164125ce38d1fe8a56f138ba4b6bbe87"
+    },
+    {
+      "file": "coordinated_runtime.py",
+      "sha256": "1d46870f207cece7009c09eb195d3df39fbd13c4473a50a33f564af1f40a02f0"
+    },
+    {
+      "file": "selected_participant.py",
+      "sha256": "4b2dcae91fb160d8d852a6fd598516a63ce7da7336163a889a5b39bf29fbcd40"
+    },
+    {
+      "file": "coordination_cohort.py",
+      "sha256": "ea349f18973448cb8a0284df6918b75a57340461e863168f5f2ce7fa0b466bbe"
+    },
+    {
+      "file": "coordination_response.py",
+      "sha256": "d51fb8cf0984a0926f650f03556931791d9658357034a23f51360ade964ea18d"
+    },
+    {
+      "file": "tracked_turn.py",
+      "sha256": "70c609e395dff5a1155beaaba4f148fd8ab16e35d015224f016ab16e16a04256"
+    },
+    {
+      "file": "native_prompt_send.py",
+      "sha256": "82d8b454343ecc3313e8f48c992c9eb46c58fc3ae61faf3483b79f5c1946d263"
+    },
+    {
+      "file": "private_send_admission.py",
+      "sha256": "e1541f1f680f2f9bf2ba209af4ab9862a4fe5444e5cbebef3b54ddd12fee4f04"
+    },
+    {
+      "file": "private_send_stage.py",
+      "sha256": "bbbe4b1f7bb614af46aad597a538b6527f43896296288982cc78ef2fad29e7c4"
+    },
+    {
+      "file": "compaction_private_inputs.py",
+      "sha256": "b793dde31b014df7e5b837e81cbe1635c403af68c5fc79df2d7ea95b3803f1f5"
+    },
+    {
+      "file": "compaction_journal.py",
+      "sha256": "0462e3b2c46cb29ac0aa03c85b65d7e0667ae59651169d61d08b2dc430070db4"
+    },
+    {
+      "file": "owned_send_admission.py",
+      "sha256": "ed13b391298898e9beb4a102e57188e21f4540fdc05b25206a2d9a2f3419ae55"
+    },
+    {
+      "file": "claim_admission.py",
+      "sha256": "3d5d21e619eecf778658fd2749838f8a3b35dc9595f01a50e9afd2bde5fd5cee"
+    },
+    {
+      "file": "cursor_publication.py",
+      "sha256": "7f1ee812c4ab6ca17b4b0f9a128cb70b109c84df242e4be07ff9ee816c5ade22"
+    },
+    {
+      "file": "message_bus.py",
+      "sha256": "3579960cae43c65e3210a4a7fe1970e8bc73a907322b1b11d44399bb6594030f"
+    }
+  ],
+  "scopes": [
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.locked",
+      "line": 59,
+      "end_line": 61,
+      "resource": "_store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes, contention=contention)",
+      "scope_contains_await": false,
+      "scope_contains_yield": true
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.certified_read",
+      "line": 66,
+      "end_line": 71,
+      "resource": "_store_lock(self.path, blocking=blocking, contention=contention)",
+      "scope_contains_await": false,
+      "scope_contains_yield": true
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.conversation_sources",
+      "line": 77,
+      "end_line": 87,
+      "resource": "_store_lock(self.path)",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.full_history",
+      "line": 90,
+      "end_line": 91,
+      "resource": "self.locked()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.record_context",
+      "line": 97,
+      "end_line": 100,
+      "resource": "self.locked()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.context_manifests",
+      "line": 108,
+      "end_line": 117,
+      "resource": "_store_lock(self.path.parent / 'wire')",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.context_manifests",
+      "line": 108,
+      "end_line": 117,
+      "resource": "self.locked()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.retained_context",
+      "line": 144,
+      "end_line": 156,
+      "resource": "_store_lock(self.path.parent / 'wire')",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.retained_context",
+      "line": 144,
+      "end_line": 156,
+      "resource": "self.locked()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.retained_context",
+      "line": 148,
+      "end_line": 156,
+      "resource": "InputDispositions(self.path.parent / InputDispositions.filename).reading()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.claim_projection",
+      "line": 193,
+      "end_line": 198,
+      "resource": "_store_lock(self.path)",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.read_delivery_cohort",
+      "line": 299,
+      "end_line": 302,
+      "resource": "self.certified_read()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.read_keyed_response",
+      "line": 336,
+      "end_line": 338,
+      "resource": "_store_lock(self.path)",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog._record_snapshot",
+      "line": 361,
+      "end_line": 374,
+      "resource": "_store_lock(self.path)",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.deliveries_for_references",
+      "line": 416,
+      "end_line": 417,
+      "resource": "self.certified_read()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.total_messages",
+      "line": 420,
+      "end_line": 421,
+      "resource": "_store_lock(self.path)",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.latest_sequence",
+      "line": 425,
+      "end_line": 426,
+      "resource": "_store_lock(self.path)",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.read_metadata_unlocked",
+      "line": 498,
+      "end_line": 536,
+      "resource": "_store_lock(self.metadata_path, shared=True)",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "wire_log.py",
+      "owner": "WireLog.write_metadata_unlocked",
+      "line": 542,
+      "end_line": 547,
+      "resource": "_store_lock(self.metadata_path)",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "locked_store.py",
+      "owner": "LockedStore.locked",
+      "line": 71,
+      "end_line": 72,
+      "resource": "_store_lock(self.path, shared=shared, blocking=blocking)",
+      "scope_contains_await": false,
+      "scope_contains_yield": true
+    },
+    {
+      "file": "locked_store.py",
+      "owner": "LockedStore.reading",
+      "line": 77,
+      "end_line": 78,
+      "resource": "self.locked(shared=True, blocking=blocking)",
+      "scope_contains_await": false,
+      "scope_contains_yield": true
+    },
+    {
+      "file": "locked_store.py",
+      "owner": "LockedStore.read",
+      "line": 81,
+      "end_line": 82,
+      "resource": "self.reading()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "locked_store.py",
+      "owner": "LockedStore.update",
+      "line": 85,
+      "end_line": 90,
+      "resource": "self.locked()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "locked_store.py",
+      "owner": "LockedStore.replace",
+      "line": 99,
+      "end_line": 100,
+      "resource": "self.locked()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "selected_participant.py",
+      "owner": "SelectedParticipant.require_current",
+      "line": 44,
+      "end_line": 45,
+      "resource": "self.store.session.read()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "selected_participant.py",
+      "owner": "SelectedParticipant.select",
+      "line": 77,
+      "end_line": 82,
+      "resource": "bus.log.locked()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "selected_participant.py",
+      "owner": "SelectedParticipant.select",
+      "line": 83,
+      "end_line": 86,
+      "resource": "store.session.read()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "selected_participant.py",
+      "owner": "SelectedParticipant.select",
+      "line": 96,
+      "end_line": 97,
+      "resource": "store.session.read()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "selected_participant.py",
+      "owner": "SelectedParticipant.source",
+      "line": 164,
+      "end_line": 165,
+      "resource": "store.session.read()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "coordination_cohort.py",
+      "owner": "accept_delivery_cohort",
+      "line": 242,
+      "end_line": 247,
+      "resource": "bus.log.locked()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "coordination_cohort.py",
+      "owner": "accept_delivery_cohort",
+      "line": 249,
+      "end_line": 308,
+      "resource": "store.session.transaction()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "coordination_cohort.py",
+      "owner": "sealed_cohort_sequences",
+      "line": 313,
+      "end_line": 322,
+      "resource": "store.session.read()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "coordination_cohort.py",
+      "owner": "pending_sealed_assignments",
+      "line": 352,
+      "end_line": 362,
+      "resource": "store.session.read()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "coordination_cohort.py",
+      "owner": "sealed_cohort_assignments",
+      "line": 376,
+      "end_line": 393,
+      "resource": "store.session.read()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "coordination_response.py",
+      "owner": "install_private_response_schema",
+      "line": 191,
+      "end_line": 203,
+      "resource": "store.session.transaction()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "coordination_response.py",
+      "owner": "_response_boundary",
+      "line": 215,
+      "end_line": 220,
+      "resource": "_store_lock(bus.log.path.parent / 'wire', blocking=blocking, contention=contention)",
+      "scope_contains_await": false,
+      "scope_contains_yield": true
+    },
+    {
+      "file": "coordination_response.py",
+      "owner": "_response_boundary",
+      "line": 215,
+      "end_line": 220,
+      "resource": "bus.log.locked(blocking=blocking, contention=contention)",
+      "scope_contains_await": false,
+      "scope_contains_yield": true
+    },
+    {
+      "file": "coordination_response.py",
+      "owner": "_response_boundary",
+      "line": 215,
+      "end_line": 220,
+      "resource": "_store_lock(bus._registry.store.path, blocking=blocking, contention=contention)",
+      "scope_contains_await": false,
+      "scope_contains_yield": true
+    },
+    {
+      "file": "coordination_response.py",
+      "owner": "prepare_fenced_response",
+      "line": 354,
+      "end_line": 410,
+      "resource": "_response_boundary(bus)",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "coordination_response.py",
+      "owner": "prepare_fenced_response",
+      "line": 359,
+      "end_line": 410,
+      "resource": "store.session.transaction()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "coordination_response.py",
+      "owner": "_settle_fenced_response",
+      "line": 452,
+      "end_line": 521,
+      "resource": "_response_boundary(bus)",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "coordination_response.py",
+      "owner": "_settle_fenced_response",
+      "line": 461,
+      "end_line": 480,
+      "resource": "store.session.transaction()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "coordination_response.py",
+      "owner": "_settle_fenced_response",
+      "line": 481,
+      "end_line": 521,
+      "resource": "store.session.transaction()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "tracked_turn.py",
+      "owner": "TrackedTurnSession.send",
+      "line": 309,
+      "end_line": 313,
+      "resource": "_store_lock(self.maintenance_root / 'wire')",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "private_send_stage.py",
+      "owner": "NativeSendStage.reserve",
+      "line": 73,
+      "end_line": 86,
+      "resource": "store.session.transaction()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "private_send_stage.py",
+      "owner": "NativeSendStage.verify",
+      "line": 135,
+      "end_line": 146,
+      "resource": "store.session.read()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "private_send_stage.py",
+      "owner": "NativeSendStage.require_binding",
+      "line": 193,
+      "end_line": 195,
+      "resource": "self.bound_prompt(store, input_id, owner, wire_root_id, prompt, blocking=blocking)",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "private_send_stage.py",
+      "owner": "TriageNativeSend.reject",
+      "line": 229,
+      "end_line": 246,
+      "resource": "store.session.transaction()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "private_send_stage.py",
+      "owner": "TriageNativeSend.commit",
+      "line": 288,
+      "end_line": 297,
+      "resource": "store.session.transaction()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "private_send_stage.py",
+      "owner": "FullNativeSend.fail_unknown",
+      "line": 330,
+      "end_line": 332,
+      "resource": "_response_boundary(bus)",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "private_send_stage.py",
+      "owner": "FullNativeSend.commit",
+      "line": 354,
+      "end_line": 360,
+      "resource": "store.session.transaction()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "compaction_private_inputs.py",
+      "owner": "PrivateInputs.enroll",
+      "line": 78,
+      "end_line": 93,
+      "resource": "self.journal.transaction()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "compaction_private_inputs.py",
+      "owner": "PrivateInputs.reserve",
+      "line": 107,
+      "end_line": 108,
+      "resource": "self.admission(session_file)",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "compaction_private_inputs.py",
+      "owner": "PrivateInputs.admission",
+      "line": 121,
+      "end_line": 128,
+      "resource": "InputDispositions(self.journal.path.parent / InputDispositions.filename).reading(blocking=blocking)",
+      "scope_contains_await": false,
+      "scope_contains_yield": true
+    },
+    {
+      "file": "compaction_private_inputs.py",
+      "owner": "PrivateInputs.admission",
+      "line": 121,
+      "end_line": 128,
+      "resource": "self.journal.transaction(blocking=blocking, retain_exclusion=True)",
+      "scope_contains_await": false,
+      "scope_contains_yield": true
+    },
+    {
+      "file": "compaction_private_inputs.py",
+      "owner": "PrivateInputs.send_fence",
+      "line": 149,
+      "end_line": 152,
+      "resource": "self.admission(session_file)",
+      "scope_contains_await": false,
+      "scope_contains_yield": true
+    },
+    {
+      "file": "compaction_journal.py",
+      "owner": "CompactionJournal.__init__",
+      "line": 93,
+      "end_line": 108,
+      "resource": "self.transaction()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "owned_send_admission.py",
+      "owner": "OwnedSendAdmission.__call__",
+      "line": 144,
+      "end_line": 189,
+      "resource": "_store_lock(self.comms._wire_lock_path)",
+      "scope_contains_await": false,
+      "scope_contains_yield": true
+    },
+    {
+      "file": "claim_admission.py",
+      "owner": "verify_selected_wake",
+      "line": 50,
+      "end_line": 63,
+      "resource": "_store_lock(comms._wire_lock_path)",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "claim_admission.py",
+      "owner": "verify_selected_wake",
+      "line": 53,
+      "end_line": 56,
+      "resource": "comms.bus.log.locked()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "claim_admission.py",
+      "owner": "_verify_selected_wake_state",
+      "line": 85,
+      "end_line": 115,
+      "resource": "store.session.read()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "claim_admission.py",
+      "owner": "_selected_claim_boundary",
+      "line": 131,
+      "end_line": 163,
+      "resource": "_store_lock(comms._wire_lock_path)",
+      "scope_contains_await": false,
+      "scope_contains_yield": true
+    },
+    {
+      "file": "claim_admission.py",
+      "owner": "_selected_claim_boundary",
+      "line": 131,
+      "end_line": 163,
+      "resource": "bus.log.locked()",
+      "scope_contains_await": false,
+      "scope_contains_yield": true
+    },
+    {
+      "file": "claim_admission.py",
+      "owner": "_selected_claim_boundary",
+      "line": 131,
+      "end_line": 163,
+      "resource": "_store_lock(comms.registry.store.path)",
+      "scope_contains_await": false,
+      "scope_contains_yield": true
+    },
+    {
+      "file": "claim_admission.py",
+      "owner": "_selected_claim_boundary",
+      "line": 161,
+      "end_line": 163,
+      "resource": "store.session.read()",
+      "scope_contains_await": false,
+      "scope_contains_yield": true
+    },
+    {
+      "file": "claim_admission.py",
+      "owner": "write_selected_claimed_file",
+      "line": 362,
+      "end_line": 413,
+      "resource": "_store_lock(comms._wire_lock_path)",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "claim_admission.py",
+      "owner": "write_selected_claimed_file",
+      "line": 362,
+      "end_line": 413,
+      "resource": "bus.log.locked()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "claim_admission.py",
+      "owner": "write_selected_claimed_file",
+      "line": 362,
+      "end_line": 413,
+      "resource": "_store_lock(comms.registry.store.path)",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "claim_admission.py",
+      "owner": "write_selected_claimed_file",
+      "line": 393,
+      "end_line": 413,
+      "resource": "scoped.session.transaction()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "message_bus.py",
+      "owner": "MessageBus.channel_activity",
+      "line": 110,
+      "end_line": 112,
+      "resource": "self.log.locked()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "message_bus.py",
+      "owner": "MessageBus.inbox",
+      "line": 153,
+      "end_line": 160,
+      "resource": "self.log.locked()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "message_bus.py",
+      "owner": "MessageBus._pending_projection",
+      "line": 230,
+      "end_line": 267,
+      "resource": "self.log.locked()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "message_bus.py",
+      "owner": "MessageBus.awareness_segments",
+      "line": 318,
+      "end_line": 322,
+      "resource": "self.log.locked(blocking=False)",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    },
+    {
+      "file": "message_bus.py",
+      "owner": "MessageBus.last_sent_timestamps",
+      "line": 390,
+      "end_line": 392,
+      "resource": "self.log.locked()",
+      "scope_contains_await": false,
+      "scope_contains_yield": false
+    }
+  ]
+}

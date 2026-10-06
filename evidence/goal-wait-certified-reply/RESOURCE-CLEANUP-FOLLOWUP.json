@@ -1,0 +1,90 @@
+{
+  "executing_owner": "Mendel",
+  "scope": "merged449/230 disposable test installation+wheel output; Sch explicit finished450 cache clearance",
+  "started_unix": 1790815760.3333673,
+  "audit_path": "/home/ts/.cache/agent-scratch/mendel-owned-resource-cleanup-20260930/followup/audit.json",
+  "audit_sha256": "16c41c3ef999ad73c1c26ecce5f8a00c0baeb956227313517271f098575652cb",
+  "paths_removed": [
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-r1-preparing-input-custody-20260930/installed",
+      "owner": "Mendel449",
+      "kind": "installed environment",
+      "allocated_bytes_removed": 8015872,
+      "filesystem_available_delta_during_removal": 8015872
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-r1-preparing-input-custody-20260930/wheel",
+      "owner": "Mendel449",
+      "kind": "wheel output",
+      "allocated_bytes_removed": 757760,
+      "filesystem_available_delta_during_removal": 757760
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/toad-native-widget-actions-20260930/installed",
+      "owner": "Mendel230",
+      "kind": "installed environment",
+      "allocated_bytes_removed": 16850944,
+      "filesystem_available_delta_during_removal": 16850944
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/toad-native-widget-actions-20260930/wheels",
+      "owner": "Mendel230",
+      "kind": "wheel output",
+      "allocated_bytes_removed": 2215936,
+      "filesystem_available_delta_during_removal": 2215936
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/mcp-cache-preparation",
+      "owner": "Schrodinger450 explicit clearance",
+      "kind": "dependency cache",
+      "allocated_bytes_removed": 35987456,
+      "filesystem_available_delta_during_removal": 35987456
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/npm-cache/_cacache",
+      "owner": "Schrodinger450 explicit clearance",
+      "kind": "dependency cache",
+      "allocated_bytes_removed": 5476352,
+      "filesystem_available_delta_during_removal": 5476352
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/wheels",
+      "owner": "Schrodinger450 explicit clearance",
+      "kind": "wheel output",
+      "allocated_bytes_removed": 757760,
+      "filesystem_available_delta_during_removal": 757760
+    }
+  ],
+  "allocated_bytes_removed": 70062080,
+  "observed_filesystem_available_delta": 70062080,
+  "completed_unix": 1790815760.5670512,
+  "caveat": "Allocated bytes count removed directory allocations, not exclusive physical reclaimed bytes; shared hardlinks/reflinks and concurrent writes affect available-space deltas.",
+  "reference_audit": {
+    "same_uid_processes_checked": 144,
+    "effective_uid": 0,
+    "process_authority": "/home/ts/.cache/agent-scratch/gw462/installed/lib/python3.14/site-packages/agent_comms/child_process.py",
+    "references": [],
+    "unreadable": [],
+    "runtime_metadata_files_checked": 135,
+    "visibility_limit": "Only target-user processes inspected; no other-user process exclusion claimed."
+  },
+  "source_evidence_heads_preserved": [
+    "29a25b4b5751cb7b90908dd181a0eea6dbbcb358",
+    "0ebd4a77897cdc0e674f13d7edee82296f7ab44b"
+  ],
+  "protected": [
+    "g458/g460 originals, failed candidates and all current stack WIP",
+    "current #457/#461/#462 installed candidate environments and wheels",
+    "all native stable/rollback/candidate prefixes, native sessions, input-proof, UNKNOWN, goal/wire records",
+    "raw #449/#230/#450 UI/native/discovery/timing/build/provenance evidence",
+    "all inspected owned worktrees; dirty #430 test changes retained"
+  ],
+  "final_resource_guard": {
+    "assert_exit_code": 2,
+    "level": "warning",
+    "home_free_gib": 10.2,
+    "root_free_gib": 8.2,
+    "ram_available_gib": 19.1,
+    "swap_used_gib": 8.9
+  }
+}

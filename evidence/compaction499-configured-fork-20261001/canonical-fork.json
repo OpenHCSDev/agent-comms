@@ -1,0 +1,13 @@
+{
+  "owner": "parent/Sch499 canonical fork validation",
+  "parent": "openhcs-architecture-memory",
+  "child": "compaction499-live-architecture-memory",
+  "returncode": 0,
+  "stdout": "{\n  \"forked\": \"compaction499-live-architecture-memory\",\n  \"pid\": 2472251\n}\n",
+  "stderr": "",
+  "parent_worktree": "/home/ts/code/projects/openhcs",
+  "parent_model": "openai-codex/gpt-6.1-sol",
+  "parent_thinking": "<class 'agent_comms.pi_vocabulary.HighThinkingLevel'>",
+  "input_supplied": false,
+  "original_input_retried": false
+}

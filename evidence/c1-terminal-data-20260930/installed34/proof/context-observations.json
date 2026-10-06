@@ -1,0 +1,42 @@
+{
+  "source": "actual existing ACP usage_update packets decoded by pinnedSDK0.12.1 UsageUpdate; no newRPC",
+  "observations": [
+    {
+      "session": "beta",
+      "stamp": "[1790825348.905]",
+      "native_ACP_used": 110,
+      "native_ACP_size": 272000
+    },
+    {
+      "session": "beta",
+      "stamp": "[1790825349.104]",
+      "native_ACP_used": 110,
+      "native_ACP_size": 272000
+    },
+    {
+      "session": "beta",
+      "stamp": "[1790825349.113]",
+      "native_ACP_used": 110,
+      "native_ACP_size": 272000
+    },
+    {
+      "session": "beta",
+      "stamp": "[1790825349.179]",
+      "native_ACP_used": 110,
+      "native_ACP_size": 272000
+    },
+    {
+      "session": "beta",
+      "stamp": "[1790825349.470]",
+      "native_ACP_used": 110,
+      "native_ACP_size": 272000
+    },
+    {
+      "session": "beta",
+      "stamp": "[1790825349.834]",
+      "native_ACP_used": 110,
+      "native_ACP_size": 272000
+    }
+  ],
+  "caveat": "later provider usage is controlled fixture usage; source contextWindow272000 and maxTokens128000 independently native SDK resolved; request characters are not token counts"
+}

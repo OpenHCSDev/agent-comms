@@ -1,0 +1,36 @@
+{
+  "state": "OriginalBohr independentlyCLOSED25ce; OriginalSch closedONLYexact matchingREAD+EXEC; no newloan",
+  "whole": "2c1f23e9441ffd8e2519258ad5b4670f188dee91b153767ebeea84a9069265f8",
+  "records": [
+    {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel687-fresh-ACP-native-fourcase-lifecycle.json",
+      "sha256": "34592fe3a5a675366a7e083ee12c95ccf87325100ae88765cf5b7f285e4252cf",
+      "bytes": 21536
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel687-independent-final-floor-readback.json",
+      "sha256": "996c2b160ed99dcc9a07d7b9ed49a9f3c5eee33f0b7ecec97207eab285c12114",
+      "bytes": 4187
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel687-independent-final-borrowers.json",
+      "sha256": "0111946d6c8cf2023d9e248f00d8513da75f07a2e1983181dd1af411f960bea4",
+      "bytes": 2110
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel687-independent-final-reference-classification.json",
+      "sha256": "6f881a02965339061a8711f230b18ce9266ff3ec0422f1e8f1e41fb84ac1e4dc",
+      "bytes": 6505
+    },
+    {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/native-keeper687-fresh-ACP-native4B-READ-EXEC-handback-20261005.json",
+      "sha256": "fc2247691db9e50997c5b8bde8eee933304e60525ce5186641b23657eb53965d",
+      "bytes": 29689
+    }
+  ],
+  "current_flags": "all false/stage1proof1control1restore1",
+  "raw_negative_unchanged": "firstallow observer setupFAIL11.123729360/other3UNRUN, genuine raw TypeError and secondarylog; no nativeReady",
+  "source_successor": "Toad472afc657ef one PIDargument removal, originalNRA 1477 modules0omissions +sameAST/compile; no behavior/test/import/runtime qualification",
+  "artifact": "Corebee runtimeunchanged/retained355+360 proof; no rebuild",
+  "scope_limit": "No correctedfourcase run/newgrant/authority inferred; originalauthored25 files and76refs preserved; public475unchanged"
+}

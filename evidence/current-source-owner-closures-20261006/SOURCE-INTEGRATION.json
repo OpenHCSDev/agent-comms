@@ -1,0 +1,49 @@
+{
+  "integration_head": "e1c712b307b46b87f723e75c51cf7730d796ec77",
+  "checks": [
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "owner_head": "fe32f518382acf6348cfdbdaf1dd5796ac09b253",
+      "sha256": "1d5c14d2b68b895c347a642465e3a0deb2a8a497015a571b809d3d06bf49ef20",
+      "bytes": 19636,
+      "byte_equal": true,
+      "compiled_without_import": true
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "owner_head": "fe32f518382acf6348cfdbdaf1dd5796ac09b253",
+      "sha256": "f0de7d13f02e73a2cfd9ecc9781e450d6dba6f530d822ef4d7ac3d69ff7d6b0d",
+      "bytes": 13708,
+      "byte_equal": true,
+      "compiled_without_import": true
+    },
+    {
+      "path": "tests/test_owner_restart_handoff.py",
+      "owner_head": "fe32f518382acf6348cfdbdaf1dd5796ac09b253",
+      "sha256": "59abd7a9db548e9704f215f627f8327b905fbb6a322041d5f5d7d442b54b7013",
+      "bytes": 5047,
+      "byte_equal": true,
+      "compiled_without_import": true
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "owner_head": "b331bd8e6ce07f889a2a6a9c246f45c133afcaa2",
+      "sha256": "b086d7a5e5a3792e0b3ff19088b6b88cb9286dd76c9323d764d2dbb82920d0cf",
+      "bytes": 13064,
+      "byte_equal": true,
+      "compiled_without_import": true
+    },
+    {
+      "path": "tests/test_mcp_acceptance.py",
+      "owner_head": "24bd65f717d42cc74a4773a4b66fa950df72d61e",
+      "sha256": "64ac8f5389fe2539ef92fda7266a0638161e0c7b1946888f51a6061777b33a29",
+      "bytes": 31662,
+      "byte_equal": true,
+      "compiled_without_import": true
+    }
+  ],
+  "tests_repeated": false,
+  "installed_or_runtime_operation": false,
+  "retained_launch_capture": "Reads actual original /proc/PID/cmdline and environ, validates same birth and snapshot relation; optional source_interpreter is a refusal constraint, not caller default.",
+  "remaining": "Configured journey, affected three MCP cases, warm and eviction, actual stopped batch/recovery remain unqualified."
+}

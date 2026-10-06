@@ -1,0 +1,86 @@
+{
+  "status": "SOURCE PREPARED/UNRUN; no native deployment/pin/wheel/holder/artifact purpose inferred",
+  "previous_frozen_future_tuple": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/FUTURE-INSTALLED-PURPOSE.json",
+    "sha256": "849bc21dd59688f1202459bf88a06774612bde44ba4746140d2f99df38ad3110"
+  },
+  "independent_typed_tuple": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/TYPED-ONLY-INSTALLED-PURPOSE.json",
+    "sha256": "a6c1e0f665728e7e74621fb27fb75e4a317bbc0efc02ae072985e75cfce597ad",
+    "unchanged": true,
+    "purpose": "Independent typed-only metadata/mounted path; new guard/qualifier not a prerequisite."
+  },
+  "qualifier_control": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_mcp_acceptance.py",
+    "sha256": "797cdcb4d37debce6aefa276c7a102f9e54603bbc077fa6181aea4367854e2c6",
+    "source_receipt": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/GUARD-CONTROL-SOURCE.json",
+    "source_receipt_sha256": "186c906a5c7f96d69867c7257d84ed439811cbc8e94b4e0532ebc28256f7a48b"
+  },
+  "native_source": {
+    "owner": "Sch685",
+    "production_head": "e1a64efd2decaa9edaa30379ddc73796f0419267",
+    "docs_head": "7b7a06c350c7031e2756223bd5a517a72d9e9932",
+    "bootstrap_sha256": "b9af81dbe003fde1c4d80dbd77fa7ae08f4a1c017deb8a94f8520452da47de27",
+    "SDK_contract_sha256": "981e74f8cb6c259ce5fff8443391e6831cdd8d2619852143c016879947b5e259"
+  },
+  "new_native_commitment": {
+    "path": null,
+    "manifest": null,
+    "tree": null,
+    "source_receipt": null,
+    "READ_EXEC_issued": null,
+    "FullTrust_receipt": null,
+    "old7a": "Immutable unchanged, guard inactive; never substituted or mutated."
+  },
+  "consuming_core_relation": {
+    "merged_source": null,
+    "guard_bootstrap_member": null,
+    "forced_pin_resource": null,
+    "wheel_path_SHA_inventory": null,
+    "retained3fe": "Cannot represent a future changed bootstrap/pin. No rebuild currently authorized or performed. Toadb2e/Text67 production remains reusable."
+  },
+  "holder": {
+    "eligible_existing_nonlive_prefix": null,
+    "Bohr_issued": null,
+    "actual_floor_restore": null,
+    "installed_proof": null,
+    "execution_release": null
+  },
+  "future_command": {
+    "family": "original four-case real Pi SDK/MCP/ACP + mounted permission/remount/disconnect",
+    "argv": [
+      "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python",
+      "-B",
+      "-m",
+      "pytest",
+      "-q",
+      "-o",
+      "addopts=",
+      "--maxfail=1",
+      "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_mcp_acceptance.py",
+      "--basetemp=/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/native",
+      "--junitxml=/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/native.xml"
+    ],
+    "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+    "status": "NOT executable until truthful committed active guard + matching source/native custody bound; no same7a bypass",
+    "existing_bounds": "Original TIMEOUT40s waits, 12s receipt/model gates, 15s node/PTY, 3s PTY cleanup and model join, mounted permission10s; unchanged. Serial execution and first-failure stop; no deadline/status exemption."
+  },
+  "environment_binding": "Actual original model server origin from AGENT_COMMS_NATIVE_ORIGIN; selected committed artifact via PI_COMPACTION_TEST_PACKAGE. No NODE_OPTIONS guard/source preload/new extension/caller dispatcher. Native tuple only after truthful source/artifact/purpose binding.",
+  "additional_guard_operations": {
+    "count": 1,
+    "where": "allow case before canonical native owner acquisition/input, original joined Coordination.run_worker",
+    "child": "original _node_run/ParentedProcess with selected immutable fence and bootstrap preloads, 15s unchanged bound",
+    "SDK_calls": 2,
+    "SDK_clients": "named OpenAI instances capture default guarded fetch before/after actual configureHttpDispatcher reset",
+    "SDK_refused_destination": "https://127.0.0.1:<same actual loopback model port>/v1/chat/completions; outside allowed HTTP origin but never a remote address",
+    "HTTP_GETs": 2,
+    "HTTP_GET_paths": [
+      "/guard-positive",
+      "/guard-redirect"
+    ],
+    "native_model_POSTs": "Original two per native case remain separate; no guard model POST expected",
+    "evidence": "exact two refusal causes+both origins, actual Undici observer positive event and zero outside-origin create events, real302 redirect refused before target, original HTTP GET records, retained first/replacement dispatcher closure and exact helper identity/outcome/retirement."
+  },
+  "negative_limits": "Fetch-origin/default SDK transport scope only; no custom fetch/direct http/net/undici/WebSocket/MCP subprocess or all-process network isolation acceptance. No generic CLI Connectionerror accepted as guard evidence. Proxy/caller-dispatcher refusal remains source semantics, not additional runtime claim.",
+  "stop": "First failure/uncertainty stops before next input/case; raw partial timeout output and whole original owner/group/socket cleanup retained, no retries or original-input replay. Exact future issued floor restore/whole handback required."
+}

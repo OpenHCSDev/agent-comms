@@ -1,0 +1,131 @@
+{
+  "stage": "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001",
+  "pins": {
+    "agent-comms": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+    "batrachian-toad": "15601a4f785fd6ee3e53e12b3a971ae1186f4482",
+    "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+  },
+  "SDK": "0.12.1",
+  "native_full_trust": true,
+  "original_file_counts_equal": {
+    "agent-comms": 303,
+    "batrachian-toad": 304,
+    "textual": 266
+  },
+  "package_distributions": 69,
+  "package_preflight_cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 211465,
+        "start_ticks": 29253125,
+        "returncode": 0
+      }
+    ]
+  },
+  "artifact_hashes": {
+    "/home/ts/.cache/agent-scratch/atomic-page-handoff-stage-20261001/paired-ready-receipt.json": "e37581c021162de4fff37ad4fe8e3afe215302697c95219105c001ba5d3256cf",
+    "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001/activation.json": "e92534c1ec44de41db22dc1eb08bd336111454aea870e8aa56d0d7b9f3559b94",
+    "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001/staging-receipt.json": "1ed2519e07bbf2f10eae24b4588aa6a5a848e4490f2686433239d6c6d5b221fa",
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/evidence/c1-terminal-data-20260930/installed33/receipt.json": "633183651675c9ff8c4bb6671245517096c2aebc0dc5528ae064f78c7538e458"
+  },
+  "joint_gate": {
+    "artifact": "evidence/c1-terminal-data-20260930/installed33/receipt.json",
+    "terminal": 0,
+    "seconds": 85.53802990500117,
+    "frames": 2390,
+    "physical_pending_before_native_started": 5,
+    "duplicate_or_missing_queue_chat_paint": false,
+    "fork_immediate_open_and_first_response": true,
+    "owned_processes_remaining": [],
+    "status_caption_qualification": {
+      "strict_review_includes_status_captions": false,
+      "last_emitted_cancel_frame": "Session details Thinking\u00b7Cancelling",
+      "original_control_canonical_cancel_settled": true,
+      "stationary_ready_paint_wait_performed": false,
+      "permanent_staleness_claim": false,
+      "named_followup_owner": "Arendt original phase publication; exact observation sent directly"
+    }
+  },
+  "bus_gate": {
+    "owner": "Schrodinger; publication integration Heisenberg252/254",
+    "state": "FAIL first physical tab-return answer appears twice",
+    "original_artifact": "/home/ts/wt/comms-bus-projection-ownership-s14-20260930/evidence/s14-bus-projection/installed-bus-gate/u07",
+    "terminal": 1,
+    "elapsed_seconds": 120.8399907790008,
+    "canonical_fragment_answer_count": 1,
+    "visible_response_resource_count": 2,
+    "resource_ids": [
+      140438924237728,
+      140437979124864
+    ],
+    "original_resource_ancestry": [
+      [
+        {
+          "type": "TranscriptFragmentView",
+          "resource_id": 140438924233776
+        },
+        {
+          "type": "TranscriptPageView",
+          "resource_id": 140437942508496
+        },
+        {
+          "type": "TranscriptHistory",
+          "resource_id": 140437942510736
+        },
+        {
+          "type": "Contents",
+          "resource_id": 140439194763344
+        }
+      ],
+      [
+        {
+          "type": "Contents",
+          "resource_id": 140439194763344
+        },
+        {
+          "type": "ContentsGrid",
+          "resource_id": 140439194768144
+        },
+        {
+          "type": "Window",
+          "resource_id": 140439194768784
+        },
+        {
+          "type": "Conversation",
+          "resource_id": 140439196147920
+        }
+      ]
+    ],
+    "checkpoint_worker": {
+      "state": "WorkerState.SUCCESS",
+      "error": "None"
+    },
+    "remaining_owned_processes": [],
+    "provider_errors": [],
+    "no_old_gate_substitution": true,
+    "original_replays": 0,
+    "public_effects": 0
+  },
+  "public_install": "runtime-body-readiness-20260930 unchanged",
+  "runtime_reset_and_public_signals": 0,
+  "original_replays": 0,
+  "paid_calls": 0,
+  "parallel_followups": {
+    "performance": "Heisenberg254 with Kepler256; combined source passes, physical source recording complete; not combined installed Ready",
+    "SessionRevision": "Core468 merged77fc0838;75 deleted/155 added across14; actual native/ACP accepted and parent verified all294 installedPY+source/proof/wheel hashes. Not in rejected156 cohort; next paired candidate required.",
+    "cancel_status": "Arendt; producer idle published, stationary consumer paint not observed",
+    "native_admission_epoch": "Arendt47094059caf source closes all original producer/readers with originalSQLDDL byte-equal; shared47156152dff normally integrated; actual EOF/recovery gate next",
+    "full_execution_identity": "Mendel nextS14 owner; shared native-row edits sequenced withArendt"
+  },
+  "frontend_merge": {
+    "251": "merged a2761f4b",
+    "252": "merged 9b9479dd",
+    "250_normal_main_integration": "3fe890f80a630c64065caf5e675b934aaaf13865",
+    "250_production_and_metadata_equal_frozen156": true,
+    "250": "merged f79c85419b441b41da7cf9081df143b98c1d7f52"
+  },
+  "public_quiet_preflight": "read-only validation refuses public Toad4091704@28109492; no signal, reset or publication"
+}

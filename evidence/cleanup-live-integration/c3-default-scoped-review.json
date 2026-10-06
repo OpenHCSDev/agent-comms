@@ -1,0 +1,25 @@
+{
+  "source_receipt": "/home/ts/wt/toad-first-ui-end-keypad-20260930/evidence/c3-release-integration-20260930/default-entrypoint-scoped-receipt.json",
+  "parent_reviewed_pngs": [
+    "phase-startup.png",
+    "phase-edited.png",
+    "phase-end-stationary.png"
+  ],
+  "installed_default_attachment_and_readable_history": true,
+  "physical_Delete_abcdef_to_abcf": true,
+  "stationary_tail_body_readable": true,
+  "End_from_older_page_jump_verified": false,
+  "raw_wrapper_failed_clear_assertion_preserved": true,
+  "whole_live_workflow_verified": false,
+  "open_defects": {
+    "thinking_configuration_read_mutates_settings": "Arendt Core448",
+    "participant_inbox_identity_conflict": "Mendel receiving-owner investigation",
+    "refactor_r1_long_preparing_turn": "Mendel original attribution/lifecycle investigation",
+    "full_scroll_and_warm_raster": "Heisenberg236 + Kepler physical profile",
+    "cancelled_compaction_source_and_reconnect": "Sch445/237 + Mendel446"
+  },
+  "original_nra_source_and_process_unchanged": true,
+  "capture_provider_calls": 0,
+  "capture_native_inputs": 0,
+  "capture_owned_process_leaks": []
+}

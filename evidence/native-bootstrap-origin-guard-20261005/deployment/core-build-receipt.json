@@ -1,0 +1,26 @@
+{
+  "source_head": "575db4a232d7736261dacd5bf0da4a750e885fdd",
+  "argv": [
+    "/usr/bin/python",
+    "-m",
+    "build",
+    "--wheel",
+    "--no-isolation",
+    "--outdir",
+    "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/core-wheel/wheel"
+  ],
+  "cwd": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005",
+  "environment": {
+    "PYTHONPATH": "/home/ts/.cache/uv/archive-v0/RgcgNn7xR1Zs9HSF",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "cached_backend_metadata_sha256": "acd3b755437aa07859ebe3ed9b71d94536fa183cc851bbd95b437ba3fe7e09b6",
+  "pid": 2091096,
+  "birth": "71758023",
+  "joined": true,
+  "proc_absent": true,
+  "exit": 0,
+  "elapsed_seconds": 0.5422684820368886,
+  "builds_consumed": 1,
+  "package_native_provider_execution": false
+}

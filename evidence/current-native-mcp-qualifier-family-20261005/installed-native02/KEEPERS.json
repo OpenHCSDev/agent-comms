@@ -1,0 +1,86 @@
+[
+  {
+    "source": "/home/ts/.cache/agent-scratch/m682n02/terminal.json",
+    "keeper": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/installed-native02/terminal.json",
+    "sha256": "f02c0c22aa2a27a72e18574dcc3b2428cfeac3381afcd01356c9533e6db388f0",
+    "bytes": 312
+  },
+  {
+    "source": "/home/ts/.cache/agent-scratch/m682n02/native.xml",
+    "keeper": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/installed-native02/native.xml",
+    "sha256": "463c411a84a4419b5e336d8db06cbb8c84f7e08be7cff25826443ff20e2a9873",
+    "bytes": 12309
+  },
+  {
+    "source": "/home/ts/.cache/agent-scratch/m682n02/stdout.log",
+    "keeper": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/installed-native02/stdout.log",
+    "sha256": "8fe05d4ac4637e1495846ba457bfaa9d6c0c5749215bd7db80a77a19a223cc07",
+    "bytes": 12288
+  },
+  {
+    "source": "/home/ts/.cache/agent-scratch/m682n02/stderr.log",
+    "keeper": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/installed-native02/stderr.log",
+    "sha256": "71ddfa61a33d39d6569a68ed06f7300059bcfea1dfae7b11755ee1adb4796876",
+    "bytes": 801
+  },
+  {
+    "source": "/home/ts/.cache/agent-scratch/m682n02/whole-handback.json",
+    "keeper": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/installed-native02/whole-handback.json",
+    "sha256": "1279b93f25c3646f1bb9c41f595af104be4b70f5caabfd85f928302338c1bf93",
+    "bytes": 28728
+  },
+  {
+    "source": "/home/ts/.cache/agent-scratch/m682n02/final-floor-readback.json",
+    "keeper": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/installed-native02/final-floor-readback.json",
+    "sha256": "9da9b305ce2d21c3b217417a982f09a7908f63debea7a76f8e5b2c873547d97a",
+    "bytes": 6498
+  },
+  {
+    "source": "/home/ts/.cache/agent-scratch/m682n02/SCOPED-RESULT.json",
+    "keeper": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/installed-native02/SCOPED-RESULT.json",
+    "sha256": "b48b2e22b636ce5b102b42bd78a3b70deea513652173a875e08aff7ed6f65d20",
+    "bytes": 2111
+  },
+  {
+    "source": "/home/ts/.cache/agent-scratch/m682n02/NODE-HELPER-JOIN-SUPPLEMENT.json",
+    "keeper": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/installed-native02/NODE-HELPER-JOIN-SUPPLEMENT.json",
+    "sha256": "0727aba2c533f74d8385733267e9fe10bc69bf252dd382d9330a9ac107cbddc4",
+    "bytes": 2112
+  },
+  {
+    "source": "/home/ts/.cache/agent-scratch/m682n02/n/test_real_pi_mcp_acp_link_allo0/origin-guard.json",
+    "keeper": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/installed-native02/origin-guard.json",
+    "sha256": "6613ec67ce5941107d01b4a2b19eba7cea3f650a76ce602eddbda9d6ac14fab1",
+    "bytes": 1086
+  },
+  {
+    "source": "/home/ts/.cache/agent-scratch/m682n02/n/test_real_pi_mcp_acp_link_allo0/origin-guard.command.json",
+    "keeper": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/installed-native02/origin-guard.command.json",
+    "sha256": "16c158d621043e731cce1563fe44a4339eb9c525f5ef003800e1c3c4dca038fb",
+    "bytes": 4225
+  },
+  {
+    "source": "/home/ts/.cache/agent-scratch/m682n02/n/test_real_pi_mcp_acp_link_allo0/guard-http-requests.json",
+    "keeper": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/installed-native02/guard-http-requests.json",
+    "sha256": "03a4fba38ac73219ff8cf6494619d7a01684a474683c84a3a83061fa62c17f84",
+    "bytes": 142
+  },
+  {
+    "source": "/home/ts/.cache/agent-scratch/m682n02/n/test_real_pi_mcp_acp_link_allo0/model-requests.json",
+    "keeper": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/installed-native02/model-requests.json",
+    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "bytes": 2
+  },
+  {
+    "source": "/home/ts/.cache/agent-scratch/m682n02/n/test_real_pi_mcp_acp_link_allo0/wire/input_dispositions.json",
+    "keeper": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/installed-native02/input_dispositions.json",
+    "sha256": "119759541c1e12ba699b86a6d8ebe605d4cf15d4cb80a99636fec60bd7410a19",
+    "bytes": 249
+  },
+  {
+    "source": "/home/ts/.cache/agent-scratch/m682n02/n/test_real_pi_mcp_acp_link_allo0/wire/diagnostics/801b6d8f8c7c4197a62e3b1189badca4.json",
+    "keeper": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/installed-native02/backend-diagnostic.json",
+    "sha256": "17e1a4fc012c3d7652e1bd00b64222cbcacb7b2fb2860f63cb75557821a585e2",
+    "bytes": 4029
+  }
+]

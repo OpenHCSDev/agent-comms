@@ -1,0 +1,522 @@
+{
+  "scope": "original recorded ACP sequence, no receive timestamps; native monotonic telemetry is producer time",
+  "log": "Native_fixture_2026-09-30T21_22_07_271635.txt",
+  "rows": [
+    {
+      "line": 19,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "session_info_update",
+      "text": null,
+      "kinds": [
+        "cursor_advanced"
+      ],
+      "cursor": {
+        "kind": "cursor_advanced",
+        "envelope": {
+          "scope": {
+            "session_id": "beta",
+            "wire_root_id": "f080ae6beb49478a8103e8a0d2313485",
+            "admission": {
+              "incarnation": {
+                "name": "beta",
+                "created_at": 1790817726.0196621
+              },
+              "admission_generation": 5
+            },
+            "owner_pid": 236960
+          },
+          "revision": 27,
+          "observation": {
+            "kind": "verified",
+            "cursor": {
+              "kind": "current_native_cursor",
+              "wire_root_id": "f080ae6beb49478a8103e8a0d2313485",
+              "recipient_lookup": "0d412bcc9ed1e9d024b78e065abd3f7d",
+              "owner_thread": "beta",
+              "owner_generation": 1,
+              "owner_admission_generation": 5,
+              "covered_seq": 7,
+              "injected_seq": 6,
+              "input_id": "263019d4ce7c1798528d8a6ffb80d523",
+              "assignment_id": "cohort-v1:23b9c86c43c1dca96f757b86c2f30865549d3828b053c2018661e49c8ef14e06",
+              "stage": "triage",
+              "session_id": "01a0f50e-c206-75a0-b24d-ededf8d5797e",
+              "request_generation": 1
+            }
+          }
+        },
+        "selected_status": null
+      }
+    },
+    {
+      "line": 20,
+      "direction": "[client]",
+      "method": "session/prompt",
+      "rpc_id": 7,
+      "sessionUpdate": null,
+      "text": null,
+      "kinds": []
+    },
+    {
+      "line": 21,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "input_delivery_changed"
+      ]
+    },
+    {
+      "line": 22,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "queue_changed"
+      ]
+    },
+    {
+      "line": 23,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "preparing",
+      "native_ns": null,
+      "stage": null
+    },
+    {
+      "line": 24,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "input_delivery_changed"
+      ]
+    },
+    {
+      "line": 25,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "prompt_acceptance",
+      "native_ns": null,
+      "stage": null
+    },
+    {
+      "line": 26,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "model_wait",
+      "native_ns": null,
+      "stage": null
+    },
+    {
+      "line": 27,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "input_delivery_changed"
+      ]
+    },
+    {
+      "line": 28,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "input_started"
+      ]
+    },
+    {
+      "line": 29,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "queue_changed"
+      ]
+    },
+    {
+      "line": 30,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "model_wait",
+      "native_ns": "293448219535902",
+      "stage": "preparing"
+    },
+    {
+      "line": 31,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "model_wait",
+      "native_ns": "293448336384443",
+      "stage": "callback"
+    },
+    {
+      "line": 32,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "model_wait",
+      "native_ns": "293448336507636",
+      "stage": "callback_end"
+    },
+    {
+      "line": 33,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "model_wait",
+      "native_ns": "293448337042479",
+      "stage": "dispatch"
+    },
+    {
+      "line": 34,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "model_wait",
+      "native_ns": "293448365250543",
+      "stage": "headers"
+    },
+    {
+      "line": 35,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "model_wait",
+      "native_ns": "293448365378154",
+      "stage": "callback"
+    },
+    {
+      "line": 36,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "model_wait",
+      "native_ns": "293448365495196",
+      "stage": "callback_end"
+    },
+    {
+      "line": 37,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "model_wait",
+      "native_ns": "293448366330558",
+      "stage": "callback"
+    },
+    {
+      "line": 38,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "model_wait",
+      "native_ns": "293448366512152",
+      "stage": "callback_end"
+    },
+    {
+      "line": 39,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "model_wait",
+      "native_ns": "293448368886197",
+      "stage": "first_event"
+    },
+    {
+      "line": 40,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "usage_update",
+      "text": null,
+      "kinds": []
+    },
+    {
+      "line": 41,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "model_wait",
+      "native_ns": "293448369764340",
+      "stage": "stream_end"
+    },
+    {
+      "line": 42,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "model_wait",
+      "native_ns": "293448370377551",
+      "stage": "first_delta_consumed"
+    },
+    {
+      "line": 43,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "usage_update",
+      "text": null,
+      "kinds": []
+    },
+    {
+      "line": 44,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "CONTROLLED_RETURN_0",
+      "kinds": [
+        "text_route"
+      ]
+    },
+    {
+      "line": 45,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "usage_update",
+      "text": null,
+      "kinds": []
+    },
+    {
+      "line": 46,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "model_wait",
+      "native_ns": "293448370527595",
+      "stage": "callback"
+    },
+    {
+      "line": 47,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "usage_update",
+      "text": null,
+      "kinds": []
+    },
+    {
+      "line": 48,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "model_wait",
+      "native_ns": "293448388939319",
+      "stage": "callback_end"
+    },
+    {
+      "line": 49,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "model_wait",
+      "native_ns": "293448388973223",
+      "stage": "finished"
+    },
+    {
+      "line": 50,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "settling_stats",
+      "native_ns": null,
+      "stage": null
+    },
+    {
+      "line": 51,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "usage_update",
+      "text": null,
+      "kinds": []
+    },
+    {
+      "line": 52,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "usage_update",
+      "text": null,
+      "kinds": []
+    },
+    {
+      "line": 53,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": "publishing",
+      "native_ns": null,
+      "stage": null
+    },
+    {
+      "line": 54,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "transcript_changed"
+      ]
+    },
+    {
+      "line": 55,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "input_delivery_changed"
+      ]
+    },
+    {
+      "line": 56,
+      "direction": "[agent]",
+      "method": "session/update",
+      "rpc_id": null,
+      "sessionUpdate": "agent_message_chunk",
+      "text": "",
+      "kinds": [
+        "turn_changed"
+      ],
+      "phase": null,
+      "native_ns": null,
+      "stage": null
+    },
+    {
+      "line": 57,
+      "direction": "[agent]",
+      "method": null,
+      "rpc_id": 7,
+      "sessionUpdate": null,
+      "text": null,
+      "kinds": [],
+      "result": {
+        "stopReason": "end_turn"
+      }
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "allowed_origin": "http://127.0.0.1:42117",
+  "requested_origin": "https://127.0.0.1:42117",
+  "dispatcher_reconfigured": true,
+  "refusals": [
+    {
+      "name": "Error",
+      "message": "Connection error.",
+      "cause": {
+        "code": "ERR_AGENT_COMMS_NATIVE_ORIGIN_REFUSED",
+        "allowed_origin": "http://127.0.0.1:42117",
+        "requested_origin": "https://127.0.0.1:42117"
+      }
+    },
+    {
+      "name": "Error",
+      "message": "Connection error.",
+      "cause": {
+        "code": "ERR_AGENT_COMMS_NATIVE_ORIGIN_REFUSED",
+        "allowed_origin": "http://127.0.0.1:42117",
+        "requested_origin": "https://127.0.0.1:42117"
+      }
+    }
+  ],
+  "redirect_error": {
+    "name": "TypeError",
+    "message": "fetch failed",
+    "cause_message": "unexpected redirect"
+  },
+  "localhost_positive": true,
+  "sdk_origin_refused": true,
+  "redirect_refused": true,
+  "dispatched": [
+    {
+      "origin": "http://127.0.0.1:42117",
+      "path": "/guard-positive"
+    },
+    {
+      "origin": "http://127.0.0.1:42117",
+      "path": "/guard-redirect"
+    }
+  ]
+}

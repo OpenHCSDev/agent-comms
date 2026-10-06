@@ -1,0 +1,142 @@
+{
+  "state": "SCOPED READY for normal source merge: committed optional default-SDK fetch-origin guard reached actual original qualifier controls; full native/MCP batch failed separately",
+  "source_checkpoint_before_evidence": "5c68942c7718f15a0667d69c9b6717398af89dce",
+  "actual_main_read_for_merge_review": "d41d725fd5400aab74c891dd3700e7071853b2ff",
+  "selected_deployment_source": "575db4a232d7736261dacd5bf0da4a750e885fdd",
+  "artifact_handoff": {
+    "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/evidence/native-bootstrap-origin-guard-20261005/deployment/ARTIFACT-HANDOFF.json",
+    "sha256": "179fd28a8310cbe3f86ab0c38733e4ff3ce4b54de979e9aa1d181d32818f0c1e",
+    "bytes": 7280
+  },
+  "normal683_source_relation": {
+    "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/evidence/native-bootstrap-origin-guard-20261005/deployment/NORMAL683-JOINED-WHEEL-RELATION.json",
+    "sha256": "b1d97d222a9778a776e17a042e124f877127abda652a906ab1548110f7b70f49",
+    "bytes": 1684
+  },
+  "matching_commitment": {
+    "manifest": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+    "tree": "63f18710cb9329be6ade27bac3b4dd822e2b36f013756fa8e6717b8073a4592c"
+  },
+  "bootstrap_sha256": "b9af81dbe003fde1c4d80dbd77fa7ae08f4a1c017deb8a94f8520452da47de27",
+  "consuming_Core_wheel_sha256": "5d6617d99f43e5aabf44f985d9fbcf1847b4c6404f976143a9a38986b33f0137",
+  "qualified_guard_controls": {
+    "localhost_GET_positive": true,
+    "selected_OpenAI_chat_completions_default_fetch_refusal_before_dispatch": true,
+    "cause_code_both_origins_verified": true,
+    "pre_and_post_configureHttpDispatcher_SDK_clients_refused": true,
+    "redirect_error_refusal": true,
+    "request_create_diagnostics_count": 2,
+    "all_dispatches_exact_allowed_loopback_origin": true,
+    "actual_HTTP_GET_count": 2,
+    "provider_model_POSTs": 0
+  },
+  "guard_scope": "Optional AGENT_COMMS_NATIVE_ORIGIN default-SDK global-fetch origin boundary installed before SDK import. Outside-origin control changes http loopback to https loopback. No actual external host request, custom fetch/dispatcher/directHTTP/WebSocket/MCPchild containment or whole-process isolation claim.",
+  "raw_byte_exact_copies": {
+    "origin-guard.json": {
+      "original": {
+        "path": "/home/ts/.cache/agent-scratch/m682n02/n/test_real_pi_mcp_acp_link_allo0/origin-guard.json",
+        "sha256": "6613ec67ce5941107d01b4a2b19eba7cea3f650a76ce602eddbda9d6ac14fab1",
+        "bytes": 1086
+      },
+      "published_copy": {
+        "path": "evidence/native-bootstrap-origin-guard-20261005/qualification/origin-guard.json",
+        "sha256": "6613ec67ce5941107d01b4a2b19eba7cea3f650a76ce602eddbda9d6ac14fab1",
+        "bytes": 1086
+      }
+    },
+    "guard-http-requests.json": {
+      "original": {
+        "path": "/home/ts/.cache/agent-scratch/m682n02/n/test_real_pi_mcp_acp_link_allo0/guard-http-requests.json",
+        "sha256": "03a4fba38ac73219ff8cf6494619d7a01684a474683c84a3a83061fa62c17f84",
+        "bytes": 142
+      },
+      "published_copy": {
+        "path": "evidence/native-bootstrap-origin-guard-20261005/qualification/guard-http-requests.json",
+        "sha256": "03a4fba38ac73219ff8cf6494619d7a01684a474683c84a3a83061fa62c17f84",
+        "bytes": 142
+      }
+    },
+    "native-full-trust.json": {
+      "original": {
+        "path": "/home/ts/.cache/agent-scratch/m682n02/native-full-trust.json",
+        "sha256": "02f3f8e9881becd385ca39398a781bb1e92cb3a60bd0664ff011f83549307bf4",
+        "bytes": 707
+      },
+      "published_copy": {
+        "path": "evidence/native-bootstrap-origin-guard-20261005/qualification/native-full-trust.json",
+        "sha256": "02f3f8e9881becd385ca39398a781bb1e92cb3a60bd0664ff011f83549307bf4",
+        "bytes": 707
+      }
+    },
+    "candidate-source-proof.json": {
+      "original": {
+        "path": "/home/ts/.cache/agent-scratch/m682n02/candidate-source-proof.json",
+        "sha256": "86ee270fcc63a0d955cead56bfd1ac3cb5e742c7f750dcae8da9a2f474594fa0",
+        "bytes": 9259
+      },
+      "published_copy": {
+        "path": "evidence/native-bootstrap-origin-guard-20261005/qualification/candidate-source-proof.json",
+        "sha256": "86ee270fcc63a0d955cead56bfd1ac3cb5e742c7f750dcae8da9a2f474594fa0",
+        "bytes": 9259
+      }
+    },
+    "native-batch-terminal.json": {
+      "original": {
+        "path": "/home/ts/.cache/agent-scratch/m682n02/terminal.json",
+        "sha256": "f02c0c22aa2a27a72e18574dcc3b2428cfeac3381afcd01356c9533e6db388f0",
+        "bytes": 312
+      },
+      "published_copy": {
+        "path": "evidence/native-bootstrap-origin-guard-20261005/qualification/native-batch-terminal.json",
+        "sha256": "f02c0c22aa2a27a72e18574dcc3b2428cfeac3381afcd01356c9533e6db388f0",
+        "bytes": 312
+      }
+    },
+    "artifact-authority-closure.json": {
+      "original": {
+        "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/native-keeper682-native4B-READ-EXEC-handback-20261005.json",
+        "sha256": "11dc80046b69149745b64dad09b4fce7860c756c316a03dfc9ab8f1bccb4b196",
+        "bytes": 31494
+      },
+      "published_copy": {
+        "path": "evidence/native-bootstrap-origin-guard-20261005/qualification/artifact-authority-closure.json",
+        "sha256": "11dc80046b69149745b64dad09b4fce7860c756c316a03dfc9ab8f1bccb4b196",
+        "bytes": 31494
+      }
+    }
+  },
+  "full_native_MCP_batch": {
+    "exit_code": 1,
+    "seconds": 63.72686986299232,
+    "failed_case": "allow entered.wait TimeoutError",
+    "raw_error": "RequestError Internal error; participant-not-registered/NotSent retained",
+    "cause": "unproved",
+    "other_cases": "no_controller/revoke_midturn/disconnect UNRUN",
+    "fresh_membership_source_owner": "OriginalMendel SessionLifecycle/ThreadManagement/Registration",
+    "no_guard_weakening_retry": true
+  },
+  "holder_whole_return": {
+    "path": "/home/ts/.cache/agent-scratch/m682n02/whole-handback.json",
+    "sha256": "1279b93f25c3646f1bb9c41f595af104be4b70f5caabfd85f928302338c1bf93",
+    "bytes": 28728
+  },
+  "independent_CLOSED_lifecycle": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel682-native4B-package-native-qualifier-lifecycle.json",
+    "sha256": "71fabd7e690fae2b9c09a6cefda64780b2b2f225867f73dbb6929af7b819e679",
+    "bytes": 22629
+  },
+  "independent_floor_readback": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel682-native4B-independent-final-floor-readback.json",
+    "sha256": "2dcb6456da144a6f5cf9f629ff3046f56b89095064e75f638c4b5ad244238c91",
+    "bytes": 3525
+  },
+  "metadata_authorities_RETURNED_CLOSED": {
+    "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/native-keeper682-native4B-READ-EXEC-handback-20261005.json",
+    "sha256": "11dc80046b69149745b64dad09b4fce7860c756c316a03dfc9ab8f1bccb4b196",
+    "bytes": 31494
+  },
+  "same_4b_package_Core_wheel_no_rebuild": true,
+  "shared7a_and_actualPUBLIC475_unchanged": true,
+  "no_new_runtime_prefix_package_input_or_native_operation": true,
+  "source_merge_readiness": "Guard source and original build-owner seams ready at reached fetch-only strength. Full ACP/MCP qualifier remains failed/unrun as recorded; separate fresh-membership source repair does not invalidate reached guard controls."
+}

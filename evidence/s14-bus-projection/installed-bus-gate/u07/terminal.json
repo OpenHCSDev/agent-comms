@@ -1,0 +1,36 @@
+{
+  "fixture": "/home/ts/wt/g460b/u07",
+  "prefix": "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001",
+  "command": [
+    "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001/bin/python",
+    "/home/ts/wt/comms-bus-projection-ownership-s14-20260930/evidence/s14-bus-projection/installed-bus-gate/atomic-page-driver/tests/canonical_wire_conversation_installed_pilot.py"
+  ],
+  "root_id": "f080ae6beb49478a8103e8a0d2313485",
+  "activation_sha256": "e92534c1ec44de41db22dc1eb08bd336111454aea870e8aa56d0d7b9f3559b94",
+  "driver_sha256": "1d6a5bd1831f8d52a2bd2d200a6d9ee0df5909c09766edab4f77c92b06d4af24",
+  "recorder_sha256": "74f1b48aece7d8f701734be6404f84356e8d527ec1ffe5e9bc7a88cde55386b0",
+  "native_inputs_replayed": 0,
+  "paid_calls": 0,
+  "public_effects": 0,
+  "display": ":1",
+  "exit_code": 1,
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 236722,
+        "start_ticks": 29336260,
+        "returncode": 0
+      },
+      {
+        "pid": 236724,
+        "start_ticks": 29336268,
+        "returncode": 1
+      }
+    ]
+  },
+  "elapsed_seconds": 120.8399907790008,
+  "activation_unchanged": true
+}

@@ -1,0 +1,34 @@
+{
+  "state": "installed; default native admission and physical saved-history opening verified",
+  "publication_phase": "retained-batch-launched-configurations-verified-public-ui-pending",
+  "public_owner_count": 13,
+  "pins": {
+    "agent_comms": "50d77a17d3d998d403b0349a254f3f85d94517b8",
+    "toad": "a7087274f4a656968c84f9378ae8a87f9ee20820",
+    "textual": "4e9016c1a8f3592eb652efc39ada493a41ee9206"
+  },
+  "runtime_policy": {
+    "kind": "preserve",
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza"
+  },
+  "runtime_result": "runtime/preserve",
+  "runtime_retired": [],
+  "protected_original_count": 27,
+  "original_hashes_unchanged_under_stopped_custody": true,
+  "protected_preimage_copies": 0,
+  "audit_preimage_bytes": 268660,
+  "original_inputs_replayed": 0,
+  "default_native_gate": {
+    "receipt": "/home/ts/wt/comms-shared-private-admission-custody-20261001/evidence/shared-private-admission-20261001/default01-receipt.json",
+    "seconds": 24.370840330957435,
+    "owners": 3,
+    "provider_posts_localhost": 3,
+    "paid_calls": 0,
+    "public_mutations": 0,
+    "all_owned_workers_retired": true
+  },
+  "remaining_general_latency_owner": "Arendt / Core485",
+  "remaining_performance_owner": "Heisenberg / Toad275; Mendel paired builder",
+  "default_fully_usable_claim": false,
+  "physical_review": "admission484-default-physical-review.json"
+}

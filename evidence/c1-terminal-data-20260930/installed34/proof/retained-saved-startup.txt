@@ -1,0 +1,44 @@
+                                                                                                                                                                
+  ☰     <──    ──>   ✓ beta Indexing… ×                                                                                                                        
+                      ━━━━━━━━━━━━━━━━                                                                                                                          
+▼ Channels                                           Name ▾    │                                                                                                
++ New Session                                                  │                                                                                                
+▾ #any                                       Date created ▾    │                                                                                                
+  Indexing… ✓ beta                                             │                                                                                                
+    Ready                                                      │                                                                                                
+▸ #none                                      Date created ▾    │                                                                                                
+▸ #all                                       Date created ▾    │                                                                                                
+▸ #team                                      Date created ▾    │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │ ↑ Earlier history loads as you scroll                                                          
+                                                             < │▌▶ 🔧 bash ✔                                                                                  < 
+                                                               │▌                                                                                               
+                                                               │▌▶ 🔧 bash ✔                                                                                    
+                                                               │▌                                                                                               
+                                                               │▌▶ 🔧 bash ✔                                                                                    
+                                                               │▌                                                                                               
+                                                               │▌                                                                                               
+                                                               │▌─────────────────────────────────── Agent · 17:14:47 ───────────────────────────────────       
+                                                               │▌Fixed all three issues, added regression tests, and rebuilt skills/refactor-audit.skill.       
+                                                               │▌                                                                                               
+                                                               │▌Committed and pushed 9c45469 to checkpoint/native-proof-performance-20260914. Tests pass       
+                                                               │▌on Python 3.11 and 3.14; packaged tests pass too. Unrelated changes untouched.                 
+                                                               │▌                                                                                               
+                                                               │                                  Native fixture connected                                      
+                                                               │                                                                                                
+                                                               │ ▶ Session details · Ready · Saved history available                                            
+                                                               │                                                                                                
+                                                               │▊▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▎   
+                                                               │▊ ❯                                                                                         ▎   
+40% ───────────────────────────────────────●────────────────   │▊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▎   
+  ──>   Float                                                  │  selected-offline/fixture · off  … Context unavailable · Native owner has not reported cont    
+⏎ Send ⇧+⏎ Line ^c Interrupt ^g IRC view ^s Channels                                                                                                ▏^p palette 
