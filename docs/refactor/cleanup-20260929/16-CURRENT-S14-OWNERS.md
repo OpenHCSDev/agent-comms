@@ -38,9 +38,12 @@ The original objective remains incomplete. CI is deferred as a merge gate.
   navigation2 checks. The exact three-wheel stage passed once in 0.223 seconds;
   controller, root preparation and installer joined and are directly absent.
   Fresh private READ is verified. The original proof/controller are materialized
-  with only their four/three issued literals; ten proof outputs remain absent.
-  Joined stage and exact binding are delivered to Bohr for the sole proof release.
-  Source capture and physical App remain held; no installed performance claim.
+  with only their four/three issued literals. The sole installed-source proof
+  passed in 3.300 seconds: all953 assets/full69/origins and original keepers match,
+  original FullTrust passed, and both proof processes joined and are absent.
+  Final handoff includes the exact typed Core member and thirteen-file App map.
+  Source capture and physical App await fresh execution/source receipts and final
+  release; no installed performance claim.
 - Actual visible pointer App: right median50.4ms/p9558.5ms/max112.9ms; left
   median54.5ms/p9571.6ms/max185.5ms, empty stderr. Earlier429/424ms measurements
   selected a hidden zero-size sidebar and are invalid visible-toggle results,
