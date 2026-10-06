@@ -4,6 +4,35 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Publication storage relation reviewed — 2026-10-06
+
+Parent compared actual source3931f16fe with selected Core99cdd707 before choosing
+any future runtime installation action. InputDispositions, goal_attempts,
+coordinated_runtime_schema, native_prompt_binding, private_sidecar,
+coordination_response and coordination_schema source bytes are equal. The entire
+compaction_records AST is equal after removing only four added NativeForkCreation
+ancestry/reader methods; declared journal tables are unchanged. The entire
+goal_history AST is equal after removing only the new read-only acquisition
+method and the full-wire row discriminator; SQLite fields and DDL are unchanged.
+Thread changes add behavior, not stored fields. Recorded read-ledger changes
+alter acquisition/projection behavior, not its durable declaration.
+
+This supports the original PreserveRuntimeInstallation member for this selected
+same-format pair, conditional on authentic built/installed declaration equality
+at use. An unnecessary ResetRuntimeInstallation must not retire its compaction
+records. Existing publication already protects original InputDispositions,
+goal_history, native proofs/sessions and declared goal state; its changed-schema
+carry remains separate if an actual future declaration differs. This is source
+comparison and semantic publisher review, not a root read, installed schema
+proof, native READ, stop/restart or runtime grant. Actual3931 owner handoff/recovery
+still needs Einstein's complete original-owner source closure before publication.
+
+Sch's consumed3808 artifact closure64d2100b is delivered separately from Bohr's
+CLOSED40b25eca holder; matching e7f829/9f522 permissions are returned and false.
+Warm04 has a new disjoint former485 stage-only purpose4d0182e2; its sole stage,
+proof and mounted App boundaries remain original Heis/Sch/Bohr custody. No
+Parent runtime operation or reuse of either purpose follows this checkpoint.
+
 ### Paired source updated and native purpose independently closed — 2026-10-06
 
 Toad478 published129b016b, explicitly selecting Core99cdd707 in pyproject and all
