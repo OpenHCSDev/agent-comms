@@ -248,6 +248,16 @@ passed0.882s from3e109632 with unchanged4b commitment. Parent verified all355
 current source/ZIP assets and wheelbee0813b (906687 bytes). This is a new truthful
 source wheel, not retained5d equivalence. Installed fresh ACP/MCP acceptance is
 still unproved and requires a separate fresh purpose; no old9b replay follows.
+Mendel published68719bb with the remaining selected-source wrapper consumers
+migrated to session.creation/path and NativeSessionIdentity.session_file.
+These tests-only changes retain the one355-asset bee0813b wheel; no passing
+source control or build repeated. Qualifier682c5a966aa normally includes687 and
+merged685, retains all four case assertions/bounds/joins and omits only the
+already accepted standalone guard invocation. Final future proposalc389ee09
+and source binding9432962d were personally hash-matched and relayed to original
+Sch through the working Parent route. Existing334 is only a candidate pending
+fresh Bohr floor/purpose; rootm687n01 and new READ/EXEC/release remain unbound.
+No authority from closed9b is inherited and no runtime success is claimed.
 
 Parent reviewed final scoped Ready68584b47b5a, matched all17 named final
 references and verified no source/build change from frozen5c689. Exact685 was
