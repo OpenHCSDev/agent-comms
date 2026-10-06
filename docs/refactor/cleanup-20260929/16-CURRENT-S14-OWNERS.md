@@ -375,6 +375,16 @@ mount-generated handling acquire recorded page identity and original notificatio
 feedback. The temporary held-read instrumentation delegates the original owner;
 selection/screen retirement cancels the native worker, releases the held read in
 finally and joins the default executor. Runtime acceptance remains unproved.
+The pair now has one built Corec44d5a6c at b9734568 and one ToAd0fb3fa9b at
+d08c1a49. Parent independently matched every355+319 Git/local/ZIP asset,
+360+324 complete RECORD digest/size rows, metadata and original build inputs.
+Toad's declared Core pin is b973 in original pyproject/uv inputs; its wheel
+METADATA correctly carries the ordinary dependency rather than a uv Git pin.
+Prospective paired mounted operands name authentic old720 source540 and candidate
+target334, but actual334 remains exclusively in freshACP25ce. No paired holder
+purpose or SDK execution authority follows from this artifact review. The
+original fresh floor/restore/authority binding remains necessary before stage;
+no artifact rebuild or additional source review gate is introduced.
 The separate genuine720 central-batch bootstrap has an earlier source blocker:
 phased_owner_kernel loads only owner_restart/owner_cutover, but owner_restart
 imports owner_launch, absent from the authentic720 Git tree. Thread.execution
