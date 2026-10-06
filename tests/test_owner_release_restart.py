@@ -2,6 +2,7 @@
 
 import os
 import signal
+import shlex
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -18,6 +19,7 @@ from agent_comms.child_process import (
 )
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
+from agent_comms.owner_restart import FencedOwnerBatch, StoppedOwnerFailure
 
 
 def wait_for(path: Path) -> None:
@@ -55,6 +57,9 @@ while True: time.sleep(0.01)
         "AGENT_COMMS_THREAD": "worker",
         "PI_AGENT_ID": "worker",
         "PI_WORKTREE": str(tmp_path),
+        # Declare this actual source process command for retained launch capture.
+        "AGENT_COMMS_AGENT_BIN": sys.executable,
+        "AGENT_COMMS_AGENT_ARGS": shlex.join((str(script),)),
     }
     child = ParentedProcess.launch((sys.executable, str(script)), env=env)
     comms = Comms(root)
@@ -135,6 +140,20 @@ def test_changed_owner_after_release_refuses_escalation_and_replacement(releasin
             comms.registry.register(current, new_owner=True)
         else:
             comms.owners.releases.replace({})
-        with pytest.raises(RelationViolationError, match="changed while stopping"):
+        with pytest.raises(StoppedOwnerFailure) as caught:
             stopping.result(timeout=5)
-        assert child.alive(), "Stale fence must not authorize forced retirement"
+        failure = caught.value
+        try:
+            assert isinstance(failure.__cause__, RelationViolationError)
+            assert "changed while stopping" in str(failure.__cause__)
+            phase = failure.stopped
+            assert isinstance(phase, FencedOwnerBatch)
+            assert len(phase.captured) == len(phase.unconfirmed) == 1
+            assert phase.captured[0][0].process_identity == child.identity
+            assert phase.exited_processes == phase.retired == ()
+            assert phase.launches[0].process == child.identity
+            assert child.alive(), "Stale fence must not authorize forced retirement"
+            assert comms.registry.require("worker").pid == child.identity.pid
+        finally:
+            # Disposition precedes fixture teardown; no replacement or stale signal.
+            failure.abandon()

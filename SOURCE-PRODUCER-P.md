@@ -42,3 +42,24 @@ schema carry and routing carry do not supply it.
 ## Partial retirement successor
 
 The shared original owner_restart phase now retains exited-process and validated-retired progress across guard/witness failure through existing StoppedOwnerFailure/cutover.failed. Incomplete fenced recovery refuses before any operation recovery/launch; explicit abandon releases acquired context. Three new authored in-memory cases pass, not a real OFD/signal/installed proof. See current689 PARTIAL-RETIREMENT-CUSTODY and preserved batch receipts. No source wheel or runtime qualification is added.
+
+
+## Goal-report preservation successor
+
+The original GoalHistoryStore now also exposes full acquire_read_only under the
+original registry custody. No constructor/initialization/observe is used by this
+boundary. GoalHistoryEntry declares the `row` family discriminator to preserve
+its existing durable `kind` field during strict full FieldCodec roundtrip; SQL
+fields/schema and original public to_wire remain unchanged. reports_turn is the
+same query as the target replacement guard, with no new durable field.
+
+The current source operation/fixture tools are owned in the current689 checkout;
+P source controls select P application declarations explicitly. Eleven authored
+P-report/current-strict-postimage cases pass after the row correction; P read-only
+acquisition four cases passed in the original preserved batch. Three real authored
+Python changed-owner refusal cases pass after carrying the original failure,
+source process command and explicit abandon through the existing control. Initial
+codec/missing-source-launch/missing-test-import negatives are preserved. No complete
+restart/OFD/launch/recovery, native/provider, installed or P wheel claim follows.
+The exact current tool/consumer checkpoint and results remain paired with this
+explicit amended P, never the unchanged720/c3e artifact.
