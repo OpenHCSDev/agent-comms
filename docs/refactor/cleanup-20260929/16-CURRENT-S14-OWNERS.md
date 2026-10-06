@@ -19,9 +19,11 @@ The original objective remains incomplete. CI is deferred as a merge gate.
   installed frame-time result. Public installation remains unchanged.
 - Parent's reused isolated sidebar-selected-targets checkout now owns complete
   right-sidebar parking/eviction integration. Warm panel graph retention and
-  actual teardown are separated under existing native admission; full session
-  widget cost includes the sidebar. Existing project-tree restoration check
-  still fails after eviction and is being traced before acceptance/publication.
+  actual teardown are separated under existing native admission; conversation
+  and sidebar are independent resources in the same working-set budget.
+  Four-tab source App returns passed, including two identical warm panel graphs
+  and exact project-reader restoration after eviction. Draft489 retains an
+  earlier intermittent disclosure failure; installed latency remains unverified.
   No repeat physical operation or source/provider input is authorized by that
   source investigation.
 
