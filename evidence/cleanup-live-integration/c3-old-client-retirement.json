@@ -1,0 +1,9 @@
+{
+  "pid": 3186733,
+  "birth_ticks": "24764806",
+  "signal": "SIGINT",
+  "reason": "authorized quiet old client retirement; no unsent drafts",
+  "signal_sent": true,
+  "previous_ui_2255883_already_exited": true,
+  "exited_within_15_seconds": true
+}

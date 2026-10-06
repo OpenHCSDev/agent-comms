@@ -1,0 +1,566 @@
+{
+  "parser": "existing refactor-audit Package.load/Repository",
+  "scope": "notification/assignment/read-ledger source owners and related consumers",
+  "coverage": [
+    {
+      "head": "45e41cec4430d1dd6251f4137d6e37ad9e5b0d00",
+      "root": "src/agent_comms",
+      "parsed": 324,
+      "omissions": []
+    },
+    {
+      "head": "f3e99cff6b47be050b1541b5348dd429b6cb846e",
+      "root": "src/toad",
+      "parsed": 288,
+      "omissions": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 93,
+      "declaration": "pending_notification",
+      "text": "def pending_notification(self, notification: MessageNotification) -> MessageNotification: ..."
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 107,
+      "declaration": "pending_notification",
+      "text": "def pending_notification(self, notification: MessageNotification) -> MessageNotification:\n        return notification"
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "line": 121,
+      "declaration": "pending_notification",
+      "text": "def pending_notification(self, notification: MessageNotification) -> MessageNotification:\n        return replace(notification, state=\"Waiting for recovery\",\n            detail=f\"{self.diagnostic.summary}. This message is saved and has not started.\",\n            priority=4, busy=False)"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 36,
+      "declaration": "RecipientActivity",
+      "text": "class RecipientActivity(DeclaredFamily, affix=\"RecipientActivity\"):\n    \"\"\"Acquired recipient availability; no assignment, start or retry authority.\"\"\"\n\n    def turn_started_by(self, updated_at_ms: int) -> bool:\n        return False\n\n    @abstractmethod\n    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification: ...\n\n    def after_inbox_read(self, notification, source, reads, document, snapshot):\n        return notification"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 50,
+      "declaration": "ExternalRecipientActivity",
+      "text": "class ExternalRecipientActivity(RecipientActivity):\n    incarnation: ThreadIncarnation\n\n    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:\n        from .presentation import MessageNotification\n\n        return MessageNotification(notification.recipient_identity, \"Waiting for agent\",\n            \"External CLI participant checks its inbox; no native prompt transport is attached.\",\n            priority=4)\n\n    def after_inbox_read(self, notification, source, reads, document, snapshot):\n        if self.incarnation.current(snapshot) and source.message.seq in reads.seen_sequences(\n            self.incarnation.name, snapshot, document=document\n        ):\n            return replace(notification, state=\"Checked by CLI\",\n                           detail=\"The external participant acknowledged this original inbox message.\",\n                           priority=2, busy=False)\n        return notification"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 71,
+      "declaration": "UnavailableRecipientActivity",
+      "text": "class UnavailableRecipientActivity(RecipientActivity):\n    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:\n        from .presentation import MessageNotification\n\n        return MessageNotification(notification.recipient_identity, \"Waiting for agent\",\n            \"Agent is stopped; this message has not been checked.\", priority=4)"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 80,
+      "declaration": "LiveRecipientActivity",
+      "text": "class LiveRecipientActivity(RecipientActivity):\n    thread: Thread\n    activity: ObservedActivity\n\n    def turn_started_by(self, updated_at_ms: int) -> bool:\n        return self.thread.turn_started_by(updated_at_ms)\n\n    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:\n        from .presentation import MessageNotification\n\n        if blocked_by_prior:\n            notification = MessageNotification(notification.recipient_identity,\n                \"Queued behind current turn\" if self.thread.executing else \"Blocked by earlier turn\",\n                \"The agent is finishing an earlier turn; this message has not started.\"\n                if self.thread.executing else \"An earlier turn has an unresolved outcome. This message \"\n                \"is saved and has not started; the earlier turn needs recovery, not a resend.\")\n        return self.activity.readiness.pending_notification(notification)"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 43,
+      "declaration": "pending_notification",
+      "text": "def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification: ..."
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 53,
+      "declaration": "pending_notification",
+      "text": "def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:\n        from .presentation import MessageNotification\n\n        return MessageNotification(notification.recipient_identity, \"Waiting for agent\",\n            \"External CLI participant checks its inbox; no native prompt transport is attached.\",\n            priority=4)"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 72,
+      "declaration": "pending_notification",
+      "text": "def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:\n        from .presentation import MessageNotification\n\n        return MessageNotification(notification.recipient_identity, \"Waiting for agent\",\n            \"Agent is stopped; this message has not been checked.\", priority=4)"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 87,
+      "declaration": "pending_notification",
+      "text": "def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:\n        from .presentation import MessageNotification\n\n        if blocked_by_prior:\n            notification = MessageNotification(notification.recipient_identity,\n                \"Queued behind current turn\" if self.thread.executing else \"Blocked by earlier turn\",\n                \"The agent is finishing an earlier turn; this message has not started.\"\n                if self.thread.executing else \"An earlier turn has an unresolved outcome. This message \"\n                \"is saved and has not started; the earlier turn needs recovery, not a resend.\")\n        return self.activity.readiness.pending_notification(notification)"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 138,
+      "declaration": "observe_recipients",
+      "text": "def observe_recipients(self, recipients: Iterable[FrozenRecipient], *, snapshot: RegistrySnapshot) -> Mapping[str, RecipientActivity]:\n        \"\"\"Acquire one bounded window's recipients from the original source snapshot.\"\"\"\n        from .bus_publication import stable_thread_lookup\n\n        snapshot.require_unambiguous_ownership()\n        observations: dict[str, RecipientActivity] = {\n            recipient.recipient_lookup: UnavailableRecipientActivity() for recipient in recipients\n        }\n        for thread in snapshot.threads.values():\n            lookup = stable_thread_lookup(thread.created_at)\n            if lookup not in observations:\n                continue\n            observations[lookup] = thread.execution.observe_recipient(self, snapshot, thread)\n        return observations"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 96,
+      "call": "self.activity.readiness.pending_notification(notification)"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 309,
+      "declaration": "EngagedAssignment",
+      "text": "class EngagedAssignment(BoundAssignment):\n    def wake_frame(self, source, obligation) -> tuple[str, str]:\n        from .wake import derive_exact_reply_target\n\n        if obligation is None:\n            raise IdentityConflict(\"full wake frame requires the current response obligation\")\n        obligation.lifecycle.require_preparation()\n        if (obligation.execution_id, obligation.exact_target) != (\n            self.decision.execution_id,\n            derive_exact_reply_target(source),\n        ):\n            raise IdentityConflict(\"full wake frame requires the current response obligation\")\n        return self.mode.full_expectation(), \"you owe a response: \" + json.dumps(\n            {\n                \"target\": obligation.exact_target,\n                \"source_seq\": source.seq,\n                \"execution_id\": obligation.execution_id,\n            },\n            ensure_ascii=True,\n            separators=(\",\", \":\"),\n        )\n\n    def require_engagement(self) -> Engagement:\n        return self.decision\n\n    def notification(\n        self,\n        recipient,\n        *,\n        observation,\n        updated_at_ms=0,\n        triage_inflight=False,\n        blocked_by_prior=False,\n    ):\n        from .presentation import MessageNotification\n\n        if not observation.turn_started_by(updated_at_ms):\n            return MessageNotification(\n                recipient,\n                \"Paused\",\n                \"A response was selected, but no matching active turn is running. \"\n                \"Outcome is unconfirmed; do not automatically retry.\",\n            )\n        return super().notification(recipient, observation=observation)\n\n    notification_state = \"Responding\u2026\"\n    notification_detail = \"The agent chose to respond; work is in progress.\"\n    notification_priority = 1\n    notification_busy = True\n\n    engaged = True\n\n    @classmethod\n    def successors(cls):\n        return CompletedAssignment, DeferredAssignment, FailedAssignment"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 68,
+      "declaration": "notification",
+      "text": "def notification(\n        self,\n        recipient,\n        *,\n        observation: RecipientActivity,\n        updated_at_ms: int = 0,\n        triage_inflight: bool = False,\n        blocked_by_prior: bool = False,\n    ):\n        from .presentation import MessageNotification\n\n        return MessageNotification(\n            recipient,\n            self.notification_state,\n            self.notification_detail,\n            self.notification_priority,\n            self.notification_busy,\n        )"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 185,
+      "declaration": "notification",
+      "text": "def notification(self, recipient, *, observation, updated_at_ms=0,\n                     triage_inflight=False, blocked_by_prior=False):\n        ordinary = super().notification(recipient, observation=observation)\n        return observation.pending_notification(ordinary, blocked_by_prior=blocked_by_prior)"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 334,
+      "declaration": "notification",
+      "text": "def notification(\n        self,\n        recipient,\n        *,\n        observation,\n        updated_at_ms=0,\n        triage_inflight=False,\n        blocked_by_prior=False,\n    ):\n        from .presentation import MessageNotification\n\n        if not observation.turn_started_by(updated_at_ms):\n            return MessageNotification(\n                recipient,\n                \"Paused\",\n                \"A response was selected, but no matching active turn is running. \"\n                \"Outcome is unconfirmed; do not automatically retry.\",\n            )\n        return super().notification(recipient, observation=observation)"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 395,
+      "declaration": "notification",
+      "text": "def notification(\n        self,\n        recipient,\n        *,\n        observation,\n        updated_at_ms=0,\n        triage_inflight=False,\n        blocked_by_prior=False,\n    ):\n        from .presentation import MessageNotification\n\n        if observation.turn_started_by(updated_at_ms) and triage_inflight:\n            return MessageNotification(\n                recipient,\n                \"Checking relevance\u2026\",\n                \"Checking relevance before deciding whether to respond.\",\n                priority=0,\n                busy=True,\n            )\n        if triage_inflight:\n            return MessageNotification(\n                recipient,\n                \"Outcome uncertain\",\n                \"The check was attempted but no decision was confirmed. \"\n                \"Do not automatically retry.\",\n            )\n        return super().notification(recipient, observation=observation)"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 187,
+      "call": "super().notification(recipient, observation=observation)"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 188,
+      "call": "observation.pending_notification(ordinary, blocked_by_prior=blocked_by_prior)"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 352,
+      "call": "super().notification(recipient, observation=observation)"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 421,
+      "call": "super().notification(recipient, observation=observation)"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 680,
+      "call": "ctx.messaging.acknowledge(self.thread)"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 237,
+      "declaration": "references",
+      "text": "def references(cls):\n        return (\n            ForeignKey((\"claim_id\",), WakeAssignment, (\"assignment_id\",)),\n            ForeignKey((\"recipient_lookup\",), Participants, (\"participant_lookup\",)),\n            ForeignKey(\n                (\"wire_root_id\", \"wire_seq\"), ClaimBatchReceipts, (\"wire_root_id\", \"wire_seq\")\n            ),\n        )"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 316,
+      "declaration": "references",
+      "text": "def references(cls):\n        return (\n            ForeignKey((\"recipient_lookup\",), Participants, (\"participant_lookup\",)),\n            ForeignKey((\"claim_id\",), WakeAssignment, (\"assignment_id\",)),\n            ForeignKey(\n                (\"wire_root_id\", \"wire_seq\"), ClaimBatchReceipts, (\"wire_root_id\", \"wire_seq\")\n            ),\n        )"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 466,
+      "declaration": "references",
+      "text": "def references(cls):\n        return (\n            ForeignKey((\"claim_id\",), WakeAssignment, (\"assignment_id\",)),\n            ForeignKey((\"recipient_lookup\",), Participants, (\"participant_lookup\",)),\n            ForeignKey(\n                (\"wire_root_id\", \"wire_seq\", \"claim_id\"),\n                ClaimBatchMembers,\n                (\"wire_root_id\", \"wire_seq\", \"claim_id\"),\n            ),\n        )"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 112,
+      "declaration": "references",
+      "text": "def references(cls):\n        return (ForeignKey((\"execution_id\", \"exact_target\"), PublicationIntents,\n                          (\"execution_id\", \"exact_target\")),)"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/assignments.py",
+      "line": 265,
+      "declaration": "references",
+      "text": "def references(cls):\n        from agent_comms.coordination_tables.executions import ExecutionRecord\n        from agent_comms.coordination_tables.participants import Participants\n        from agent_comms.coordination_tables.responses import ResponseObligation\n\n        return (\n            ForeignKey((\"recipient_lookup\",), Participants, (\"participant_lookup\",)),\n            ForeignKey((\"execution_id\",), ExecutionRecord, (\"execution_id\",)),\n            ForeignKey(\n                (\"execution_id\", \"exact_target\"), ResponseObligation,\n                (\"execution_id\", \"exact_target\"), deferred=True,\n            ),\n            ForeignKey(\n                (\"execution_id\", \"assignment_id\"),\n                ExecutionAssignmentLink,\n                (\"execution_id\", \"assignment_id\"),\n                deferred=True,\n            ),\n            ForeignKey(\n                (\"execution_id\", \"claim_status_kind\"),\n                ExecutionRecord,\n                (\"execution_id\", \"claim_status_kind\"),\n                deferred=True,\n            ),\n        )"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/assignments.py",
+      "line": 358,
+      "declaration": "references",
+      "text": "def references(cls):\n        from agent_comms.coordination_tables.executions import ExecutionRecord\n\n        return (\n            ForeignKey((\"execution_id\",), ExecutionRecord, (\"execution_id\",), on_delete=\"RESTRICT\"),\n            ForeignKey(\n                (\"assignment_id\", \"execution_id\"), WakeAssignment, (\"assignment_id\", \"execution_id\")\n            ),\n        )"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/attempts.py",
+      "line": 250,
+      "declaration": "references",
+      "text": "def references(cls):\n        from agent_comms.coordination_tables.executions import ExecutionRecord\n        from agent_comms.coordination_tables.participants import Participants\n\n        return (\n            ForeignKey((\"execution_id\",), ExecutionRecord, (\"execution_id\",)),\n            ForeignKey((\"owner_lookup\",), Participants, (\"participant_lookup\",)),\n            ForeignKey(\n                (\"execution_id\", \"attempt_ordinal\", \"owner_lookup\", \"active_required_status\"),\n                ExecutionRecord,\n                (\"execution_id\", \"current_attempt_ordinal\", \"owner_lookup\", \"status\"),\n                deferred=True,\n            ),\n        )"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/attempts.py",
+      "line": 444,
+      "declaration": "references",
+      "text": "def references(cls):\n        from agent_comms.coordination_tables.executions import ExecutionRecord\n\n        return (\n            ForeignKey((\"execution_id\",), ExecutionRecord, (\"execution_id\",), on_delete=\"RESTRICT\"),\n        )"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "line": 76,
+      "declaration": "references",
+      "text": "def references(cls):\n        from agent_comms.coordination_tables.participants import Participants\n\n        return (\n            ForeignKey((\"owner_lookup\",), Participants, (\"participant_lookup\",)),\n            ForeignKey(\n                (\"execution_id\", \"attempt_ordinal\", \"owner_lookup\", \"required_active\"),\n                ExecutionRecord,\n                (\"execution_id\", \"current_attempt_ordinal\", \"owner_lookup\", \"status\"),\n                deferred=True,\n            ),\n            ForeignKey(\n                (\"execution_id\", \"attempt_ordinal\", \"owner_lookup\", \"required_active\"),\n                AttemptRecord,\n                (\"execution_id\", \"attempt_ordinal\", \"owner_lookup\", \"phase_kind\"),\n                deferred=True,\n            ),\n        )"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "line": 340,
+      "declaration": "references",
+      "text": "def references(cls):\n        from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink\n        from agent_comms.coordination_tables.attempts import ReplayAssessments\n        from agent_comms.coordination_tables.participants import Participants\n\n        return (\n            ForeignKey((\"owner_lookup\",), Participants, (\"participant_lookup\",)),\n            ForeignKey(\n                (\n                    \"execution_id\",\n                    \"current_attempt_ordinal\",\n                    \"owner_lookup\",\n                    \"required_attempt_kind\",\n                ),\n                AttemptRecord,\n                (\"execution_id\", \"attempt_ordinal\", \"owner_lookup\", \"phase_kind\"),\n                deferred=True,\n            ),\n            ForeignKey(\n                (\"owner_lookup\", \"active_execution_id\", \"active_attempt_ordinal\"),\n                CurrentExecutions,\n                (\"owner_lookup\", \"execution_id\", \"attempt_ordinal\"),\n                deferred=True,\n            ),\n            ForeignKey(\n                (\"wire_execution_id\", \"wire_claim_ordinal\"),\n                ExecutionAssignmentLink,\n                (\"execution_id\", \"ordinal\"),\n                deferred=True,\n            ),\n            ForeignKey(\n                (\"deferred_replay_id\", \"deferred_replay_required\"),\n                ReplayAssessments,\n                (\"execution_id\", \"retry_authorized\"),\n                deferred=True,\n            ),\n        )"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/participants.py",
+      "line": 68,
+      "declaration": "references",
+      "text": "def references(cls):\n        return (ForeignKey((\"participant_lookup\",), Participants, (\"participant_lookup\",)),)"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/participants.py",
+      "line": 100,
+      "declaration": "references",
+      "text": "def references(cls):\n        return (ForeignKey((\"owner_lookup\",), Participants, (\"participant_lookup\",)),)"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/publications.py",
+      "line": 206,
+      "declaration": "references",
+      "text": "def references(cls):\n        from agent_comms.coordination_tables.executions import ExecutionRecord\n        from agent_comms.coordination_tables.responses import ResponseObligation\n\n        return (\n            ForeignKey((\"execution_id\",), ExecutionRecord, (\"execution_id\",), on_delete=\"RESTRICT\"),\n            ForeignKey(\n                (\"execution_id\", \"exact_target\", \"obligation_intent_required\"),\n                ResponseObligation,\n                (\"execution_id\", \"exact_target\", \"intent_settled\"),\n                deferred=True,\n            ),\n        )"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/publications.py",
+      "line": 348,
+      "declaration": "references",
+      "text": "def references(cls):\n        from agent_comms.coordination_tables.responses import ResponseObligation\n\n        return (\n            ForeignKey((\"execution_id\", \"exact_target\"), PublicationIntents, (\"execution_id\", \"exact_target\")),\n            ForeignKey(\n                (\"execution_id\", \"exact_target\", \"obligation_receipt_required\"),\n                ResponseObligation,\n                (\"execution_id\", \"exact_target\", \"receipt_settled\"),\n                deferred=True,\n            ),\n        )"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/recovery.py",
+      "line": 55,
+      "declaration": "references",
+      "text": "def references(cls):\n        from agent_comms.coordination_tables.executions import ExecutionRecord\n\n        return (\n            ForeignKey((\"execution_id\",), ExecutionRecord, (\"execution_id\",), on_delete=\"RESTRICT\"),\n        )"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/recovery.py",
+      "line": 112,
+      "declaration": "references",
+      "text": "def references(cls):\n        from agent_comms.coordination_tables.attempts import AttemptRecord\n        from agent_comms.coordination_tables.executions import ExecutionRecord\n\n        return (\n            ForeignKey((\"execution_id\",), ExecutionRecord, (\"execution_id\",), on_delete=\"RESTRICT\"),\n            ForeignKey(\n                (\"execution_id\", \"attempt\"), AttemptRecord, (\"execution_id\", \"attempt_ordinal\")\n            ),\n        )"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/responses.py",
+      "line": 181,
+      "declaration": "references",
+      "text": "def references(cls):\n        from agent_comms.coordination_tables.executions import ExecutionRecord\n\n        return (\n            ForeignKey((\"execution_id\",), ExecutionRecord, (\"execution_id\",), on_delete=\"RESTRICT\"),\n        )"
+    },
+    {
+      "path": "src/agent_comms/goal_failure_observation.py",
+      "line": 111,
+      "declaration": "references",
+      "text": "def references(cls):\n        from .goal_attempts import AttemptRecord\n\n        return (ForeignKey((\"attempt_id\",), AttemptRecord, (\"attempt_id\",)),)"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 140,
+      "declaration": "HistorySource",
+      "text": "class HistorySource:\n    \"\"\"An immutable bus/registry snapshot attached by the destination MessageBus.\"\"\"\n\n    root: str\n    original_root: str\n    wire_root_id: str\n    bus_identity: tuple[int, int]\n    size: int\n    snapshot_bus_revision: tuple[int, int, int, int]\n    snapshot_registry_revision: tuple[int, int, int, int]\n    provenance: RegistryProvenance\n\n    @property\n    def key(self) -> str:\n        return self.root\n\n    def validate(self) -> None:\n        root = Path(self.root)\n        if (\n            file_revision(root / \"bus.jsonl\") != self.snapshot_bus_revision\n            or file_revision(root / \"registry.json\") != self.snapshot_registry_revision\n        ):\n            raise ValueError(\"Historical snapshot changed; restore it before browsing\")\n\n    def require_original(self, root: Path) -> None:\n        \"\"\"Admit an original typed acquisition before destination publication.\"\"\"\n        root = root.resolve()\n        if self.root != str(root) or self.original_root != str(root):\n            raise ValueError(\"Recorded provenance belongs to another original source\")\n        self.validate()\n        log = WireLog(root / \"bus.jsonl\")\n        info = log.path.stat()\n        if (log.read_metadata_unlocked(required=True).root_id != self.wire_root_id\n                or (info.st_dev, info.st_ino) != self.bus_identity or info.st_size != self.size):\n            raise ValueError(\"Recorded provenance lost original wire custody\")\n\n    @classmethod\n    def require(cls, archive: HistoryArchive, key: str) -> HistorySource:\n        source = next((item for item in archive.sources() if item.key == key), None)\n        if source is None:\n            raise ValueError(\"Historical source detached; refresh history\")\n        source.validate()\n        return source"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 273,
+      "declaration": "acknowledge",
+      "text": "def acknowledge(self, archive: HistoryArchive, registry: Registration) -> None:\n        \"\"\"Acknowledge exactly painted retained membership in its own ledger.\"\"\"\n        from .read_ledger import ReadLedger\n\n        viewer = registry.require(self.viewer)\n        if viewer.incarnation != self.displayed.viewer_identity or viewer.role.executable:\n            raise ValueError(\"Historical viewer changed; refresh history\")\n        if self.source not in archive.sources():\n            raise ValueError(\"Historical source detached; refresh history\")\n        self.source.validate()\n        ReadLedger(Path(self.source.root) / ReadLedger.filename).mark_displayed(\n            self.viewer,\n            self.displayed,\n        )"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 85,
+      "declaration": "message_notifications",
+      "text": "def message_notifications(self, messages: Sequence[Message]):\n        return MessageNotification.window(self.root, self.registry, self.bus.log, messages)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 88,
+      "declaration": "message_notifications_for_references",
+      "text": "def message_notifications_for_references(self, references: Sequence[MessageReference]):\n        return MessageNotification.references(self.root, self.registry, self.bus.log, references)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 186,
+      "declaration": "mark_historical_view_read",
+      "text": "def mark_historical_view_read(self, displayed: HistoricalDisplay) -> None:\n        displayed.acknowledge(self.bus.history, self.registry)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 89,
+      "call": "MessageNotification.references(self.root, self.registry, self.bus.log, references)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 187,
+      "call": "displayed.acknowledge(self.bus.history, self.registry)"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 399,
+      "call": "expected_display_basis.acknowledge(self.bus, self.registry, self.root, peer, worktree=worktree, through=through)"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 221,
+      "declaration": "acknowledge",
+      "text": "def acknowledge(self, name: str, target: str | None = None) -> int:\n        \"\"\"Mark an inbox or one conversation delivered. Returns count acknowledged.\"\"\"\n        with _store_lock(self._wire_lock_path):\n            return self.bus.mark_delivered(name, target)"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 53,
+      "declaration": "NotificationAssignment",
+      "text": "class NotificationAssignment(NotificationSource):\n    assignment: WakeAssignment\n    activity: AssignmentActivity\n\n    @classmethod\n    def for_delivery(cls, original: CommittedDelivery, records) -> tuple[NotificationSource, ...]:\n        \"\"\"Classify receipt absence at the original read boundary, without minting one.\"\"\"\n        sources = []\n        for recipient, decision in zip(original.audience.recipients, original.decisions, strict=True):\n            matching = tuple(record for record in records\n                if record.assignment.source == original.message.reference\n                and record.assignment.recipient_lookup == recipient.recipient_lookup)\n            if len(matching) > 1:\n                raise ValueError(\"Original notification recipient has multiple handling receipts\")\n            sources.append(matching[0] if matching else UnrecordedNotificationSource(recipient, decision))\n        return tuple(sources)\n\n    @classmethod\n    def database_path(cls, root: Path) -> Path:\n        return root / \"coordination.sqlite3\"\n\n    @classmethod\n    def source_paths(cls, root: Path) -> tuple[Path, ...]:\n        \"\"\"SQLite may publish original recipient changes only in its WAL.\"\"\"\n        database = cls.database_path(root)\n        return database, database.with_name(database.name + \"-wal\")\n\n    @classmethod\n    def select(\n        cls,\n        root: Path,\n        predicate: str,\n        parameters: tuple,\n        *,\n        limit: int = 0,\n        ascending: bool = False,\n    ):\n        from .coordination_database import CoordinationStore\n        from .native_runtime_input import NativeRuntimeInput\n        from .recovery_projection import _preflight\n\n        database = cls.database_path(root)\n        failure = _preflight(database)\n        if failure == \"missing\":\n            return ()\n        if failure:\n            raise ValueError(f\"Channel notification status unavailable: {failure}\")\n        with CoordinationStore.observing(database, lock_timeout=0.05) as connection:\n            if SQLiteUserVersion.read(connection.execute(\"PRAGMA user_version\")) != [\n                SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)\n            ]:\n                raise ValueError(\"Channel notification status has an unsupported schema\")\n            columns = \",\".join(f\"w.{name}\" for name in WakeAssignment.columns())\n            rows = WakeAssignment.joined(\n                connection.execute(\n                    f\"SELECT {columns}, EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n \"\n                    f\"JOIN ({NativeRuntimeInput.source_membership_sql()}) member ON member.input_id=n.input_id \"\n                    \"WHERE member.assignment_id=w.assignment_id \"\n                    \"AND n.stage='triage' AND n.session_entry_id IS NULL) \"\n                    \"AS triage_inflight, c.execution_id AS current_execution_id \"\n                    f\"FROM {WakeAssignment.declared_name} w \"\n                    f\"LEFT JOIN {CurrentExecutions.declared_name} c \"\n                    \"ON c.owner_lookup=w.recipient_lookup \"\n                    f\"WHERE {predicate} ORDER BY w.wire_seq {'ASC' if ascending else 'DESC'},w.recipient\"\n                    + (\" LIMIT ?\" if limit else \"\"),\n                    (*parameters, limit) if limit else parameters,\n                ),\n                AssignmentActivity,\n            )\n            return tuple(cls(assignment, activity) for assignment, activity in rows)\n\n    @property\n    def recipient(self) -> FrozenRecipient:\n        return FrozenRecipient(self.assignment.recipient_lookup, self.assignment.recipient)\n\n    def project(self, observation: RecipientActivity) -> MessageNotification:\n        return self.assignment.lifecycle.notification(\n            self.recipient,\n            observation=observation,\n            updated_at_ms=self.assignment.updated_at_ms,\n            triage_inflight=self.activity.triage_inflight,\n            blocked_by_prior=self.activity.blocks(self.assignment),\n        )"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 129,
+      "call": "self.assignment.lifecycle.notification(self.recipient, observation=observation, updated_at_ms=self.assignment.updated_at_ms, triage_inflight=self.activity.triage_inflight, blocked_by_prior=self.activity.blocks(self.assignment))"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 206,
+      "call": "session.inputs.acknowledge(response)"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 194,
+      "call": "session.admission.acknowledge(response)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 50,
+      "declaration": "MessageNotification",
+      "text": "class MessageNotification:\n    \"\"\"Read-only display of one recipient's durable assignment decision.\"\"\"\n\n    window_limit: ClassVar[int] = 120\n    recipient_identity: FrozenRecipient\n    state: str\n    detail: str\n    priority: int = 3\n    busy: bool = False\n    message: Message | None = None\n    displayed_to: tuple[ThreadIncarnation, ...] = ()\n\n    @property\n    def recipient(self) -> str:\n        return self.recipient_identity.canonical_thread\n\n    @classmethod\n    def window(\n        cls, root: Path, registry: Registration, log: WireLog, messages: Sequence[Message]\n    ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:\n        \"\"\"Read one visible window's actual recipient outcomes; never schedule work.\n\n        Display uses the coordinator's existing assignment decoder and lifecycle.\n        A missing coordination store or absent row supplies no receipt. Errors remain\n        visible to the caller instead of becoming false successful delivery.\n        \"\"\"\n        if len(messages) > cls.window_limit:\n            raise ValueError(\"Notification reads require a bounded visible message window\")\n        references = tuple(reference for message in messages\n                           for reference in message.notification_references())\n        sources = log.deliveries_for_references(references)\n        projected = cls.delivery_window(root, registry, sources)\n        return {(message.seq,message.message_id):projected.get((message.seq,message.message_id), ())\n                for message in messages}\n\n    @classmethod\n    def references(\n        cls, root: Path, registry: Registration, log: WireLog,\n        references: Sequence[MessageReference],\n    ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:\n        \"\"\"Borrow mounted references in the original bounded delivery windows.\"\"\"\n        result = {}\n        for start in range(0, len(references), cls.window_limit):\n            sources = log.deliveries_for_references(\n                references[start : start + cls.window_limit]\n            )\n            result.update(cls.delivery_window(root, registry, sources))\n        return result\n\n    @classmethod\n    def delivery_window(cls, root: Path, registry: Registration,\n                        sources: Sequence[CommittedDelivery]):\n        \"\"\"Project the original frozen audience even before handling is recorded.\"\"\"\n        from .notification_assignment import NotificationAssignment\n\n        if len(sources) > cls.window_limit:\n            raise ValueError(\"Notification reads require a bounded visible message window\")\n        keys = {(source.message.seq, source.message.message_id) for source in sources}\n        result: dict[tuple[int, str], list[MessageNotification]] = {key: [] for key in keys}\n        if not keys:\n            return {}\n        placeholders = \",\".join(\"?\" for _ in keys)\n        rows = NotificationAssignment.select(\n            root, f\"w.wire_seq IN ({placeholders})\", tuple(key[0] for key in keys)\n        )\n        snapshot = registry.snapshot()\n        from .agent_activity import AgentActivity\n\n        agents = AgentActivity(root, registry)\n        observations = agents.observe_recipients(\n            (recipient for source in sources for recipient in source.audience.recipients),\n            snapshot=snapshot,\n        )\n        reads = ReadLedger(root / ReadLedger.filename)\n        document = reads.read()\n        for source in sources:\n            key = (source.message.seq, source.message.message_id)\n            for outcome in NotificationAssignment.for_delivery(source, rows):\n                observation = observations[outcome.recipient.recipient_lookup]\n                notification = observation.after_inbox_read(\n                    outcome.project(observation), source, reads, document, snapshot\n                )\n                result[key].append(\n                    replace(\n                        notification,\n                        displayed_to=reads.displayed_recipient(\n                            source.message,\n                            notification.recipient_identity,\n                            snapshot,\n                            document=document,\n                        ),\n                    )\n                )\n        return {key: tuple(rows) for key, rows in result.items()}\n\n    @classmethod\n    def recent(\n        cls, root: Path, registry: Registration, log: WireLog, name: str, *, limit: int = 5\n    ) -> tuple[MessageNotification, ...]:\n        \"\"\"Recent assigned messages, including channel work, for one agent view.\n\n        Reads the original assignments and source messages. This is not a DM\n        delivery or a read acknowledgement, and never schedules another turn.\n        \"\"\"\n        if not 1 <= limit <= 20:\n            raise ValueError(\"Recent notification limit must be between 1 and 20\")\n        owner = registry.require(name)\n        from .transcript_receipts import AssignedTranscriptSource\n\n        sources = AssignedTranscriptSource.for_thread(root, owner, log).rows(limit=limit)\n        return cls.for_sources(root, registry, owner, sources)\n\n    @classmethod\n    def for_sources(\n        cls, root: Path, registry: Registration, owner: Thread, sources: Sequence[CommittedDelivery]\n    ) -> tuple[MessageNotification, ...]:\n        \"\"\"Project outcomes from the caller's original certified source window.\"\"\"\n        from .bus_publication import stable_thread_lookup\n\n        lookup = stable_thread_lookup(owner.created_at)\n        projected = cls.delivery_window(root, registry, sources)\n        return tuple(\n            replace(notification, message=source.message)\n            for source in sources\n            for notification in projected[source.message.seq, source.message.message_id]\n            if source.audience.sender_lookup == lookup\n            or notification.recipient_identity.recipient_lookup == lookup\n        )"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 86,
+      "declaration": "references",
+      "text": "def references(\n        cls, root: Path, registry: Registration, log: WireLog,\n        references: Sequence[MessageReference],\n    ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:\n        \"\"\"Borrow mounted references in the original bounded delivery windows.\"\"\"\n        result = {}\n        for start in range(0, len(references), cls.window_limit):\n            sources = log.deliveries_for_references(\n                references[start : start + cls.window_limit]\n            )\n            result.update(cls.delivery_window(root, registry, sources))\n        return result"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 100,
+      "declaration": "delivery_window",
+      "text": "def delivery_window(cls, root: Path, registry: Registration,\n                        sources: Sequence[CommittedDelivery]):\n        \"\"\"Project the original frozen audience even before handling is recorded.\"\"\"\n        from .notification_assignment import NotificationAssignment\n\n        if len(sources) > cls.window_limit:\n            raise ValueError(\"Notification reads require a bounded visible message window\")\n        keys = {(source.message.seq, source.message.message_id) for source in sources}\n        result: dict[tuple[int, str], list[MessageNotification]] = {key: [] for key in keys}\n        if not keys:\n            return {}\n        placeholders = \",\".join(\"?\" for _ in keys)\n        rows = NotificationAssignment.select(\n            root, f\"w.wire_seq IN ({placeholders})\", tuple(key[0] for key in keys)\n        )\n        snapshot = registry.snapshot()\n        from .agent_activity import AgentActivity\n\n        agents = AgentActivity(root, registry)\n        observations = agents.observe_recipients(\n            (recipient for source in sources for recipient in source.audience.recipients),\n            snapshot=snapshot,\n        )\n        reads = ReadLedger(root / ReadLedger.filename)\n        document = reads.read()\n        for source in sources:\n            key = (source.message.seq, source.message.message_id)\n            for outcome in NotificationAssignment.for_delivery(source, rows):\n                observation = observations[outcome.recipient.recipient_lookup]\n                notification = observation.after_inbox_read(\n                    outcome.project(observation), source, reads, document, snapshot\n                )\n                result[key].append(\n                    replace(\n                        notification,\n                        displayed_to=reads.displayed_recipient(\n                            source.message,\n                            notification.recipient_identity,\n                            snapshot,\n                            document=document,\n                        ),\n                    )\n                )\n        return {key: tuple(rows) for key, rows in result.items()}"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 81,
+      "call": "cls.delivery_window(root, registry, sources)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 119,
+      "call": "agents.observe_recipients((recipient for source in sources for recipient in source.audience.recipients), snapshot=snapshot)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 170,
+      "call": "cls.delivery_window(root, registry, sources)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 96,
+      "call": "cls.delivery_window(root, registry, sources)"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 135,
+      "call": "reads.displayed_recipient(source.message, notification.recipient_identity, snapshot, document=document)"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 142,
+      "declaration": "references",
+      "text": "def references(self, references) -> Iterator[CommittedDelivery]:\n        \"\"\"Capture exact seq/id originals through the existing sealed pointers.\"\"\"\n        marks = \",\".join(\"?\" for _ in references)\n        self.require_current()\n        rows = DeliverySources.select(\n            self.connection, where=f\"seq IN ({marks})\",\n            parameters=tuple(ref.seq for ref in references),\n        )\n        by_sequence = {row.seq: row for row in rows}\n        ordered = []\n        for reference in references:\n            row = by_sequence.get(reference.seq)\n            if row is None or row.reference != reference:\n                raise RelationViolationError(\"Notification reference is not its original source\")\n            ordered.append(row)\n        return self.capture_sources(tuple(ordered))"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 217,
+      "declaration": "acknowledge",
+      "text": "def acknowledge(\n        self,\n        bus: MessageBus,\n        registry: Registration,\n        root: Path,\n        peer: str,\n        *,\n        worktree: str,\n        through: int,\n    ) -> None:\n        \"\"\"CAS one painted human DM tail, never a global/executor ACK.\n\n        The page must have no omitted unread inbound messages. The caller must\n        additionally prove its through-bound was actually and contiguously\n        painted; a fetched page alone cannot establish visibility.\n        \"\"\"\n        if type(through) is not int:\n            raise ValueError(\"Painted DM read requires a typed page basis and integer bound.\")\n        with _store_lock(root / \"wire\", shared=True), _store_lock(registry.store.path):\n            snapshot = registry.store._read_unlocked().snapshot()\n            self.validate_for(\n                root,\n                worktree,\n                peer,\n                through,\n                snapshot,\n                bus.reads.bus_identity(bus.log.path),\n            )\n            bus.reads.mark_displayed(self.viewer, self.displayed.through(through))"
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "line": 36,
+      "declaration": "ReadLedger",
+      "text": "class ReadLedger(Sealed, LockedStore[ReadDocument]):\n    filename = \"read_ledger.json\"\n\n    @property\n    def record_type(self) -> type[ReadDocument]:\n        return ReadDocument\n\n    def empty(self) -> ReadDocument:\n        return ReadDocument()\n\n    @staticmethod\n    def human(role: ThreadRole) -> bool:\n        return not role.executable\n\n    @staticmethod\n    def bus_identity(path: Path) -> tuple[int, int] | None:\n        try:\n            info = path.stat()\n        except FileNotFoundError:\n            return None\n        return info.st_dev, info.st_ino\n\n    @staticmethod\n    def conversation(message: Message, snapshot: RegistryProvenance) -> Conversation:\n        from .channel_targets import BuiltinChannel, is_channel_target\n\n        builtin = BuiltinChannel.lookup(message.target)\n        if builtin is not None or is_channel_target(message.target):\n            return Conversation(target=builtin.value if builtin is not None else message.target)\n        names = sorted(\n            {snapshot.canonical_name(name) for name in (message.sender, message.target)}\n        )\n        return Conversation(\n            participants=tuple(\n                ThreadIncarnation(\n                    name, snapshot.threads[name].created_at if name in snapshot.threads else -1.0\n                )\n                for name in names\n            )\n        )\n\n    @staticmethod\n    def _key(viewer: str, created_at: float, conversation: Conversation) -> str:\n        return json.dumps([viewer, created_at, conversation.to_wire()], separators=(\",\", \":\"))\n\n    def capture(\n        self,\n        viewer: str,\n        messages: Iterable[Message],\n        snapshot: RegistrySnapshot,\n        bus_path: Path,\n        *,\n        conversation_snapshot: RegistryProvenance | None = None,\n    ) -> DisplayBasis:\n        viewer = snapshot.canonical_name(viewer)\n        grouped: dict[Conversation, list[int]] = {}\n        for message in messages:\n            conversation = self.conversation(message, conversation_snapshot or snapshot)\n            grouped.setdefault(conversation, []).append(message.seq)\n        return DisplayBasis(\n            viewer,\n            snapshot.threads[viewer].created_at,\n            tuple(\n                DisplayedConversation(conversation, tuple(sorted(set(sequences))))\n                for conversation, sequences in grouped.items()\n            ),\n            self.bus_identity(bus_path),\n        )\n\n    def mark_displayed(self, viewer: str, displayed: DisplayBasis) -> None:\n        if displayed.bus_identity != self.bus_identity(self.path.with_name(\"bus.jsonl\")):\n            raise ValueError(\"Display bus changed; refresh the displayed page.\")\n        if viewer != displayed.viewer:\n            raise ValueError(\"Display belongs to a different viewer.\")\n\n        def advance(document: ReadDocument) -> ReadDocument:\n            messages = (\n                dict(document.messages) if document.bus_identity == displayed.bus_identity else {}\n            )\n            for item in displayed.conversations:\n                key = self._key(viewer, displayed.viewer_created_at, item.conversation)\n                messages[key] = tuple(sorted(set(messages.get(key, ())) | set(item.sequences)))\n            return (\n                replace(document, messages=messages, bus_identity=displayed.bus_identity)\n                if messages != document.messages or document.bus_identity != displayed.bus_identity\n                else document\n            )\n\n        self.update(advance)\n\n    def seen_sequences(\n        self, viewer: str, snapshot: RegistrySnapshot, *, document: ReadDocument | None = None\n    ) -> frozenset[int]:\n        viewer = snapshot.canonical_name(viewer)\n        thread = snapshot.threads[viewer]\n        seen: set[int] = set()\n        document = self.read() if document is None else document\n        if document.bus_identity != self.bus_identity(self.path.with_name(\"bus.jsonl\")):\n            return frozenset()\n        for key, sequences in document.messages.items():\n            name, created, raw = json.loads(key)\n            if snapshot.canonical_name(name) == viewer and created == thread.created_at:\n                conversation = Conversation.from_wire(raw)\n                if conversation.current(snapshot):\n                    seen.update(sequences)\n        return frozenset(seen)\n\n    def displayed_recipient(self, message, recipient, snapshot, *, document=None):\n        \"\"\"Return recorded human display evidence for this exact frozen recipient.\n\n        Processing, assignment acceptance and a reply cannot grant this fact.\n        A reused name with a different creation identity cannot inherit it.\n        \"\"\"\n        from .bus_publication import stable_thread_lookup\n\n        for thread in snapshot.threads.values():\n            if (\n                self.human(thread.role)\n                and stable_thread_lookup(thread.created_at) == recipient.recipient_lookup\n                and message.seq in self.seen_sequences(thread.name, snapshot, document=document)\n            ):\n                return (thread.incarnation,)\n        return ()\n\n    @staticmethod\n    def _transcript_key(viewer: str, source: str, inode: int) -> str:\n        return json.dumps([viewer, str(Path(source).resolve()), inode])\n\n    def transcript_seen(\n        self, viewer: str, source: str, inode: int, *, document: ReadDocument | None = None\n    ) -> int:\n        document = self.read() if document is None else document\n        return document.transcripts.get(self._transcript_key(viewer, source, inode), 0)\n\n    def mark_transcript(\n        self, viewer: str, source: str, inode: int, through: int, size: int\n    ) -> None:\n        key = self._transcript_key(viewer, source, inode)\n\n        def advance(document: ReadDocument) -> ReadDocument:\n            previous = document.transcripts.get(key, 0)\n            if previous <= size and previous >= through:\n                return document\n            return replace(document, transcripts={**document.transcripts, key: through})\n\n        self.update(advance)"
+    },
+    {
+      "path": "src/agent_comms/read_ledger.py",
+      "line": 143,
+      "declaration": "displayed_recipient",
+      "text": "def displayed_recipient(self, message, recipient, snapshot, *, document=None):\n        \"\"\"Return recorded human display evidence for this exact frozen recipient.\n\n        Processing, assignment acceptance and a reply cannot grant this fact.\n        A reused name with a different creation identity cannot inherit it.\n        \"\"\"\n        from .bus_publication import stable_thread_lookup\n\n        for thread in snapshot.threads.values():\n            if (\n                self.human(thread.role)\n                and stable_thread_lookup(thread.created_at) == recipient.recipient_lookup\n                and message.seq in self.seen_sequences(thread.name, snapshot, document=document)\n            ):\n                return (thread.incarnation,)\n        return ()"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 226,
+      "call": "source.references(tuple((MessageReference(assignment.wire_seq, assignment.message_id) for assignment in assignments)))"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 153,
+      "call": "original_source.references((self.original,))"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 515,
+      "call": "original_source.references((self.subject,))"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 958,
+      "call": "comms.messaging.acknowledge(name, target)"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 982,
+      "call": "comms.messaging.acknowledge(self.thread, target)"
+    },
+    {
+      "path": "src/agent_comms/tools.py",
+      "line": 793,
+      "call": "comms.messaging.acknowledge(thread)"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 412,
+      "call": "self.admission.acknowledge(event)"
+    },
+    {
+      "path": "src/agent_comms/turn_admission.py",
+      "line": 30,
+      "declaration": "acknowledge",
+      "text": "def acknowledge(self, response: Response) -> PromptAdmission:\n        return self"
+    },
+    {
+      "path": "src/agent_comms/turn_admission.py",
+      "line": 49,
+      "declaration": "acknowledge",
+      "text": "def acknowledge(self, response):\n        return AcknowledgedPrompt(response)"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 53,
+      "declaration": "acknowledge",
+      "text": "def acknowledge(self, response: Response) -> None:\n        if response.success is True and any(item[0] == response.id for item in self.pending):\n            self.accepted.add(response.id)\n        self.changed.set()"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 405,
+      "declaration": "references",
+      "text": "def references(cls) -> tuple[ForeignKey, ...]:\n        # A method permits mutually referring row classes without string names.\n        return ()"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 449,
+      "call": "cls.references()"
+    },
+    {
+      "path": "src/agent_comms/wake.py",
+      "line": 54,
+      "call": "PassiveWake.initial_state()().notification(recipient, observation=observation)"
+    },
+    {
+      "path": "src/agent_comms/wake.py",
+      "line": 71,
+      "call": "self.wake_mode.initial_state()().notification(recipient, observation=observation)"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 515,
+      "call": "source.references(references)"
+    },
+    {
+      "path": "src/toad/acp/api.py",
+      "line": 45,
+      "call": "API.notification(name='session/cancel')"
+    },
+    {
+      "path": "src/toad/app.py",
+      "line": 377,
+      "call": "self.terminal_attention.notification(event.notification)"
+    },
+    {
+      "path": "src/toad/jsonrpc.py",
+      "line": 525,
+      "declaration": "notification",
+      "text": "def notification(\n        self,\n        name: str = \"\",\n        *,\n        prefix: str = \"\",\n    ) -> Callable[[Callable[P, T]], Callable[P, MethodCall[T]]]:\n        return self.method(name, prefix=prefix, notification=True)"
+    },
+    {
+      "path": "src/toad/jsonrpc.py",
+      "line": 580,
+      "call": "api.notification()"
+    },
+    {
+      "path": "src/toad/render_protocol.py",
+      "line": 143,
+      "call": "service.acknowledge(self)"
+    },
+    {
+      "path": "src/toad/render_protocol.py",
+      "line": 204,
+      "call": "client.acknowledge(submission)"
+    },
+    {
+      "path": "src/toad/render_protocol.py",
+      "line": 212,
+      "call": "client.acknowledge(submission)"
+    },
+    {
+      "path": "src/toad/render_protocol.py",
+      "line": 221,
+      "call": "client.acknowledge(submission)"
+    },
+    {
+      "path": "src/toad/render_service.py",
+      "line": 151,
+      "declaration": "acknowledge",
+      "text": "def acknowledge(self, command: AcknowledgeRender) -> RenderReply:\n        job = self._owned(command.client_id, command.request_id)\n        if job is not None:\n            if not job.future.done():\n                return PendingReply(command.request_id)\n            self._jobs.pop(command.request_id)\n        return AcknowledgedReply(command.request_id)"
+    },
+    {
+      "path": "src/toad/render_zmq.py",
+      "line": 293,
+      "declaration": "acknowledge",
+      "text": "async def acknowledge(self, submission: RenderSubmission) -> None:\n        await self._exchange(AcknowledgeRender(self._client_id, submission.request_id))\n        if submission.cancel_requested or self._closed:\n            raise asyncio.CancelledError"
+    },
+    {
+      "path": "src/toad/screens/historical_sessions.py",
+      "line": 30,
+      "declaration": "HistoricalSessions",
+      "text": "class HistoricalSessions(CoreEventReceiver, ProjectPathOwner, WorkspaceScreen, ModalScreen):\n    BINDINGS: ClassVar = [(\"escape\", \"close\", \"Back to chats\")]\n    DEFAULT_CSS = \"\"\"\n    HistoricalSessions { align: center middle; background: $background 60%; }\n    HistoricalSessions > Vertical { width: 95%; height: 95%; background: $surface; border: solid $primary; }\n    HistoricalSessions #source-label { height: auto; padding: 1; }\n    HistoricalSessions HistoryWindow { height: 1fr; }\n    HistoricalSessions #saved-content { height: auto; }\n    \"\"\"\n\n    def __init__(\n        self,\n        comms: Comms,\n        threads: tuple[HistoricalThread, ...],\n        *,\n        name: str | None = None,\n        source: str | None = None,\n    ):\n        super().__init__()\n        self.comms = comms\n        self.threads = threads\n        self.initial_name = name\n        self.initial_source = source\n        self._selection_generation = 0\n\n    @property\n    def project_root(self) -> Path:\n        index = self.query_one(\"#saved-identity\", Select).value\n        return Path(self.threads[index].thread.worktree)\n\n    def compose(self) -> ComposeResult:\n        with Vertical():\n            yield Static(\n                \"Saved sessions \u00b7 select an original identity \u00b7 Esc returns to chats\",\n                id=\"source-label\",\n            )\n            options = [\n                (\n                    (\n                        f\"@{item.thread.name} \u00b7 {item.thread.title or 'Untitled'} \u00b7 \"\n                        f\"{Path(item.source.original_root).name} \u00b7 created {item.thread.created_at}\"\n                    ),\n                    index,\n                )\n                for index, item in enumerate(self.threads)\n            ]\n            initial = next(\n                (\n                    index\n                    for index, item in enumerate(self.threads)\n                    if item.thread.name == self.initial_name\n                    and (\n                        self.initial_source is None\n                        or item.source.key == self.initial_source\n                    )\n                ),\n                0,\n            )\n            yield Select(options, allow_blank=False, value=initial, id=\"saved-identity\")\n            with HistoryWindow(id=\"saved-window\"):\n                yield VerticalGroup(id=\"saved-content\")\n\n    @on(Select.Changed, \"#saved-identity\")\n    async def selected(self, event: Select.Changed) -> None:\n        if event.value is Select.BLANK:\n            return\n        self._selection_generation += 1\n        self.workers.cancel_group(self, \"historical-handling\")\n        generation = self._selection_generation\n        item = self.threads[event.value]\n        content = self.query_one(\"#saved-content\", VerticalGroup)\n        await content.remove_children()\n        self.query_one(\"#source-label\", Static).update(\n            f\"@{item.thread.name} \u00b7 original incarnation {item.thread.created_at}\\n\"\n            f\"Source: {item.source.original_root}\\n\"\n            f\"Channels/tags: {', '.join(sorted(item.thread.tags)) or 'none'}\\n\"\n            f\"Session: {item.thread.session_file or 'No saved session recorded'} \u00b7 read only\"\n        )\n        loader = partial(\n            self.comms.transcripts.capture_page_read,\n            item.thread.name,\n            historical_source=item.source.key,\n        )\n\n        async def load(**kwargs):\n            def read():\n                return loader(**kwargs).read()\n\n            return await asyncio.to_thread(read)\n\n        try:\n            page = await load()\n        except (OSError, ValueError, StaleRevision) as error:\n            if generation == self._selection_generation:\n                await content.mount(\n                    Static(f\"Could not read this saved session: {error}\", markup=False)\n                )\n            return\n        if generation != self._selection_generation or not self.is_attached:\n            return\n        if not page.events and not page.has_older:\n            await content.mount(\n                Static(\"No saved conversation records are available for this identity.\")\n            )\n        else:\n            history = TranscriptHistory(page, load)\n            await history.prepare_body(lambda: generation == self._selection_generation and self.is_attached)\n            if generation != self._selection_generation or not self.is_attached:\n                return\n            await content.mount(history)\n            self.query_one(HistoryWindow).scroll_end(animate=False, immediate=True)\n\n    def action_focus_prompt(self) -> None:\n        self.query_one(HistoryWindow).jump_to_latest()\n\n    @handles(MessageHandlingRequested)\n    def request_message_handling(self, message: CoreEventMessage) -> None:\n        message.stop()\n        index = self.query_one(\"#saved-identity\", Select).value\n        self.run_worker(partial(self.publish_handling, self.threads[index],\n                                self._selection_generation),\n                        group=\"historical-handling\", exclusive=True)\n\n    async def publish_handling(self, item: HistoricalThread, generation: int) -> None:\n        \"\"\"Read the selected archive, never today's-name live notification.\"\"\"\n        if generation != self._selection_generation or not self.is_attached:\n            return\n        content = self.query_one(\"#saved-content\", VerticalGroup)\n        bodies = WireMessageHandling.within(content)\n        references = WireMessageHandling.references_in(bodies)\n        if not references:\n            return\n\n        def read():\n            item.source.validate()\n            # Source-only Comms reads admit no protocol initialization, claim\n            # or historical execution; the original frozen registry owns joins.\n            original = Comms(Path(item.source.root), private_initial_writes=False,\n                             private_claim_writes=False)\n            order = self.comms.bus.history.sources().index(item.source)\n            messages = tuple(HistoricalMessage.project(message, item.source, order,\n                                                       item.source.provenance)\n                             for message in original.bus.log.messages_for_references(references))\n            results = {}\n            for start in range(0, len(messages), MessageNotification.window_limit):\n                results.update(original.views.message_notifications(\n                    messages[start:start + MessageNotification.window_limit]))\n            item.source.validate()\n            return results\n\n        try:\n            results = await asyncio.to_thread(read)\n        except (OSError, ValueError) as error:\n            if generation == self._selection_generation and self.is_attached:\n                for body in bodies:\n                    if body.is_attached:\n                        body.show_notification_error(error)\n            return\n        if generation == self._selection_generation and self.is_attached:\n            for body in bodies:\n                if body.is_attached:\n                    body.show_notifications(results)\n\n    def action_close(self) -> None:\n        self.dismiss()"
+    },
+    {
+      "path": "src/toad/screens/historical_sessions.py",
+      "line": 146,
+      "declaration": "request_message_handling",
+      "text": "def request_message_handling(self, message: CoreEventMessage) -> None:\n        message.stop()\n        index = self.query_one(\"#saved-identity\", Select).value\n        self.run_worker(partial(self.publish_handling, self.threads[index],\n                                self._selection_generation),\n                        group=\"historical-handling\", exclusive=True)"
+    },
+    {
+      "path": "src/toad/screens/historical_sessions.py",
+      "line": 153,
+      "declaration": "publish_handling",
+      "text": "async def publish_handling(self, item: HistoricalThread, generation: int) -> None:\n        \"\"\"Read the selected archive, never today's-name live notification.\"\"\"\n        if generation != self._selection_generation or not self.is_attached:\n            return\n        content = self.query_one(\"#saved-content\", VerticalGroup)\n        bodies = WireMessageHandling.within(content)\n        references = WireMessageHandling.references_in(bodies)\n        if not references:\n            return\n\n        def read():\n            item.source.validate()\n            # Source-only Comms reads admit no protocol initialization, claim\n            # or historical execution; the original frozen registry owns joins.\n            original = Comms(Path(item.source.root), private_initial_writes=False,\n                             private_claim_writes=False)\n            order = self.comms.bus.history.sources().index(item.source)\n            messages = tuple(HistoricalMessage.project(message, item.source, order,\n                                                       item.source.provenance)\n                             for message in original.bus.log.messages_for_references(references))\n            results = {}\n            for start in range(0, len(messages), MessageNotification.window_limit):\n                results.update(original.views.message_notifications(\n                    messages[start:start + MessageNotification.window_limit]))\n            item.source.validate()\n            return results\n\n        try:\n            results = await asyncio.to_thread(read)\n        except (OSError, ValueError) as error:\n            if generation == self._selection_generation and self.is_attached:\n                for body in bodies:\n                    if body.is_attached:\n                        body.show_notification_error(error)\n            return\n        if generation == self._selection_generation and self.is_attached:\n            for body in bodies:\n                if body.is_attached:\n                    body.show_notifications(results)"
+    },
+    {
+      "path": "src/toad/screens/historical_sessions.py",
+      "line": 175,
+      "call": "original.views.message_notifications(messages[start:start + MessageNotification.window_limit])"
+    },
+    {
+      "path": "src/toad/terminal_attention.py",
+      "line": 152,
+      "declaration": "notification",
+      "text": "def notification(self, notification: Notification) -> None:\n        settings = self.app.settings.notifications\n        if settings.hide_low_severity and notification.severity == \"information\":\n            return\n        message = (Content.from_markup(notification.message).plain\n                   if notification.markup else notification.message)\n        self.notify(message, title=notification.title)"
+    },
+    {
+      "path": "src/toad/widgets/conversation.py",
+      "line": 1471,
+      "declaration": "request_message_handling",
+      "text": "def request_message_handling(self, message: CoreEventMessage) -> None:\n        message.stop()\n        self.transcript.request_handling()"
+    }
+  ]
+}

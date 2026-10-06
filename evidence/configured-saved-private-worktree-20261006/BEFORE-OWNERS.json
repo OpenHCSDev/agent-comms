@@ -1,0 +1,556 @@
+{
+  "revision": "e8f0284a7a4951785db4d3f84af1fce2b49cda0f",
+  "parser": "refactor-audit.audit.findings.Package",
+  "strength": "source AST and semantic trace only",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "modules": 324,
+      "unparsed": [],
+      "sites": [
+        {
+          "path": "src/agent_comms/acp.py",
+          "line": 129,
+          "kind": "call",
+          "expression": "RuntimeServer(self)"
+        },
+        {
+          "path": "src/agent_comms/context_tokens.py",
+          "line": 37,
+          "kind": "call",
+          "expression": "Path.cwd()"
+        },
+        {
+          "path": "src/agent_comms/debt_ratchet.py",
+          "line": 567,
+          "kind": "call",
+          "expression": "Path.cwd()"
+        },
+        {
+          "path": "src/agent_comms/native_fork.py",
+          "line": 15,
+          "kind": "declaration",
+          "name": "ForkSessionRequest"
+        },
+        {
+          "path": "src/agent_comms/native_fork.py",
+          "line": 38,
+          "kind": "call",
+          "expression": "ForkSessionRequest(str(package), file, worktree)"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 102,
+          "kind": "call",
+          "expression": "Path.cwd()"
+        },
+        {
+          "path": "src/agent_comms/owned_turn.py",
+          "line": 200,
+          "kind": "call",
+          "expression": "Path.cwd()"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 173,
+          "kind": "declaration",
+          "name": "acquire_thread"
+        },
+        {
+          "path": "src/agent_comms/pi_commands.py",
+          "line": 307,
+          "kind": "call",
+          "expression": "Path.cwd()"
+        },
+        {
+          "path": "src/agent_comms/presentation.py",
+          "line": 613,
+          "kind": "declaration",
+          "name": "participants"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 158,
+          "kind": "declaration",
+          "name": "restore_stopped"
+        },
+        {
+          "path": "src/agent_comms/registration.py",
+          "line": 160,
+          "kind": "call",
+          "expression": "edit.document.restore_stopped(source, names)"
+        },
+        {
+          "path": "src/agent_comms/registry_document.py",
+          "line": 169,
+          "kind": "declaration",
+          "name": "restore_stopped"
+        },
+        {
+          "path": "src/agent_comms/runtime.py",
+          "line": 146,
+          "kind": "declaration",
+          "name": "RuntimeServer"
+        },
+        {
+          "path": "src/agent_comms/session_lifecycle.py",
+          "line": 164,
+          "kind": "declaration",
+          "name": "acquire_declared_thread"
+        },
+        {
+          "path": "src/agent_comms/session_lifecycle.py",
+          "line": 181,
+          "kind": "declaration",
+          "name": "bind_owned"
+        },
+        {
+          "path": "src/agent_comms/session_lifecycle.py",
+          "line": 295,
+          "kind": "declaration",
+          "name": "attach_owner"
+        },
+        {
+          "path": "src/agent_comms/session_lifecycle.py",
+          "line": 412,
+          "kind": "declaration",
+          "name": "release_owned"
+        },
+        {
+          "path": "src/agent_comms/session_lifecycle.py",
+          "line": 424,
+          "kind": "declaration",
+          "name": "acquire_declared_thread"
+        },
+        {
+          "path": "src/agent_comms/session_lifecycle.py",
+          "line": 161,
+          "kind": "call",
+          "expression": "self.comms.threads.restore_stopped(self.comms.registry.snapshot(), (thread.name,))"
+        },
+        {
+          "path": "src/agent_comms/session_lifecycle.py",
+          "line": 162,
+          "kind": "call",
+          "expression": "self.acquire_declared_thread(thread)"
+        },
+        {
+          "path": "src/agent_comms/session_lifecycle.py",
+          "line": 166,
+          "kind": "call",
+          "expression": "self.comms.owners.acquire_thread(thread.name, owner_pid=os.getpid())"
+        },
+        {
+          "path": "src/agent_comms/session_lifecycle.py",
+          "line": 259,
+          "kind": "call",
+          "expression": "self.bind_owned(thread, thread.name)"
+        },
+        {
+          "path": "src/agent_comms/session_lifecycle.py",
+          "line": 285,
+          "kind": "call",
+          "expression": "self.bind_owned(thread, session_id)"
+        },
+        {
+          "path": "src/agent_comms/session_lifecycle.py",
+          "line": 452,
+          "kind": "call",
+          "expression": "self.attach_owner(owner, session_id)"
+        },
+        {
+          "path": "src/agent_comms/session_lifecycle.py",
+          "line": 283,
+          "kind": "call",
+          "expression": "self.attach_owner(thread, session_id)"
+        },
+        {
+          "path": "src/agent_comms/thread_management.py",
+          "line": 172,
+          "kind": "declaration",
+          "name": "restore_stopped"
+        },
+        {
+          "path": "src/agent_comms/thread_management.py",
+          "line": 186,
+          "kind": "call",
+          "expression": "self.registry.restore_stopped(source, selected)"
+        }
+      ]
+    },
+    {
+      "root": "tests",
+      "modules": 373,
+      "unparsed": [],
+      "sites": [
+        {
+          "path": "tests/compaction_source_successor_installed_journey.py",
+          "line": 62,
+          "kind": "declaration",
+          "name": "configured_saved_agent"
+        },
+        {
+          "path": "tests/compaction_source_successor_installed_journey.py",
+          "line": 192,
+          "kind": "call",
+          "expression": "configured_saved_agent(stage, package, source_file, Receiver(), receipt, capture_source=capture_source, observe_launch=observe_launch, core_source=core_source, core_artifacts=core_artifacts)"
+        },
+        {
+          "path": "tests/compaction_source_successor_installed_journey.py",
+          "line": 100,
+          "kind": "call",
+          "expression": "ForkSessionRequest(str(package), str(source_file), original.worktree, str(stage / 'forks'))"
+        },
+        {
+          "path": "tests/compaction_source_successor_installed_journey.py",
+          "line": 151,
+          "kind": "call",
+          "expression": "agent.sessions.bind_owned(owner, owner.name)"
+        },
+        {
+          "path": "tests/native_backend_fixture.py",
+          "line": 68,
+          "kind": "call",
+          "expression": "agent.sessions.bind_owned(thread, thread.name)"
+        },
+        {
+          "path": "tests/native_context_budget_installed_journey.py",
+          "line": 126,
+          "kind": "call",
+          "expression": "ForkSessionRequest(str(package), str(source), str(project), str(config / 'sessions'))"
+        },
+        {
+          "path": "tests/real_native_compaction_installed_pilot.py",
+          "line": 81,
+          "kind": "call",
+          "expression": "ForkSessionRequest(str(package), str(source_file), str(project), str(stage / 'native-forks'))"
+        },
+        {
+          "path": "tests/reply_relevance_installed_journey.py",
+          "line": 62,
+          "kind": "call",
+          "expression": "ForkSessionRequest(str(package), str(source_file), source.worktree, str(stage / 'forks'))"
+        },
+        {
+          "path": "tests/selected_summary_recovery_installed_journey.py",
+          "line": 91,
+          "kind": "call",
+          "expression": "ForkSessionRequest(str(package), original.require_saved_session(), original.worktree, str(stage / 'forks'))"
+        },
+        {
+          "path": "tests/shared_bus_restart_native.py",
+          "line": 138,
+          "kind": "call",
+          "expression": "ForkSessionRequest(str(arguments.package), str(original), source.worktree, str(stage / 'forks'))"
+        },
+        {
+          "path": "tests/test_acp_input_disposition.py",
+          "line": 246,
+          "kind": "call",
+          "expression": "comms.threads.restore_stopped(comms.registry.snapshot(), (session,))"
+        },
+        {
+          "path": "tests/test_acp_input_disposition.py",
+          "line": 247,
+          "kind": "call",
+          "expression": "comms.owners.acquire_thread(session, owner_pid=os.getpid())"
+        },
+        {
+          "path": "tests/test_acp_input_disposition.py",
+          "line": 250,
+          "kind": "call",
+          "expression": "owner.sessions.bind_owned(thread, session)"
+        },
+        {
+          "path": "tests/test_backend_response_ownership.py",
+          "line": 31,
+          "kind": "call",
+          "expression": "Path.cwd()"
+        },
+        {
+          "path": "tests/test_backend_response_ownership.py",
+          "line": 31,
+          "kind": "call",
+          "expression": "Path.cwd()"
+        },
+        {
+          "path": "tests/test_backend_response_ownership.py",
+          "line": 31,
+          "kind": "call",
+          "expression": "Path.cwd()"
+        },
+        {
+          "path": "tests/test_channels.py",
+          "line": 444,
+          "kind": "call",
+          "expression": "comms.views.coordination_snapshot().participants('#api')"
+        },
+        {
+          "path": "tests/test_channels.py",
+          "line": 450,
+          "kind": "call",
+          "expression": "comms.views.coordination_snapshot().participants('#api')"
+        },
+        {
+          "path": "tests/test_channels.py",
+          "line": 447,
+          "kind": "call",
+          "expression": "comms.views.coordination_snapshot().participants('#api')"
+        },
+        {
+          "path": "tests/test_command_families.py",
+          "line": 155,
+          "kind": "call",
+          "expression": "RuntimeServer(agent)"
+        },
+        {
+          "path": "tests/test_history_view_declaration.py",
+          "line": 63,
+          "kind": "call",
+          "expression": "comms.views.coordination_snapshot().participants('#team')"
+        },
+        {
+          "path": "tests/test_history_view_declaration.py",
+          "line": 59,
+          "kind": "call",
+          "expression": "snapshot.participants('#team')"
+        },
+        {
+          "path": "tests/test_history_view_declaration.py",
+          "line": 60,
+          "kind": "call",
+          "expression": "snapshot.participants('#team')"
+        },
+        {
+          "path": "tests/test_native_catalog_discovery.py",
+          "line": 49,
+          "kind": "call",
+          "expression": "ForkSessionRequest(str(package), str(source), str(native.project), directory=str(native.project / 'launch-sessions'))"
+        },
+        {
+          "path": "tests/test_native_catalog_discovery.py",
+          "line": 356,
+          "kind": "call",
+          "expression": "ForkSessionRequest(os.environ['PI_COMPACTION_TEST_PACKAGE'], str(source), str(native.project), directory=str(native.project / 'replacement-sessions'))"
+        },
+        {
+          "path": "tests/test_native_catalog_discovery.py",
+          "line": 468,
+          "kind": "call",
+          "expression": "ForkSessionRequest(os.environ['PI_COMPACTION_TEST_PACKAGE'], str(source), str(native.project), directory=str(native.project / 'writer-sessions'))"
+        },
+        {
+          "path": "tests/test_native_catalog_discovery.py",
+          "line": 547,
+          "kind": "call",
+          "expression": "ForkSessionRequest(os.environ['PI_COMPACTION_TEST_PACKAGE'], str(donor), str(native.project), directory=str(native.root / 'native-sessions'))"
+        },
+        {
+          "path": "tests/test_native_catalog_discovery.py",
+          "line": 621,
+          "kind": "call",
+          "expression": "ForkSessionRequest(os.environ['PI_COMPACTION_TEST_PACKAGE'], str(donor), str(native.project), directory=str(native.root / 'native-sessions'))"
+        },
+        {
+          "path": "tests/test_native_context_inspection.py",
+          "line": 110,
+          "kind": "call",
+          "expression": "ForkSessionRequest(str(package), str(fixture.session), str(project), str(fixture.root.parent / 'c-native-fork'))"
+        },
+        {
+          "path": "tests/test_native_phase_producer.py",
+          "line": 19,
+          "kind": "call",
+          "expression": "Path.cwd()"
+        },
+        {
+          "path": "tests/test_pi_rpc_nominal.py",
+          "line": 98,
+          "kind": "call",
+          "expression": "Path.cwd()"
+        },
+        {
+          "path": "tests/test_pi_rpc_nominal.py",
+          "line": 98,
+          "kind": "call",
+          "expression": "Path.cwd()"
+        },
+        {
+          "path": "tests/test_pi_rpc_nominal.py",
+          "line": 98,
+          "kind": "call",
+          "expression": "Path.cwd()"
+        },
+        {
+          "path": "tests/test_registration_process_identity.py",
+          "line": 32,
+          "kind": "call",
+          "expression": "restored.restore_stopped(comms.registry.snapshot(), (owner.name,))"
+        },
+        {
+          "path": "tests/test_retained_manual_compaction.py",
+          "line": 160,
+          "kind": "call",
+          "expression": "agent.sessions.bind_owned(comms.registry.require('retained'), 'retained')"
+        },
+        {
+          "path": "tests/test_roster_restoration.py",
+          "line": 91,
+          "kind": "call",
+          "expression": "new.registry.restore_stopped(old.registry.snapshot(), (thread.name,))"
+        },
+        {
+          "path": "tests/test_roster_restoration.py",
+          "line": 47,
+          "kind": "call",
+          "expression": "current.registry.restore_stopped(source, ('live', 'missing'))"
+        },
+        {
+          "path": "tests/test_roster_restoration.py",
+          "line": 59,
+          "kind": "call",
+          "expression": "current.registry.restore_stopped(source, ('live', 'missing'))"
+        },
+        {
+          "path": "tests/test_roster_restoration.py",
+          "line": 82,
+          "kind": "call",
+          "expression": "current.registry.restore_stopped(source, ('good', conflicting.name))"
+        },
+        {
+          "path": "tests/test_roster_restoration.py",
+          "line": 171,
+          "kind": "call",
+          "expression": "current.threads.restore_stopped(source, (missing.name,))"
+        },
+        {
+          "path": "tests/test_roster_restoration.py",
+          "line": 208,
+          "kind": "call",
+          "expression": "current.threads.restore_stopped(old.registry.snapshot(), ('missing',))"
+        },
+        {
+          "path": "tests/test_roster_restoration.py",
+          "line": 162,
+          "kind": "call",
+          "expression": "current.registry.restore_stopped(source, (missing.name,))"
+        },
+        {
+          "path": "tests/test_roster_restoration.py",
+          "line": 201,
+          "kind": "call",
+          "expression": "current.threads.restore_stopped(source, (missing.name,))"
+        },
+        {
+          "path": "tests/test_runtime.py",
+          "line": 423,
+          "kind": "call",
+          "expression": "client.sessions.attach_owner(comms.registry.require(response.session_id), response.session_id)"
+        },
+        {
+          "path": "tests/test_runtime_attachment_lifetime.py",
+          "line": 102,
+          "kind": "call",
+          "expression": "agent.sessions.attach_owner(thread, 'owner')"
+        },
+        {
+          "path": "tests/test_runtime_owned_session_admission.py",
+          "line": 59,
+          "kind": "call",
+          "expression": "owner.sessions.bind_owned(retired, 'retired-acp-session')"
+        },
+        {
+          "path": "tests/test_runtime_owned_session_admission.py",
+          "line": 69,
+          "kind": "call",
+          "expression": "owner.sessions.bind_owned(thread, 'original-acp-session')"
+        },
+        {
+          "path": "tests/test_same_owner_native_fork.py",
+          "line": 58,
+          "kind": "call",
+          "expression": "ForkSessionRequest(os.environ['PI_COMPACTION_TEST_PACKAGE'], str(native.session), str(native.project), directory=str(native.session.parent))"
+        },
+        {
+          "path": "tests/test_same_owner_native_fork.py",
+          "line": 150,
+          "kind": "call",
+          "expression": "ForkSessionRequest(os.environ['PI_COMPACTION_TEST_PACKAGE'], str(native.session), str(native.project), directory=str(native.session.parent))"
+        },
+        {
+          "path": "tests/test_same_owner_native_fork.py",
+          "line": 166,
+          "kind": "call",
+          "expression": "comms.owners.acquire_thread(session, owner_pid=os.getpid())"
+        },
+        {
+          "path": "tests/test_thread_order.py",
+          "line": 28,
+          "kind": "call",
+          "expression": "comms.owners.acquire_thread('alpha', owner_pid=os.getpid())"
+        },
+        {
+          "path": "tests/three_cut_retention_configured_journey.py",
+          "line": 375,
+          "kind": "call",
+          "expression": "configured_saved_agent(seed_stage, package, source_file, receiver, seed_receipt, capture_source=capture_source, core_source=core_source, core_artifacts=core_artifacts)"
+        },
+        {
+          "path": "tests/three_cut_retention_configured_journey.py",
+          "line": 153,
+          "kind": "call",
+          "expression": "configured_saved_agent(application_stage, package, captured_source, Receiver(), receipt, capture_source=capture_source, observe_launch=launch, core_source=core_source, core_artifacts=core_artifacts)"
+        },
+        {
+          "path": "tests/three_cut_retention_configured_journey.py",
+          "line": 189,
+          "kind": "call",
+          "expression": "configured_saved_agent(stage, package, source, Receiver(), receipt, capture_source=capture_source, observe_launch=observe_launch, core_source=core_source, core_artifacts=core_artifacts)"
+        },
+        {
+          "path": "tests/three_cut_retention_configured_journey.py",
+          "line": 240,
+          "kind": "call",
+          "expression": "configured_saved_agent(stage, package, source_file, receiver, receipt, capture_source=capture_source, observe_launch=observe_launch, core_source=core_source, core_artifacts=core_artifacts)"
+        },
+        {
+          "path": "tests/three_cut_retention_configured_journey.py",
+          "line": 299,
+          "kind": "call",
+          "expression": "ForkSessionRequest(str(package), original_owner.thread.require_saved_session(), owner.worktree, str(arm_stage / 'forks'))"
+        },
+        {
+          "path": "tests/turn_context_installed_journey.py",
+          "line": 245,
+          "kind": "call",
+          "expression": "service.threads.restore_stopped(service.registry.snapshot(), (thread.name,))"
+        },
+        {
+          "path": "tests/turn_context_installed_journey.py",
+          "line": 246,
+          "kind": "call",
+          "expression": "service.owners.acquire_thread(thread.name, owner_pid=os.getpid())"
+        },
+        {
+          "path": "tests/turn_context_installed_journey.py",
+          "line": 212,
+          "kind": "call",
+          "expression": "ForkSessionRequest(str(package), str(original_file), str(project), str(root / 'native-forks'))"
+        }
+      ]
+    },
+    {
+      "root": "tools",
+      "modules": 54,
+      "unparsed": [],
+      "sites": [
+        {
+          "path": "tools/cutover/seed_thread_retirement_fixture.py",
+          "line": 59,
+          "kind": "call",
+          "expression": "service.owners.acquire_thread('phase-alpha', owner_pid=os.getpid())"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "state": "241-default-links-published-after-actual-candidate-cli-acceptance",
+  "target": "/home/ts/.local/share/agent-comms/runtime-private-launch-caller-20260930",
+  "core": "a80c15025624eec3ed6bd93ef6173cfb66a193b6",
+  "toad": "b2006bfe50ae50a262b049074258f7f0281791ac",
+  "native": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+  "owner_restarts": 0,
+  "root_changes": 0,
+  "inputs_replayed": 0,
+  "gate": "Einstein actual normal toad-comms original saved history startup + peer click + A return, 28.789s; cold B body remains unproved",
+  "raw": "/home/ts/.cache/agent-scratch/comms-candidate-private-launch-caller-20260930/capture"
+}

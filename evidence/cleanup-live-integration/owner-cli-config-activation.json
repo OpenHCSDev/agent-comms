@@ -1,0 +1,279 @@
+{
+  "target": "/home/ts/.local/share/agent-comms/runtime-owner-cli-config-20260930",
+  "started": 1790777662.4893553,
+  "steps": [
+    "five default links published",
+    "exact original Toad exited",
+    "canonical retained batch returned"
+  ],
+  "before": [
+    {
+      "name": "agent-comms-ux",
+      "process": {
+        "pid": 3196750,
+        "start_time": 24802056
+      }
+    },
+    {
+      "name": "nra-architecture",
+      "process": {
+        "pid": 3196764,
+        "start_time": 24802122
+      }
+    },
+    {
+      "name": "nra-class-first-name-review",
+      "process": {
+        "pid": 3196765,
+        "start_time": 24802192
+      }
+    },
+    {
+      "name": "nra-domain-mapping",
+      "process": {
+        "pid": 3196767,
+        "start_time": 24802262
+      }
+    },
+    {
+      "name": "nra-ordered-branch-call-review",
+      "process": {
+        "pid": 3196769,
+        "start_time": 24802332
+      }
+    },
+    {
+      "name": "nra-roster-heuristic-map",
+      "process": {
+        "pid": 3196778,
+        "start_time": 24802403
+      }
+    },
+    {
+      "name": "refactor-r1",
+      "process": {
+        "pid": 3196780,
+        "start_time": 24802479
+      }
+    },
+    {
+      "name": "openhcs-architecture-memory",
+      "process": {
+        "pid": 3196782,
+        "start_time": 24802551
+      }
+    },
+    {
+      "name": "openhcs-pr159-viewer-bind-owner",
+      "process": {
+        "pid": 3196794,
+        "start_time": 24802622
+      }
+    },
+    {
+      "name": "nominal-refactor-advisor-2",
+      "process": {
+        "pid": 3196796,
+        "start_time": 24802696
+      }
+    },
+    {
+      "name": "openhcs-helper",
+      "process": {
+        "pid": 3196798,
+        "start_time": 24802771
+      }
+    },
+    {
+      "name": "openhcs-helper2",
+      "process": {
+        "pid": 3196869,
+        "start_time": 24802847
+      }
+    },
+    {
+      "name": "comms428",
+      "process": {
+        "pid": 3196900,
+        "start_time": 24802922
+      }
+    }
+  ],
+  "nra_before": "888b79c4afea78a87c8e591928dbc015eeaaa3123e82477c56d40f3739bcf10c",
+  "restart": [
+    {
+      "thread": "agent-comms-ux",
+      "previous_pid": 3196750,
+      "pid": 3341761
+    },
+    {
+      "thread": "nra-architecture",
+      "previous_pid": 3196764,
+      "pid": 3341782
+    },
+    {
+      "thread": "nra-class-first-name-review",
+      "previous_pid": 3196765,
+      "pid": 3341840
+    },
+    {
+      "thread": "nra-domain-mapping",
+      "previous_pid": 3196767,
+      "pid": 3341913
+    },
+    {
+      "thread": "nra-ordered-branch-call-review",
+      "previous_pid": 3196769,
+      "pid": 3341992
+    },
+    {
+      "thread": "nra-roster-heuristic-map",
+      "previous_pid": 3196778,
+      "pid": 3342006
+    },
+    {
+      "thread": "refactor-r1",
+      "previous_pid": 3196780,
+      "pid": 3342009
+    },
+    {
+      "thread": "openhcs-architecture-memory",
+      "previous_pid": 3196782,
+      "pid": 3342011
+    },
+    {
+      "thread": "openhcs-pr159-viewer-bind-owner",
+      "previous_pid": 3196794,
+      "pid": 3342034
+    },
+    {
+      "thread": "nominal-refactor-advisor-2",
+      "previous_pid": 3196796,
+      "pid": 3342036
+    },
+    {
+      "thread": "openhcs-helper",
+      "previous_pid": 3196798,
+      "pid": 3342107
+    },
+    {
+      "thread": "openhcs-helper2",
+      "previous_pid": 3196869,
+      "pid": 3342178
+    },
+    {
+      "thread": "comms428",
+      "previous_pid": 3196900,
+      "pid": 3342199
+    }
+  ],
+  "after": [
+    {
+      "name": "agent-comms-ux",
+      "process": {
+        "pid": 3341761,
+        "start_time": 25331527
+      },
+      "interpreter": "/home/ts/.local/share/agent-comms/runtime-owner-cli-config-20260930/bin/python"
+    },
+    {
+      "name": "nra-architecture",
+      "process": {
+        "pid": 3341782,
+        "start_time": 25331669
+      },
+      "interpreter": "/home/ts/.local/share/agent-comms/runtime-owner-cli-config-20260930/bin/python"
+    },
+    {
+      "name": "nra-class-first-name-review",
+      "process": {
+        "pid": 3341840,
+        "start_time": 25331812
+      },
+      "interpreter": "/home/ts/.local/share/agent-comms/runtime-owner-cli-config-20260930/bin/python"
+    },
+    {
+      "name": "nra-domain-mapping",
+      "process": {
+        "pid": 3341913,
+        "start_time": 25331957
+      },
+      "interpreter": "/home/ts/.local/share/agent-comms/runtime-owner-cli-config-20260930/bin/python"
+    },
+    {
+      "name": "nra-ordered-branch-call-review",
+      "process": {
+        "pid": 3341992,
+        "start_time": 25332098
+      },
+      "interpreter": "/home/ts/.local/share/agent-comms/runtime-owner-cli-config-20260930/bin/python"
+    },
+    {
+      "name": "nra-roster-heuristic-map",
+      "process": {
+        "pid": 3342006,
+        "start_time": 25332238
+      },
+      "interpreter": "/home/ts/.local/share/agent-comms/runtime-owner-cli-config-20260930/bin/python"
+    },
+    {
+      "name": "refactor-r1",
+      "process": {
+        "pid": 3342009,
+        "start_time": 25332379
+      },
+      "interpreter": "/home/ts/.local/share/agent-comms/runtime-owner-cli-config-20260930/bin/python"
+    },
+    {
+      "name": "openhcs-architecture-memory",
+      "process": {
+        "pid": 3342011,
+        "start_time": 25332520
+      },
+      "interpreter": "/home/ts/.local/share/agent-comms/runtime-owner-cli-config-20260930/bin/python"
+    },
+    {
+      "name": "openhcs-pr159-viewer-bind-owner",
+      "process": {
+        "pid": 3342034,
+        "start_time": 25332662
+      },
+      "interpreter": "/home/ts/.local/share/agent-comms/runtime-owner-cli-config-20260930/bin/python"
+    },
+    {
+      "name": "nominal-refactor-advisor-2",
+      "process": {
+        "pid": 3342036,
+        "start_time": 25332801
+      },
+      "interpreter": "/home/ts/.local/share/agent-comms/runtime-owner-cli-config-20260930/bin/python"
+    },
+    {
+      "name": "openhcs-helper",
+      "process": {
+        "pid": 3342107,
+        "start_time": 25332941
+      },
+      "interpreter": "/home/ts/.local/share/agent-comms/runtime-owner-cli-config-20260930/bin/python"
+    },
+    {
+      "name": "openhcs-helper2",
+      "process": {
+        "pid": 3342178,
+        "start_time": 25333083
+      },
+      "interpreter": "/home/ts/.local/share/agent-comms/runtime-owner-cli-config-20260930/bin/python"
+    },
+    {
+      "name": "comms428",
+      "process": {
+        "pid": 3342199,
+        "start_time": 25333227
+      },
+      "interpreter": "/home/ts/.local/share/agent-comms/runtime-owner-cli-config-20260930/bin/python"
+    }
+  ],
+  "nra_after": "888b79c4afea78a87c8e591928dbc015eeaaa3123e82477c56d40f3739bcf10c",
+  "state": "installed-and-owner-process-verified; default UI acceptance pending",
+  "finished": 1790777693.2084293
+}

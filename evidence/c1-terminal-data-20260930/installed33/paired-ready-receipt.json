@@ -1,0 +1,46 @@
+{
+  "state": "PACKAGE-READY-AWAITING-ACTUAL-JOINT-AND-BUS-GATES",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001",
+  "pins": {
+    "agent-comms": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+    "batrachian-toad": "15601a4f785fd6ee3e53e12b3a971ae1186f4482",
+    "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "native_manifest_sha256": "593b978a717ae8f6ab4300a1a107b615c8ced52e767ef4cad0596f827041a218",
+  "distributions": 69,
+  "native_full_trust": true,
+  "all_original_package_files_equal": {
+    "agent-comms": 303,
+    "batrachian-toad": 304,
+    "textual": 266
+  },
+  "runtime_preflight_pass": true,
+  "probe_cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 211465,
+        "start_ticks": 29253125,
+        "returncode": 0
+      }
+    ]
+  },
+  "private_root_witness": {
+    "root": "/home/ts/wt/g460b/meta07/wire",
+    "wire_root_id": "4e40c941c079455a987af0eed60a409e",
+    "producer": "actual installed Core Comms/initialize_private_initial_protocol",
+    "owner_starts": 0,
+    "native_inputs": 0
+  },
+  "public_effects": 0,
+  "native_inputs": 0,
+  "provider_calls": 0,
+  "build_count": 1,
+  "staging_receipt_sha256": "1ed2519e07bbf2f10eae24b4588aa6a5a848e4490f2686433239d6c6d5b221fa",
+  "activation_sha256": "e92534c1ec44de41db22dc1eb08bd336111454aea870e8aa56d0d7b9f3559b94",
+  "remaining_scope": "Einstein joint native/ACP/PTY gate and460 hotDM/IRC/tab-return gate required"
+}

@@ -1,0 +1,469 @@
+{
+  "status": "ACCEPTED_SCOPED_DEFAULT_STARTUP_END_TOOL_COVERAGE_UNREACHED",
+  "owner": "Heisenberg",
+  "default_entrypoint": "/home/ts/bin/toad-comms nra-architecture",
+  "runtime_override": false,
+  "runtime": {
+    "selection": "PATH agent-comms-acp",
+    "bin_directory": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin",
+    "launcher": "/home/ts/.agent-comms/stack/bin/toad-comms",
+    "launcher_sha256": "80382c0f935a0f069c0128c21ca530c8dd277684b6d778611315646ab82040ad",
+    "launcher_links": {
+      "command": {
+        "selected_path": "/home/ts/bin/toad-comms",
+        "resolved_path": "/home/ts/.agent-comms/stack/bin/toad-comms",
+        "sha256": "80382c0f935a0f069c0128c21ca530c8dd277684b6d778611315646ab82040ad"
+      },
+      "acp": {
+        "selected_path": "/home/ts/.local/bin/agent-comms-acp",
+        "resolved_path": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/agent-comms-acp",
+        "sha256": "9399d06c4fbcca679743d27dc20ba347256d1502ca81915c5c67c29e37b07e4e"
+      }
+    },
+    "entrypoints": {
+      "toad": {
+        "path": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/toad",
+        "sha256": "fdcdae30ffaad03a9bee5732ec4a44af8f2fa78590837d7a4262432316d29f48"
+      },
+      "agent-comms-acp": {
+        "path": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/agent-comms-acp",
+        "sha256": "9399d06c4fbcca679743d27dc20ba347256d1502ca81915c5c67c29e37b07e4e"
+      }
+    },
+    "activation_path": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/activation.json",
+    "activation_sha256": "1e7cfc5df00200f3bb18f24000bf978119a30f9df27e5f0fa9b343a378c2ae43",
+    "activation": {
+      "state": "staged-exact-package-trusted-not-activated",
+      "stage": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930",
+      "pins": {
+        "agent-comms": "000a31c562b6d048e26e288b24fcd3f1ac64f803",
+        "batrachian-toad": "173901b9329af36116158ec492db839af7d872c6",
+        "textual": "65053c5a2df12249ef1c4193beeff7023c1f75d7"
+      },
+      "sdk": "0.12.1",
+      "native_package": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent",
+      "all_68_requirements_checked": true,
+      "default_launchers_unchanged": true,
+      "entrypoints": {
+        "toad": {
+          "path": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/toad",
+          "sha256": "fdcdae30ffaad03a9bee5732ec4a44af8f2fa78590837d7a4262432316d29f48"
+        },
+        "agent-comms": {
+          "path": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/agent-comms",
+          "sha256": "5e0a25808ebfb52a78be0762d009b21db9445eb630a374abba7561ccefb595de"
+        },
+        "agent-comms-acp": {
+          "path": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/agent-comms-acp",
+          "sha256": "9399d06c4fbcca679743d27dc20ba347256d1502ca81915c5c67c29e37b07e4e"
+        },
+        "agent-comms-agent": {
+          "path": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/agent-comms-agent",
+          "sha256": "1292e074caf17ecb60feb89b2502fd12d1daae5ebf5aa0e3b799a11699753fb8"
+        },
+        "pi-comms-native": {
+          "path": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/pi-comms-native",
+          "sha256": "4e88d8e9d9594dda305e6898e422bc5aa9275bc45a52098c878e2b3a65b4f037"
+        }
+      },
+      "pending": "parent441 atomic cutover and default installed gate; accepted215 journey retained, not repeated"
+    },
+    "observed": {
+      "python": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/python",
+      "prefix": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930",
+      "packages": {
+        "toad": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/lib/python3.14/site-packages/toad/__init__.py",
+          "module_sha256": "dd5b5084de47f965aef80813e00aaac76cb186af163a9e0fe1a764037aa46337",
+          "source_tree_sha256": "5ea7a3dc61601190bbc8fbef832ff27e8d26e49ea46481f4e1df1009ebfbd184",
+          "distribution": "batrachian-toad",
+          "version": "0.6.20",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/toad.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "173901b9329af36116158ec492db839af7d872c6",
+              "requested_revision": "173901b9329af36116158ec492db839af7d872c6"
+            }
+          }
+        },
+        "textual": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/lib/python3.14/site-packages/textual/__init__.py",
+          "module_sha256": "fcd1524975df6075497bbb5c47fe564c6909d2b4b9651708e28ead65e7492671",
+          "source_tree_sha256": "dd18483216975c850f6f09dcbb455d67cc0d9124e0213840a9559e51d348e9a2",
+          "distribution": "textual",
+          "version": "8.2.8",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/textual.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "65053c5a2df12249ef1c4193beeff7023c1f75d7",
+              "requested_revision": "65053c5a2df12249ef1c4193beeff7023c1f75d7"
+            }
+          }
+        },
+        "agent_comms": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/lib/python3.14/site-packages/agent_comms/__init__.py",
+          "module_sha256": "302424efabe07e591de8d139721b7de369c362dae6c942d2d23ebf01f7dd617e",
+          "source_tree_sha256": "e465d405f279fd80cc0bee0791f6608e9cc0a9e93992e0d6058118052e14af74",
+          "distribution": "agent-comms",
+          "version": "0.1.0",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/agent-comms.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "000a31c562b6d048e26e288b24fcd3f1ac64f803",
+              "requested_revision": "000a31c562b6d048e26e288b24fcd3f1ac64f803"
+            }
+          }
+        }
+      },
+      "route": {
+        "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+        "wire_root_id": "e206f3766e60451a989ca34df0e2a94b",
+        "native_package": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent"
+      }
+    }
+  },
+  "physical_recording": "/home/ts/.cache/agent-scratch/comms-canonical-source-default-entrypoint-20260930-attempt02/capture-context/terminal.mp4",
+  "attempt": "/home/ts/.cache/agent-scratch/comms-canonical-source-default-entrypoint-20260930-attempt02",
+  "previous_attempt_preserved": {
+    "status": "PENDING_DEFAULT_ENTRYPOINT_PRE_UI_RECEIPT_NATIVE_PIN_MISMATCH",
+    "owner": "Heisenberg",
+    "default_entrypoint": "/home/ts/bin/toad-comms nra-architecture",
+    "runtime_override": false,
+    "runtime": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930",
+    "attempt": "/home/ts/.cache/agent-scratch/comms-canonical-source-default-entrypoint-20260930-attempt01",
+    "gate_returncode": 1,
+    "ui_launched": false,
+    "native_prompts": 0,
+    "owner_restarts": 0,
+    "original_before": {
+      "owner": {
+        "pid": 2823983,
+        "start_time": 23393932
+      },
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl",
+      "bytes": 41270257,
+      "sha256": "888b79c4afea78a87c8e591928dbc015eeaaa3123e82477c56d40f3739bcf10c",
+      "active_turn": null,
+      "turn_generation": 81
+    },
+    "original_after": {
+      "owner": {
+        "pid": 2823983,
+        "start_time": 23393932
+      },
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl",
+      "bytes": 41270257,
+      "sha256": "888b79c4afea78a87c8e591928dbc015eeaaa3123e82477c56d40f3739bcf10c",
+      "active_turn": null,
+      "turn_generation": 81
+    },
+    "original_source_unchanged": true,
+    "recorder": {
+      "owner": "Einstein-default-entrypoint",
+      "purpose": "installed TUI physical interaction video review",
+      "output": "/home/ts/.cache/agent-scratch/comms-canonical-source-default-entrypoint-20260930-attempt01/capture-context",
+      "command": [
+        "/home/ts/bin/toad-comms",
+        "nra-architecture"
+      ],
+      "terminal_command": [
+        "st",
+        "-e",
+        "/home/ts/bin/toad-comms",
+        "nra-architecture"
+      ],
+      "fps": 60,
+      "screen": [
+        1280,
+        900
+      ],
+      "profiling_requested": false,
+      "state_capture_requested": true,
+      "private_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "capture_target": "existing_thread",
+      "physical_journey": "default_gate",
+      "original_owner_before": {
+        "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+        "mode": "existing_thread",
+        "name": "nra-architecture",
+        "identity": {
+          "pid": 2823983,
+          "start_time": 23393932
+        },
+        "original_owner_alive": true
+      },
+      "recorder_argv": [
+        "/home/ts/wt/toad-retained-outer-history-first-paint-20260929/tests/tools/record_installed_tui.py",
+        "--output",
+        "/home/ts/.cache/agent-scratch/comms-canonical-source-default-entrypoint-20260930-attempt01/capture-context",
+        "--owner",
+        "Einstein-default-entrypoint",
+        "--capture-target",
+        "existing_thread",
+        "--journey",
+        "default_gate",
+        "--actions",
+        "/home/ts/.cache/agent-scratch/comms-canonical-source-default-entrypoint-20260930-attempt01/actions.xdo",
+        "--capture-state",
+        "--review-timing",
+        "deferred",
+        "--width",
+        "1280",
+        "--height",
+        "900",
+        "--fit-window",
+        "--startup-wait",
+        "12",
+        "--max-duration",
+        "55",
+        "--tail-seconds",
+        "2",
+        "--",
+        "/home/ts/bin/toad-comms",
+        "nra-architecture"
+      ],
+      "recorder_source_sha256": "dd3662e0dc5ea03a707092c18cc5689dcec15c04682c35eebf778ad69102f88b",
+      "started_utc": "2026-09-30T08:57:36.368066+00:00",
+      "assessment": "unreviewed",
+      "capture_completed": false,
+      "completed": false,
+      "review_timing": "deferred",
+      "review": {
+        "start_seconds": 0,
+        "seconds": 3,
+        "fps": 8,
+        "frames_limit": 24,
+        "slowdown": 8,
+        "timestamp_basis": "source video seconds"
+      },
+      "error": "ValueError: Candidate activation and private route native packages must match",
+      "cleanup": {
+        "remaining_owned_pids": [],
+        "errors": [],
+        "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+        "processes": [
+          {
+            "pid": 2832649,
+            "start_ticks": 23429557,
+            "returncode": 0
+          }
+        ]
+      },
+      "original_owner_after": {
+        "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+        "mode": "existing_thread",
+        "name": "nra-architecture",
+        "identity": {
+          "pid": 2823983,
+          "start_time": 23393932
+        },
+        "original_owner_alive": true
+      }
+    },
+    "activation_native_package": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent",
+    "canonical_active_route_native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent",
+    "memory_pressure_current": "some/full avg10=0.00 avg60=0.00; swap use alone not a reason to park approved bounded gate",
+    "blocker_owner": "Parent installation/route owner; verify correct native custody and activation receipt. Keep existing recorder guard intact. No product/UI failure inferred before launch.",
+    "physical_assessment": "Not executed; no startup, End or tool-click frame acceptance. Default user readiness still pending."
+  },
+  "capture_seconds": 17.533333,
+  "captured_frames": 1052,
+  "accepted_scope": [
+    "Actual default launcher resolved Core000/Toad173/Textual650/nativee36 without override",
+    "Original41MB saved history visibly loaded; native history registered; Ready status",
+    "Physical End plus4second stationary region readable, no complete-body blank screened; actual minimum inspected"
+  ],
+  "physical_files": {
+    "before.png": {
+      "path": "/home/ts/.cache/agent-scratch/comms-canonical-source-default-entrypoint-20260930-attempt02/capture-context/before.png",
+      "sha256": "559216b7235d4d152295aa5cbab6aae38f3131c07b3e12183fe7fbc4a8e9fde7"
+    },
+    "end-physical-16s.png": {
+      "path": "/home/ts/.cache/agent-scratch/comms-canonical-source-default-entrypoint-20260930-attempt02/capture-context/end-physical-16s.png",
+      "sha256": "982bd984eec8776ca8fcc207cb807b06dd4f56cb40bf353e2fc565ab01d687ab"
+    },
+    "end-minimum-763.png": {
+      "path": "/home/ts/.cache/agent-scratch/comms-canonical-source-default-entrypoint-20260930-attempt02/capture-context/end-minimum-763.png",
+      "sha256": "c6e71c445a0425c593cfb93ca805fdfe36600468a13343eaf51b8bb176cae1c4"
+    },
+    "end-pixel-screen.json": {
+      "path": "/home/ts/.cache/agent-scratch/comms-canonical-source-default-entrypoint-20260930-attempt02/capture-context/end-pixel-screen.json",
+      "sha256": "ef2668f8aad6e7a589889c184ae16d30b2f3822ed177fa3a679c2cb9806fd713"
+    }
+  },
+  "physical_screen": {
+    "recorded_frames": 1052,
+    "eligible_end_stationary_interval_seconds": [
+      12.602042890997836,
+      16.602042890997836
+    ],
+    "minimum_frame": 763,
+    "minimum_pixels": 10129,
+    "threshold": 200,
+    "blank_candidate_frames": [],
+    "limits": "Screen only End stationary before diagnostic SVG; pixels do not prove source/order or all partial regions. Driver tool coverage not reached."
+  },
+  "native_window_at_startup": {
+    "_reactive_scroll_y": 59,
+    "_reactive_scroll_x": 0.0,
+    "_is_anchored": null,
+    "_anchor_released": false,
+    "_reactive_virtual_size": [
+      102,
+      91
+    ],
+    "scroll_y": 59,
+    "maximum": 59,
+    "follows_tail": true,
+    "history_lock_held": false,
+    "restoring": false,
+    "anchor": null,
+    "layout_ready": null,
+    "paint_ready": null,
+    "body_resources": {
+      "registered": 8,
+      "dormant": 0,
+      "visible": 3,
+      "visible_dormant": 0,
+      "reconciling": false,
+      "suspended": false
+    }
+  },
+  "original_before": {
+    "owner": {
+      "pid": 2823983,
+      "start_time": 23393932
+    },
+    "session_file": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl",
+    "bytes": 41270257,
+    "sha256": "888b79c4afea78a87c8e591928dbc015eeaaa3123e82477c56d40f3739bcf10c",
+    "active_turn": null,
+    "turn_generation": 81
+  },
+  "original_after": {
+    "owner": {
+      "pid": 2823983,
+      "start_time": 23393932
+    },
+    "session_file": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl",
+    "bytes": 41270257,
+    "sha256": "888b79c4afea78a87c8e591928dbc015eeaaa3123e82477c56d40f3739bcf10c",
+    "active_turn": null,
+    "turn_generation": 81
+  },
+  "original_source_unchanged": true,
+  "tool_coverage": {
+    "passed": false,
+    "reason": "Current mounted newest lazy source span contains8fragment/native wire-message projections and no ToolCall with content. Allmessage categories including ToolCategory enabled; tool assertion failed before any click. Driver range mismatch; no application renderer failure inferred.",
+    "actual_tool_proof": {
+      "pid": 2839351,
+      "input_sent": false,
+      "states": [],
+      "passed": false,
+      "error": "Traceback (most recent call last):\n  File \"<string>\", line 22, in check\nAssertionError\n"
+    },
+    "source_checks_against_accepted_f92": {
+      "src/toad/widgets/tool_call.py": {
+        "identical": true,
+        "sha256": "4cfc4c5293eba28b82164a9185a7321f77f007c447fdc65c55b804a87511d2a6"
+      },
+      "src/toad/block_navigation.py": {
+        "identical": true,
+        "sha256": "6c5b1a3e238af1dedd0852c5c10d350a5867a9fbd96b0f54a97540bd4918e709"
+      }
+    },
+    "CursorContainer_AST_identical_f92_to_173": true,
+    "limits": "Renderer/navigation bytes unchanged; source admission/history lifetime changed and independently accepted215 gate. Parent owns release-scope judgment. No ToolCall click pass for attempt02."
+  },
+  "exit_codes": {
+    "gate": 1,
+    "driver": 1,
+    "st": 1,
+    "ffmpeg": 255
+  },
+  "shutdown": {
+    "normal_application_exit0_observed": false,
+    "reason": "Driver failed its mounted-tool existence assertion; recorder then terminated owned ST/Toad group. terminal.log child terminated due to signal15; STreturn1 is retained, not relabeled0. FFmpeg255 acceptedSIGINT. No new application fatal report observed; normal graceful application shutdown is not proven by this run."
+  },
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 2839321,
+        "start_ticks": 23456857,
+        "returncode": 0
+      },
+      {
+        "pid": 2839348,
+        "start_ticks": 23456925,
+        "returncode": 0
+      },
+      {
+        "pid": 2839350,
+        "start_ticks": 23456932,
+        "returncode": 1
+      },
+      {
+        "pid": 2839351,
+        "start_ticks": 23456937,
+        "custody": "verified launch identity transferred to installed ObservedProcess"
+      },
+      {
+        "pid": 2839357,
+        "start_ticks": 23456989,
+        "returncode": 0
+      },
+      {
+        "pid": 2839358,
+        "start_ticks": 23456997,
+        "returncode": 0
+      },
+      {
+        "pid": 2839359,
+        "start_ticks": 23457005,
+        "returncode": 0
+      },
+      {
+        "pid": 2839360,
+        "start_ticks": 23457014,
+        "returncode": 255
+      },
+      {
+        "pid": 2839710,
+        "start_ticks": 23458215,
+        "returncode": 0
+      },
+      {
+        "pid": 2839715,
+        "start_ticks": 23458242,
+        "returncode": 0
+      },
+      {
+        "pid": 2839720,
+        "start_ticks": 23458275,
+        "returncode": 1
+      }
+    ]
+  },
+  "original_owner_after": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "mode": "existing_thread",
+    "name": "nra-architecture",
+    "identity": {
+      "pid": 2823983,
+      "start_time": 23393932
+    },
+    "original_owner_alive": true
+  },
+  "native_prompts": 0,
+  "provider_calls": 0,
+  "owner_restarts": 0,
+  "replays": 0,
+  "navigation_limits": "DM/IRC/tab/channel clicks not executed by unchanged driver. Current existing inbound/outbound statuses visible, no fresh input or delivery test. Critical215 full native/source journey acceptance remains separate.",
+  "remaining": "Full227TC1/T9, warm prepared/rendered A/B/A resources/draft/undo, focus/nonprintablekeys, growing-end/adaptivepartialgaps and CPU work not closed by this scope."
+}

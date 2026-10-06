@@ -1,0 +1,28 @@
+{
+  "child": "compaction501-live-architecture-memory",
+  "parent": "openhcs-architecture-memory",
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "prefix": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/runtime-compaction499-operation-observation-20261001",
+  "native_package": "/home/ts/wt/comms-selected-native-compaction-budget-20261001/stack/.pi-native-5184ffa6d842fe23/node_modules/@earendil-works/pi-coding-agent",
+  "results": [
+    {
+      "thread": "compaction501-live-architecture-memory",
+      "previous_pid": 2643504,
+      "pid": 2644125
+    }
+  ],
+  "checks": {
+    "same_session": true,
+    "same_worktree": true,
+    "same_model": true,
+    "same_thinking": true,
+    "same_tags": true,
+    "same_home": true,
+    "same_config": true,
+    "candidate_native": true,
+    "same_backend_args": true,
+    "same_provider_credentials": true
+  },
+  "original_input_retried": false,
+  "default_route_unchanged": true
+}

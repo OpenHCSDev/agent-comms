@@ -1,0 +1,54 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/g458j/tools/continuous-retained.py", line 97, in acceptance
+    await base.continuous(app,pilot,agent,comms,entered,release,hold_next,requests)
+  File "/home/ts/wt/comms-c1-terminal-data-20260930/evidence/c1-terminal-data-20260930/installed33/continuous-with-menu-preflight-guarded.py", line 116, in continuous
+    await run_continuous(app,pilot,agent,comms,entered,release,hold_next,requests)
+  File "/home/ts/wt/comms-c1-terminal-data-20260930/evidence/c1-terminal-data-20260930/installed33/continuous-with-menu-preflight-guarded.py", line 112, in run_continuous
+    await acceptance(app,pilot,agent,comms,entered,release,hold_next,requests)
+  File "/home/ts/wt/toad-native-fixture-cleanup-20260930/tests/input_visibility_native_installed_pilot.py", line 258, in acceptance
+    await app.submit_editor(view, pilot, comms, 'VISIBILITY_CANCEL_STARTED')
+  File "/home/ts/wt/toad-native-fixture-cleanup-20260930/tests/input_visibility_native_installed_pilot.py", line 130, in submit_editor
+    async with self.input_presentation_gate(view, pilot, comms, text):
+               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 221, in __aexit__
+    await anext(self.gen)
+  File "/home/ts/wt/toad-native-fixture-cleanup-20260930/tests/input_visibility_native_installed_pilot.py", line 153, in input_presentation_gate
+    await until(pilot, capture.receipt.done)
+  File "/home/ts/wt/toad-native-fixture-cleanup-20260930/tests/l0a_native_installed_pilot.py", line 52, in until
+    await pilot.pause(0.05)
+  File "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/lib/python3.14/site-packages/textual/pilot.py", line 547, in pause
+    self.app.screen._on_timer_update()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/lib/python3.14/site-packages/toad/screens/workspace.py", line 172, in _on_timer_update
+    super()._on_timer_update()
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/lib/python3.14/site-packages/textual/screen.py", line 1288, in _on_timer_update
+    self._compositor_refresh()
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/lib/python3.14/site-packages/textual/screen.py", line 1254, in _compositor_refresh
+    app._display(self, update)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-native-fixture-cleanup-20260930/tests/input_visibility_native_installed_pilot.py", line 197, in _display
+    self.observe_input_paint(frame)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/home/ts/wt/g458j/tools/continuous-retained.py", line 43, in observe_input_paint
+    'original_turn_state':FieldCodec.encode(view.turns.owner.state),'thread_presentation':FieldCodec.encode(source),
+                                                                                          ~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/lib/python3.14/site-packages/agent_comms/field_codec.py", line 267, in encode
+    hints = cls._types(type(value))
+  File "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/lib/python3.14/site-packages/agent_comms/field_codec.py", line 251, in _types
+    return get_type_hints(declaration, include_extras=True)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py", line 2391, in get_type_hints
+    value = _eval_type(value, base_globals, base_locals, (),
+                       format=format, owner=obj, prefer_fwd_module=True)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py", line 461, in _eval_type
+    return evaluate_forward_ref(t, globals=globalns, locals=localns,
+                                type_params=type_params, owner=owner,
+                                _recursive_guard=recursive_guard, format=format)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py", line 1000, in evaluate_forward_ref
+    value = forward_ref.evaluate(globals=globals, locals=locals,
+                                 type_params=type_params, owner=owner, format=format)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/annotationlib.py", line 205, in evaluate
+    return eval(code, globals=globals, locals=locals)
+  File "<string>", line 1, in <module>
+NameError: name 'MessageNotification' is not defined

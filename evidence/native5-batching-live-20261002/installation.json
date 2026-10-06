@@ -1,0 +1,50 @@
+{
+  "state": "default installed; actual saved-history startup Ready; configured-provider mixed-route batch journey passed",
+  "prefix": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-native5-batch490-20261001",
+  "pins": {
+    "agent_comms": "b28349027052a57c50b17952a11dcfae2e71f31e",
+    "toad": "2ca4d89474699891a34001728af70b85d9460223",
+    "textual": "e36d7ee4b8b1945ebf90fcb840753a68fe2ae16d"
+  },
+  "native_manifest": "5184ffa6d842fe232b370e40f9ee532696e9f83b789ab009e047c9f164026c68",
+  "source_proof": {
+    "path": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/native5-batch-release-20261001/source-proof.json",
+    "sha256": "41a7aea9b56bf55e22b4494225b706b2225866516b1d580e818f54678ec21ee1"
+  },
+  "batch_elapsed_seconds": 23.512330400000792,
+  "batch_gate": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/native5-batch-release-20261001/installed-mixedroute02.json",
+  "original_failed_cutover": "/home/ts/wt/comms-cleanup-live-integration-20260929/.release-private/native5-batch490-20261002/publication.json",
+  "original_failure": "EXDEV before first store replacement; all38 protected originals confirmed unchanged",
+  "reviewed_continuation": "/home/ts/wt/comms-cleanup-live-integration-20260929/.release-private/native5-batch490-20261002/reviewed-continuation.json",
+  "launch_policy": "ordinary authorized OwnerLifecycle.start; canonical Thread/model/thinking/session/settings; no fabricated RetainedOwnerLaunch environment proof",
+  "canonical_thread_settings_preserved": 19,
+  "non_carried_original_files_byte_invariant": 36,
+  "native_inputs_preserved": 532,
+  "prompt_bindings_preserved": 532,
+  "original_triage_sources_preserved": 443,
+  "original_input_replays": 0,
+  "reconstructed_proofs": 0,
+  "operator_fix": {
+    "source_commit": "359bc64cea1910781f20a525140edb9905184bc9",
+    "parent_commit": "61c7754b",
+    "lines_added": 14,
+    "lines_deleted": 15,
+    "owner": "existing private_sidecar._publish for BOTH carried snapshots"
+  },
+  "actual_default_ui": {
+    "receipt": "/home/ts/.cache/agent-scratch/parent-native5batch490-default-ui-20261002/receipt.json",
+    "image": "/home/ts/.cache/agent-scratch/parent-native5batch490-default-ui-20261002/before.png",
+    "personally_viewed": true,
+    "thread": "openhcs-helper",
+    "status": "Ready",
+    "capture_completed": true,
+    "original_owner_unchanged": true,
+    "cleanup_errors": []
+  },
+  "limits": [
+    "Startup verified in real public default entrypoint; mixed-route batching verified on actual configured provider in installed isolated route. Public channel backlog response still awaits user confirmation.",
+    "Historical error alerts and UNKNOWN attempts preserved; not replayed or reclassified.",
+    "No scrolling or wider lifecycle latency readiness claim.",
+    "Original retained launch environment snapshots lost at failed operator exit; ordinary authorized starts used canonical saved Thread settings, no fabricated RetainedOwnerLaunch proof."
+  ]
+}

@@ -1,0 +1,181 @@
+{
+  "as_of": "2026-10-02T11:45:25.062640+00:00",
+  "default_prefix": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-progress528-source-resource525-20261002",
+  "prs": [
+    {
+      "createdAt": "2026-10-02T11:23:20Z",
+      "headRefName": "fix/selected-publication-custody-20261002",
+      "headRefOid": "ce8df6c6dac0347753a1b82db30427ab01acbf82",
+      "isDraft": true,
+      "number": 530,
+      "title": "Close selected source publication through original owner custody",
+      "updatedAt": "2026-10-02T11:23:20Z",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/530",
+      "repo": "agent-comms",
+      "worktrees": [
+        {
+          "branch": "fix/selected-publication-custody-20261002",
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+          "head": "ce8df6c6dac0347753a1b82db30427ab01acbf82",
+          "exists": true
+        }
+      ],
+      "owner": "Mendel",
+      "scope": "Input proof and selected publication through original custody"
+    },
+    {
+      "createdAt": "2026-10-02T10:44:14Z",
+      "headRefName": "fix/compaction-source-successor-20261002",
+      "headRefOid": "761864c828b08eccd157445f1e5476276bcec0b3",
+      "isDraft": true,
+      "number": 529,
+      "title": "Derive compaction freshness from original preserved facts",
+      "updatedAt": "2026-10-02T11:39:46Z",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/529",
+      "repo": "agent-comms",
+      "worktrees": [
+        {
+          "branch": "fix/compaction-source-successor-20261002",
+          "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002",
+          "head": "761864c828b08eccd157445f1e5476276bcec0b3",
+          "exists": true
+        }
+      ],
+      "owner": "Arendt",
+      "scope": "Canonical compaction source/freshness; joined generation policy gate"
+    },
+    {
+      "createdAt": "2026-10-02T10:14:25Z",
+      "headRefName": "feat/route-owned-summary-prefix-20261002",
+      "headRefOid": "a758fac02d9acd4a287e5c9d7f8fd73862ac9552",
+      "isDraft": true,
+      "number": 527,
+      "title": "Implement route-owned prefix summary reuse through existing native owners",
+      "updatedAt": "2026-10-02T11:02:39Z",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/527",
+      "repo": "agent-comms",
+      "worktrees": [],
+      "owner": "Mendel",
+      "scope": "S3 route-owned prefix reuse; parked behind user latency"
+    },
+    {
+      "createdAt": "2026-10-02T08:09:17Z",
+      "headRefName": "feat/task-aware-compaction-timing-20261002",
+      "headRefOid": "0fcc1434754131c74983f6cb4abb4a91e3895e0e",
+      "isDraft": true,
+      "number": 520,
+      "title": "Implement task-aware compaction timing through existing source and policy owners",
+      "updatedAt": "2026-10-02T11:45:19Z",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/520",
+      "repo": "agent-comms",
+      "worktrees": [
+        {
+          "branch": "feat/task-aware-compaction-timing-20261002",
+          "path": "/home/ts/wt/comms-retained-human-main-20261001",
+          "head": "0fcc1434754131c74983f6cb4abb4a91e3895e0e",
+          "exists": true
+        }
+      ],
+      "owner": "Einstein / Schrodinger",
+      "scope": "S1 task timing, generation intent, configured saved-fork acceptance"
+    },
+    {
+      "createdAt": "2026-09-30T00:21:49Z",
+      "headRefName": "refactor/cleanup-live-integration-20260929",
+      "headRefOid": "95aa70af942573e1c2bc3ca09be8a16a20f20fbc",
+      "isDraft": true,
+      "number": 432,
+      "title": "Track live checkpoint and remaining nominal integration scope",
+      "updatedAt": "2026-10-02T11:43:38Z",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/432",
+      "repo": "agent-comms",
+      "worktrees": [
+        {
+          "branch": "refactor/cleanup-live-integration-20260929",
+          "path": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+          "head": "95aa70af942573e1c2bc3ca09be8a16a20f20fbc",
+          "exists": true
+        }
+      ],
+      "owner": "Parent",
+      "scope": "Integration tracking; never merge wholesale"
+    },
+    {
+      "createdAt": "2026-10-02T11:41:14Z",
+      "headRefName": "perf/sidebar-publication-after322-20261002",
+      "headRefOid": "5a0cf5514810bb715fdf51a1526d67d5c5cb68e1",
+      "isDraft": true,
+      "number": 323,
+      "title": "perf: derive sidebar publications from retained row output",
+      "updatedAt": "2026-10-02T11:41:14Z",
+      "url": "https://github.com/OpenHCSDev/toad/pull/323",
+      "repo": "toad",
+      "worktrees": [
+        {
+          "branch": "perf/sidebar-publication-after322-20261002",
+          "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001",
+          "head": "7d93f7b51bca2031e66e7252d000d3cf8787f76d",
+          "exists": true
+        }
+      ],
+      "owner": "Heisenberg",
+      "scope": "Sidebar output/row custody and remaining full performance scope"
+    },
+    {
+      "createdAt": "2026-10-02T09:47:13Z",
+      "headRefName": "deploy/task-aware-timing-candidate-20261002",
+      "headRefOid": "c324daca0c3032792088dace020d87a639acf6a1",
+      "isDraft": true,
+      "number": 317,
+      "title": "Pair task-aware compaction timing with current native owners",
+      "updatedAt": "2026-10-02T10:00:59Z",
+      "url": "https://github.com/OpenHCSDev/toad/pull/317",
+      "repo": "toad",
+      "worktrees": [
+        {
+          "branch": "deploy/task-aware-timing-candidate-20261002",
+          "path": "/home/ts/wt/toad-native6-wire-source-pin-20261002",
+          "head": "c324daca0c3032792088dace020d87a639acf6a1",
+          "exists": true
+        }
+      ],
+      "owner": "Einstein / Schrodinger",
+      "scope": "Paired candidate for520; source checkpoint retained"
+    },
+    {
+      "createdAt": "2026-10-02T05:46:32Z",
+      "headRefName": "feat/context-tree-inspector-20261002",
+      "headRefOid": "30edca12da1c0870fc4443a20947a9a9562d078d",
+      "isDraft": true,
+      "number": 309,
+      "title": "Draft: plan read-only Textual context tree and detail pane",
+      "updatedAt": "2026-10-02T05:46:32Z",
+      "url": "https://github.com/OpenHCSDev/toad/pull/309",
+      "repo": "toad",
+      "worktrees": [],
+      "owner": "compaction499-live-architecture-memory",
+      "scope": "Planning only; no implementation authorization"
+    },
+    {
+      "createdAt": "2026-10-02T11:43:53Z",
+      "headRefName": "feat/native-scroll-geometry-targets-20261002",
+      "headRefOid": "e899df5d29b922802fa0797703b06526a8c4ee2e",
+      "isDraft": true,
+      "number": 26,
+      "title": "Preserve declared geometry targets through native scroll reflow",
+      "updatedAt": "2026-10-02T11:45:17Z",
+      "url": "https://github.com/OpenHCSDev/textual/pull/26",
+      "repo": "textual",
+      "worktrees": [
+        {
+          "branch": "feat/native-scroll-geometry-targets-20261002",
+          "path": "/home/ts/wt/textual-native-subtree-strips-20261002",
+          "head": "e899df5d29b922802fa0797703b06526a8c4ee2e",
+          "exists": true
+        }
+      ],
+      "owner": "Kepler",
+      "scope": "Native Screen scroll reflow preserves canonical geometry targets"
+    }
+  ]
+}

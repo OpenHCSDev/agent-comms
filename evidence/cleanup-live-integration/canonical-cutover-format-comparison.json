@@ -1,0 +1,31 @@
+{
+  "state": "declared-source-format-comparison-not-live-cutover",
+  "source": "41a83508e579be6c1adf3be28c582da24c865bbe",
+  "installed_core": "72062939239b0f07707406309305a056a23f925f",
+  "digests": {
+    "installed720": {
+      "compaction_journal": "96db37ef24041cca418b17d8ad38997c8dd793a9bc2d0c0612e4885468321fe9",
+      "coordination": "811eaf5e152e6b171fe8ee15a75654f4bce17851c908d3211058776f0fde8ecd",
+      "native_runtime": "a133b2a34bf03a73e77b21b797369beab418dc799b23f46a0cd6e84b34c0409e",
+      "durable_transcript_routes": "e220d6df54f529dea77f74b9facfdee47a624dd5e778aabca33b6de22d730c57",
+      "private_bus_checkpoint": "3ad18177026b9e35b865242bc4659dc78554d00bc974e3650d047d0256ffc0aa",
+      "input_document": "3a40daf93c0bd602bd456f60435e673219ec0ec4d21720c3ff4acecf9f2203e5",
+      "input_attempts": "eb1c85827b5ceb4747860f90a0de869e988c8e015e3b99a4112d1d644fd5112d"
+    },
+    "current41": {
+      "compaction_journal": "96db37ef24041cca418b17d8ad38997c8dd793a9bc2d0c0612e4885468321fe9",
+      "coordination": "811eaf5e152e6b171fe8ee15a75654f4bce17851c908d3211058776f0fde8ecd",
+      "native_runtime": "a133b2a34bf03a73e77b21b797369beab418dc799b23f46a0cd6e84b34c0409e",
+      "durable_transcript_routes": "e220d6df54f529dea77f74b9facfdee47a624dd5e778aabca33b6de22d730c57",
+      "private_bus_checkpoint": "7b59d15d774e37c0b2892df53f779767c52180d80794364b952f743a7cd97efb",
+      "input_document": "3a40daf93c0bd602bd456f60435e673219ec0ec4d21720c3ff4acecf9f2203e5",
+      "input_attempts": "eb1c85827b5ceb4747860f90a0de869e988c8e015e3b99a4112d1d644fd5112d"
+    }
+  },
+  "changed": [
+    "private_bus_checkpoint"
+  ],
+  "store_reads": 0,
+  "store_mutations": 0,
+  "boundary": "old installed declarations versus current source declarations in isolated child imports; no index or input journal read"
+}

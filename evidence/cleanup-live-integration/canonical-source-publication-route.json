@@ -1,0 +1,21 @@
+{
+  "state": "canonical-active-route-published-default-ui-verification-pending",
+  "publisher": "agent_comms.active_route._publish_active_route_locked",
+  "expected": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "wire_root_id": "e206f3766e60451a989ca34df0e2a94b",
+    "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent",
+    "version": 1
+  },
+  "published": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "wire_root_id": "e206f3766e60451a989ca34df0e2a94b",
+    "native_package": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent",
+    "version": 1
+  },
+  "route_mode": "0o600",
+  "owner_restarts": 0,
+  "input_replays": 0,
+  "provider_calls": 0,
+  "failure_attempt": "comms-canonical-source-default-entrypoint-20260930-attempt01 rejected before UI; preserved"
+}

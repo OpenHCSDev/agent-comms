@@ -1,0 +1,27 @@
+{
+  "state": "accepted checkpoints merged; final bus checkpoint validation in progress; default unchanged",
+  "core505_merge": "5cdda0b8405e7b2f825fcd932fc304aeefa7c569",
+  "toad297_merge": "fea779d1e9dab9a53cbf33f69653b40d6280f06d",
+  "toad300_receiving_head": "761ffc16234783949080a391c69e66d0ac012bbb",
+  "core508_source": "74877f2dd108ed211871a098064178eaf3a4fdb5",
+  "current_default": "runtime-purechannel502-20261002",
+  "facts": {
+    "actual_shared_lock_holder": "Original Toad2932308 ChannelPreparation/HistoryReadRequest.read\u2192latest_sequence\u2192full typedlog scan under EXbuslock; others waiting",
+    "bus508": "committed sequence derives once from acquired original certified prefix; reservation ahead of committed prefix remains distinct; broader async snapshot/publication source lifetime work continues",
+    "relevance505": "one original instruction; configured helperfork originalchannelTRIAGE\u2192FULL\u2192canonicalreply Responded passed; fresh selected cohortjournal distinct from43MB displayhistory",
+    "toad297": "whole command namespace/execution/advertisement owner closure; actualnative/ACP/st journey10.717s"
+  },
+  "preserved": {
+    "original326_327_replay": false,
+    "default_mutation": false,
+    "new_native_schema": false
+  },
+  "owners": {
+    "bus_integration": "Arendt #508/currentcheckpoint + #489/fullnative; asyncbus follow-up",
+    "cursor": "Singer #507 paired #503 Kepler",
+    "compaction": "Einstein #506",
+    "performance": "Heisenberg #298/Text21",
+    "Toad_async_bus_consumers": "Mendel",
+    "model_mode_T4": "Schrodinger"
+  }
+}

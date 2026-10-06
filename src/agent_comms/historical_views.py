@@ -161,6 +161,45 @@ class HistorySource:
         ):
             raise ValueError("Historical snapshot changed; restore it before browsing")
 
+    def require_original(self, root: Path) -> None:
+        """Admit an original typed acquisition before destination publication."""
+        root = root.resolve()
+        if self.root != str(root) or self.original_root != str(root):
+            raise ValueError("Recorded provenance belongs to another original source")
+        self.validate()
+        log = WireLog(root / "bus.jsonl")
+        info = log.path.stat()
+        if (log.read_metadata_unlocked(required=True).root_id != self.wire_root_id
+                or (info.st_dev, info.st_ino) != self.bus_identity or info.st_size != self.size):
+            raise ValueError("Recorded provenance lost original wire custody")
+
+    @classmethod
+    def require(cls, archive: HistoryArchive, key: str) -> HistorySource:
+        source = next((item for item in archive.sources() if item.key == key), None)
+        if source is None:
+            raise ValueError("Historical source detached; refresh history")
+        source.validate()
+        return source
+
+    def notification_references(self, archive: HistoryArchive, references):
+        """Borrow this attached namespace's frozen deliveries and durable receipts."""
+        from functools import partial
+
+        from .presentation import MessageNotification
+
+        def require_selected():
+            if self.require(archive, self.key) != self:
+                raise ValueError("Historical source changed; refresh history")
+
+        require_selected()
+        root = Path(self.root)
+        result = MessageNotification.read_references(
+            WireLog(root / "bus.jsonl"), references,
+            partial(MessageNotification.recorded_delivery_window, root, self.provenance),
+        )
+        require_selected()
+        return result
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class HistoricalMessage(Message):
@@ -282,7 +321,7 @@ class HistoryArchive:
             return ()
         return FieldCodec.decode(tuple[HistorySource, ...], raw)
 
-    def attach(self, source_root: Path) -> HistorySource:
+    def attach(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
         """Snapshot a preserved source, then publish it for ordinary display.
 
         Only destination files are written. No Comms constructor, source locks,
@@ -319,12 +358,21 @@ class HistoryArchive:
                     )
                 ]
                 revisions = tuple(file_revision(path) for path in paths)
+                if source_read is None:
+                    provenance = RegistryProvenance.capture(
+                        Registration(source_root / "registry.json").snapshot()
+                    )
+                else:
+                    source_read.require_original(source_root)
+                    provenance = source_read.provenance
                 for path in paths:
                     if path.exists():
                         shutil.copy2(path, stage / path.name)
                 TranscriptRoutes(source_root).snapshot(stage)
                 if revisions != tuple(file_revision(path) for path in paths):
                     raise ValueError("Historical source changed during snapshot; retry")
+                if source_read is not None:
+                    source_read.require_original(source_root)
                 bus_info = paths[0].stat() if paths[0].exists() else None
                 if bus_info is None:
                     (stage / "bus.jsonl").touch()
@@ -359,7 +407,7 @@ class HistoryArchive:
                     bus_info.st_size if bus_info else 0,
                     file_revision(stage / "bus.jsonl"),
                     file_revision(stage / "registry.json"),
-                    RegistryProvenance.capture(Registration(stage / "registry.json").snapshot()),
+                    provenance,
                 )
                 declarations = source.provenance.threads
                 previous = 0

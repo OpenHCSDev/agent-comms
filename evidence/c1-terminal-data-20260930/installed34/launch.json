@@ -1,0 +1,43 @@
+{
+  "pins": {
+    "agent-comms": "e191bcf44c292dfedc5b8b62b2b503f06de3ae7b",
+    "batrachian-toad": "1edd96c0cfa011a69782cdeb67138ceea98e227b",
+    "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+  },
+  "wrapper_pid": 440207,
+  "script_pid": 440218,
+  "argv": [
+    "script",
+    "-q",
+    "-e",
+    "-f",
+    "-T",
+    "/home/ts/wt/g458j/u03/terminal.timing",
+    "-c",
+    "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/bin/python /home/ts/wt/g458j/tools/continuous-retained.py",
+    "/home/ts/wt/g458j/u03/terminal.ansi"
+  ],
+  "activation_sha256": "f03e2370464094408d2a8cd3eb90966d55f8dcb6c75829e90cd86ab34ecfb043",
+  "private_fixture": "/home/ts/wt/g458j/u03/fixture",
+  "provider_budget": 5,
+  "paid_calls": 0,
+  "public_mutations": 0,
+  "old_input_replay": false,
+  "started_utc": "2026-10-01T03:28:43.627668+00:00",
+  "source_history_bytes": 41270331,
+  "driver_checkpoint": "44b3d52e",
+  "tool_sha256": {
+    "native-config-directory.mjs": "fc89e3139c5a353c36018aea03a5bfd7cf4f8fc2cde0f3d509579b06e016252c",
+    "run-continuous-retained.py": "e0fc3165afffddf0ef8c39031b9f0eb93392337b12a48f2d6c64237794d22c54",
+    "retained-prepare.py": "48cfea2bc043ec1534cf85cb1103b54a8930e101c6d7c2a8dcd87ace95ffef62",
+    "model-capabilities.mjs": "36ac01259aa72a5fd1a1cb50edf1f600224dae326e575f3fa8ade5e5fc291ced",
+    "continuous-retained.py": "0521bab188cb81a26462055ad12265e8073246f101d09fe88d8555bd92c3a22b"
+  },
+  "resource_preflight": {
+    "level": "warning",
+    "ram_available_gib": 20.6,
+    "home_free_gib": 24.8,
+    "swap_used_gib": 12.9,
+    "authorization": "one actual retained native lane alongside separate BUS root"
+  }
+}

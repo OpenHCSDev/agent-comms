@@ -1,0 +1,260 @@
+{
+  "pr": 287,
+  "status": "fully superseded packaging candidate; no unique product/tool/evidence behavior",
+  "branch_head": "2f4effb6f3277bed134b02bd735aafca48810320",
+  "current_main": "b9ebd4c0baf2495e2d74c87c2696458cf4826a87",
+  "common_ancestor": "ea968f4f9521137912c6370fe58ab3b3805ece5c",
+  "net_branch_only_paths": [
+    "pyproject.toml",
+    "uv.lock"
+  ],
+  "net_branch_only_numstat": "1\t1\tpyproject.toml\n2\t2\tuv.lock",
+  "production_tool_evidence_delta_to_common_ancestor": "empty",
+  "branch_only_commits": [
+    {
+      "commit": "39ef5a65adb4de63f41fb0a2edb9220fe48291e7",
+      "subject": "Pair compaction policy499 with viewport284 and native damage ownership",
+      "parents": [
+        "10a8a38f86cf67f502c817d782d8242cacddc7f9"
+      ],
+      "first_parent_files": [
+        "pyproject.toml",
+        "uv.lock"
+      ],
+      "stable_patch_id": "f3360f291e84648baea450c847d87927acc07ad4"
+    },
+    {
+      "commit": "7a29c5d5da54047e3d72f0d074805a13effa0d92",
+      "subject": "Integrate owned canonical fork capture with paired candidate",
+      "parents": [
+        "39ef5a65adb4de63f41fb0a2edb9220fe48291e7",
+        "0c05485b319f02b39a51576f41dc4725ac65ce33"
+      ],
+      "first_parent_files": [
+        "evidence/viewport-raster-cpu-after275/owned-fork-capture.md",
+        "tests/tools/record_installed_tui.py",
+        "tools/performance/click_history.py"
+      ],
+      "stable_patch_id": "602e0b7313a3c96166025783b8feae3eb28af118"
+    },
+    {
+      "commit": "d3b25016d5590e70b29e4661fa6e7c2016993930",
+      "subject": "Integrate parametric recorder budget and real compaction assessment",
+      "parents": [
+        "7a29c5d5da54047e3d72f0d074805a13effa0d92",
+        "ea968f4f9521137912c6370fe58ab3b3805ece5c"
+      ],
+      "first_parent_files": [
+        "evidence/viewport-raster-cpu-after275/canonical-compaction-capture01-partial.json",
+        "evidence/viewport-raster-cpu-after275/canonical-compaction-observation.md",
+        "tests/tools/record_installed_tui.py"
+      ],
+      "stable_patch_id": "750b64f8bf2c48d8e24f6e51d6e83cc0f4b062bc"
+    },
+    {
+      "commit": "9c110000b5fb2455fc26cf7dcdb0c15c6e50df4c",
+      "subject": "Pin complete compaction result family and caller closure",
+      "parents": [
+        "d3b25016d5590e70b29e4661fa6e7c2016993930"
+      ],
+      "first_parent_files": [
+        "pyproject.toml",
+        "uv.lock"
+      ],
+      "stable_patch_id": "643b2fecd4db27ed68ffc30a5b811ef60f779f23"
+    },
+    {
+      "commit": "2f4effb6f3277bed134b02bd735aafca48810320",
+      "subject": "Pair aggregate compaction progress ownership with complete result family",
+      "parents": [
+        "9c110000b5fb2455fc26cf7dcdb0c15c6e50df4c"
+      ],
+      "first_parent_files": [
+        "pyproject.toml",
+        "uv.lock"
+      ],
+      "stable_patch_id": "8f2a353a802ead8db908917d9f4ae771f4090882"
+    }
+  ],
+  "retained_committed_evidence": [
+    {
+      "path": "evidence/viewport-raster-cpu-after275/OWNER.md",
+      "branch_blob": "ef1aa7b5db2313036ae5653e2604e4bcfc79d702",
+      "main_blob": "ef1aa7b5db2313036ae5653e2604e4bcfc79d702",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/canonical-compaction-capture01-partial.json",
+      "branch_blob": "a73291ae6b24a0cc6dbf7efc729a1d79c349ec82",
+      "main_blob": "a73291ae6b24a0cc6dbf7efc729a1d79c349ec82",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/canonical-compaction-observation.md",
+      "branch_blob": "36c0f8bcc8b0daa60a1683920124af9f89eb8d2b",
+      "main_blob": "36c0f8bcc8b0daa60a1683920124af9f89eb8d2b",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/damage-stage-ownership.json",
+      "branch_blob": "a0ccd481d629a5cc4de145ae222d149a9fb62755",
+      "main_blob": "a0ccd481d629a5cc4de145ae222d149a9fb62755",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/damage-stage-source-proof.json",
+      "branch_blob": "563490361e5d7671c1def714379f7406df5ffc5d",
+      "main_blob": "563490361e5d7671c1def714379f7406df5ffc5d",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/host-read-admission07.json",
+      "branch_blob": "53d09170c73d328a6e4844234200db6d97b401be",
+      "main_blob": "53d09170c73d328a6e4844234200db6d97b401be",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/installed-capture02-partial.json",
+      "branch_blob": "0c78f478eee9a7cf024f3c03ac71ba2e9db519f9",
+      "main_blob": "0c78f478eee9a7cf024f3c03ac71ba2e9db519f9",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/installed-capture03-partial.json",
+      "branch_blob": "0f2fb04724c2dcc58c4bd2d01f821dcf972a8b7f",
+      "main_blob": "0f2fb04724c2dcc58c4bd2d01f821dcf972a8b7f",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/installed-capture05-review.json",
+      "branch_blob": "f612b583e1daec68e40d95ea6ec69eb419550390",
+      "main_blob": "f612b583e1daec68e40d95ea6ec69eb419550390",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/installed-capture06-partial.json",
+      "branch_blob": "afca03c4ef41ef45f12741bd446af3eaf2c00606",
+      "main_blob": "afca03c4ef41ef45f12741bd446af3eaf2c00606",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/installed-capture07-partial.json",
+      "branch_blob": "23d7105bd09406758fdf2f3b168d049bbbfb99bd",
+      "main_blob": "23d7105bd09406758fdf2f3b168d049bbbfb99bd",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/lock.log",
+      "branch_blob": "f0f2af44d5b7b0f4015dc5c1add87d1196df1ae9",
+      "main_blob": "f0f2af44d5b7b0f4015dc5c1add87d1196df1ae9",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/lock02.log",
+      "branch_blob": "16632e7ba75775cc4c33d4487fa6c24563414fe2",
+      "main_blob": "16632e7ba75775cc4c33d4487fa6c24563414fe2",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/lock03.log",
+      "branch_blob": "67e8843b11e48abfabf6e5d0fe72e4d58929f696",
+      "main_blob": "67e8843b11e48abfabf6e5d0fe72e4d58929f696",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/owned-fork-capture.md",
+      "branch_blob": "69db5d91fd81f101fcb41bb9e16e107312213fa0",
+      "main_blob": "69db5d91fd81f101fcb41bb9e16e107312213fa0",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/publication-stage-ownership.json",
+      "branch_blob": "bf165d617a811c4ff2d3775863981d0a8a12ac31",
+      "main_blob": "bf165d617a811c4ff2d3775863981d0a8a12ac31",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/publication-stage-source-proof.json",
+      "branch_blob": "6a17e0fc101c55d27bc2f23eb162dd330a8c20ba",
+      "main_blob": "6a17e0fc101c55d27bc2f23eb162dd330a8c20ba",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/reader283-stationary-review.json",
+      "branch_blob": "e5ef2079037b675fbe3c0beb56c3c265dc33fcec",
+      "main_blob": "e5ef2079037b675fbe3c0beb56c3c265dc33fcec",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/scene-owner-ast-query.json",
+      "branch_blob": "c10722c5de5cbe1bd3d9632da35608374f355c54",
+      "main_blob": "c10722c5de5cbe1bd3d9632da35608374f355c54",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/scene-owner-query.py",
+      "branch_blob": "ad3b90a54b139d7cda84749e82059b84acdc3d6a",
+      "main_blob": "ad3b90a54b139d7cda84749e82059b84acdc3d6a",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/source-fidelity-census.md",
+      "branch_blob": "f40c54bcfd84eeb2aabe02ab4377b48d72e23b08",
+      "main_blob": "f40c54bcfd84eeb2aabe02ab4377b48d72e23b08",
+      "identical": true
+    },
+    {
+      "path": "evidence/viewport-raster-cpu-after275/source-fidelity-sanity.json",
+      "branch_blob": "14c662f60c2465269500616ca48016950544419e",
+      "main_blob": "14c662f60c2465269500616ca48016950544419e",
+      "identical": true
+    }
+  ],
+  "newer_main_source_evolution": {
+    "added": 480,
+    "deleted": 335,
+    "files": 12,
+    "note": "changes already landed by other PRs, no new source changes in this reconciliation"
+  },
+  "remaining_owner": "Heisenberg295 owns CPU/raster/viewport/TC1T9, not a unique287 implementation",
+  "artifacts_preserved": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts",
+  "originals": "canonical499/501 sessions, UNKNOWN input/compaction records and all raw capture evidence preserved; no replay/build/tests",
+  "dependency_and_owner_ancestry": [
+    {
+      "scope": "Core499 frozen native policy",
+      "original": "07934d583cd1175f17a8843d3e7feec5093c2fb5",
+      "current": "5c74f0ec700e4d83886e2f6fdaea4e1e19ad0d77",
+      "ancestor_exit": 0
+    },
+    {
+      "scope": "Core499 full family plus501",
+      "original": "29248ed03469be4be4eaacdf782dc9d656a656bc",
+      "current": "5c74f0ec700e4d83886e2f6fdaea4e1e19ad0d77",
+      "ancestor_exit": 0
+    },
+    {
+      "scope": "Textual19 native damage ownership",
+      "original": "55954718732586f5a89f6f664b78a9b1e6e01f6a",
+      "current": "68a0d1cf62fdde8aeef9834836ecf0caf7b169c7",
+      "ancestor_exit": 0
+    },
+    {
+      "scope": "Toad284 candidate family",
+      "original": "10a8a38f86cf67f502c817d782d8242cacddc7f9",
+      "current": "b9ebd4c0baf2495e2d74c87c2696458cf4826a87",
+      "ancestor_exit": 0
+    },
+    {
+      "scope": "OwnedForkCapture source",
+      "original": "0c05485b319f02b39a51576f41dc4725ac65ce33",
+      "current": "b9ebd4c0baf2495e2d74c87c2696458cf4826a87",
+      "ancestor_exit": 0
+    },
+    {
+      "scope": "Parametric capture/evidence",
+      "original": "ea968f4f9521137912c6370fe58ab3b3805ece5c",
+      "current": "b9ebd4c0baf2495e2d74c87c2696458cf4826a87",
+      "ancestor_exit": 0
+    }
+  ]
+}

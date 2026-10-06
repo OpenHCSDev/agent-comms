@@ -1,0 +1,45 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/lib/python3.14/site-packages/toad/cli.py", line 37, in run_terminal
+    app.run()
+    ~~~~~~~^^
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/lib/python3.14/site-packages/textual/app.py", line 2352, in run
+    return asyncio.run(run_app())
+           ~~~~~~~~~~~^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/lib/python3.14/site-packages/textual/app.py", line 2338, in run_app
+    return await self.run_async(
+           ^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/lib/python3.14/site-packages/textual/app.py", line 2302, in run_async
+    await asyncio.shield(app._shutdown())
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/lib/python3.14/site-packages/textual/app.py", line 3746, in _shutdown
+    await self._close_all()
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/lib/python3.14/site-packages/toad/app.py", line 336, in _close_all
+    await super()._close_all()
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/lib/python3.14/site-packages/toad/workspace_sessions.py", line 179, in _close_all
+    await self.workspace_sessions.aclose()
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/lib/python3.14/site-packages/toad/workspace_sessions.py", line 169, in aclose
+    await self.app.workspace_chrome.native.close()
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/lib/python3.14/site-packages/toad/session_presentation.py", line 287, in close
+    await self._remove(owner)
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/lib/python3.14/site-packages/toad/session_presentation.py", line 267, in _remove
+    await conversation.release_native_session()
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/lib/python3.14/site-packages/toad/widgets/conversation.py", line 507, in release_native_session
+    await self.transcript.close()
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/lib/python3.14/site-packages/toad/transcript_publication.py", line 624, in close
+    await self.suspend()
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/lib/python3.14/site-packages/toad/transcript_publication.py", line 645, in suspend
+    await worker.wait()
+  File "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-summary529-geometry322-20261002/lib/python3.14/site-packages/textual/worker.py", line 467, in wait
+    raise WorkerFailed(self._error)
+textual.worker.WorkerFailed: Worker raised exception: OperationalError('database is locked')

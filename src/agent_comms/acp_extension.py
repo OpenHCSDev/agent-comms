@@ -499,9 +499,9 @@ class TranscriptSnapshotUpdate(AgentCommsUpdate):
     identity: TranscriptReadIdentity
 
     @classmethod
-    def capture(cls, transcripts, name):
+    def capture(cls, transcripts, name, *, historical_source=None):
         """Publish the page together with the source witness that read it."""
-        read = transcripts.capture_page_read(name)
+        read = transcripts.capture_page_read(name, historical_source=historical_source)
         return cls(read.read(), read.identity)
 
 

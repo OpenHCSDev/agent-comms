@@ -1,0 +1,9 @@
+{
+  "owned_fixture_roots": [
+    "/home/ts/wt/g460b/v01",
+    "/home/ts/wt/g460b/v02",
+    "/home/ts/wt/g460b/v03"
+  ],
+  "live_process_references": [],
+  "scope": "cmdline/environment private-root/attempt references; original source bytes also verified unchanged"
+}

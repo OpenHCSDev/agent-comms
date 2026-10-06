@@ -1,0 +1,237 @@
+{
+  "owner": "Schrodinger",
+  "created_utc": "2026-10-02T02:21:11Z",
+  "shared_body_archive": "/home/ts/.cache/agent-scratch/sch-owned-cleanup-20261002/215-shared-original-history.jsonl.gz",
+  "archive_sha256": "48976ac68bac47e793b44fd607e16af2faa45bf57ed6adeb2498f80513680f0f",
+  "forks": [
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/composition215-01/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-composition215-01-project--/2026-09-30T05-38-32-280Z_01a0f0d2-58d9-7130-a8ad-a8659bed087f.jsonl",
+      "bytes": 41270320,
+      "allocated": 41271296,
+      "sha256": "a9dc12f12da462dc4f85e2f97d50f9b308c00f6a533b8a023c009c9475f29194",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f0d2-58d9-7130-a8ad-a8659bed087f\",\"timestamp\":\"2026-09-30T05:38:32.280Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/composition215-01/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/composition215-01/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-composition215-01-project--/2026-09-30T05-38-34-109Z_01a0f0d2-5ffd-75eb-8d68-66e078b78c82.jsonl",
+      "bytes": 41270320,
+      "allocated": 41271296,
+      "sha256": "65de5a5b0ae39390b183826a570bb19a06c260fcd583982006e1de1d9b00f9a8",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f0d2-5ffd-75eb-8d68-66e078b78c82\",\"timestamp\":\"2026-09-30T05:38:34.109Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/composition215-01/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/composition215-02/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-composition215-02-project--/2026-09-30T06-25-36-766Z_01a0f0fd-71fe-70ed-8db7-f72718acc14d.jsonl",
+      "bytes": 41270320,
+      "allocated": 41271296,
+      "sha256": "883b81712576ee03cf8d3df5bc2acd21fbec0606ff753778022be0357bdf1fcf",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f0fd-71fe-70ed-8db7-f72718acc14d\",\"timestamp\":\"2026-09-30T06:25:36.766Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/composition215-02/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/composition215-02/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-composition215-02-project--/2026-09-30T06-25-38-720Z_01a0f0fd-79a1-7540-bd66-64aec920a940.jsonl",
+      "bytes": 41270320,
+      "allocated": 41275392,
+      "sha256": "67be74270fa41d8a92c02343d9cf272ad925ef113b0a322b7fa7def4662ce370",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f0fd-79a1-7540-bd66-64aec920a940\",\"timestamp\":\"2026-09-30T06:25:38.720Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/composition215-02/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-01/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-read-custody215-01-project--/2026-09-30T03-44-08-158Z_01a0f069-9bdf-7135-b141-69789716cf9f.jsonl",
+      "bytes": 41270321,
+      "allocated": 41275392,
+      "sha256": "b38f2c1a06204f90047ceb5fd3bcf843f83dfbbfcf424cf2475ff3e3df42f67c",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f069-9bdf-7135-b141-69789716cf9f\",\"timestamp\":\"2026-09-30T03:44:08.158Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-01/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-01/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-read-custody215-01-project--/2026-09-30T03-44-10-001Z_01a0f069-a312-703e-a2e1-d7544d22396f.jsonl",
+      "bytes": 41270321,
+      "allocated": 41271296,
+      "sha256": "c52ab1bf31953cc9d50ee878f48c8346e83144da12533152fcbeaba1a4173cf1",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f069-a312-703e-a2e1-d7544d22396f\",\"timestamp\":\"2026-09-30T03:44:10.001Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-01/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-02/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-read-custody215-02-project--/2026-09-30T03-46-19-450Z_01a0f06b-9cbb-7675-9a30-6396d6eb7a6b.jsonl",
+      "bytes": 41270321,
+      "allocated": 41271296,
+      "sha256": "24d654dabc43348974caddd85eeaa7b6d81a1103141be15092d8c7a77eb4365d",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f06b-9cbb-7675-9a30-6396d6eb7a6b\",\"timestamp\":\"2026-09-30T03:46:19.450Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-02/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-02/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-read-custody215-02-project--/2026-09-30T03-46-21-299Z_01a0f06b-a3f3-7021-93b6-794c6c91068b.jsonl",
+      "bytes": 41270321,
+      "allocated": 41271296,
+      "sha256": "f4011d9b3ea890ee56d67145008d0dc3803c388be11b17c1d2132cdf28631c13",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f06b-a3f3-7021-93b6-794c6c91068b\",\"timestamp\":\"2026-09-30T03:46:21.299Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-02/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-03/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-read-custody215-03-project--/2026-09-30T05-23-28-231Z_01a0f0c4-8d67-73d1-8b55-c98050626517.jsonl",
+      "bytes": 41270321,
+      "allocated": 41271296,
+      "sha256": "a044c7263541f2bc8f45ed63e858f75a8faf97b383180b598f1bf0b6ed500163",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f0c4-8d67-73d1-8b55-c98050626517\",\"timestamp\":\"2026-09-30T05:23:28.231Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-03/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-03/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-read-custody215-03-project--/2026-09-30T05-23-30-102Z_01a0f0c4-94b7-7324-80c3-7e19f1bfc998.jsonl",
+      "bytes": 41270321,
+      "allocated": 41271296,
+      "sha256": "c6eed4f682993c84ad5832104e845bd6a5f6944c3ec69b52b4d15e9547b47c16",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f0c4-94b7-7324-80c3-7e19f1bfc998\",\"timestamp\":\"2026-09-30T05:23:30.102Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-03/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-01/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-01-project--/2026-09-30T02-46-14-486Z_01a0f034-9ad7-75ec-952d-a63e11fffce9.jsonl",
+      "bytes": 41270318,
+      "allocated": 41271296,
+      "sha256": "5c6cc7208ba2520d04f9dc922cec0438dcd246411d4ec44a6acb166fc3945a45",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f034-9ad7-75ec-952d-a63e11fffce9\",\"timestamp\":\"2026-09-30T02:46:14.486Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-01/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-01/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-01-project--/2026-09-30T02-46-16-357Z_01a0f034-a226-7753-9956-d40c3cca818b.jsonl",
+      "bytes": 41270318,
+      "allocated": 41275392,
+      "sha256": "b2cc09a18c2a087608013c11a7402adce218fa782cbbbd512f96381bfbdc2f45",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f034-a226-7753-9956-d40c3cca818b\",\"timestamp\":\"2026-09-30T02:46:16.357Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-01/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-02/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-02-project--/2026-09-30T03-02-38-622Z_01a0f043-9f1f-70a9-aa8d-626cfa920927.jsonl",
+      "bytes": 41270318,
+      "allocated": 41275392,
+      "sha256": "0a91f91e9e30a4350cfd012182ba1901d3ba6bc123bdef97315260ff9dc4c882",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f043-9f1f-70a9-aa8d-626cfa920927\",\"timestamp\":\"2026-09-30T03:02:38.622Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-02/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-02/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-02-project--/2026-09-30T03-02-40-390Z_01a0f043-a607-7340-bd58-da59eb0f4c2e.jsonl",
+      "bytes": 41270318,
+      "allocated": 41275392,
+      "sha256": "c7dd8f997cdfa455dd4bd699435f3af1b1424825cbbe79fddc53c7ba060c4d21",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f043-a607-7340-bd58-da59eb0f4c2e\",\"timestamp\":\"2026-09-30T03:02:40.390Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-02/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-03/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-03-project--/2026-09-30T03-32-34-856Z_01a0f05f-07a9-705d-87c5-50d642b9d4df.jsonl",
+      "bytes": 41270318,
+      "allocated": 41275392,
+      "sha256": "cf16ece16c4e4526856159dfd992a142cd9303b82226d38653b8ba268234beb6",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f05f-07a9-705d-87c5-50d642b9d4df\",\"timestamp\":\"2026-09-30T03:32:34.856Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-03/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-03/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-03-project--/2026-09-30T03-32-36-697Z_01a0f05f-0eda-70f9-9b47-ec7a4d8db416.jsonl",
+      "bytes": 41270318,
+      "allocated": 41275392,
+      "sha256": "4c95252d1899bc04659b233cda96b843171a4c37fb26592494d61e1391a4461c",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f05f-0eda-70f9-9b47-ec7a4d8db416\",\"timestamp\":\"2026-09-30T03:32:36.697Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-03/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-04/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-04-project--/2026-09-30T04-37-44-072Z_01a0f09a-ae09-773d-b8e6-3070c9d1444f.jsonl",
+      "bytes": 41270318,
+      "allocated": 41275392,
+      "sha256": "d23163a7ab023a14b4e8ed02a7903ac80246738fe7d4f0b197921c56700c77ce",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f09a-ae09-773d-b8e6-3070c9d1444f\",\"timestamp\":\"2026-09-30T04:37:44.072Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-04/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-04/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-04-project--/2026-09-30T04-37-45-856Z_01a0f09a-b500-73e3-9100-ead81e55c7f9.jsonl",
+      "bytes": 41270318,
+      "allocated": 41275392,
+      "sha256": "29b5b714b4372660fca5eaae4e196106c346e4a1bc000b5c468bc6c2406dc05f",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f09a-b500-73e3-9100-ead81e55c7f9\",\"timestamp\":\"2026-09-30T04:37:45.856Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-04/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-05/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-05-project--/2026-09-30T05-28-25-007Z_01a0f0c9-14b0-747c-abed-675a02464723.jsonl",
+      "bytes": 41270318,
+      "allocated": 41271296,
+      "sha256": "a843a9d5e877326fee110a42368449c6efae3505b51ed7cbed3edc0f2392f550",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f0c9-14b0-747c-abed-675a02464723\",\"timestamp\":\"2026-09-30T05:28:25.007Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-05/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-05/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-05-project--/2026-09-30T05-28-26-810Z_01a0f0c9-1bba-720e-bcf1-2ac8f8d15670.jsonl",
+      "bytes": 41270318,
+      "allocated": 41271296,
+      "sha256": "b28f9e54ccfb0e7be4b1820769c68f18ef41f4dbf46013eb8e845d3163d40671",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f0c9-1bba-720e-bcf1-2ac8f8d15670\",\"timestamp\":\"2026-09-30T05:28:26.810Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-05/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-06/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-06-project--/2026-09-30T06-37-29-243Z_01a0f108-511c-71ff-b0ea-661313305c93.jsonl",
+      "bytes": 41270318,
+      "allocated": 41275392,
+      "sha256": "cf013c89162114c40fbbe6c20c92c2bacfc688dde115e2096066a0cc3b122064",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f108-511c-71ff-b0ea-661313305c93\",\"timestamp\":\"2026-09-30T06:37:29.243Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-06/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    },
+    {
+      "path": "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-06/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-06-project--/2026-09-30T06-37-31-075Z_01a0f108-5843-746a-a925-2e730d1bd4c5.jsonl",
+      "bytes": 41270318,
+      "allocated": 41275392,
+      "sha256": "713b46a19721113f132c5813ccb46cbdc96b0b9c33f0f12de4fa60e2bca418e8",
+      "header": "{\"type\":\"session\",\"version\":3,\"id\":\"01a0f108-5843-746a-a925-2e730d1bd4c5\",\"timestamp\":\"2026-09-30T06:37:31.075Z\",\"cwd\":\"/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-06/project\",\"parentSession\":\"/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl\"}\n",
+      "body_sha256": "45fedf65bee9b53260669b039d1b614655ec923f4c87ff2285e1114d3a6feb7f",
+      "body_bytes": 41269965
+    }
+  ],
+  "process_refs": [],
+  "preserved": "all private wire/journals/UNKNOWN/receipts/source and public sessions; exact fork reconstruction header+decompressed shared body",
+  "before_available": 6067400704,
+  "deleted": [
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/composition215-01/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-composition215-01-project--/2026-09-30T05-38-32-280Z_01a0f0d2-58d9-7130-a8ad-a8659bed087f.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/composition215-01/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-composition215-01-project--/2026-09-30T05-38-34-109Z_01a0f0d2-5ffd-75eb-8d68-66e078b78c82.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/composition215-02/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-composition215-02-project--/2026-09-30T06-25-36-766Z_01a0f0fd-71fe-70ed-8db7-f72718acc14d.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/composition215-02/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-composition215-02-project--/2026-09-30T06-25-38-720Z_01a0f0fd-79a1-7540-bd66-64aec920a940.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-01/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-read-custody215-01-project--/2026-09-30T03-44-08-158Z_01a0f069-9bdf-7135-b141-69789716cf9f.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-01/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-read-custody215-01-project--/2026-09-30T03-44-10-001Z_01a0f069-a312-703e-a2e1-d7544d22396f.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-02/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-read-custody215-02-project--/2026-09-30T03-46-19-450Z_01a0f06b-9cbb-7675-9a30-6396d6eb7a6b.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-02/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-read-custody215-02-project--/2026-09-30T03-46-21-299Z_01a0f06b-a3f3-7021-93b6-794c6c91068b.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-03/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-read-custody215-03-project--/2026-09-30T05-23-28-231Z_01a0f0c4-8d67-73d1-8b55-c98050626517.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/read-custody215-03/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-read-custody215-03-project--/2026-09-30T05-23-30-102Z_01a0f0c4-94b7-7324-80c3-7e19f1bfc998.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-01/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-01-project--/2026-09-30T02-46-14-486Z_01a0f034-9ad7-75ec-952d-a63e11fffce9.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-01/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-01-project--/2026-09-30T02-46-16-357Z_01a0f034-a226-7753-9956-d40c3cca818b.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-02/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-02-project--/2026-09-30T03-02-38-622Z_01a0f043-9f1f-70a9-aa8d-626cfa920927.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-02/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-02-project--/2026-09-30T03-02-40-390Z_01a0f043-a607-7340-bd58-da59eb0f4c2e.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-03/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-03-project--/2026-09-30T03-32-34-856Z_01a0f05f-07a9-705d-87c5-50d642b9d4df.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-03/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-03-project--/2026-09-30T03-32-36-697Z_01a0f05f-0eda-70f9-9b47-ec7a4d8db416.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-04/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-04-project--/2026-09-30T04-37-44-072Z_01a0f09a-ae09-773d-b8e6-3070c9d1444f.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-04/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-04-project--/2026-09-30T04-37-45-856Z_01a0f09a-b500-73e3-9100-ead81e55c7f9.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-05/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-05-project--/2026-09-30T05-28-25-007Z_01a0f0c9-14b0-747c-abed-675a02464723.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-05/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-05-project--/2026-09-30T05-28-26-810Z_01a0f0c9-1bba-720e-bcf1-2ac8f8d15670.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-06/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-06-project--/2026-09-30T06-37-29-243Z_01a0f108-511c-71ff-b0ea-661313305c93.jsonl",
+    "/home/ts/wt/toad-restored-inbound-chronology-20260929/real-fixtures/real-wire215-06/native-forks/sessions/--home-ts-wt-toad-restored-inbound-chronology-20260929-real-fixtures-real-wire215-06-project--/2026-09-30T06-37-31-075Z_01a0f108-5843-746a-a925-2e730d1bd4c5.jsonl"
+  ],
+  "removed_allocated_bytes": 908013568,
+  "archive_allocated_bytes": 13488128,
+  "net_owned_allocated_reclaimed": 894525440,
+  "after_available": 6975389696
+}

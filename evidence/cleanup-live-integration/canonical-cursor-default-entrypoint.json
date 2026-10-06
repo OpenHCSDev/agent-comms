@@ -1,0 +1,226 @@
+{
+  "state": "actual-default-entrypoint-passed",
+  "entrypoint": "/home/ts/bin/toad-comms",
+  "command": [
+    "/home/ts/bin/toad-comms",
+    "nra-architecture"
+  ],
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-tool-20260930/bin",
+  "runtime_override": false,
+  "source": {
+    "owner": {
+      "pid": 2126072,
+      "start_time": 20963438
+    },
+    "session_file": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl",
+    "bytes": 41270257,
+    "sha256": "888b79c4afea78a87c8e591928dbc015eeaaa3123e82477c56d40f3739bcf10c",
+    "active_turn": null,
+    "turn_generation": 81
+  },
+  "source_unchanged": true,
+  "capture_seconds": 25.241177468997194,
+  "display": ":510",
+  "startup": "original retained nra history readable in before.png",
+  "end_stationary": "actual End then four seconds stationary; raw end-stationary.svg + video",
+  "tool_sequence": "expanded-collapsed-reopened",
+  "tool_states": [
+    {
+      "label": "first-toggle",
+      "before": false,
+      "after": true,
+      "header_region": [
+        72,
+        6,
+        11,
+        1
+      ],
+      "cursor_region": [
+        71,
+        -32,
+        1,
+        152
+      ],
+      "cursor_block": "None"
+    },
+    {
+      "label": "second-toggle",
+      "before": true,
+      "after": false,
+      "header_region": [
+        72,
+        6,
+        11,
+        1
+      ],
+      "cursor_region": [
+        71,
+        -32,
+        1,
+        139
+      ],
+      "cursor_block": "None"
+    },
+    {
+      "label": "reopen",
+      "before": false,
+      "after": true,
+      "header_region": [
+        72,
+        6,
+        11,
+        1
+      ],
+      "cursor_region": [
+        71,
+        -32,
+        1,
+        152
+      ],
+      "cursor_block": "None"
+    }
+  ],
+  "tool_cursor_implementation": {
+    "navigation": "ContentNavigation",
+    "cursor": "CursorContainer",
+    "source": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-tool-20260930/lib/python3.14/site-packages/toad/widgets/tool_call.py"
+  },
+  "original_owner_before": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "mode": "existing_thread",
+    "name": "nra-architecture",
+    "identity": {
+      "pid": 2126072,
+      "start_time": 20963438
+    },
+    "original_owner_alive": true
+  },
+  "original_owner_after": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "mode": "existing_thread",
+    "name": "nra-architecture",
+    "identity": {
+      "pid": 2126072,
+      "start_time": 20963438
+    },
+    "original_owner_alive": true
+  },
+  "native_prompts": 0,
+  "provider_calls": 0,
+  "owner_restarts": 0,
+  "source_resets": 0,
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 2610474,
+        "start_ticks": 22563820,
+        "returncode": 0
+      },
+      {
+        "pid": 2610476,
+        "start_ticks": 22563887,
+        "returncode": 0
+      },
+      {
+        "pid": 2610478,
+        "start_ticks": 22563894,
+        "returncode": 0
+      },
+      {
+        "pid": 2610479,
+        "start_ticks": 22563899,
+        "custody": "verified launch identity transferred to installed ObservedProcess"
+      },
+      {
+        "pid": 2610484,
+        "start_ticks": 22563946,
+        "returncode": 0
+      },
+      {
+        "pid": 2610485,
+        "start_ticks": 22563957,
+        "returncode": 0
+      },
+      {
+        "pid": 2610486,
+        "start_ticks": 22563966,
+        "returncode": 0
+      },
+      {
+        "pid": 2610488,
+        "start_ticks": 22563976,
+        "returncode": 255
+      },
+      {
+        "pid": 2610890,
+        "start_ticks": 22565177,
+        "returncode": 0
+      },
+      {
+        "pid": 2610897,
+        "start_ticks": 22565206,
+        "returncode": 0
+      },
+      {
+        "pid": 2610902,
+        "start_ticks": 22565238,
+        "returncode": 0
+      },
+      {
+        "pid": 2611185,
+        "start_ticks": 22566442,
+        "returncode": 0
+      },
+      {
+        "pid": 2611190,
+        "start_ticks": 22566470,
+        "returncode": 0
+      },
+      {
+        "pid": 2611196,
+        "start_ticks": 22566548,
+        "returncode": 0
+      },
+      {
+        "pid": 2611251,
+        "start_ticks": 22566618,
+        "returncode": 0
+      },
+      {
+        "pid": 2611399,
+        "start_ticks": 22566795,
+        "returncode": 0
+      }
+    ]
+  },
+  "raw_capture": "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-context",
+  "video": "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-context/terminal.mp4",
+  "screenshots": [
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-context/before.png",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-context/after.png"
+  ],
+  "raw_tool_receipt": "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/tool-proof-context.json",
+  "gate_driver": "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/gate.py",
+  "remote_driver": "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/tool-template.py",
+  "failed_driver_attempts_preserved": [
+    "capture",
+    "capture-corrected",
+    "capture-cursor",
+    "capture-final",
+    "capture-actual",
+    "capture-click"
+  ],
+  "driver_correction": "Remote asynchronous pilot must inherit app._context(); nested history tool addressed within actual HistoryWindow. Prior attempts were driver failures, not acceptance.",
+  "remaining": "33ms fast PageDown gap/highCPU/fullwarm/resource scope NOT fixed; no broader suite rerun",
+  "artifact_hashes": {
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-context/terminal.mp4": "bfb3946600c1e38b6b7b7da6f0caedb520a4267cd3633763cab235d368a6a7cf",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-context/before.png": "f94f6c2274096f7855336948e9029f96379a74e3d0dcc98e20fb84e356e322a0",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-context/after.png": "1d51527924f3f27dc6f275ea49f0c66e30ed509c0d69438ab9f8ea3cffb360e7",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/tool-proof-context.json": "488bb5382111b60690f1b846586ae85f955325c3045c6f48613abd5d637cfd96",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/gate.py": "7f43ad175d724d624d9b36e52631e72d89f283bf69744f42fbcca243ca4eb9c8",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/tool-template.py": "1d28dcd0d3c9e1bd712f25c0ee3bd2627d3c4f77fcfa44ea1feaa507d778d995"
+  }
+}

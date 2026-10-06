@@ -1,0 +1,15 @@
+{
+  "state": "staged-exact-package-trusted-not-activated",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-workspace-publication-20260930",
+  "pins": {
+    "agent-comms": "72062939239b0f07707406309305a056a23f925f",
+    "textual": "65053c5a2df12249ef1c4193beeff7023c1f75d7",
+    "batrachian-toad": "6e3110ab305829c88a420c36a2c43a8f1419d839"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent",
+  "all_68_requirements_checked": true,
+  "package_compatibility_checked": true,
+  "default_launchers_unchanged": true,
+  "pending": "sole original41MB physical scroll/profile journey; source frame publication check is not terminal acceptance"
+}

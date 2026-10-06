@@ -1,0 +1,125 @@
+{
+  "state": "actual installed many-owner pure-channel acceptance failed",
+  "sequence": 326,
+  "original_message_id": "6ba2aee585ff",
+  "claims": 12,
+  "native_triage_decisions": 10,
+  "full_decisions": 9,
+  "ignored_decisions": 1,
+  "full_executions": 0,
+  "failure": "selected source retained pre-triage lifecycle revision; execution compared it to legitimate post-reservation revision",
+  "original_proof_references": "original-seq326.json",
+  "model_request_clocks": [
+    {
+      "owner": "openhcs-audit-merged-runtime",
+      "native_start_ms": 1790906173414,
+      "native_finish_ms": 1790906180858,
+      "native_model_ms": 7444.179336,
+      "events": 14,
+      "first_recorded_ns": 381812734382677,
+      "last_recorded_ns": 381820950454727
+    },
+    {
+      "owner": "openhcs-audit-merged-boundaries",
+      "native_start_ms": 1790906176904,
+      "native_finish_ms": 1790906182260,
+      "native_model_ms": 5355.936673,
+      "events": 14,
+      "first_recorded_ns": 381816238686610,
+      "last_recorded_ns": 381824124442745
+    },
+    {
+      "owner": "compaction501-live-architecture-memory",
+      "native_start_ms": 1790906186785,
+      "native_finish_ms": 1790906190425,
+      "native_model_ms": 3640.435814,
+      "events": 14,
+      "first_recorded_ns": 381826062747792,
+      "last_recorded_ns": 381832508232480
+    },
+    {
+      "owner": "openhcs-architecture-memory",
+      "native_start_ms": 1790906195899,
+      "native_finish_ms": 1790906199381,
+      "native_model_ms": 3481.871376,
+      "events": 14,
+      "first_recorded_ns": 381835177281169,
+      "last_recorded_ns": 381840570740381
+    },
+    {
+      "owner": "openhcs-helper",
+      "native_start_ms": 1790906199417,
+      "native_finish_ms": 1790906203103,
+      "native_model_ms": 3685.086378,
+      "events": 14,
+      "first_recorded_ns": 381838745387233,
+      "last_recorded_ns": 381846931747892
+    },
+    {
+      "owner": "openhcs-audit-merged-models",
+      "native_start_ms": 1790906211107,
+      "native_finish_ms": 1790906215947,
+      "native_model_ms": 4840.305015,
+      "events": 14,
+      "first_recorded_ns": 381850377854047,
+      "last_recorded_ns": 381855945262036
+    },
+    {
+      "owner": "openhcs-audit-open-prs",
+      "native_start_ms": 1790906218865,
+      "native_finish_ms": 1790906226416,
+      "native_model_ms": 7550.834943,
+      "events": 14,
+      "first_recorded_ns": 381858160914634,
+      "last_recorded_ns": 381867753402071
+    },
+    {
+      "owner": "openhcs-helper2",
+      "native_start_ms": 1790906225044,
+      "native_finish_ms": 1790906228330,
+      "native_model_ms": 3286.589764,
+      "events": 14,
+      "first_recorded_ns": 381864323981840,
+      "last_recorded_ns": 381871578822239
+    },
+    {
+      "owner": "compaction499-live-architecture-memory",
+      "native_start_ms": 1790906235358,
+      "native_finish_ms": 1790906239032,
+      "native_model_ms": 3674.292496,
+      "events": 14,
+      "first_recorded_ns": 381874621392042,
+      "last_recorded_ns": 381882349410317
+    },
+    {
+      "owner": "openhcs-pr159-viewer-bind-owner",
+      "native_start_ms": 1790906246710,
+      "native_finish_ms": 1790906253743,
+      "native_model_ms": 7032.975284,
+      "events": 14,
+      "first_recorded_ns": 381886017115848,
+      "last_recorded_ns": 381893324949862
+    }
+  ],
+  "model_duration_seconds_range": [
+    3.286589764,
+    7.550834943
+  ],
+  "fix": {
+    "pr": 502,
+    "owner": "Singer",
+    "state": "source closure in progress; not live",
+    "package_owner": "Kepler",
+    "acceptance": "configured saved many-owner pure-channel TRIAGE to FULL; no DM forcing FULL"
+  },
+  "latency_owner": "Arendt",
+  "original_inputs_replayed": 0,
+  "prior_gate_limit": "mixed channel/DM gate forces FULL and does not validate pure-channel triage",
+  "performance": {
+    "owner": "Heisenberg",
+    "recording": "/home/ts/.cache/agent-scratch/compaction501-foreground284-native5-readonly-20261002-03/capture",
+    "warm_checks_passed": 16,
+    "paging_checks_passed": 7,
+    "full_performance_ready": false
+  }
+}

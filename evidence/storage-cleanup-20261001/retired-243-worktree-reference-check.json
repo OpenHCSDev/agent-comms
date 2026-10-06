@@ -1,0 +1,17 @@
+{
+  "path": "/home/ts/wt/toad-provider-login-action-modal-20260930",
+  "observed_ns": 1790821601092407646,
+  "references": [],
+  "process_limitations": [
+    {
+      "pid": "1786010",
+      "comm": "systemd"
+    },
+    {
+      "pid": "1786012",
+      "comm": "(sd-pam)"
+    }
+  ],
+  "donor_scan_exit": 1,
+  "whole_source_and_proofs_git_tracked": true
+}

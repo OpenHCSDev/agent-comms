@@ -1,0 +1,15 @@
+{
+  "started": 1790961083.0767539,
+  "returned": 1790961084.538599,
+  "elapsed": 1.4618451595306396,
+  "message": {
+    "seq": 418,
+    "from": "user",
+    "to": "#openhcs",
+    "ts": 1790961083.1415808,
+    "type": "info",
+    "text": "testing the installed database and history-read fix; please reply tersely if you receive this",
+    "sender_role": "user",
+    "id": "660958a8c77d"
+  }
+}

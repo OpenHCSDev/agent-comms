@@ -1,0 +1,30 @@
+{
+  "owner": "Schrodinger",
+  "before_available": 7532392448,
+  "removed": [
+    {
+      "path": "/home/ts/.cache/agent-scratch/sch-selected-native-budget-499-20261001/fresh-unverified",
+      "allocated_bytes": 203218944
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/sch-native17d-source-repair-20261001/fresh-binding-capture",
+      "allocated_bytes": 203251712
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/sch-native17d-source-repair-20261001/runtime",
+      "allocated_bytes": 15630336
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/sch-selected-native-budget-499-20261001/mcp-cache-fill",
+      "allocated_bytes": 35987456
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/sch-selected-native-budget-499-20261001/npm-cache",
+      "allocated_bytes": 5558272
+    }
+  ],
+  "reason": "38,378 generated regular native files all equal complete preserved durable5184/c4 donors; no proc/config/route/pth refs; generated cache-fill/runtime retired",
+  "preserved": "native5184/c4 donors, defaultNative5, all sources/pins/build logs/original wheels/UNKNOWN/session proofs",
+  "removed_allocated_bytes": 463646720,
+  "after_available": 7984345088
+}

@@ -1,0 +1,355 @@
+{
+  "scope": "Installed genuine-newly-built exact720 stopped routing into declaration-owned recorded reader; mounted historical selection/notification handling and retirement",
+  "Core_selected_source": "b97345686f8b498db24069d262f364c5ad1ffb1b",
+  "Toad_selected_source": "d08c1a49b068c66e021e1ef31a497308022b774c",
+  "Core_wheel_sha256": "c44d5a6c786dfd0bd82dfd50304c0ac7e02258d272855005fc915a943c3679ca",
+  "Toad_wheel_sha256": "0fb3fa9b4ca11f98ba94866d18b1bc73b302059e6d5198fe7522c6bced847b80",
+  "old720_wheel_sha256": "c3e41356b1d84c67314de57dadc287aed199f249cfe88164aad0fe705242f44b",
+  "proposal_sha256": "b52ed4da43829756df78967caf9a23083009659c12986905fd21a453e8175d9d",
+  "result": {
+    "elapsed": 25.73141989496071,
+    "returncode": 0,
+    "timed_out": false,
+    "error": null,
+    "drain_errors": [],
+    "outcome": {
+      "kind": "exited",
+      "code": 0
+    },
+    "controller": {
+      "pid": 2773867,
+      "start_time": 72894361
+    },
+    "child": {
+      "pid": 2774195,
+      "start_time": 72894916
+    },
+    "child_retired": true,
+    "owned_group_members": [],
+    "native_SDK_execution_authorized": true,
+    "native_process_execution_authorized": false,
+    "central_batch_used": false,
+    "source_grant_sha256": "85afc9411f20f0a287ba1e97da080517c470ce7703e5a66f5a258205d9de74c1",
+    "target_grant_sha256": "55ccf6a14d5476fda65162def017e39227da15ae5eabef2749ae05f1284b898a"
+  },
+  "consumer_scope": {
+    "mounted_historical_selections": [
+      "alpha",
+      "beta",
+      "alpha"
+    ],
+    "native_answer_painted_once": true,
+    "original_request_painted_once": true,
+    "recorded_page_capture_count": 9,
+    "notification_retirements": [
+      {
+        "kind": "selection",
+        "worker": "CANCELLED",
+        "completed_original_read_returned": true,
+        "stale_notification_publications": 0
+      },
+      {
+        "kind": "screen",
+        "worker": "CANCELLED",
+        "completed_original_read_returned": true,
+        "stale_notification_publications": 0
+      }
+    ],
+    "app_preparation_and_workers_closed": true,
+    "default_executor_joined": true,
+    "source_bytes_unchanged": true,
+    "original_input_UNKNOWN_unchanged": true,
+    "new_owner_launches": 0,
+    "provider_calls": 0,
+    "input_replays": 0,
+    "routing_cells": 3,
+    "registry_routings": 1,
+    "central_batch_used": false
+  },
+  "whole_handback": {
+    "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/whole-handback.json",
+    "sha256": "db56e724170a6e76186b7e72751e4439296bea21dae891741bcc1e8b9a7829c8",
+    "bytes": 17172
+  },
+  "raw_receipts": [
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/actual-grant-read-ack.json",
+      "sha256": "6097d69ee1e89c2021e13ebe8845acfde852b76708660a0f7dafbcc7b3cd9c1a",
+      "bytes": 1152
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/authored-fixture-postcontrol-manifest.json",
+      "sha256": "83d133542d354e0a350f078cbb10c3282a9d916e532dc4a60c199aca9ba55195",
+      "bytes": 18314
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/candidate-source-proof.json",
+      "sha256": "64b0af57781c18f2bb3cf6996b78207c1544268720c7f17df669cdbfa74e6bfb",
+      "bytes": 5478
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/command.json",
+      "sha256": "5321e949d485b10cc9c0b386de3040e807b195cef08054e87b86caf14bcd5227",
+      "bytes": 1804
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/controller-launch.json",
+      "sha256": "11597590b3db7d8d2d47e886055236eb4e5dab817cf152d306ba2b47b4a90d34",
+      "bytes": 2561
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/controller-terminal.json",
+      "sha256": "22b2430c058c718259a9c33a9f7938126ff52d0f2ce53eed8d17d75e329a6a21",
+      "bytes": 160
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/controller.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/controller.stdout.log",
+      "sha256": "4b64594ae969f904635719dcd60eaa1ef8546b93142e337c73dad95fcad0c879",
+      "bytes": 947
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/handle.json",
+      "sha256": "d2df776b9162827cdd98d745aa906ac3c0f7e1a82cdd89c9cfe1c25c502e1528",
+      "bytes": 349
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/paired-proof-handback-binding.json",
+      "sha256": "ba1a62b9ec7aa55975b47c20ebbcc8cecb410051c32eab85cdfde89e2e38d428",
+      "bytes": 6005
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/proof-command.json",
+      "sha256": "a2f61c271bdaf536ed3d250751f5532636adffb60818f890808cf8b73aaf819c",
+      "bytes": 2097
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/proof-handle.json",
+      "sha256": "32994bb196dbd3dfec2b2a713eb65519642fc5e31b37e2a387dc3fc2e3244304",
+      "bytes": 918
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/proof-terminal.json",
+      "sha256": "4466a76d0195f25f7e3065d7f8d7827f622352ac9ec526007ae71193fd463626",
+      "bytes": 264
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/proof.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/proof.stdout.log",
+      "sha256": "c277702b5910f62d7b232561ff406c0cdbc71c047b91447d5ea98e40ab4827ee",
+      "bytes": 282
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/resolved-controller-and-new-native-authority.json",
+      "sha256": "e31ac3181e7c1b9e716c5dc7091160ade3a1386fcafc49deb48b24c802630e4f",
+      "bytes": 7656
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/resolved-stage-and-proof-operands.json",
+      "sha256": "a16623aed24c7676963ce8db610edf4464a146ad97c689b1e6606f26c7480431",
+      "bytes": 5611
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/source-restore-command.json",
+      "sha256": "3cfe6cefbdaa272b2bd8e0f339962afb5753d040283d70dc14252e0927e6369a",
+      "bytes": 787
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/source-restore-handle.json",
+      "sha256": "12318990585d0c79d6d567fc8365dca06357cda9fd329f27fa1e663fa94d7ee7",
+      "bytes": 444
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/source-restore-terminal.json",
+      "sha256": "db52f8c923a794c62ffde9340833e39aa7b340809d7659d44fe3acceda6251a9",
+      "bytes": 543
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/source-restore.stderr.log",
+      "sha256": "57f1aa40495dc044fc106357eb96d2eadc91f8eb6b8b17a3aab593a80aa47c19",
+      "bytes": 903
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/source-restore.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/source-stage-command.json",
+      "sha256": "9842e477d2d3bdf347c961eb3ef357e20c790298f5b2e02d0eb7bec1829c26d5",
+      "bytes": 841
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/source-stage-handle.json",
+      "sha256": "ccee4d98a8054cde8c6f2a8ba6d49ae4b5c6162d2b5d05383e545cc8137b0aa1",
+      "bytes": 459
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/source-stage-terminal.json",
+      "sha256": "05e0e6ab6067ba41a101f2dc30e9a29e4256a52a4877a2bac37901d767836093",
+      "bytes": 191
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/source-stage.stderr.log",
+      "sha256": "4cbd837102eb8c6c1daea5d6683b4a797ea66cd6f33fe6578641dc54bb9aa250",
+      "bytes": 904
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/source-stage.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/stdout.log",
+      "sha256": "20d74fc0ec2f9c0caa3c7fb7b753292dfe19947ae2a741fb41f210bd63ad7e59",
+      "bytes": 27003
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/target-restore-command.json",
+      "sha256": "963be21187b694480080149ed4480f2cdd90864cb337094f8c6b9c6f43a6c77c",
+      "bytes": 1294
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/target-restore-handle.json",
+      "sha256": "a39cc8b7ce5ff01d7838708cc044f41894c5088a7fe788a483886f46821174e8",
+      "bytes": 951
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/target-restore-terminal.json",
+      "sha256": "bc3b0af4c38a6eb8ad2d18154c3aaf1e904b0f1c77c5a4dadc8d07113990cf3a",
+      "bytes": 1050
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/target-restore.stderr.log",
+      "sha256": "617c1e1a05d889cab6ba85d3950e9eb4ce25c6cbebf3faa285c908e1973eee49",
+      "bytes": 1335
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/target-restore.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/target-stage-command.json",
+      "sha256": "e177e041b13fc42ee49c0a047c260349e9329e88a42dfd61fb614a70d0206e7a",
+      "bytes": 1009
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/target-stage-handle.json",
+      "sha256": "394d8de03c8e60173c7586e1d0d8ace3f1a50ce486973997e4172359ef1b7bac",
+      "bytes": 630
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/target-stage-terminal.json",
+      "sha256": "09334ba318c31c0e65c4c0f4e25c350a31525e7dc6819045c990170b59be37ba",
+      "bytes": 191
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/target-stage.stderr.log",
+      "sha256": "b5b8194afac8b35900e157d5411dab4b7a4d1ed59ca28b9264a802569921fcb6",
+      "bytes": 1322
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/target-stage.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/terminal.json",
+      "sha256": "47b4edc467f7fc3fe069efaf4e1edeeff05d243e850cf953fc7b6cfbedb721ae",
+      "bytes": 668
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/whole-floor-readback.json",
+      "sha256": "3f665892f746a887d8b50fb94cabb241502a861e7d90d92e20429c374dc0b9b1",
+      "bytes": 3616
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/einstein-retained-routing-mounted01-20261005/receipt.json",
+      "sha256": "9c8835ae47f0d7538df07a6b4802500259b4553b3e7bf75871aa5d4bf0ec48c9",
+      "bytes": 39944
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/einstein-retained-routing-mounted01-20261005/carry-receipt.json",
+      "sha256": "445ea26303ef1f03958a786410d0f74746bbcdce9c6e0fba95989cff20762559",
+      "bytes": 6460
+    }
+  ],
+  "owned_identities": [
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/source-stage-handle.json",
+      "pid": 2729216,
+      "birth": 72817944,
+      "group": 2729216,
+      "proc_absent": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/target-stage-handle.json",
+      "pid": 2729270,
+      "birth": 72817961,
+      "group": 2729270,
+      "proc_absent": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/proof-handle.json",
+      "pid": 2743136,
+      "birth": 72835954,
+      "group": 2743136,
+      "proc_absent": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/controller-launch.json",
+      "pid": 2773867,
+      "birth": 72894361,
+      "group": 2773867,
+      "proc_absent": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/source-restore-handle.json",
+      "pid": 2776571,
+      "birth": 72901401,
+      "group": 2776571,
+      "proc_absent": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/target-restore-handle.json",
+      "pid": 2776597,
+      "birth": 72901417,
+      "group": 2776597,
+      "proc_absent": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/handle.json",
+      "pid": 2774195,
+      "birth": 72894916,
+      "group": 2774195,
+      "proc_absent": true
+    }
+  ],
+  "both_original_floors_restored": {
+    "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/retained-routing-provenance-20261005/paired-mounted01/whole-floor-readback.json",
+    "sha256": "3f665892f746a887d8b50fb94cabb241502a861e7d90d92e20429c374dc0b9b1",
+    "bytes": 3616
+  },
+  "source_restore_attempts": 1,
+  "target_restore_attempts": 1,
+  "native_READ_and_SDK_EXEC_returned": true,
+  "independent_Bohr_closure": "pending at this owner checkpoint",
+  "central_batch_used": false,
+  "physical_acceptance": false,
+  "historical_original_installed_artifact_equivalence": false,
+  "future_access": false
+}

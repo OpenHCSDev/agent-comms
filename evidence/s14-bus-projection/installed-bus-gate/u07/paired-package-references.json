@@ -1,0 +1,31 @@
+{
+  "scope": "immutable original packaged candidate provenance; actual bus journey FAILED",
+  "prefix": "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001",
+  "production_override": false,
+  "receipts": [
+    {
+      "path": "/home/ts/.cache/agent-scratch/atomic-page-handoff-stage-20261001/paired-ready-receipt.json",
+      "sha256": "e37581c021162de4fff37ad4fe8e3afe215302697c95219105c001ba5d3256cf"
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/atomic-page-handoff-stage-20261001/paired-staging-receipt.json",
+      "sha256": "1ed2519e07bbf2f10eae24b4588aa6a5a848e4490f2686433239d6c6d5b221fa"
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/atomic-page-handoff-stage-20261001/package-source-trust.json",
+      "sha256": "315e5fb1836073bad3fe6e89be1153efb2c7332d8b4d6d048402a660cf21e197"
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/atomic-page-handoff-stage-20261001/paired-runtime-preflight.json",
+      "sha256": "53b3a0cd1cb93fc711ace97bdb27aed7867c71780425f6d1452210180fab6a6d"
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/atomic-page-handoff-stage-20261001/paired-probe-cleanup.json",
+      "sha256": "856bf783eb15b963a51607f5f889b2306aa52ac84ff52e01d97e84ab8b865d26"
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/atomic-page-handoff-stage-20261001/package-build-receipt.json",
+      "sha256": "dc8f1e4647dec5017a2471e85bd41fb1a9743384eb1696823bef93d636501391"
+    }
+  ]
+}

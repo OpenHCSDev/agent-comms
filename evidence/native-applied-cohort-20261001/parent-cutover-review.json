@@ -1,0 +1,39 @@
+{
+  "phase": "retained-batch-launched-configurations-verified-default-entrypoint-accepted",
+  "started": 1790826225.4381702,
+  "finished": 1790826254.973912,
+  "target": "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001",
+  "native": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "actual_gate_artifacts": {
+    "joint-native-ui": {
+      "artifact": "/home/ts/wt/comms-c1-terminal-data-20260930/evidence/c1-terminal-data-20260930/installed34/ready-receipt.json",
+      "sha256": "a6031469f494fdaa4aac5e77497514f1638f9c66a27daed27abfab7a869b68f3"
+    },
+    "bus-hot-views": {
+      "artifact": "/home/ts/wt/toad-native-applied-cohort-pair-20261001/evidence/native-applied-cohort-pair-20261001/bus-u09/receipt.json",
+      "sha256": "4f46d689436fa5f962d399b1c42dc148aa560405572255182bc513c39cb5091b"
+    },
+    "ordinary-default": {
+      "artifact": "/home/ts/wt/toad-native-applied-cohort-pair-20261001/evidence/native-applied-cohort-pair-20261001/public-default/receipt.json",
+      "sha256": "7d3bad4834681270b11e6f1ab1b8eef35cd0498908bffd3c0c07d9f2dc2ee77b",
+      "scope": "Ordinary published default read-only saved startup, physical channel/participant opening and A/B/A returns; no overall performance claim",
+      "fresh_saved_ACP_loads": 3,
+      "prompt_requests": 0,
+      "rpc_errors": 0
+    }
+  },
+  "protected_input_rows": 170,
+  "protected_unresolved_inputs": 14,
+  "protected_input_sha256": "55fbc4663b5c5acbc15458da2eca4dbc47aedf784ddf235860d3e137144995e8",
+  "operator_sha256": "eebb84b981da9bdf308cae5d4bc05671a286b79f8e097f9ff66574176127a5e3",
+  "toad_main_merge": "8ea96a3785153768f9d6656c002eeee77e2426ac",
+  "original_owners_restarted": 13,
+  "ordinary_default_entrypoint_verified": true,
+  "user_drafts_saved_and_clients_closed": true,
+  "settings_readback": "original complete retained configurations equal, except exact process identity",
+  "fresh_target_interpreter_and_five_links_verified": true,
+  "input_replay": false,
+  "native_proofs_and_durable_wire_goals_decisions_reset": false,
+  "default_native_and_input_sources_unchanged": true,
+  "user_feedback": "Tristan reports live build is way better; remaining full scrolling/performance acceptance stays open."
+}

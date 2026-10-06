@@ -1,16 +1,31 @@
 {
-  "state": "source-integrated-not-installed-or-accepted",
+  "state": "source-integrated-critical-wire-family-and-merged-scheduler-not-default-activated",
   "pins": {
-    "integration": "adc4bc79d2ce05eeafb0c177e1b83c3d67cabb96",
-    "main": "3b03785f45df2ef5dc62ba6aed99294192ecbb01",
-    "430": "77b6c2c421e58575ce2fd70060f070c02995a9a4",
+    "integration": "41a83508e579be6c1adf3be28c582da24c865bbe",
+    "main": "1e967af485c65c138cc86bf26190dcc55c1a75d2",
+    "430": "cf48759df4c024be1eccb2bc5e3cf02637124ff7",
     "434": "bd18e9c3af02291d10fcc6b116a9d95b83001c6e",
     "436": "1db38fcd63ac313ceb5f7b481d7fd3824511c7a6",
-    "437": "accfd57233d0d46965edbf3aa35a0397c6fd61b0"
+    "437": "accfd57233d0d46965edbf3aa35a0397c6fd61b0",
+    "438": "97b1a03943b6d7b29bc856fc0cdab087b3b98a56",
+    "436_getter": "f554139a35da610a1a52b397c9d2f422f924c0f2",
+    "439": "79c379ca87ced2aa63ddbf1fa7e52eeefac7f21d",
+    "422": "d4ec93d4ed7d936bb75595d265a4f91766cfb213"
   },
   "conflict_resolution": "Retain newest437 original saved-history readiness before any input; no producer implementation conflict.",
   "source_intersection_check": "10 affected custody/progress/provider cases passed in1.50s before receipt-only1db getter merge",
   "native_manifest_sha256": "b68dfdced9148b50e753e94f8a6660bc8d108d100667f6b32c368eaa31469dba",
   "native_tree_sha256": "614a956de3870ea47d6e217da6ae9b3b1a952d2214d90187b17351625110ff7a",
-  "pending": "430 shared source transaction/public bind_page_read plus original436 result publication consumer; no API readiness inferred from ancestor alone"
+  "pending": "Sch215 isolates notification-source/real-app driver stall from preserved06 before another paid attempt. Backend default720/native4ab unchanged. Future436/430 source1f has accepted33.42s ordinary-native proof but awaits Arendt owned outside-src durable routing carry; excluded from current41 format assessment and release.",
+  "accepted_fixture_cohort": "94152909d34a099afc70232f922ba78e0d9af7cd",
+  "accepted_scope": {
+    "compaction": "actual automatic400.918s/manual382.512s, real native and installed ACP/Toad widgets, no original replay",
+    "lifecycle": "continuous actual installed UI/native cancel-next input-goal edit-cancel-next input, exit0/89.168s",
+    "messaging": "real05 at8691/Toad4e admitted original FULL input and published original reply; actual provider-free same-pair composition showed one wire row but two rendered body/header instances through overlapping C3 handlers. Corrected exclusiveWireText family criticalcf/Core700 plus Toad517 pending installed acceptance.",
+    "439": "Controlled original43MB/native scheduling span893.717ms to621.071ms; installed native2cases15.93s and continuous ordinary/privateACP2cases28.30s passed. Not a real-model speed or default activation claim.",
+    "critical_wire_composition": "Exact immutable700/Toad517/Text412/native614 provider-free installed215-02 exited0; original41,270,257B history and one original48234bc58eb1 row projected one parent/child/body/header/SVG; zero native inputs/ACP prompts, both owned workers retired.",
+    "real06_partial": "ExactCore41/Toade59/Text650/nativee36: fresh originalseq1/811956778224 -> fullafbb66cc nativeentry945beb5f -> replyseq2/c136d11a5590; one body/header/SVG passed. Canonical original Responded, reply Checked-noresponse. Driver watchdog360s+15s grace terminated137; hothandling/31s/A-B-A/cold reopen NOT proved. Both owned idle workers stopped, original wire/native/journals archived, no replay."
+  },
+  "next_native_manifest_sha256": "e36a1dde326b70179fa1c854a73fcad61948c90f5a93465a55ddd07d72936f07",
+  "next_native_tree_sha256": "5ea25e3f9e88d073e5506ce97ceeca4c763b6da19f986ab032880d45f020f35c"
 }

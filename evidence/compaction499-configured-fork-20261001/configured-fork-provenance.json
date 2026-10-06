@@ -1,0 +1,21 @@
+{
+  "parent": "openhcs-architecture-memory",
+  "child": "compaction499-live-architecture-memory",
+  "checks": {
+    "same_worktree": true,
+    "same_model": true,
+    "same_thinking_level": true,
+    "inherited_tags": true,
+    "canonical_parent": true,
+    "distinct_session": true,
+    "same_backend_binary": true,
+    "same_backend_args": true,
+    "same_home": true,
+    "same_config_directory": true,
+    "same_configured_provider_environment": true
+  },
+  "child_session": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T22-51-46-051Z_01a0f9aa-a804-77e8-8107-3d93fcaec806.jsonl",
+  "child_process_pid": 2472251,
+  "model": "openai-codex/gpt-6.1-sol",
+  "original_input_retried": false
+}

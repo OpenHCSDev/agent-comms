@@ -1,0 +1,34 @@
+{
+  "state": "prepared-awaiting-Sch-reviewed-package-ready",
+  "owner": "Einstein sole continuous actual Native/ACP/LinuxDriver gate",
+  "toad": "15601a4f785fd6ee3e53e12b3a971ae1186f4482",
+  "core": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+  "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+  "native_manifest": "593b978a717ae8f6ab4300a1a107b615c8ced52e767ef4cad0596f827041a218",
+  "sdk": "0.12.1",
+  "expected_prefix": "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001",
+  "tool_source_head": "98a0eac445bf446ff4a33c65d0121cda836214d4",
+  "tool_hook_original_published": "a2761f4b",
+  "normal_merge_conflicts": [],
+  "test_tool_hashes": {
+    "input_visibility_native_installed_pilot.py": "664f36c432feea6125732ee8df1f5c65cd6901d4ac66131b2f443aaf7a729f98",
+    "first_fork_native_installed_pilot.py": "03869c043d31ee4b1e3ca675d8e3a8ca856872b6198244187ab3d6810c231208",
+    "saved_state_user_journey_pilot.py": "96983bad6cbde69860a3f21c36847374943239c55348d460be68691175fe80cf",
+    "l0a_native_installed_pilot.py": "6086cbc3c671537d92b8c95c8f6f80c28a88813d001090c18fa04b7eb963878b",
+    "runtime_fixture.py": "2080002916a9d42ae98941e4548be3359ece5a6d6ce8d9391fb14399f40eb08f"
+  },
+  "owned_driver_sha256": "06f5e1598099d1df85b1a1dd17009bb8a6f260e80d4da35a742ab84443501c0a",
+  "scope": "same continuous row/menuclose\u2192physicalseed\u2192forkcoldopen\u2192childreply\u2192busyqueueonceSaved\u2192cancel + original strict incremental ANSI",
+  "capture": "same original emitted frame callback; one failure-only resource/history/pump/task/worker/nonblocking backend snapshot before yield/teardown",
+  "public_effects": 0,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "processes_started": 0,
+  "original_replay": false,
+  "originals_preserved": [
+    "g458f",
+    "g458g",
+    "g458h"
+  ],
+  "environment": "TERM xterm-256color; DISPLAY/WAYLAND_DISPLAY/NO_COLOR removed"
+}

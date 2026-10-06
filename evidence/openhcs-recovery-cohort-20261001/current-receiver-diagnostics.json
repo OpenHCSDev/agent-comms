@@ -1,0 +1,30 @@
+{
+  "observation": "original typed latest activity fenced to current registry owner",
+  "activity_unchanged_during_read": true,
+  "rows": [
+    {
+      "thread": "openhcs-architecture-memory",
+      "readiness": "UnavailableDrainReadiness",
+      "error_type": "NativePiUnavailable",
+      "reason": "Native Pi operation failed: PromptSendUnknown: Native prompt admission ended before writing any bytes",
+      "recovery": "Drain stopped; fix the error and restart the owner"
+    },
+    {
+      "thread": "openhcs-pr159-viewer-bind-owner",
+      "readiness": "UnavailableDrainReadiness",
+      "error_type": "NativePiUnavailable",
+      "reason": "Native Pi operation failed: PromptSendUnknown: Native prompt admission ended before writing any bytes",
+      "recovery": "Drain stopped; fix the error and restart the owner"
+    },
+    {
+      "thread": "openhcs-helper",
+      "readiness": "UnavailableDrainReadiness",
+      "error_type": "NativePiUnavailable",
+      "reason": "Native Pi operation failed: PromptSendUnknown: Native prompt admission ended before writing any bytes",
+      "recovery": "Drain stopped; fix the error and restart the owner"
+    }
+  ],
+  "provider_calls": 0,
+  "replays": 0,
+  "public_writes": 0
+}
