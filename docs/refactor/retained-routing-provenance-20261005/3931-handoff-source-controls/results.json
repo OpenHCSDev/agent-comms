@@ -1,0 +1,60 @@
+[
+  {
+    "name": "current",
+    "argv": [
+      "/usr/bin/python",
+      "-B",
+      "-m",
+      "pytest",
+      "-o",
+      "addopts=",
+      "--noconftest",
+      "--basetemp",
+      "/home/ts/.cache/agent-scratch/einstein-3931-handoff-source-controls-20261006/current",
+      "-q",
+      "--tb=short",
+      "tests/test_owner_restart_handoff.py",
+      "tests/test_owner_partial_retirement.py"
+    ],
+    "cwd": "/home/ts/wt/comms-original-owner-admission-20261006",
+    "PYTHONPATH": "/home/ts/wt/comms-original-owner-admission-20261006/src:/home/ts/.cache/uv/archive-v0/mNatOBGB9uuf-bXB",
+    "source_only": true,
+    "pid": 2950239,
+    "birth": 73201361,
+    "group": 2950239,
+    "exit": 0,
+    "timeout": false,
+    "elapsed_seconds": 2.66902596806176,
+    "wait_joined": true,
+    "proc_absent": true
+  },
+  {
+    "name": "amended720",
+    "argv": [
+      "/usr/bin/python",
+      "-B",
+      "-m",
+      "pytest",
+      "-o",
+      "addopts=",
+      "--noconftest",
+      "--basetemp",
+      "/home/ts/.cache/agent-scratch/einstein-3931-handoff-source-controls-20261006/amended720",
+      "-q",
+      "--tb=short",
+      "tests/test_owner_restart_handoff.py",
+      "tests/test_owner_partial_retirement.py"
+    ],
+    "cwd": "/home/ts/wt/comms-amended720-owner-admission-20261006",
+    "PYTHONPATH": "/home/ts/wt/comms-amended720-owner-admission-20261006/src:/home/ts/.cache/uv/archive-v0/mNatOBGB9uuf-bXB",
+    "source_only": true,
+    "pid": 2950396,
+    "birth": 73201628,
+    "group": 2950396,
+    "exit": 0,
+    "timeout": false,
+    "elapsed_seconds": 2.018869235063903,
+    "wait_joined": true,
+    "proc_absent": true
+  }
+]
