@@ -16,7 +16,7 @@ from agent_comms import restart_queue as queue
 from agent_comms.comms import Comms
 from agent_comms.child_process import AttachedChild
 from agent_comms.field_codec import FieldCodec
-from agent_comms.private_nk_entrypoint import ROOT_ID_ENV
+from agent_comms.private_nk_entrypoint import ROOT_ID_ENV, PACKAGE_ENV
 from agent_comms.runtime import socket_path
 from agent_comms.threads import Thread
 from explicit_private_owner_installed_journey import Subscriber
@@ -85,7 +85,7 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
     source_environment.update(
         {
             "VIRTUAL_ENV": str(source_runtime),
-            queue.PACKAGE_ENV: str(source_package),
+            PACKAGE_ENV: str(source_package),
             "QUEUE_FIXTURE_AUTH_SENTINEL": "source-auth-only",
         }
     )
@@ -122,7 +122,7 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
         environment = dict(os.environ, AGENT_COMMS_ROOT=str(comms.root))
         if interpreter != target_interpreter:
             environment.pop("PYTHONPATH", None)
-            environment[queue.PACKAGE_ENV] = str(source_package)
+            environment[PACKAGE_ENV] = str(source_package)
         async with spawn_agent_process(
             subscriber,
             interpreter,
@@ -197,10 +197,12 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
             replacement.model == original.model
             and replacement.thinking_level == original.thinking_level
         )
-        replacement_env = queue._owner_environment(replacement.pid, "worker", target_interpreter)
+        replacement_env = queue.RetainedOwnerLaunch.capture(
+            replacement, comms.registry.snapshot(), interpreter=target_interpreter
+        ).environment
         assert replacement_env["QUEUE_FIXTURE_AUTH_SENTINEL"] == "source-auth-only"
         assert replacement_env["PI_CODING_AGENT_DIR"] == str(fixture.config)
-        assert replacement_env[queue.PACKAGE_ENV] == str(target_package)
+        assert replacement_env[PACKAGE_ENV] == str(target_package)
         assert replacement_env[queue.RestartEnvironment.binary_key] == request.target.agent_bin
         assert replacement_env.get("PYTHONPATH") == os.environ.get("PYTHONPATH")
         assert replacement_env.get("VIRTUAL_ENV") == os.environ.get("VIRTUAL_ENV")

@@ -11,19 +11,19 @@ import ctypes
 import json
 import os
 import select
-import shlex
 import sys
 import uuid
 from contextlib import contextmanager
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field, replace
 from typing import ClassVar
 from collections.abc import Mapping
 
-from .child_process import ProcessIdentity, Platform, ParentedProcess
+from .child_process import ProcessIdentity, ParentedProcess
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .owner_lifecycle import OwnerRestartSelection
-from .private_nk_entrypoint import ROOT_ID_ENV, PACKAGE_ENV
+from .owner_launch import RestartEnvironment, RetainedOwnerLaunch
+from .owner_restart import StoppedOwnerFailure
 from .restart_refusals import RestartRefusal
 from pathlib import Path
 
@@ -75,80 +75,6 @@ class UncertainRestart(RestartState):
 class RestartedRestart(RestartState):
     previous: ProcessIdentity
     current: ProcessIdentity
-
-
-@dataclass(frozen=True)
-class RestartEnvironment:
-    """Declared inheritance policy for the credential-free resident watcher.
-
-    Private launch variable spellings belong to PrivateNkLaunch. Owner credentials
-    stay in /proc and are read only from the exact selected process at execution.
-    """
-
-    home: str | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_name": "HOME"}
-    )
-    path: str | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_name": "PATH", "runtime": True}
-    )
-    pythonpath: str | None = field(
-        default=None,
-        metadata={"wire_omit_default": True, "wire_name": "PYTHONPATH", "runtime": True},
-    )
-    virtual_env: str | None = field(
-        default=None,
-        metadata={"wire_omit_default": True, "wire_name": "VIRTUAL_ENV", "runtime": True},
-    )
-    config: str | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_name": "XDG_CONFIG_HOME"}
-    )
-    root: str | None = field(
-        default=None,
-        metadata={"wire_omit_default": True, "wire_name": "AGENT_COMMS_ROOT", "runtime": True},
-    )
-    root_id: str | None = field(
-        default=None,
-        metadata={"wire_omit_default": True, "wire_name": ROOT_ID_ENV, "runtime": True},
-    )
-    package: str | None = field(
-        default=None,
-        metadata={"wire_omit_default": True, "wire_name": PACKAGE_ENV, "runtime": True},
-    )
-    owner_key: ClassVar[str] = "AGENT_COMMS_THREAD"
-    binary_key: ClassVar[str] = "AGENT_COMMS_AGENT_BIN"
-    arguments_key: ClassVar[str] = "AGENT_COMMS_AGENT_ARGS"
-
-    @classmethod
-    def inherit(cls, environment: Mapping[str, str]):
-        return cls(**{f.name: environment.get(f.metadata["wire_name"]) for f in fields(cls)})
-
-    def encode(self) -> dict[str, str]:
-        return FieldCodec.encode(self)
-
-    @classmethod
-    def require_owner(cls, environment: Mapping[str, str], name: str):
-        if environment.get(cls.owner_key) != name or not environment.get(cls.binary_key):
-            raise ValueError("Owner launch configuration cannot be verified")
-
-    @classmethod
-    def restart_arguments(cls, environment: Mapping[str, str], *, agent_bin: str | None = None):
-        arguments = environment.get(cls.arguments_key)
-        return dict(
-            agent_bin=agent_bin if agent_bin is not None else environment[cls.binary_key],
-            agent_args=shlex.split(arguments) if arguments is not None else None,
-        )
-
-    def apply_runtime(self, source: Mapping[str, str]) -> dict[str, str]:
-        """Preserve source credentials/settings; replace the declared runtime fields."""
-        result = dict(source)
-        encoded = self.encode()
-        for declaration in fields(self):
-            if declaration.metadata.get("runtime"):
-                name = declaration.metadata.get("wire_name")
-                result.pop(name, None)
-                if name in encoded:
-                    result[name] = encoded[name]
-        return result
 
 
 @dataclass(frozen=True)
@@ -231,18 +157,6 @@ def _records(comms: Comms):
         yield path, FieldCodec.decode(QueuedRestart, json.loads(path.read_text(encoding="utf-8")))
 
 
-def _owner_environment(pid: int, name: str, interpreter: str) -> dict[str, str]:
-    """Read an exact owner's launch configuration without journaling secrets."""
-    command = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0", 1)[0]
-    if os.fsdecode(command) != interpreter:
-        raise ValueError("Selected source owner interpreter changed")
-    raw = Path(f"/proc/{pid}/environ").read_bytes()
-    values = dict(item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
-    env = {os.fsdecode(key): os.fsdecode(value) for key, value in values.items()}
-    RestartEnvironment.require_owner(env, name)
-    return env
-
-
 def enqueue(comms: Comms, name: str) -> QueuedRestart:
     if sys.platform != "linux":
         raise ValueError("Queued restarts require Linux inotify and /proc")
@@ -251,16 +165,10 @@ def enqueue(comms: Comms, name: str) -> QueuedRestart:
         snapshot = comms.registry.snapshot()
         owner = comms.registry.require(name)
         status = snapshot.statuses[owner.name]
-        if not owner.role.executable or not status.active or not owner.process_alive:
-            raise RelationViolationError("Queued restart requires a live agent owner")
+        owner.require_restart_owner(status)
         selection = OwnerRestartSelection.capture(snapshot, owner.name)
-        Platform.current().require(selection.process)
-        source_interpreter = os.fsdecode(
-            Path(f"/proc/{selection.process.pid}/cmdline").read_bytes().split(b"\0", 1)[0]
-        )
-        source = _owner_environment(selection.process.pid, owner.name, source_interpreter)
-        Platform.current().require(selection.process)
-        target = RestartTarget.capture(comms, source)
+        launch = RetainedOwnerLaunch.capture(owner, snapshot)
+        target = RestartTarget.capture(comms, launch.environment)
         target.require_watcher(comms)
         # Queueing itself never signals or interrupts the owner, even if it is busy.
         with _store_lock(directory / "queue"):
@@ -272,7 +180,7 @@ def enqueue(comms: Comms, name: str) -> QueuedRestart:
                     break
             else:
                 result = QueuedRestart(
-                    uuid.uuid4().hex, selection, source_interpreter, target, PendingRestart()
+                    uuid.uuid4().hex, selection, launch.interpreter, target, PendingRestart()
                 )
                 _save(directory / f"{result.id}.json", result)
     # A new watcher can safely race an existing watcher: flock permits one runner.
@@ -341,20 +249,20 @@ def step(comms: Comms) -> None:
         if not record.state.attempting:
             continue
         try:
-            Platform.current().require(record.selection.process)
-            original = _owner_environment(owner.pid, owner.name, record.source_interpreter)
-            Platform.current().require(record.selection.process)
-            launch = RestartEnvironment.restart_arguments(
-                original, agent_bin=record.target.agent_bin
-            )
             (receipt,) = comms.owners.restart_owners(
                 [owner.name],
                 expected=record.selection,
-                environment=record.target.runtime.apply_runtime(original),
-                **launch,
+                runtime=record.target.runtime,
+                agent_bin=record.target.agent_bin,
+                source_interpreter=record.source_interpreter,
             )
         except RestartRefusal as refusal:
             record = record.transition(refusal.queue_state())
+        except StoppedOwnerFailure as exc:
+            # An attempted restart remains uncertain. This watcher cannot keep
+            # credentials or authorize installation/input replay in its queue.
+            exc.abandon()
+            record = record.transition(UncertainRestart(reason=f'{exc}: {exc.__cause__}'))
         except Exception as exc:
             record = record.transition(UncertainRestart(reason=f"{type(exc).__name__}: {exc}"))
         else:

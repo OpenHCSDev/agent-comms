@@ -76,6 +76,16 @@ class Thread:
     def turn_state(self) -> TurnState:
         return TurnState(self.active_turn, self.last_finished_turn_id)
 
+
+    def restart_candidates(self, status):
+        return (self,) if self.role.executable and status.active and self.process_alive else ()
+
+    def require_restart_owner(self, status) -> None:
+        self.role.require_executable()
+        status.require_active()
+        if not self.process_alive or self.pid == os.getpid():
+            raise RelationViolationError("Restart requires another live owner")
+
     def __post_init__(self) -> None:
         generated = isinstance(self.created_at, _GeneratedCreationTime)
         object.__setattr__(self, "_generated_created_at", generated)

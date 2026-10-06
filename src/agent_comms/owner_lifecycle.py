@@ -6,7 +6,7 @@ import logging
 import os
 import shlex
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -16,6 +16,7 @@ from .diagnostics import owner_process_output
 from .errors import RelationViolationError
 from .locked_store import LockedStore
 from .maintenance_barrier import MaintenanceBarrier
+from .owner_launch import RestartEnvironment
 from .message_bus import MessageBus
 from .private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch
 from .registration import Registration
@@ -24,7 +25,6 @@ from .store_files import _store_lock
 from .threads import Thread
 from .thread_identity import OwnerIdentity
 from .restart_refusals import (
-    OwnerBusyRefusal,
     OwnerSelectionChangedRefusal,
     OwnerGenerationChangedRefusal,
 )
@@ -59,6 +59,30 @@ class OwnerRestartSelection:
         if snapshot.admission_generations[self.name] != self.admission_generation:
             raise OwnerGenerationChangedRefusal()
         return snapshot.require_active(self.name)
+
+    @classmethod
+    def capture_retired(cls, snapshot: RegistrySnapshot, original: Thread):
+        """Capture the post-fence generations without borrowing live admission."""
+        selection = cls(snapshot.owner_identity(original.name), original.require_process(),
+                        snapshot.admission_generations[original.name])
+        if selection.identity.incarnation != original.incarnation:
+            raise OwnerSelectionChangedRefusal()
+        selection.require_retired(snapshot)
+        return selection
+
+    def require_retired(self, snapshot: RegistrySnapshot) -> Thread:
+        """The complete stopped witness remains authority until replacement launch."""
+        if snapshot.owner_identity(self.name) != self.identity:
+            raise OwnerSelectionChangedRefusal()
+        if snapshot.admission_generations[self.name] != self.admission_generation:
+            raise OwnerGenerationChangedRefusal()
+        thread = snapshot.threads[self.name]
+        thread.require_local_process(self.process)
+        thread.require_idle()
+        snapshot.statuses[self.name].require_stopped()
+        if thread.process_alive:
+            raise RelationViolationError("Original owner survived retirement")
+        return thread
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +119,9 @@ class OwnerReleaseStore(LockedStore[dict[str, OwnerReleaseReceipt]]):
         return {}
 
 
+from .owner_cutover import OwnerCutover, PreserveOwnerRuntime
+
+
 class OwnerLifecycle:
     def __init__(self, root: Path, registry: Registration, bus: MessageBus):
         self.root = root
@@ -104,6 +131,16 @@ class OwnerLifecycle:
         self.maintenance = MaintenanceBarrier(registry.store.path)
         self.releases = OwnerReleaseStore(root / "owner_release_receipts.json")
         self._private_nk_launch: PrivateNkLaunch | None = None
+
+    @contextmanager
+    def restart_wire(self) -> Iterator[int]:
+        """Borrow this declaration's wire lock as the inherited integer OFD.
+
+        The original _store_lock and WireLog durability barrier yield an integer.
+        This context retains that original lock until the stopped phase closes.
+        """
+        with _store_lock(self._wire_lock_path) as descriptor:
+            yield descriptor
 
     def pin_private_nk_launch(
         self, validated_root: Path, wire_root_id: str, native_package: Path
@@ -202,79 +239,27 @@ class OwnerLifecycle:
         self,
         names: Sequence[str] | None = None,
         *,
-        agent_bin: str = "pi",
+        agent_bin: str | None = "pi",
         agent_args: Sequence[str] | None = None,
         expected: OwnerRestartSelection | None = None,
-        environment: Mapping[str, str] | None = None,
+        runtime: RestartEnvironment | None = None,
+        source_interpreter: str | None = None,
+        cutover: OwnerCutover = PreserveOwnerRuntime(),
     ) -> tuple[OwnerRestartResult, ...]:
-        """Preflight every idle owner before stopping any exact process identity."""
-        with _store_lock(self._wire_lock_path):
-            self.maintenance.assert_open_unlocked()
-            snapshot = self.registry.snapshot()
-            threads = (
-                [
-                    thread
-                    for thread in snapshot.threads.values()
-                    if thread.role.executable
-                    and snapshot.statuses[thread.name].active
-                    and thread.process_alive
-                ]
-                if names is None
-                else list(
-                    {
-                        self.registry.require(name).name: self.registry.require(name)
-                        for name in names
-                    }.values()
-                )
-            )
-            if expected is not None:
-                if len(threads) != 1 or threads[0].name != expected.name:
-                    raise OwnerSelectionChangedRefusal()
-                expected.require_current(snapshot)
-            captured = []
-            for thread in threads:
-                generation = snapshot.admission_generations[thread.name]
-                if not thread.role.executable or not snapshot.statuses[thread.name].active:
-                    raise RelationViolationError("Restart requires a running agent.")
-                if not thread.process_alive or thread.pid == os.getpid():
-                    raise RelationViolationError("Restart requires another live owner.")
-                try:
-                    thread.require_idle()
-                except RelationViolationError as error:
-                    raise OwnerBusyRefusal() from error
-                captured.append((thread, generation))
-            # Fence before the first signal, so a concurrent channel wake cannot
-            # start a turn while shutdown is pending. No replay is scheduled.
-            captured = [
-                (
-                    thread,
-                    self.registry.fence_idle_owner(
-                        thread,
-                        expected_admission_generation=generation,
-                    ),
-                )
-                for thread, generation in captured
-            ]
-        for thread, generation in captured:
-            self._stop_process(thread, generation)
-        with _store_lock(self._wire_lock_path):
-            for thread, generation in captured:
-                self._require_same_stop_owner(thread, generation)
-                if thread.process_alive:
-                    raise RelationViolationError("Owner survived retirement.")
-            return tuple(
-                OwnerRestartResult(
-                    thread.name,
-                    thread.pid,
-                    self._launch_owner_unlocked(
-                        self.registry.require(thread.name),
-                        agent_bin,
-                        agent_args,
-                        environment=environment,
-                    ).pid,
-                )
-                for thread, _ in captured
-            )
+        """Retain one batch through stop, optional quiet maintenance and launch.
+
+        The declared cutover runs under the wire admission lock after every
+        original exits and before any replacement launches. It owns its writer
+        proof and operation; failure leaves the fenced batch stopped for review.
+        """
+        from .owner_restart import OwnerRestartRequest
+
+        request = OwnerRestartRequest(
+            tuple(names) if names is not None else None, agent_bin,
+            tuple(agent_args) if agent_args is not None else None,
+            expected, runtime, source_interpreter,
+        )
+        return cutover.restart(self, request)
 
     @contextmanager
     def _signal_guard(self, thread: Thread, admission_generation: int):

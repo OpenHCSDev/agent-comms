@@ -34,6 +34,11 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
 
         raise RelationViolationError("live owner is stopped or unavailable")
 
+    def require_stopped(self) -> None:
+        from .errors import RelationViolationError
+
+        raise RelationViolationError("Retired owner is no longer stopped")
+
     def require_mutable(self, name: str) -> None:
         """Registration/heartbeat may update this thread's presence."""
 
@@ -101,6 +106,9 @@ class IdleThreadStatus(ActiveThreadPresence, ThreadStatus):
 class StoppedThreadStatus(ThreadStatus):
     stopped = True
     visible = True
+
+    def require_stopped(self) -> None:
+        pass
 
     def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
         return show_stopped
