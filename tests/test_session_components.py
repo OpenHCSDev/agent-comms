@@ -91,6 +91,7 @@ async def test_attached_declaration_publishes_membership_without_acquiring_execu
         assert type(attachment.sessions) is AttachedSessionLifecycle
         assert thread.pid == 0 and thread.process_identity is None
         assert owner._comms.registry.require(thread.name) == thread
+        assert owner._comms.registry.status(thread.name).active
         assert not attachment.sessions.bindings and not attachment.sessions.proxies
         with Coordination(str(owner._comms.root / "coordination.sqlite3")) as store:
             participant = store.participants.get(stable_thread_lookup(thread.created_at))

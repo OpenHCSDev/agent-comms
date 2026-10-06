@@ -12,6 +12,8 @@ Original Package parsed324 production,373 tests and54 tools without omissions. B
 
 The branch normally joined merged main6de443, including685 bootstrap, forced4b pin and original build seams. Those four resource/build files remain byte equal to that merged main. Original Core5d represents its own575db source, not this successor lifecycle; a future wheel must truthfully include this correction. No wheel was built.
 
+The attached declaration remains active: RegistryDocument.restore_stopped preserves an already-present matching incarnation and its status, while ThreadManagement.restore_stopped publishes its private membership. The attached control checks active status explicitly. EnsuringSessionLoadAdmission/OwnerLifecycle.ensure_owner remain the later launch authority; no start/status reset is added.
+
 This is source only. The failed9b input, raw logs, guard-only positive and whole return remain frozen on682 f36702ba. No runtime, package, wheel, environment, native or provider operation is authorized here. Original685 deployment remains unchanged. Future affected acceptance must use a separately issued coherent package/native purpose and fresh authored input; it must never replay the failed NotSent input automatically.
 
 ## Affected acceptance proposal
