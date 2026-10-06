@@ -271,6 +271,20 @@ protected records unchanged. Native EXEC, four-case control and public source
 operations remain held for separate NEW EXEC and same-purpose controller
 release. The unchanged5d595 controller is resolved ina0b59560; no four-case
 behavior is qualified by the proof. Closed9b authority is not inherited.
+Bohr released the single controller at364c63ce with separate EXECcf475dcf.
+The actual attempt failed1 in11.124s (outer12.153s), before permission: Toad
+mcp_observation_fixture.turn_source still called declare_thread(cwd,pid) after
+687 removed the PID argument. The other three cases are unrun; secondary UI
+UnregisteredThreadError is preserved without a broader cause claim. Parent
+verified the actual terminal and both original controller/child absent, then
+sent the concrete cross-repository caller to Mendel and original closure owners.
+Mendel returned whole2c1f23e9 after one normal four-wheel restore0.405s; Parent
+matched all76 raw references by hash and length. READ8bcfff/EXECcf475 are
+explicitly returned. Independent Bohr floor/census/lifecycle closure is still
+separate; no replay follows. Mendel owns the source-only fixture migration,
+keeping existing cleanup and bind_owned and enumerating the complete Core/Toad
+src/tests/tools call family before freeze. The retained bee wheel is unchanged.
+
 
 Warm02 source correction96079 waits for canonical history/displayed cursor at
 its two loaded admission sites; all29 assertions and original deadlines remain
@@ -282,6 +296,15 @@ and restore tuple. This assessment issues no purpose or access. Warm02 uses
 the same retained61bf wheel and two authored localhost requests; original89e
 failure and journals remain held. Fresh grant/READ/proof/EXEC/release are still
 required before a new mounted attempt; no rebuild or automatic retry follows.
+Heis published append-only finalwarm02 e66c6280 at1b5f8da3, binding the fresh
+former485 contract and exact new outputs. Bohr freshly issued4bfd394a with
+lifecycle282bee2a after current1467/953/full69 floor/refs verification. Parent
+read/hash-matched both actual issue records. Only own-root preparation and one
+61bf+bc47 stage are authorized; proof, native READ/EXEC and App remain held.
+Heis and Sch already have this exact issue through their original routes.
+Original c22/7b534 templates, current source849b,150s/20s and two-authored-input
+warm/eviction obligations remain unchanged; no Core stage or new build follows.
+
 
 Parent reviewed final scoped Ready68584b47b5a, matched all17 named final
 references and verified no source/build change from frozen5c689. Exact685 was
