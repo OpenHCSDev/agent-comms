@@ -31,8 +31,11 @@ def stopped():
 
 def test_retired_witness_cannot_borrow_live_or_replaced_admission():
     thread, snapshot = stopped()
-    selection = OwnerRestartSelection.capture_retired(snapshot, thread)
-    assert selection.require_retired(snapshot) is thread
+    launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python",
+                                 {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
+    owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
+    assert owner.require_current(snapshot) is thread
+    selection = OwnerRestartSelection(owner.owner, launch.process, owner.admission.admission_generation)
     with pytest.raises(RelationViolationError):
         selection.require_current(snapshot)
     changed = (
@@ -45,12 +48,11 @@ def test_retired_witness_cannot_borrow_live_or_replaced_admission():
     )
     for substituted in changed:
         with pytest.raises(RelationViolationError):
-            selection.require_retired(substituted)
+            owner.require_current(substituted)
 
 
 def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch():
     thread, snapshot = stopped()
-    selection = OwnerRestartSelection.capture_retired(snapshot, thread)
     environment = {
         "AGENT_COMMS_THREAD": thread.name, "AGENT_COMMS_AGENT_BIN": "/authored/pi",
         "AGENT_COMMS_AGENT_ARGS": "--no-tools 'authored value'",
@@ -59,10 +61,11 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch():
         "AUTHORED_CREDENTIAL": "in-memory-only",
     }
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python", environment)
-    owner = RetiredOwnerLaunch(selection, launch)
+    owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
     runtime = RestartEnvironment.inherit(environment)
     original = OwnerRestartHandoff("/authored", (owner,), runtime, None, None)
     encoded = FieldCodec.encode(original)
+    assert set(encoded["owners"][0]) == {"owner", "admission", "launch"}
     decoded = FieldCodec.decode(OwnerRestartHandoff, encoded)
     assert decoded == original
     assert decoded.owners[0].require_current(snapshot) is thread
@@ -70,11 +73,28 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch():
     assert decoded.owners[0].launch.environment["AUTHORED_CREDENTIAL"] == "in-memory-only"
     assert "execution" not in FieldCodec.encode(thread)
     unrelated = replace(launch, process=ProcessIdentity(2147483646, 1))
-    with pytest.raises(RelationViolationError, match="another process"):
-        RetiredOwnerLaunch(selection, unrelated).require_current(snapshot)
+    with pytest.raises(RelationViolationError):
+        replace(owner, launch=unrelated).require_current(snapshot)
 
 
 def test_retirement_capture_refuses_changed_original_incarnation():
     thread, snapshot = stopped()
+    launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python",
+                                 {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
     with pytest.raises(RelationViolationError):
-        OwnerRestartSelection.capture_retired(snapshot, replace(thread, created_at=2.0))
+        RetiredOwnerLaunch.capture_retired(snapshot, replace(thread, created_at=2.0), launch)
+
+
+def test_handoff_restore_requires_each_authentic_interpreter_before_read_or_launch():
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    thread, snapshot = stopped()
+    launch = RetainedOwnerLaunch(thread.require_process(), "/authored/other-python",
+                                 {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
+    owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
+    handoff = OwnerRestartHandoff("/authored", (owner,), RestartEnvironment.inherit({}), None, None)
+    lifecycle = SimpleNamespace(root=Path("/authored"))
+    # No registry/launch member supplied: refusal must precede either access.
+    with pytest.raises(RelationViolationError, match="acquired source interpreter"):
+        handoff.restore(lifecycle)

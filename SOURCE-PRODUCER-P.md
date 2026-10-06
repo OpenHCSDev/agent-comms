@@ -63,3 +63,19 @@ codec/missing-source-launch/missing-test-import negatives are preserved. No comp
 restart/OFD/launch/recovery, native/provider, installed or P wheel claim follows.
 The exact current tool/consumer checkpoint and results remain paired with this
 explicit amended P, never the unchanged720/c3e artifact.
+
+
+## Canonical original3931 handoff successor
+
+RetiredOwnerLaunch owns stopped capture/currentness and restores the original
+owner/admission/launch declaration. OwnerRestartSelection owns live selection
+only; its stopped methods are deleted. P adds real AdmissionIdentity and
+RegistrySnapshot.admission_identity from original unchanged admissions counters.
+No registry/Thread/goal row fields are added and no compatibility alias is used.
+The integer-OFD lifecycle/phase contract remains P's original reviewed method.
+Current/P handoff graph fields/defaults/decorators match authentic Git3931 at
+SOURCE-only scope; original3931 accept(int) owns its own StoreLock and restore
+still requires its authentic interpreter. P remains explicitly amended720,
+not original3931, unchanged720, c3e, or a historical installed artifact.
+Only affected authored handoff/partial-custody controls qualify this successor;
+all-stopped process/OFD/installed launch/recovery remains unqualified.
