@@ -137,7 +137,9 @@ archive is CURRENT459 only. Final warm operandsacad2011 bind this actual floor,
 retained source/wheel/controller and original150s BoundRun. Bohr issued fresh
 89e82fcf/lifecycle0c9d5039 after a new zero-reference floor readback. Only the
 single Toad61bf+Text71bc47 stage and own-root preparation are released; Core3fe
-is unchanged. Heis personally read the actual issue and owns that stage.
+is unchanged. Heis personally read the actual issue and owns that stage. Its actual lifecycle
+5eb0986c records stage1 consumedPASS and disabled, matching7a READ bound; proof
+remains held pending the exact materialized helper/argv/output binding.
 New matching7a READ, exclusive proof bindings, actual proof/DTO/Trust and separate
 EXEC/App release remain required in this same purpose. No public decoder,
 configured fork, loaded cohort, accepted07/466 replay or new build is included.
@@ -192,7 +194,15 @@ NotSent; no model request/POST or native permission was reached. This is an
 actual fresh ACP membership publication/acquisition gap, not justification for
 injecting test participants. Mendel owns the original SessionLifecycle/
 ThreadManagement/Registration capability and related consumer source closure;
-no competing fresh-session writer was identified.
+no competing fresh-session writer was identified. Source-only Draft6872785377
+now publishes stopped private membership before process acquisition and deletes
+the fixture's duplicated enrollment sequence. Parent found an actual related
+consumer break before verification: AttachedSessionLifecycle.new_session calls
+declare_thread(cwd,0), while the amended shared method unconditionally calls
+OwnerLifecycle.acquire_thread, which rejects0. Mendel received this exact
+counterexample to preserve the existing attachment's declaration-only semantics
+through lifecycle capabilities; no participant injection or new native run is
+needed to establish that source defect.
 
 The separately reached origin guard receipt6613ec67 and HTTP receipt03a4fba3
 show localhost positive, exact refused-origin causes before and after dispatcher
