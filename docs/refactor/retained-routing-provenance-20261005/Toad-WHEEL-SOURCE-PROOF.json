@@ -1,0 +1,55 @@
+{
+  "source_head": "d08c1a49b068c66e021e1ef31a497308022b774c",
+  "wheel": {
+    "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/retained-routing-provenance-20261005/wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+    "sha256": "0fb3fa9b4ca11f98ba94866d18b1bc73b302059e6d5198fe7522c6bced847b80",
+    "bytes": 2251017
+  },
+  "assets": 319,
+  "all_Git_local_ZIP_equal": true,
+  "RECORD_file_count": 324,
+  "RECORD_digest_size_complete": true,
+  "metadata_sha256": {
+    "batrachian_toad-0.6.20.dist-info/entry_points.txt": "12cacbee8134076f2a99542ab81f8682c88f39cbea62228e9c3b950d319d4528",
+    "batrachian_toad-0.6.20.dist-info/WHEEL": "58b82a17209f9bf2804afe161f2632d0fde933f9bb2792fd936b2474a2e2ac2f",
+    "batrachian_toad-0.6.20.dist-info/RECORD": "861c7b5d7e8df9a2cc96bf880aebb92f772eeeea644f2328400a989884f83571",
+    "batrachian_toad-0.6.20.dist-info/METADATA": "3fde2bfef1346f91a2bad2c6dfbca28a40710dc38ca987f66266a6064c3c43ee",
+    "batrachian_toad-0.6.20.dist-info/licenses/LICENSE": "4df3c306dddaaf4baffdff5ca820cc679ac8cd6dc263c6a74517783e42fa7a3b"
+  },
+  "build_inputs": {
+    "pyproject.toml": {
+      "sha256": "2eb292f635824e9e38638dd3bb830dc40df17eb01bbe84de0d5fdde824c7fd46",
+      "Git_equal": true
+    },
+    "uv.lock": {
+      "sha256": "64de13f433b0afece4c8f4f8953c5c021c94adaedd753d8fa50e60fbe8ff94b6",
+      "Git_equal": true
+    },
+    "README.md": {
+      "sha256": "11b3f5195acb00a19a73229749e2e71ba924314a8b1c650f05a2bf43f537d35d",
+      "Git_equal": true
+    },
+    "LICENSE": {
+      "sha256": "4df3c306dddaaf4baffdff5ca820cc679ac8cd6dc263c6a74517783e42fa7a3b",
+      "Git_equal": true
+    }
+  },
+  "build_receipt": {
+    "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/retained-routing-provenance-20261005/wheel/build-receipt.json",
+    "sha256": "b7ffceed1fd0a9d99123e959ab6e0cfb1b6604ad82703db242b8f85d753717b6"
+  },
+  "inventory": {
+    "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/retained-routing-provenance-20261005/wheel/source-inventory.json",
+    "sha256": "84b9e76109031c89f94caeb33cb5486f034dafa1f8cb160a1107566cca071fb4"
+  },
+  "record_proof": {
+    "path": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/retained-routing-provenance-20261005/wheel/record-proof.json",
+    "sha256": "d23e395c2a6fc2542b732f86485c7ffcc7f2e4180249126d3f7a870d89de1cfd"
+  },
+  "native_manifest_sha256": null,
+  "installed_qualification": "UNRUN",
+  "native_READ_or_execution": false,
+  "declared_Core_source_pin": "b97345686f8b498db24069d262f364c5ad1ffb1b",
+  "source_pin_location": "Git-qualified original pyproject.toml/uv.lock build inputs; not serialized into wheel METADATA",
+  "metadata_dependency": "agent-comms[acp]"
+}

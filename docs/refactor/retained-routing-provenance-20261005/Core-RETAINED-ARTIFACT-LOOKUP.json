@@ -1,0 +1,50 @@
+{
+  "head": "b97345686f8b498db24069d262f364c5ad1ffb1b",
+  "scope": "retained own source artifacts plus named685 builder Corewheel",
+  "assets": 355,
+  "examined": [
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-w6-successor-source/agent_comms-0.1.0-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "agent_comms/acp_extension.py",
+      "metadata_pin_equal": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-w6-filewheels-e1d15072/agent_comms-0.1.0-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "agent_comms/acp_extension.py",
+      "metadata_pin_equal": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-w6-attachment-successor-source/agent_comms-0.1.0-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "agent_comms/acp_extension.py",
+      "metadata_pin_equal": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/wheels/agent_comms-0.1.0-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "agent_comms/_pi_helpers/context_tokens.mjs",
+      "metadata_pin_equal": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/working-memory-historical-main3aac-source/agent_comms-0.1.0-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "agent_comms/acp_extension.py",
+      "metadata_pin_equal": true
+    },
+    {
+      "path": "/home/ts/wt/comms-field-codec-closure-20260928/.artifacts/context-segment-loading-20261004/wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "agent_comms/acp.py",
+      "metadata_pin_equal": true
+    },
+    {
+      "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/core-wheel/wheel/agent_comms-0.1.0-py3-none-any.whl",
+      "source_equal": false,
+      "first_mismatching_member": "agent_comms/acp_extension.py",
+      "metadata_pin_equal": true
+    }
+  ],
+  "matching_full_artifact": null
+}
