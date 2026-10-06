@@ -16,6 +16,15 @@ The original objective remains incomplete. CI is deferred as a merge gate.
 - Textual72 and Toad482 are merged: native4e3a877f and Toad6fd049622.
   SideBar now uses displayed ancestry to defer parked-tab style/hydration/layout.
   The competing conversation sidebar-padding subscriber is deleted.
+- Both new wheels are built: Toad6fd049622/nativee15. Complete wheel RECORDs
+  and all319 Toad/266 native source members match. Core remains the explicitly
+  reviewed ddcdc/6b426 artifact; no latest-Core equality claim. Exact build and
+  readback are under Parent's current-ui-publication-pair-20261006 artifact root.
+  No installed prefix or live link changed. Bohr received the artifacts for a
+  fresh existing-holder contract; Parent is preparing the original physical
+  recorder's sidebar/wheel/reversal/End and saved-return paths independently.
+- Current GitHub queries find no open Core or Toad PRs. This clears the open-PR
+  integration queue, not the remaining installed workflow/refactor acceptance.
 - Actual visible pointer App: right median50.4ms/p9558.5ms/max112.9ms; left
   median54.5ms/p9571.6ms/max185.5ms, empty stderr. Earlier429/424ms measurements
   selected a hidden zero-size sidebar and are invalid visible-toggle results,
