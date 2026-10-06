@@ -36,3 +36,14 @@ wrong-member/untagged refusals and renderer preflight passed. The installed
 508-widget/ten-tab sidebar App passed with empty stderr. Focus processing took
 5.56ms left and 6.97ms right across three calls; overall first-paint medians were
 38.4/38.3ms with long tails. No physical smoothness or baseline gain is claimed.
+
+The renderer successor was published through this owner after review. The live
+launcher opened original saved history and completed scrolling up/down, reversal
+and End with unchanged backend processes/route and no private cleanup remainder.
+743 native writer completions had 5.91ms median and 23.25ms p95 enqueue-to-writer;
+these are acknowledgements, not input-to-photon or a reliable speedup. Inspected
+upward-scroll footage shows painted history and repeated frames. General latency,
+activity bursts and pointer/multi-selection acceptance remain incomplete. The
+original result is retained at `.artifacts/sidebar-live-candidate-20261006/
+native-focus-wheel/live-entrypoint-check.json`; the recorder raw files are under
+`/home/ts/.cache/agent-scratch/sidebar-focus-live-entrypoint-20261006`.
