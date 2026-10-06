@@ -1,0 +1,183 @@
+{
+  "source_head": "3e109632e95dc15972d53d459dc5e19a99b16732",
+  "determining_production": "8a530ad5a8747bfddfb613ea695f802b24b8a02b",
+  "normal_main": "6de443afcf3ebba7a0f863358eb60af2c2660700",
+  "source_checks": {
+    "initial": "2PASS1FAIL before fresh session: obsolete coordinated_runtime trust stub; raw retained",
+    "changed02": "FAIL: original fake model passed bare path to current nominal session identity admission; raw retained",
+    "changed03": "1PASS (2.42s pytest /4.130089342s complete process) after existing SelectedSession and NativeSessionIdentity consumer migration",
+    "distinct_qualified": 3,
+    "passing_two_repeated": false,
+    "strength": "real authored private registry/coordinator/ACP handler + existing fake model; no SDK/native/provider, no installed or configured acceptance",
+    "fixture_scope": "Only selected fresh control trust stub moved to existing native_pi owner. Other historical tests with old trust patch references are unrun/unqualified, not repaired or claimed by this batch."
+  },
+  "sanity": [
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "sha256": "e7ae96b2846c4bf7f88d663c53e7fd6b52e85c8f286afb2c3a04fde3a24a0cd6",
+      "git_local_equal": true,
+      "compile_only": true
+    },
+    {
+      "path": "tests/native_backend_fixture.py",
+      "sha256": "cec2adf15305aa620673b413e52c9d31d6ea4b17c8ae1b6633a8b1f8d8707ba2",
+      "git_local_equal": true,
+      "compile_only": true
+    },
+    {
+      "path": "tests/test_session_components.py",
+      "sha256": "61c70041524692349ef028ecb4e19fcf45db477a1d91fe913794e7a0064022a4",
+      "git_local_equal": true,
+      "compile_only": true
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "sha256": "f27036d4f10405a5dc414a4a94d08f60bb1f45fea8c86752a95f71b3e5ab1ff6",
+      "git_local_equal": true,
+      "compile_only": true
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "sha256": "1279e7c83f74308d4b394afff13b590063bc55fd340a8e710f064de209e2211c",
+      "git_local_equal": true,
+      "compile_only": true
+    }
+  ],
+  "one_build": {
+    "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-successor-wheel-20261005/wheel/agent_comms-0.1.0-py3-none-any.whl",
+    "sha256": "bee0813b18f84df00595113eeb32283ef0051cdc5acf0315afcbc21247c7d6c6",
+    "bytes": 906687,
+    "full_git_local_zip_assets": 355,
+    "full_RECORD": 360,
+    "metadata_and_forced_resources_proved": true,
+    "source": "3e109632e95dc15972d53d459dc5e19a99b16732",
+    "package_changes_vs_selected5d": [
+      "agent_comms/session_lifecycle.py"
+    ],
+    "native_assembly_or_dependency_install": false,
+    "installed": false
+  },
+  "keepers": [
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/source-checks/01-launch.json",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks-20261005/launch.json",
+      "sha256": "0506df014db507b4bc2c9876d673be089f4c67e4d510bf053d8d7c77736bb834",
+      "bytes": 1744
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/source-checks/01-terminal.json",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks-20261005/terminal.json",
+      "sha256": "cf4217eb0a3478d3d58e144d4c39a5a86be7506464d877220d19def39d170058",
+      "bytes": 724
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/source-checks/01-stdout.log",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks-20261005/stdout.log",
+      "sha256": "94813d200018e5d1c234787da87097575e062c05feacf9063d6b6c64c1d1a711",
+      "bytes": 2086
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/source-checks/01-stderr.log",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks-20261005/stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/source-checks/01-result.xml",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks-20261005/result.xml",
+      "sha256": "312cb460993b546b6101d0c0d2ada25c81817a6035b121a802d71e2cf7ece29c",
+      "bytes": 2549
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/source-checks/02-launch.json",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks02-20261005/launch.json",
+      "sha256": "04c5938ee1bd3df91091a5d794ec4e32aaffa682d3299e13fe2a8eee411579f9",
+      "bytes": 1520
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/source-checks/02-terminal.json",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks02-20261005/terminal.json",
+      "sha256": "2cdb9a8b1e8100e41e67e4f1844523d24f9ce40f95f28caa3a628ef8267eff5b",
+      "bytes": 537
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/source-checks/02-stdout.log",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks02-20261005/stdout.log",
+      "sha256": "4cbb04dfccd82c54113444e9629ccbbf0399ad4813f85bbc561c7ccf3044d8a4",
+      "bytes": 6167
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/source-checks/02-stderr.log",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks02-20261005/stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/source-checks/02-result.xml",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks02-20261005/result.xml",
+      "sha256": "a2551233bc593dac5d139d2a08a68e810b25f12a0d09dfc91d8ea915abaea455",
+      "bytes": 5974
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/source-checks/03-launch.json",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks03-20261005/launch.json",
+      "sha256": "5dfef4ebe97c70d6d01450b7003991266c5c6ffcf040db0fb10aa200e7cef9f9",
+      "bytes": 1573
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/source-checks/03-terminal.json",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks03-20261005/terminal.json",
+      "sha256": "5bfff3c02561a6dc086d85877d8b88d072e3baf1f9a915bbb62c319bb0e80af9",
+      "bytes": 536
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/source-checks/03-stdout.log",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks03-20261005/stdout.log",
+      "sha256": "4635950151259d04456905f1f5db72a484d383137f57401879af09d5be7894ea",
+      "bytes": 98
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/source-checks/03-stderr.log",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks03-20261005/stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/source-checks/03-result.xml",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-source-checks03-20261005/result.xml",
+      "sha256": "62907c07802e295c72a4c0f457ae24028eb0a36245b08cf10315b5d6a5c58b68",
+      "bytes": 382
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/retained-wheel-comparison.json",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-successor-wheel-20261005/retained-wheel-comparison.json",
+      "sha256": "592c87f4c89d376182df8c63564525ad178c042c0aedafeb071c30891d21fdec",
+      "bytes": 8028
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/build-receipt.json",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-successor-wheel-20261005/build-receipt.json",
+      "sha256": "074683c7d9fbfcd94303cbc6c1de754ef1d50675d7926784bae6ba1cf17e2761",
+      "bytes": 1359
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/wheel-source-proof.json",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-successor-wheel-20261005/wheel-source-proof.json",
+      "sha256": "adac696d64016037779f1bc625d2a51273a668281c181da487a0d5b1563b6c09",
+      "bytes": 101536
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/build.stdout.log",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-successor-wheel-20261005/build.stdout.log",
+      "sha256": "4b7bf8a014c9d5f684f7ec116d30793882adbf9eac7ed1f8777e9a1d35742b80",
+      "bytes": 54
+    },
+    {
+      "path": "evidence/fresh-acp-owner-publication-20261005/build.stderr.log",
+      "original": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-successor-wheel-20261005/build.stderr.log",
+      "sha256": "3fbf5c81df4d6f7774a09a7694742996e64ed07ccaea033ef3d34574059a981c",
+      "bytes": 62
+    }
+  ],
+  "runtime": "UNRUN; native9b CLOSED/NotSent/otherthree unrun; guard-only accepted separate; future specific holder and fresh READ/EXEC required"
+}

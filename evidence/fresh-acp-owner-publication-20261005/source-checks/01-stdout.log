@@ -1,0 +1,45 @@
+..F                                                                      [100%]
+=================================== FAILURES ===================================
+_________ test_acp_new_session_owner_consumes_private_selected_source __________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-8xtjoolu')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff2c4830b50>
+
+    async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, monkeypatch):
+        root = tmp_path / "wire"
+        project = tmp_path / "proj"
+        project.mkdir()
+        comms = Comms(root)
+        comms.registry.declare(
+            Thread(
+                "sender",
+                frozenset(),
+                str(tmp_path),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
+        root_id = comms.messaging.initialize_private_initial_protocol()
+        agent = CommsAgent(
+            comms,
+            runtime_enabled=True,
+            private_nk_native_package=tmp_path,
+            private_nk_wire_root_id=root_id,
+        )
+    
+        async def noop(*args, **kwargs):
+            return None
+    
+        async def no_options(*args, **kwargs):
+            return []
+    
+        monkeypatch.setattr(agent._runtime, "start", noop)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(agent.sessions.config, "options", no_options)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+>       monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+E       AttributeError: <module 'agent_comms.coordinated_runtime' from '/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/coordinated_runtime.py'> has no attribute '_trusted_package'
+
+tests/test_acp_private_nk_delivery.py:127: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_acp_private_nk_delivery.py::test_acp_new_session_owner_consumes_private_selected_source
+1 failed, 2 passed in 2.41s
