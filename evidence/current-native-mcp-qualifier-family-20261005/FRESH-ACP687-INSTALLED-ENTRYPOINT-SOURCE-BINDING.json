@@ -1,0 +1,75 @@
+{
+  "state": "SOURCE-only consumer/operand correction; no application imports/tests/builds/package/native/runtime operations",
+  "source_head": "c81c9016907b1922decf84dcd90a016fe3e2d836",
+  "owner_trace": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/LAUNCH-REFUSAL-OWNER-CONSUMERS.json",
+    "sha256": "a10ca61b4f27deb160438a7074d5b60ecc33566d456fc230c790c81119e8ddaa",
+    "bytes": 201912
+  },
+  "predecessor": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/FRESH-ACP687-CORRECTED-OBSERVER-NATIVE-OPERANDS.json",
+    "sha256": "1c9c10252de77e790a0835d2c2e90ba1b3f42c6d0cbae0af2c005721fb1e78a7",
+    "bytes": 36324
+  },
+  "whole": {
+    "path": "/home/ts/.cache/agent-scratch/m687n02/whole-handback.json",
+    "sha256": "44b6d1b388a05e53ef905b2542f9ca192e2973469a42d1eb9ca9b0be652a40b4",
+    "bytes": 49720
+  },
+  "Bohr_closed": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel687-corrected-observer-native-fourcase-lifecycle.json",
+    "sha256": "7570cf14c521fcfb649436701f980af9c785e82a5810780903a52ebde56fcb39",
+    "bytes": 22530
+  },
+  "Sch_closed": {
+    "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/native-keeper687-corrected-observer-native4B-READ-EXEC-handback-20261005.json",
+    "sha256": "8b16069e3f995669f42b55f5a32d70be1cc876287d49768d228a55e2b1dbdf13",
+    "bytes": 52918
+  },
+  "correction": {
+    "before": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/bin/pi-native",
+    "after": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/pi-comms-native",
+    "original_owner": "OwnerLifecycle.native_entrypoint / NativePiRpcLaunch._command_selection",
+    "production_delta": [],
+    "control_oracle_or_bounds_delta": [],
+    "package_assets_delta": [],
+    "new_purpose_authority": false
+  },
+  "preserved_helpers": {
+    "metadata_producer": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/mcp_observation_fixture.py",
+      "sha256": "7a16afdb7ed4d95b943627ab70a6e7a6f505ad2b16af0bdba07678090a49ad29",
+      "published_head": "afc657ef60e5994a16c6d19412ccacfe9f0d36ea"
+    },
+    "typed_consumer": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/typed_comms_command_pilot.py",
+      "sha256": "e783896329e4616a44e8dac320916eb6302293cbf496b5b222d1f8c6453345a3"
+    },
+    "canonical_owner": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/delivery_owner_fixture.py",
+      "sha256": "b03ab1801372c8d45e6cdbf91ebd2e7013ffeec9485e392e45d0479606caae5f"
+    },
+    "core_pytest_fixture": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/conftest.py",
+      "sha256": "ced0353a6dcf25e847a2e023d705358841bc10f869a8d5f988f03f43b7f415a4"
+    },
+    "toad_app_resource": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/runtime_fixture.py",
+      "sha256": "987399f81781f57e5cca89dc0e5214c59663d97a01bcb5bad18f35d7f8eb686f"
+    },
+    "CSS": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/src/toad/toad.tcss",
+      "sha256": "8569c3275b198cb1f1e30e4ebb804b48fb61d33585fb3277b3a39a37c4e08636"
+    },
+    "core_control": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_mcp_acceptance.py",
+      "sha256": "e010e078b9bd6e377b3edca4387869c46f74c04052dd0e08b0037df5dce3ccda"
+    },
+    "toad_adapter": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/native_permission_ui.py",
+      "sha256": "8e9d11da1538b82f24595e5db6285d99f6ff1dc970d46f55030e0a026857536b"
+    }
+  },
+  "selected_artifact_relation": "Historical Core3e109632/bee0813b+Toad289f/b2e+Textd733/16c9 and immutable4b unchanged. Main432 forced APPEND_SYSTEM and Parent688/478 are not folded. No rebuild justified by operand correction.",
+  "source_authoring_negative": "Initial author assumed previous_attempts was list; actual predecessor declares dictionary. Stopped before output write, corrected against schema; no operator/prefix phase."
+}
