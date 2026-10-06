@@ -4,6 +4,682 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Affected native cases passed and693 merged — 2026-10-06
+
+Parent read original native.xml and joined terminals: no_controller37.731s,
+revoke_midturn42.931s, disconnect37.860s all passed. Original controller0 in
+123.047s and operator joined0 in124.221s; both recorded processes are absent.
+Accepted allow47.833s and standalone guard stayed excluded. This qualifies the
+three affected cases at their selected historical cohort, not the new configured
+pair or public installation. Original restoration/whole return/closure remain
+with Mendel/Bohr/Sch; source merge does not terminate that custody.
+
+Parent marked693 ready and normally merged exact2928ac1d on fork maina79d4aa0.
+Normal Parent join adds only four final operand evidence files; production,
+build inputs and selected retained Core artifact remain unchanged. No rebuild
+or runtime replay followed. Full configured UI and physical publication/recovery
+remain incomplete and keep their original owners.
+
+### Superseded warm source PR reconciled — 2026-10-06
+
+Parent verified the entire published Toad476 head is an ancestor of active478
+and closed476 as superseded. Source, original artifacts, journals and failures
+stay retained. Heis still owns configured continuous acceptance, genuine
+reader/eviction verification, loaded cohorts and performance in478; closing the
+duplicate is not acceptance. Browser50 is merged; original workspace116 is
+already closed. No branch or worktree was deleted and no runtime repeated.
+
+### Repaired artifact and actual affected native run — 2026-10-06
+
+One separate Toad successor wheel now contains joined reader480. All319 source
+assets and324 RECORD rows validate; only history_anchor.py differs from the
+frozen configured wheel. Core and Textual are unchanged. Build/raw/source
+relation is published in Parent478 evidence/current-paired-reader-artifact-20261006.
+Heis and Bohr received it for explicit final configured selection; neither
+installation nor runtime qualification is claimed from the build.
+
+Mendel received fresh EXEC and Bohr same-purpose release. The original controller
+and test child are now running with matching recorded birth identities. Only
+no_controller/revoke_midturn/disconnect are included; allow/guard are excluded.
+Result and original whole return remain pending. No second launch or retry.
+
+### Reader integration and configured installation next — 2026-10-06
+
+Warm04 holder and artifact authorities are independently closed. Two warm
+returns preserved rendered identity with zero reads; reader position failed
+following genuine eviction. Original journals/raw remain held. Heis reader480
+is normally joined into Parent478 and merged into that integration branch;
+changed modules compile. Runtime verification of the repair remains pending.
+The retained configured Toad wheel predates that repair and stays frozen.
+
+Mendel693 completed the installed-source proof for the remaining three MCP
+cases. Stage/proof are consumed; separate fresh EXEC and same-purpose release
+remain necessary before runtime. Accepted allow and guard are excluded.
+
+Heis effective configured operands select the retained coherent pair. Parent
+found its reused checkout no longer materializes the recorded frozen helpers;
+Heis is binding stable paths while Bohr assesses the now-returned485 floor.
+No holder reservation, new environment, rebuild or configured launch follows.
+
+Einstein same-format3931 publication/recovery source proposal is integrated.
+It uses the canonical retired handoff and original interpreter/OFD recovery;
+actual source/target declarations, floor, cohort and authority remain unbound.
+No public stop or recovery operation has run.
+
+### Duplicate qualifier PR retired — 2026-10-06
+
+Parent verified that693 contains the entire published682 branch and closed682
+as superseded. Source, original allow acceptance and all failures/fixtures remain
+retained. The three affected cases continue in693 under their issued purpose;
+there is no claim of full readiness. Sch's fresh READ was relayed to Mendel;
+Bohr must bind the original sole proof release before execution.
+
+### Restart ownership fix merged on the fork — 2026-10-06
+
+Parent completed source review, moved689 from its already-merged routing base
+to main, and normally merged the exact canonical handoff checkpoint. Fork main
+merge5a24c133 is actual merged state. Parent's subsequent normal join had zero
+file delta; retained Core build bytes and selected Toad pin remain unchanged.
+No rebuild followed. Physical stopped-batch/OFD/recovery acceptance is still
+pending; source merge does not claim local installation.
+
+Mendel's staging for the three affected MCP cases passed. Parent relayed the
+joined receipt and proof operands to Sch for fresh matching READ. Bohr already
+has those operands. Original proof and runtime releases remain their dependency;
+accepted allow and guard are excluded and the configured pair is separate.
+
+### Current acceptance work — 2026-10-06
+
+The new matched pair is built and retained; installed acceptance is pending.
+Heis received the artifacts and is preparing its configured run. The clean
+configured producer is merged on the fork. Bohr issued staging for Mendel's
+three remaining MCP cases; proof and runtime need their existing releases.
+Accepted allow and guard are excluded. This historical cohort is separate.
+
+Warm04 proved two retained returns preserved exact rendered identity with zero
+page reads. Genuine eviction was reached, then reader-position restoration
+failed. The whole return records both authorities returned, one normal package
+restoration, all recorded private processes gone and private references clear.
+The original journals/raw remain held. Parent read that qualification and relayed
+the whole return to Bohr and Sch for their existing independent closure. Heis
+owns the reader-position source repair; there is no rerun or new loan.
+
+Communication uses ordinary results and next actions. Exact custody records
+stay in the existing evidence, with routine acknowledgments batched. The
+standing reminder is in the existing Core AGENTS.md; Toad has no such tracked
+file, so no second instruction store was created.
+
+### Clean producer692 merged on the fork — 2026-10-06
+
+Parent reviewed and normally merged the clean three-file producer692 at exact
+b331bd8e through GitHub main58fdd060, then normally joined main into688 with zero
+file delta. Only the existing producer's optional wake selection and its evidence
+changed; compaction/S4 defaults remain false. This is a real main merge, not
+configured runtime acceptance. Canonical689 remains a source draft based on the
+original routing branch;693 includes its existing qualifier family. Both are
+reviewed/integrated in Parent688, without relabelling their installed scope.
+
+Matched wheels were retained once before this source-equivalent main join.
+Core6b426d7e and Toadbfbde5ba build inputs and package assets remain unchanged;
+no rebuild follows the merge. Warm04 now has its distinct Bohr App release,
+not a result or configured-source authority. Original physical/runtime custody
+and terminal returns remain with its original Heis/Sch/Bohr owners.
+
+### Matched current wheels retained once — 2026-10-06
+
+Parent normally joined configured Toad479 into478 and selected published Core
+ddcdc422 explicitly in pyproject and three lock locators. Both changed controls
+match original8dc69 source bytes and compile without imports; the selected
+producer matches original b086 helper and declares auto_wake. No resolver ran.
+
+ONE cached ordinary Core build passed0.557754024: wheel6b426d7e,910730 bytes,
+355 package assets and360 complete RECORD rows. ONE cached ordinary Toad build
+passed: wheelbfbde5ba,2251133 bytes,319 package assets and324 complete RECORD rows.
+All package assets match Git/local/ZIP byte for byte, without extras. Source
+heads ddcdc422/c2b4c3e8 and build inputs/raw/joined process receipts are retained
+in evidence/current-paired-artifacts-20261006; no second build or environment
+was made. The native manifest remains exact4b. Pin ownership is in Git build
+inputs; normal Toad METADATA declares agent-comms[acp], not a source revision.
+
+These are real paired build artifacts, not installed acceptance. No holder,
+source witness, new READ/EXEC or public cutover follows the builds. Original
+owners must bind the actual current floor, configured source and exact final
+operator tuple before their purpose release. Six authored configured UI inputs
+are distinct from automatic configured-provider requests; that count and the
+outer run bound remain actual next-purpose facts. Current stores support the
+reviewed Preserve relation, conditional on installed equality at use.
+
+Warm04 source/FullTrust proof has now passed7.810569731 and its original two
+identities joined/absent. Parent relayed final4d237/Appmapa685/source/DTO/Trust
+literals to Bohr and Sch. App remains separately held pending actual new EXEC
+and same-purpose release. Old failures and original journal custody persist.
+
+### Canonical handoff and affected consumers integrated — 2026-10-06
+
+Parent normally merged original689 fe32f518, clean configured producer692
+b331bd8e and mounted receipt consumer693 24bd65f7. Five changed Python files
+match their original owner checkpoints byte for byte and compile without imports;
+diff checking passes. SOURCE-INTEGRATION.json retains that evidence. Existing
+passing source controls were not repeated.
+
+RetiredOwnerLaunch now owns the canonical original3931 owner/admission/launch
+handoff and its stopped validation; the competing live selection methods are
+deleted. Original process capture reads the source interpreter and environment
+from that process, with birth and registry relation checks. Current/P source
+controls and canonical declaration equality support this source closure; actual
+stopped-batch/OFD/installed recovery remains unqualified.
+
+The configured producer now declares auto_wake=False and forwards an explicit
+True through original CommsAgent and InputDrain.ensure_live_drain after owned
+binding. Existing compaction/S4 defaults stay false. This resolves the previously
+reported keyword binding defect in source. Heis published configured Toad479
+8dc69db1 separately, with its future operands bound to this new producer; no
+configured provider journey has run. Its proposed worst-PID socket is65 bytes.
+
+The existing MCP fixture releases its localhost response only after the subscribed
+Attachment awaits the mounted observer and decodes the genuine receipt; passive
+Audit no longer owns that operational event. Allow47.833 remains accepted.
+No-controller remains failed, and revoke/disconnect remain unrun. The source
+ordering gap is established; the exact earlier callback failure remains inference.
+Mendel proposes only those three affected cases under future fresh custody.
+
+Warm04 stage is consumed once and its new matching READ16d70 is bound. Heis's
+exclusive proof helper1eb3/source bindingb404 is prepared, not invoked. Parent
+relayed those exact operands to Bohr for original same-purpose release. Receipt
+and relay do not authorize proof or App execution. Warm/eviction and configured
+continuous acceptance remain unfinished; held histories and old failures persist.
+
+### Configured producer/consumer binding defect assigned — 2026-10-06
+
+Parent source review found configured_main in Heis's active consumer passes
+configured_saved_agent(auto_wake=True), while the actual merged691/selectedCore99
+producer declares no auto_wake keyword and constructs CommsAgent(auto_wake=False).
+The selected producer therefore cannot bind this new call. This was found by
+source/signature inspection, without importing, testing, stage or provider input.
+Heis owns the existing producer method and complete real callers: retain default
+wake-disabled compaction/S4 behavior, declare the configured journey's explicit
+wake selection through the original CommsAgent contract, and publish a clean
+current-main source checkpoint. No copied fixture, private-state mutation,
+external server bypass or peer-worktree edit is authorized by this finding.
+Parent delivered the exact call/declaration sites before consumer source freeze.
+Warm04 frozen helpers/purpose remain unchanged; configured mounted acceptance is
+still unrun. Einstein's canonical handoff family is actively uncommitted in its
+own source checkout and remains separate; Parent does not merge partial edits.
+
+### Completed Parent scratch retired — 2026-10-06
+
+Parent removed only its completed two-test preflight scratch after matching all
+three published raw files and enumerating the original authored registry/catalog
+fixtures, empty locks and internal pytest links. The existing original privileged
+borrower checker inspected239 processes with no references or permission gaps.
+Published stdout/stderr/XML and original RESULT remain unchanged; CLEANUP.json
+retains the disposal record. Earlier incomplete-UID census remains historical,
+not rewritten. No source, installed holder, native session, UNKNOWN input or peer
+artifact was deleted. Initial metadata enumeration missed an empty original
+fixture lock and stopped before mutation; only the metadata reader was corrected.
+
+Warm04 sole two-wheel stage passed0.376155213 and original two identities are
+joined/absent. Parent relayed exact stage/binding/controller literals to Bohr and
+Sch. Stage consumption and a new matching READ precede the still-held proof;
+no duplicate stage, mounted launch or inherited authority follows that relay.
+Configured consumer and handoff/recovery source owners remain independently active.
+
+### Publication storage relation reviewed — 2026-10-06
+
+Parent compared actual source3931f16fe with selected Core99cdd707 before choosing
+any future runtime installation action. InputDispositions, goal_attempts,
+coordinated_runtime_schema, native_prompt_binding, private_sidecar,
+coordination_response and coordination_schema source bytes are equal. The entire
+compaction_records AST is equal after removing only four added NativeForkCreation
+ancestry/reader methods; declared journal tables are unchanged. The entire
+goal_history AST is equal after removing only the new read-only acquisition
+method and the full-wire row discriminator; SQLite fields and DDL are unchanged.
+Thread changes add behavior, not stored fields. Recorded read-ledger changes
+alter acquisition/projection behavior, not its durable declaration.
+
+This supports the original PreserveRuntimeInstallation member for this selected
+same-format pair, conditional on authentic built/installed declaration equality
+at use. An unnecessary ResetRuntimeInstallation must not retire its compaction
+records. Existing publication already protects original InputDispositions,
+goal_history, native proofs/sessions and declared goal state; its changed-schema
+carry remains separate if an actual future declaration differs. This is source
+comparison and semantic publisher review, not a root read, installed schema
+proof, native READ, stop/restart or runtime grant. Actual3931 owner handoff/recovery
+still needs Einstein's complete original-owner source closure before publication.
+
+Sch's consumed3808 artifact closure64d2100b is delivered separately from Bohr's
+CLOSED40b25eca holder; matching e7f829/9f522 permissions are returned and false.
+Warm04 has a new disjoint former485 stage-only purpose4d0182e2; its sole stage,
+proof and mounted App boundaries remain original Heis/Sch/Bohr custody. No
+Parent runtime operation or reuse of either purpose follows this checkpoint.
+
+### Paired source updated and native purpose independently closed — 2026-10-06
+
+Toad478 published129b016b, explicitly selecting Core99cdd707 in pyproject and all
+three lock locator occurrences. Both TOML files parse and all literal selections
+match; diff checking passes. This source pair now includes original d433 full
+journal/report preservation. No resolver, build, installed prefix or retained
+qualification artifact was changed. The coherent matched pair still needs actual
+build, installed acceptance and original safe publication/recovery ownership.
+
+Parent read/hash verified Bohr's actual3808 CLOSED40b25eca lifecycle and independent
+floor197d3fc5, privileged census678fcec2 and reference classificationdfcc3bb3.
+Wholecb8b6259 and explicit e7f829/9f522 returns are bound by that independent
+closure, with all phase attempts consumed once. The allow scoped pass stands;
+no-controller settlement remains a failed acceptance with source cause unproved.
+Sch's matching artifact closure is still its own responsibility. No new purpose,
+reservation, restore, native call or source-correction execution follows closure.
+
+Einstein's next canonical solution restores RetiredOwnerLaunch's original
+owner/admission/launch declaration and moves stopped capture/validation off live
+OwnerRestartSelection. Current/P migrate the complete family; amended P derives
+admission identity from original allocations without a stored-schema change.
+Authentic3931 recovery must strictly decode its original handoff and own its lock;
+same-format publication must avoid the genuine amended720 report-retirement path.
+No Parent writer overlaps this active source family. It is a concrete proposed
+source closure, not installed recovery acceptance or a changed frozen source.
+
+### Goal-report source joined and mounted allow qualified — 2026-10-06
+
+Parent normally joined original689 d433189b at49cfcf34 without conflicts. All
+fourteen changed Python modules compile without imports; merged source, tools and
+tests are byte equal to the original checkpoint. Existing GoalHistoryStore owns
+full declared read-only acquisition, and GoalReportMemberRetirement validates
+registry/release carriers against committed same-incarnation journal history
+before the strict target postimage. Raw retirement projection helpers are deleted.
+Original current/P focused controls and their first negatives are retained; the
+changed-owner refusal control now checks original cause, partial custody and
+explicit abandon. No passed control was repeated by Parent. Real stopped-batch,
+OFD, install, launch and recovery acceptance remain separate. Einstein continues
+actual3931 same-format handoff/publisher recovery through the existing owners;
+Parent has no competing edit on that family. Toad478's selected ce24 source pin
+is not silently rebound by this later source join.
+
+Original3808 mounted native allow passed47.833s through real Pi/ACP/MCP and Toad
+permission, ledger and outbound assertions against its authored localhost
+provider. No-controller failed27.677s at attachment_settled.wait5 after prompt
+return; revoke/disconnect did not run under maxfail. Batch failed80.078310096,
+operator joined81.130681273. Owner wholecb8b6259 binds218 raw references and163
+fixture files; all sixteen recorded identities are absent and the original
+normal four-wheel floor restoration passed once in0.417255679s. READ e7f829 and
+EXEC9f522 were explicitly returned; independent holder/artifact closures remain
+Bohr/Sch responsibilities. The full four-case family is not qualified. Original
+Audit reaches the managed terminal while the Toad observer log stops at a receipt;
+callback assertion interruption is a source inference, not a recorded exception.
+Mendel owns complete reset/binding/presentation tracing before a proven consumer
+correction. No deadline increase, production authority exemption or retry follows.
+
+Heis published warm04 rendered-resource proposal742a2044 in a separate concurrent
+source checkout, retaining a216 product/root equality to61bf and unchanged strict
+warm control. Parent relayed it to Bohr for fresh eligible assessment; floor,
+purpose and new authorities are unbound. Prior warm03 is fully closed, all raw
+journals remain held, and configured continuous consumer work remains active.
+
+### Paired source pin aligned — 2026-10-06
+
+Parent Toad478 now explicitly selects Corece24e9fd in pyproject and all three
+lock-file locator occurrences, replacing the earlier c34 source. This reviewed
+Core checkpoint includes the original689 partial-retirement/admission changes and
+clean691 producer. TOML parsing/literal checks and diff checking pass; no resolver,
+build, install, prefix, native body, live route or issued purpose is changed.
+Toad commitsd199acd6 and25d9a8d0 publish the pin and current source handoff. The
+sparse documentation path was staged explicitly with git add --sparse; the first
+ordinary add staged only the two root files. No package/operator step was repeated.
+The source comparison with c34 has exactly four production owner-admission files;
+combined installed/live acceptance still needs an actual matched future pair.
+
+Current3808 separate EXEC9f522 and Bohr releasea53e85 are issued for original
+Mendel's sole four-case purpose. Its historical bee/4b/b2e/16c9 cohort does not use
+or inherit this Parent pin. That attempt is now terminal as recorded above, with same original bounds and
+normal whole floor/authority return required at terminal. No new Parent launch or
+replay follows this source alignment. Heis and Einstein retain their independent
+source closure and next specific qualification boundaries.
+
+### Reader witness joined and operative handoff seam assigned — 2026-10-06
+
+Parent reviewed originalHeis a216/bd3e ReaderCheckpoint correction against
+RenderedBody.ready/paint_ready, native _render_widget, PreparedRichContent crop,
+committed history.fragment_views and DocumentViewport/visible_bodies. It requires
+visible clipped nonwhite source text and preserves exact native body/content
+identity on return; readiness/extent alone is not a paint witness. Toad478 normally
+joined bd3e at816379643 without conflicts. Only ReaderCheckpoint changes among
+helper declarations; original warm control2e2c, production and dependency pins
+remain byte unchanged. Compile without imports and diff checking pass. Heis now
+prepares a separately issued affected mounted successor, retaining historical
+61bf source/root evidence separately from the new main/pin union. There is no new
+purpose, replay, build or mounted acceptance from this source join; configured
+continuous implementation remains independently active.
+
+The actual PUBLIC4753931 source has an operative transport mismatch with689:
+RetiredOwnerLaunch encodes owner/admission/launch and StoppedOwnerBatch owns wire,
+whereas the current target decodes selection/launch and new tools require
+wire_descriptor. Original launch and source recovery both consume the handoff.
+Parent sent this complete actual3931 family seam to originalEinstein; equal stored
+registry/goal formats alone do not make the live cutover executable. Existing
+original declarations and source producers must close it without phase injection,
+raw handoff conversion, codec fallback or weakening source recovery checks. No
+PUBLIC stop/restart or new artifact operation follows this source finding.
+
+Mendel's exact3808 sole source/FullTrust proof passed8.279331265 with all19 raw
+references and joined controller/child. Parent relayed the final58879/DTO011c/
+Trust609060/controller4563 tuple to originalSch and Bohr through working transport.
+Bohr independently consumed proof1 and bound final helda67c9f; native cases remain
+held for separate new EXEC and same-purpose release. No proof or stage repeats,
+standalone accepted guard invocation, historical source rebind or public borrowing.
+
+### Clean configured producer merged — 2026-10-06
+
+Heis published clean Core691ef5fd6be based on actualmain, retaining the superseded
+Core69012575 checkpoint unchanged. Parent verified the four-file diff is byte
+identical to the original method and three evidence files; configured_saved_agent
+is the sole changed declaration and compilation/diff checking pass. Core691
+normally merged48f6d695. Parent integration normally joined that actualmain with
+zero file delta, retaining its earlier reviewed original contribution. Core690 is
+closed as superseded publication, not an inherited MCP source merge.
+
+The optional private cwd and original membership/process/runtime producer owners
+are now delivered in source. Configured saved-session/provider/UI acceptance is
+still unrun and remains Heis's active consumer work. No package build, original
+session operation, native purpose, frozen control or pin change follows. Parent688
+PR body now reflects merged routing, independent warm03 closure, integrated
+partial-retirement source and narrow real-process preflight results, replacing
+stale unrun/held descriptions at their actual scopes.
+
+### Integrated source preflight and remaining release consumer — 2026-10-06
+
+Parent ran two unchanged real-process preflight controls against integration:
+stale stored process birth does not authorize a signal, and a busy member refuses
+the entire selected batch before any stop. Both passed in1.86s with original
+ParentedProcess cleanup. This uses system Python/pytest and cached declared ACP
+0.12.1 dependency, source import paths, no environment/install or borrowed prefix,
+and no native package/provider input. Raw stdout/stderr/XML and exact command are
+in evidence/parent-owner-admission-source-preflight-20261006/RESULT.json. Plugin
+autoload was disabled; the preserved asyncio_mode warning affects no selected
+async test. Two inaccessible same-UID processes prevent a complete borrower
+claim, so the small authored pytest fixture root remains tracked in owned scratch;
+no fabricated process births or privileged census scope is reported.
+
+Source review also found an unmigrated affected control in
+ test_owner_release_restart.test_changed_owner_after_release_refuses_escalation_and_replacement:
+it still expects bare RelationViolationError although the corrected fenced phase
+transfers that original cause inside StoppedOwnerFailure. OriginalEinstein owns
+migration of current/P release consumers to preserve refusal/no forced signal,
+truthful custody and explicit abandon before teardown. Parent did not execute the
+known mismatched control or weaken its assertions. Real stopped-batch/native/OFD
+recovery acceptance remains separate from these two passing preflight controls.
+
+### Admission source joined and producer PR scope resolved — 2026-10-06
+
+Parent normally merged exact68911afe77a into Core688 without conflicts. All
+production/tool changes are byte equal to the original owner checkpoint, eleven
+changed Python files compile without imports, and diff checking passes. Runtime
+phase injection and stopped.wire references are absent across src/tools/tests.
+CLI and resident queue explicitly abandon failed custody; the publisher uses
+original failure/recovery dispatch, which now refuses an incomplete fenced phase
+before calling installation recovery. This is source integration, not real
+process/OFD/fence/launch/central-batch acceptance or an installed artifact rebind.
+Einstein continues the assigned goal-report acquisition/preservation family.
+The original Toad integration pin and every issued purpose retain their exact
+reviewed source; no builder or package operation follows this merge.
+
+Core69012575's commit itself contains only the configured_saved_agent method and
+three source evidence files, but its PR ancestry also includes still-unqualified
+Core682 MCP changes. Parent asked originalHeis to publish the narrow producer on a
+clean current-main source branch, preserving the original branch checkpoint, so
+normal merge cannot silently fold the MCP controls. Existing Parent source
+integration remains intact; no repeated producer tests, new acceptance gate or
+runtime authority follows this source delivery correction.
+
+Actual3808 installed-entrypoint purpose has one joined stage and its distinct
+READ e7f829. Bohr released the sole original8c8f proof under lifecycle46724;
+native EXEC/four-case launch remains held until actual final proof and separate
+new authority. No old READ/EXEC, accepted guard invocation or installed source
+union is inherited. Warm03 holder063b72 and matching Sch artifacte4df4168 are both
+closed, with an append-only Bohr artifact binding and unchanged closed lifecycle.
+Heis's original source investigation and configured consumer work remain active.
+
+### Current closure and source review — 2026-10-06
+
+Warm03 holder purpose3d9a is independently CLOSED063b72. Parent hash-matched the
+actual closed lifecycle, independent floor70fa936a, census5eb89e8a and
+classification35b796df. Bohr binds the explicit wholeba383 READ8923+EXEC90775
+returns, one normal floor restore and all original held fixtures. Sch received
+this independent closure for only the matching artifact records. No new warm
+purpose or runtime retry follows. The actual negative remains ReaderCheckpoint
+requiring descendant Markdown bodies, with zero verified warm/eviction branches.
+
+Heis traced the complete original acquisition/paint/checkpoint family and found a
+source counterexample: MeasuredViewportBody retains native strips in RenderedBody
+and removes reconstructible Markdown descendants. The existing checkpoint accepts
+only descendant native caches. Heis owns capture/verify/diagnostic migration to
+witness both original cache and visible ready source-bound rendered fragment paint,
+with nonwhite viewport crops and exact body/content identity. This is source
+reasoning, not the proved sole cause of warm03 or a product blank claim. Mandatory
+warm identity/rawreads0 and genuine eviction/editor/reader checks remain required.
+Configured690 and continuous consumer work continue separately.
+
+Parent reviewed actual68911afe77a partial retirement against OwnerCutover failure,
+abandon and recovery dispatch. Existing FencedOwnerBatch retains physical exits
+separately from validated retired witnesses, keeps acquired wire custody on a final
+refusal, transfers original cause through StoppedOwnerFailure, and refuses partial
+recovery before invoking the operation. Three current and three amended-P authored
+controls cover second guard, post-stop witness and final-set witness refusals;
+real process/OFD/installed central-batch acceptance remains unrun. Einstein retains
+this source family and the assigned goal-report preservation implementation.
+
+Parent compared exact PUBLIC475 Core3931 to current integration: threads,
+registry_document, thread_identity, goals, goal_history, registration,
+owner_lifecycle, owner_restart, owner_launch and owner_cutover files are byte equal.
+Authentic720 registry/goal-report conversion therefore remains a separate genuine
+cross-format requirement, rather than an assumed conversion requirement for the
+actual3931 same-format installed cutover. New689 handoff declarations still require
+coherent source/target phase ownership. No live stop, package build, registry data
+acquisition or admission bypass follows from this source relation.
+
+Installed-entrypoint native qualification now has its own actual3808 purpose and
+single joined stage reported by Mendel; Sch confirms a distinct new READ receipt
+already delivered. Sole proof and subsequent EXEC/four-case release remain original
+Bohr/Sch boundaries. Historical selected bee/4b/b2e/16c9 artifacts are unchanged;
+this is not a Parent688/478/690 installation or whole-goal completion.
+
+### Warm03 returned negative and remaining transition assigned — 2026-10-06
+
+Parent read actual warm03 terminalffb0ca6e: FAIL1/36.296851687, controller joined
+37.19949981, no timeout/error/drain errors or remaining group. The original
+controller2792684 and child2792685 are absent. Coverage/history/cursor admission
+progressed beyond the earlier strict failure; ReaderCheckpoint.capture103 then
+refused because no rendered native Markdown body was visible in its scrollable
+region after original draft/undo/non-tail setup. Both warm and eviction verified
+branches remain zero; exactly two authored localhost requests are recorded with
+no provider errors. Cause beyond that assertion is unproved.
+
+Owner whole handbackba3832a3 explicitly returns package/operator/READ8923+EXEC90775.
+Parent verified its63 hash/length descriptors (55 unique paths) with zero mismatches,
+including all52 raw references. Original CURRENT471 b2e+16c9 floor restoration ran
+once; full1467/953 ZIP/69RAW/2253+266/bootstrap2/PREFIX return and held65 fixture files
+and two journals remain original evidence. Sch received the exact return through
+Parent transport; independent holder/artifact closures remain original Bohr/Sch
+work. No duplicate restore, replay or new purpose follows. Heis owns the complete
+acquisition-to-viewport/paint/checkpoint source investigation, not another isolated
+readiness predicate workaround; configured continuous source work stays active.
+
+Parent assigned originalEinstein the remaining source preservation relationship
+through existing GoalHistoryStore and GoalReportMemberRetirement, retaining strict
+target decoding. Original720 model transitions write Goal.reported_turn; owner
+Set/Clear/Edit can leave Thread.last_goal_report_turn after current goal replacement.
+Therefore current Goal alone cannot authenticate retirement. Original committed
+journal rows keyed by owner incarnation must supply preservation across replacement;
+constructor/history observation cannot be used as a read-only acquisition because
+they initialize/reconcile/add baseline or gap rows. No data acquisition, sourcefield
+strip, new codec/store, native operation or registry transition is authorized by this
+source assignment. The partial-retirement phase correction remains Einstein's scope.
+
+### Qualified routing source merged into both forks — 2026-10-06
+
+Parent verified final Core6861cc39564 and Toad4770c0f15dc add only two scoped
+acceptance files each over the reviewed frozen sources. Core mergedddbc72b9 and
+Toad mergedcc92550d. Both Parent integration branches normally joined actualmain
+without product or pin changes; only the new acceptance files arrived. No installed
+wheel, live PUBLIC475 or frozen purpose is relabelled by this merge.
+
+Original paired85af/55cc is independently CLOSED: sourceef7798b3 and target822f7b7b
+have every package/proof/control/native/restore/future-access flag false, with one
+stage/proof/control/restore each. Bohr independently verified both original floors,
+all43 raw references and49 authored files, seven absent process identities and fresh
+borrower classification. Sch425920 is separately closed9849. This completes the
+scoped installed historical routing seam, while native four-case, warm/configured
+continuous and authentic live central-batch transition remain unfinished.
+
+Future MCP installed-entrypoint qualification must acquire a fresh actual holder
+assessment and owner-specific tuple; returned334 is not reserved or automatically
+lent. OriginalBohr/Mendel retain that custody boundary. No repeat of accepted
+historical routing,684 or standalone guard is requested.
+
+### Configured private producer joined into integration — 2026-10-06
+
+Parent reviewed Core690 exact12575d92 and normally joined it at260446b5.
+Only configured_saved_agent changes among the module's declarations; source
+compilation passed without executing imports. Original ForkSessionRequest.cwd
+supplies the optional owned project, SDK cwd and both private owner declarations.
+ThreadManagement.restore_stopped owns committed membership and acquire_thread
+owns actual process birth. Both bindings share CommsAgent's original RuntimeServer;
+its start is idempotent and release_owned closes that runtime after owner release.
+Direct participant injection and manual process replacement are deleted.
+
+Existing default callers retain original.worktree and their separate arm clocks.
+This is a source integration checkpoint, not configured saved-session, provider,
+continuous UI or package acceptance. Heis continues the affected Toad consumer in
+its separate source worktree. Current live PUBLIC475 and every frozen warm/native
+purpose keep their reviewed artifacts and inputs; no pin or rebuild follows.
+
+### Installed historical routing pass and admission review — 2026-10-06
+
+Einstein's single paired85af/55cc controller passed in25.731419895s under
+originalc225 and SDK-only425920 authority. Parent read and hashed whole handback
+db56e724 and all43 linked raw receipts with zero mismatches; all seven recorded
+process identities are absent. The original receipt records alpha-beta-alpha
+HistoricalSessions selection, nine recorded page captures, native answer and
+original request painted once, and both selection/screen notification workers
+cancelled after completed original reads returned with zero stale publications.
+App preparation, workers and default executor joined. This qualifies that
+installed authored cross-version historical routing/display scope. It does not
+qualify live central batch, native agent, ACP/provider input or configured journey.
+
+Both original floors were normally restored once: source5405f510/347/10RAW/133
+and target3341468/945/69RAW/428+1883+5nodes/PREFIX. Owner READ/SDKEXEC and package
+claims are explicitly returned; Bohr's independent paired closure and Sch's
+artifact closure are pending. No future holder purpose follows this handback.
+
+Parent reviewed implemented689 e05794fc and amended720 P bb5acfcd. The existing
+OwnerLifecycle now owns exact integer restart wire acquisition, stopped launch
+witnesses use OwnerRestartSelection, and runtime phase injection is deleted.
+A concrete remaining gap was sent to originalEinstein: FencedOwnerBatch.complete
+stops selected owners before constructing retained StoppedOwnerBatch custody.
+A later stop guard or post-stop witness refusal can leave earlier owners retired
+without the phase's explicit failure/disposition object. Einstein owns this
+partial-retirement closure; no Parent competing source patch or runtime operation.
+Strict old registry format refusal and authentic goal-history preservation remain
+separate unfinished relationships. Frozen routing tools and its accepted run stay
+unchanged.
+
+Warm03's sole source/FullTrust proof passed6.426664225s; Heis handoff8e52eb3a was
+relayed to Sch through the working Parent transport. Separate fresh EXEC and Bohr
+App release remain required. The configured continuous producer extension belongs
+to Heis in separate source worktrees, deriving the selected private project from
+original ForkSessionRequest.cwd rather than adding an alias or field. No configured
+provider/input or App authority follows the source coordination.
+
+### MCP observer control source merged — 2026-10-06
+
+Parent reviewed Toad472 exactafc657ef, all three changed controls and their
+original lifecycle/SDK/presentation consumers, then mergedbdc51726 into main.
+The branch's merge-base diff changes no production, tools or pins. Parent478
+normally joined that merge with no source delta; its existing Core pin remains
+unchanged. No package installation, rebuild or frozen purpose rebind follows.
+
+The consumed d6ce grant authenticates mcp_observation_fixture7a16afdb and
+native_permission_ui8e9d11da. Parent rehashed original toad-states0248e78b,
+toad-updates3ff3e4f6 and acp-updates283579a7. The run reached Reserved/NotSent
+launcher-refusal updates after open_observer's exercise_boundaries completed;
+all of that sequence's metadata lease, retired/foreign/malformed/duplicate
+receipt and stale-cut assertions precede its yield. This supports the reached
+authored mounted observer setup/boundary sequence, not native MCP receipt,
+permission paint, permission remount or disconnect acceptance. The separate
+typed command pilot and whole native four-case behavior remain unqualified.
+Every original failed attempt, source receipt and closed floor is preserved.
+
+### Original carry scope reviewed — 2026-10-06
+
+Parent reviewed the original RuntimeInstallation and native/schema carry
+declarations before treating them as a cross-version registry transition.
+RuntimeNativeFiles selects declared coordination, prompt-binding and compaction
+SQLite resources; its separate goal capability covers the goal-private ledger.
+It does not acquire or rewrite registry Thread declarations. RoutingCarryPlan
+authenticates the whole registry excluding only active_turn.routing and replaces
+that routing representation. Its non-routing registry equality intentionally
+retains the old Thread fields. Neither owner supplies a current full registry
+postimage for old720's removed last_goal_report_turn field.
+
+Einstein received this concrete candidate review for admission-method689. The
+method's strict target-format refusal remains necessary; authentic registry
+format transition is a separate unresolved source relationship, not something
+native schema carry or stopped routing acceptance proves. Einstein's amended
+producer/current admission implementation is active in a separate checkout,
+preserving the frozen routing operands. No compatibility decoder, field strip,
+registry rewrite or runtime operation was performed in this review.
+
+### Fresh declaration source merged and routing stages issued — 2026-10-06
+
+Parent reviewed exact68719bb027f and merged30e46665 into main. Only the
+session_lifecycle production owner changes: declare publishes committed private
+membership through existing restore_stopped, then owning/attached lifecycle
+hooks resolve local acquisition or defer to original load admission. All direct
+Core consumers and shared SelectedSession/NativeSessionIdentity test wrappers
+were reviewed; three focused source checks are qualified. The integration
+branch normally joined main without a source delta. No installed acceptance,
+resource rebind, rebuild or native rerun follows this merge.
+
+The corrected observer d6ce is independently CLOSED7570cf14 after whole44b6d1
+and exact floor return. Original ACP Reserved/NotSent detail identifies refusal
+of the external launcher before native package/SDK acquisition. Mendel and Sch
+own the existing tuple correction to holder bin/pi-comms-native with the same
+PrivateNkLaunch4b; whole four-case behavior remains unqualified. The original
+guard positive and every failed/UNKNOWN input remain preserved.
+
+Bohr now issued paired routing stages85afc941/55ccf6a1 together on fresh540/334
+floors for Einstein's frozenb52ed4/145cd9 tuple. Only sourcec3e and targetc44+0fb
+stages and owned output preparation are released. Pure proof, SDK SessionManager
+create1/append2, mounted historical selection and worker retirement still require
+their later bindings and releases. Both normal floor returns remain mandatory;
+there is no current native agent, ACP/provider input or central-batch authority.
+Warm03 former485 is separate stage-only3d9a0cd1; PUBLIC475 stays protected.
+
+### Configured continuous producer source followthrough — 2026-10-06
+
+Parent read the current original l0a native fixture, saved-state user journey,
+read-only saved reader and Core configured_saved_agent acquisition. The
+continuous saved-state journey still uses the l0a loopback producer, whose
+selected-offline/fixture model, private configuration and synthetic replies
+cannot establish configured saved-source acceptance. The read-only reader
+instead attaches original owners; it does not supply the private configured
+input producer. These are distinct existing scopes and remain preserved.
+
+Core configured_saved_agent already acquires a private SDK fork from an
+authenticated original source, carries RetainedOwnerLaunch environment/model
+and thinking, verifies installed source and joins native shutdown. Parent
+directly assigned Heis the complete acquisition-to-continuous-UI consumer
+closure through these existing owners, with CurrentTypedCapture source
+identity and original input disposition custody. This is source implementation
+followthrough, not new provider/input, package or native authority. The
+configured producer's explicit participant registration must be reconciled
+through original lifecycle capabilities, not copied into another fixture.
+
+Warm03 separately has a new stage-only issued purpose3d9a0cd1, based on final
+699dd44f and unchanged61bf product wheel. Proof and App require their own
+matching authority and releases. Warm01/02 remain closed negative evidence;
+two authored journals do not satisfy the configured continuous or >=40MB
+source objective. No configured runtime acceptance has been performed here.
+
 Current live release: Parent normally merged exact475 fddc0697 at55d942e2,
 then personally matched NEW4622 authority, its18 receipt references and all112
 frozen member hashes/bytes/modes. The original fresh admission passed for19
@@ -292,7 +968,16 @@ enumerated1477 Core/Toad src/tests/tools modules without omissions; cleanup,
 bind_owned and other AST are unchanged. Compilation passed, without another
 runtime attempt or build. Parent relayed this source handoff to originalSch.
 The retained bee wheel is unchanged; corrected four-case behavior remains
-unqualified. Parent traced the permission observer's agent assignment through
+unqualified. Mendel published corrected-observer tuple1c9c1025 atc81c9016,
+with only the one-argument Toad fixture correction and unchanged bee/proof/
+controller family. Bohr freshly issued d6ce7ed8 on334 after exact CURRENT447
+floor and borrower verification. The sole stage passed0.294s; all three
+original stage identities joined and are absent. New matching4b READ797c0296
+is bound. Current lifecycle1f710d7f releases only the sole8c8f proof; stage is
+consumed and native controller/EXEC remain held until actual final proof and
+separate authority/release. Routing686 remains unissued while this actual
+exclusive purpose owns334; its effective floor tupleb52ed4da/commands145cd9b5
+is retained without reservation or partial source grant. Parent traced the permission observer's agent assignment through
 watch_agent/bind_agent, original presentation detach custody and prepare-time
 reattachment; no missing binding was found and no speculative patch was made.
 
@@ -317,10 +1002,26 @@ then released the sole proof at39fc9dc9. It passed0 in3.622s, with no timeout or
 error and both original proof identities absent. Parent matched final handoff
 1b71c560 and all19 raw/proof references by hash and byte length. The receipt
 binds953 installed members/full69 truthful origins/protected originals and7a
-FullTrust; it is not mounted warm/eviction acceptance. Controller58ad029b is
-unrun and preserves the original three template substitutions. Separate NEW
-matching EXEC and Bohr's same-purpose App release remain required before the
-sole mounted attempt. No App, native input or public decoder has run.
+FullTrust; it is not mounted warm/eviction acceptance. Controller58ad029b preserves the original three template substitutions.
+Bohr released the sole warm02 App under97886e40 with separate NEW7a EXECb1d5.
+The original controller2611168 and child2611169 ran once and joined: warm
+exit1 after31.687s, controller exit1 after32.594s, without timeout, drain errors
+or remaining owned groups. The strict history/displayed-cursor assertion157
+failed after canonical acquisition and generic settled returned. All warm and
+eviction verified branches remain zero; exactly two localhost requests were
+recorded, with no request errors. Cause beyond that assertion is unproved.
+Heis restored only original CURRENT471 ToAdb2e and Text16c9 once in0.171s and
+returned whole02082b47. Parent matched its hash/length and65 nested file
+descriptors with no mismatch. Bohr independently closed only4bfd atf1b75524:
+all1467 records,953 installed ZIP assets,69 RAW origins,2253 other67 records,
+266 protected/bootstrap2/PREFIX match; the fresh census has zero owned refs
+and gaps. All11 recorded identities are absent. READb792/EXECb1d5 returns and
+Sch0312f closure are bound; all permission flags are false. Both journals and
+65 fixture files remain held unchanged. Heis continues the source relationship
+trace; canonical child presence and active pager registration are distinct,
+and source-page validation owns parked-pager resumption. This is source
+evidence, not a proven runtime cause or warm/eviction qualification. No new
+App purpose, replay, build or public decoder follows from closure.
 Original c22/7b534 templates, current source849b,150s/20s and two-authored-input
 warm/eviction obligations remain unchanged; no Core stage or new build follows.
 

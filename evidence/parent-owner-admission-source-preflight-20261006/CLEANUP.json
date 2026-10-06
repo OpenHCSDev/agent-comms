@@ -1,0 +1,94 @@
+{
+  "time": 1791256407.9102924,
+  "removed_root": "/home/ts/.cache/agent-scratch/parent689-source-process-20261006",
+  "scope": "Only completed Parent-owned two-test preflight scratch; published raw retained, no source or native/session/UNKNOWN fixture deletion",
+  "source_result": "RESULT.json",
+  "fresh_original_checker": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/borrower-census.py",
+  "census": {
+    "time": 1791256386.3006632,
+    "processes": 239,
+    "gaps": [],
+    "refs": {
+      "/home/ts/.cache/agent-scratch/parent689-source-process-20261006": []
+    }
+  },
+  "original_disposable_files": [
+    {
+      "path": "PURPOSE.txt",
+      "bytes": 229,
+      "sha256": "bad73835c68c832b00013d1a365e3b86ba1ddf9296c9b3624601ee1090d5c9e0"
+    },
+    {
+      "path": "stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "stdout.log",
+      "bytes": 537,
+      "sha256": "26904ff40ecb899f9042eb09541a07c200ed9d51e8de7846363bbefb5ae12291"
+    },
+    {
+      "path": "pytest.xml",
+      "bytes": 487,
+      "sha256": "fdc053b81a96fb4f7a018c10ff15a5791b3cee8cfd98cba7799266246311992c"
+    },
+    {
+      "path": "n/test_stale_stored_birth_does_n0/.compaction-publication-handoff.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "n/test_stale_stored_birth_does_n0/catalog.json",
+      "bytes": 82,
+      "sha256": "2857444e16674b00ac9d8806e248b2a5aefff3ac0b6cd71d465f0d8174665a22"
+    },
+    {
+      "path": "n/test_stale_stored_birth_does_n0/.catalog.json.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "n/test_stale_stored_birth_does_n0/.registry.json.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "n/test_stale_stored_birth_does_n0/registry.json",
+      "bytes": 1017,
+      "sha256": "edf40604e23f86f8910921dcc07523bd141ee11f80a0f4e2bb3f8c7c20a33367"
+    },
+    {
+      "path": "n/test_stale_stored_birth_does_n0/.wire.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "n/test_restart_preflights_all_ow0/catalog.json",
+      "bytes": 82,
+      "sha256": "2857444e16674b00ac9d8806e248b2a5aefff3ac0b6cd71d465f0d8174665a22"
+    },
+    {
+      "path": "n/test_restart_preflights_all_ow0/.catalog.json.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "n/test_restart_preflights_all_ow0/.registry.json.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "n/test_restart_preflights_all_ow0/registry.json",
+      "bytes": 2140,
+      "sha256": "4c108a8437ba4a897c180666cf0898a97a646ec600e0beadf1331e8f4d8b9a0e"
+    },
+    {
+      "path": "n/test_restart_preflights_all_ow0/.wire.lock",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "initial_metadata_negative": "Initial basename allowlist missed original empty fixture lock; stopped before candidate/write/delete. Enumerated actual original locks and resolved only metadata reader; no test or runtime repeated.",
+  "root_absent_after_cleanup": true
+}
