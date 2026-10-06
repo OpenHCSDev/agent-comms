@@ -355,6 +355,18 @@ paired source/artifact/seed/authority operands follow this complete consumer
 migration. One necessary cached Core and one Toad build are authorized only
 after source freeze and absence of a matching artifact; no new native assembly,
 dependency environment, accepted684 replay or unfinished687/476 fold follows.
+Parent reviewed frozen686b9734568's mounted pilot: actual Select.Changed and
+mount-generated handling acquire recorded page identity and original notification
+feedback. The temporary held-read instrumentation delegates the original owner;
+selection/screen retirement cancels the native worker, releases the held read in
+finally and joins the default executor. Runtime acceptance remains unproved.
+The separate genuine720 central-batch bootstrap has an earlier source blocker:
+phased_owner_kernel loads only owner_restart/owner_cutover, but owner_restart
+imports owner_launch, absent from the authentic720 Git tree. Thread.execution
+and fence_idle_owners are additional absent original contracts. Parent delivered
+this full launch/admission dependency finding to Einstein's existing source
+trace. No module overlay, compatibility property or competing stop/start path
+is authorized; this does not hold the stopped-routing pilot or accepted684.
 
 Core681 fork-source delivery is actually merged38a0533e at frozen3dc11331.
 Its nine authored source checks support recorded inheritance, not independent
