@@ -1,0 +1,67 @@
+{
+  "whole_handback": {
+    "path": "/home/ts/.cache/agent-scratch/mlh02/whole-handback.json",
+    "sha256": "e4c56c721722e8bc753d66875fc72c719aa0d4dbf5b2187dc20476c2a749e6f4",
+    "bytes": 87168
+  },
+  "determining_proposal": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/loaded-history-consumer-repaired-20261006/FINAL-LOADED-QUALIFICATION-OPERANDS.json",
+    "sha256": "7e185fbe3c07b866c4ae72e65a11c3735b17807db82f9e72a0cc2d22ea95458e",
+    "bytes": 33375
+  },
+  "result": "PARTIAL: four-view cohort complete;16-view body-retention assertion failed;32/64 unreached",
+  "completed_cohorts": [
+    4
+  ],
+  "loaded_views_reached": 16,
+  "actual_localhost_inputs": 4,
+  "prospective_localhost_inputs": 10,
+  "App_duration_seconds": 146.26248508901335,
+  "operator_duration_seconds": 147.41878897091374,
+  "first_failure": {
+    "path": "/home/ts/.cache/agent-scratch/mlh02/f/acceptance-failure.txt",
+    "sha256": "cfb778374a5f969caaa4eaa1348551cf12794168d9734d55fbb7fbc666db300d",
+    "bytes": 713
+  },
+  "loaded_receipt": {
+    "path": "/home/ts/.cache/agent-scratch/mlh02/f/loaded-histories.json",
+    "sha256": "7a6b70e1b0b0242391a6a9aaa41c21951881a3a37c8b4e60bca707c42e7b66ce",
+    "bytes": 8467
+  },
+  "provider_receipt": {
+    "path": "/home/ts/.cache/agent-scratch/mlh02/f/provider-failures.json",
+    "sha256": "da5e718f489831c4a4969f2297524897fc1e04b02ae7695b67e178eb6252c355",
+    "bytes": 438
+  },
+  "restoration_once_exit0_seconds": 0.42691306699998677,
+  "floor_readback": {
+    "path": "/home/ts/.cache/agent-scratch/mlh02/final-floor-readback.json",
+    "sha256": "963077e068d12277bea759238aaf5f0dae9157c6068479c869ddd9b6e1dc3bc3",
+    "bytes": 6756
+  },
+  "census": {
+    "path": "/home/ts/.cache/agent-scratch/mlh02/final-borrowers.json",
+    "sha256": "6920d1b3ddcd7aaa0caccc27723aba3cd74b4b9c92a27cb60dd51873902c2bd3",
+    "bytes": 2199
+  },
+  "classification": {
+    "path": "/home/ts/.cache/agent-scratch/mlh02/final-reference-classification.json",
+    "sha256": "172264fc1c4e8fe7a97eb67c590e6974f387e4c5f1914cf0c409316b80edc32c",
+    "bytes": 13863
+  },
+  "authored_keeper_manifest": {
+    "path": "/home/ts/.cache/agent-scratch/mlh02/original-fixture-keepers.json",
+    "sha256": "d062bbaffd6dbfc67b56f0beb0aab68e07dc40975cb5a7f7b30fe8d7b43af690",
+    "bytes": 31316
+  },
+  "recorded_identity_check": {
+    "path": "/home/ts/.cache/agent-scratch/mlh02/joined-identities-final.json",
+    "sha256": "95e5ae94dd259edae32e5cd7ebb958be4eda902a37b068ca936cbf3af6829415",
+    "bytes": 2531
+  },
+  "whole_claims_returned": true,
+  "independent_close": "Bohr/Sch; publication does not close custody",
+  "source_repair_owner": "OriginalHeis",
+  "cause_beyond_assertion": "UNPROVED",
+  "no_rerun_build_helper_or_product_change": true
+}
