@@ -4,6 +4,27 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Qualified routing source merged into both forks — 2026-10-06
+
+Parent verified final Core6861cc39564 and Toad4770c0f15dc add only two scoped
+acceptance files each over the reviewed frozen sources. Core mergedddbc72b9 and
+Toad mergedcc92550d. Both Parent integration branches normally joined actualmain
+without product or pin changes; only the new acceptance files arrived. No installed
+wheel, live PUBLIC475 or frozen purpose is relabelled by this merge.
+
+Original paired85af/55cc is independently CLOSED: sourceef7798b3 and target822f7b7b
+have every package/proof/control/native/restore/future-access flag false, with one
+stage/proof/control/restore each. Bohr independently verified both original floors,
+all43 raw references and49 authored files, seven absent process identities and fresh
+borrower classification. Sch425920 is separately closed9849. This completes the
+scoped installed historical routing seam, while native four-case, warm/configured
+continuous and authentic live central-batch transition remain unfinished.
+
+Future MCP installed-entrypoint qualification must acquire a fresh actual holder
+assessment and owner-specific tuple; returned334 is not reserved or automatically
+lent. OriginalBohr/Mendel retain that custody boundary. No repeat of accepted
+historical routing,684 or standalone guard is requested.
+
 ### Configured private producer joined into integration — 2026-10-06
 
 Parent reviewed Core690 exact12575d92 and normally joined it at260446b5.
