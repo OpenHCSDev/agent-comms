@@ -28,9 +28,12 @@ Fresh readonly returned485 Batch05 assessment is verified and bound in published
 PROPOSED-BATCH05-OPERANDS.json at59ae8751. Same built wheels, provider0/public source excluded. Batch05 is now issued;
 its one cached three-wheel stage passed in0.238s, with original root/installer
 joined and all three recorded identities absent. Joined stage was delivered to
-Bohr and consumed/disabled. The fresh READ is verified; exact four-literal proof
-materialization and binding were delivered for sole proof release. Controller
-and proof helpers are compile-only and unrun; App remains held. After affected acceptance, merge491/496 and complete
+Bohr and consumed/disabled. Fresh READ and sole proof release were personally
+verified; the installed proof passed0/3.506s with953/full69 matching and both
+original processes joined/absent. Exact final tuple was delivered to Bohr and
+Sch for proof consumption, separate EXEC and final App release. Controller is
+prepared but unrun; selection-boundary diagnostic and60-row acceptance remain
+unqualified. After affected acceptance, merge491/496 and complete
 local delivery. Broader continuous/performance and public runtime remain open.
 
 ### Current priority: sidebar and scrolling responsiveness
