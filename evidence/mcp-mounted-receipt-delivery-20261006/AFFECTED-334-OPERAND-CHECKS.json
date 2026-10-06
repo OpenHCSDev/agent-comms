@@ -1,0 +1,44 @@
+{
+  "state": "PASS metadata/source-only operand check; no imports/runtime/collection",
+  "final": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/mcp-mounted-receipt-delivery-20261006/AFFECTED-334-FINAL-OPERANDS.json",
+    "sha256": "cc62d1b7c83da7e3019c43130c3f0e1e65196fb09f1364b6db03b898bc03d545",
+    "bytes": 39868
+  },
+  "binding": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/mcp-mounted-receipt-delivery-20261006/AFFECTED-334-SOURCE-BINDING.json",
+    "sha256": "03899c22b55e4f831b268ea0c3199d0abf6d5294f78aca0b5853d7d52a4c4c01",
+    "bytes": 3332
+  },
+  "fresh_metadata_hash_bytes_matched": [
+    {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel693-mounted-receipt-fresh-assessment-floor-readback.json",
+      "sha256": "bcdd1793157f574fce5e1840831807d6e1a425b230f8713bd21129f8b35302ff",
+      "bytes": 27733
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel693-mounted-receipt-fresh-assessment-borrowers.json",
+      "sha256": "23d17932cfc4e9f809d50ac7c5896ea93d2f28e4e85826a3c6e922d0649c266e",
+      "bytes": 2110
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel693-mounted-receipt-fresh-assessment-reference-classification.json",
+      "sha256": "6e8de7c59cd285dc01e93f7f8759005fb121d18300fc296103d4f05985d94f2c",
+      "bytes": 5246
+    }
+  ],
+  "all8_source_helpers_hash_equal": true,
+  "unchanged_proof_8c8f_controller_5d595": true,
+  "five_selected_wheel_hash_size_equal": true,
+  "four_restore_wheel_hash_equal": true,
+  "restore_argv_cwd_env_exact_actual_assessment": true,
+  "case_scope": [
+    "no_controller",
+    "revoke_midturn",
+    "disconnect"
+  ],
+  "socket_max_bytes": 100,
+  "planned_owned_output_absent": true,
+  "accepted_allow_and_guard_excluded": true,
+  "new_grant_lifecycle_READ_EXEC_and_release_unbound": true
+}
