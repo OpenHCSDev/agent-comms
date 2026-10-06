@@ -15,9 +15,12 @@ returns; Bohr independently closed its existing holder and verified the floor.
 
 Loaded reached two authored seed requests and two loaded views, then failed
 because the helper read `displayed_cursor` from `TranscriptHistory` rather than
-its canonical owner. Zero cohorts completed. The original operator is finishing
-its return checks; its lifecycle remains return-only pending the actual whole
-handback and independent closure. Preserve the existing restoration attempt.
+its canonical owner. Zero cohorts completed. The original four-wheel restoration
+passed once and the whole READ/EXEC return is complete. Bohr independently closed
+the existing loaded holder after verifying its original floor, joins and census.
+The compact original result is integrated at
+[evidence/loaded-history-current-pair-20261006/RESULT.md](../../../evidence/loaded-history-current-pair-20261006/RESULT.md).
+Neither closed purpose permits another run or restored-package operation.
 
 Heis owns both existing consumer repairs, preserving strict decoding and the
 page/admission/paint checks. Parent checked his actual source trace and Mendel's
