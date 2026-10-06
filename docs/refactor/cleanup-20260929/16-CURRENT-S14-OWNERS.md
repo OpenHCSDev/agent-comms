@@ -35,8 +35,7 @@ native Click owns activation; keyboard choice and outside dismissal remain.
 The source ordering defect is concrete but not proved to be the sole Batch06
 runtime cause. One serial offline Toad-only build713113 passed full319 Git/ZIP
 and324 RECORD checks; Coreb55/nativea59 remain unchanged. Batch07 is actually issued; its single stage and installed proof passed.
-Stage/proof are consumed and disabled, and the full App remains held for the
-final same-purpose release. The separate matching EXEC is issued and personally verified; no App attempt has started. No public installation changed.
+Its one App passed the previous mixed menu boundary, then failed at off-screen disclosure acquisition during the60-row setup. One original restoration and whole return are complete; Batch07 is independently CLOSED. No public installation changed.
 Installed clipped60-row/range and later native batch acceptance,
 physical latency, continuous configured/loaded journeys and public cutover remain
 open. The full original objective remains active.
@@ -48,7 +47,7 @@ open. The full original objective remains active.
 - [x] Physical05 verified eleven saved-history/tab/draft/Undo checks with real42.7MB source and two private forks. Original restoration and explicit returns are independently closed.
 - [x] Batch06 verified initial Shift and mixed Ctrl selection. Its menu click failed; the one restoration and whole return are independently closed, with raw/twojournals held.
 - [x] PR496 is merged at e1a906da41d8b290e9a85ce851088294f4b4f464: canonical un-clipped Shift ranges, native Click menu activation and matching native77 pin. Source integration is complete.
-- [ ] Full installed selection/menu acceptance and delivery: Focused real native menu activation passed; full installed mixed actions/clipped60-row/native batch acceptance remains. Corrected Toad713113 is built; unchanged Coreb55/nativea59 are retained. Batch07 binds the fresh returned485 assessment; its one stage and installed proof passed and are consumed/disabled. The separate EXEC is verified; the full App is held for the final release.
+- [ ] Full installed selection/menu acceptance and delivery: Focused real native menu activation passed; full installed mixed actions/clipped60-row/native batch acceptance remains. Corrected Toad713113 is built; unchanged Coreb55/nativea59 are retained. Batch07 binds the fresh returned485 assessment; its one stage and installed proof passed and are consumed/disabled. Batch07 reached the60-row setup then native Pilot raised OutOfBounds at disclosure acquisition. Its original restoration and whole return are independently closed. Draft498 corrects the shared helper through native scroll_visible before the same click; Batch08 preparation reuses unchanged wheels and awaits fresh assessment.
 - [ ] Physical latency and response-burst acceptance remain incomplete. Original sidebar handler/writer timings are measured but not input-to-photon or a live-build comparison. Left overflow was not exercised by the two-row physical fixture. Parent owns the next affected installed/physical acceptance.
 - [ ] Native76 removes the competing full-map geometry requirement and is merged; actual installed latency improvement remains unproved. Arendt owns native geometry/callback semantics; Parent owns matching App acceptance.
 - [ ] Continuous configured/loaded journeys remain incomplete at their exact recorded scopes. Original consumer repairs and partial successes are preserved below; no whole-journey acceptance is inferred.
