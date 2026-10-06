@@ -1,0 +1,3647 @@
+{
+  "roots": [
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "revision": "fde600046",
+      "root": "src",
+      "modules": 324,
+      "local_source_tests": []
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "revision": "fde600046",
+      "root": "tests",
+      "modules": 378,
+      "local_source_tests": [
+        "tests/test_channels.py",
+        "tests/test_cli.py"
+      ]
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "revision": "fde600046",
+      "root": "tools",
+      "modules": 53,
+      "local_source_tests": []
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "revision": "6ff3508252148ce52810714440048ddfc9bed32d",
+      "root": "src",
+      "modules": 288,
+      "local_source_tests": []
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "revision": "6ff3508252148ce52810714440048ddfc9bed32d",
+      "root": "tests",
+      "modules": 400,
+      "local_source_tests": []
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "revision": "6ff3508252148ce52810714440048ddfc9bed32d",
+      "root": "tools",
+      "modules": 40,
+      "local_source_tests": []
+    }
+  ],
+  "modules": 1483,
+  "parse_omissions": [],
+  "sites": [
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 38,
+      "kind": "declaration",
+      "source": "TagDisposition"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 50,
+      "kind": "declaration",
+      "source": "KeepThreadsTagDisposition"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 62,
+      "kind": "declaration",
+      "source": "ArchiveThreadsTagDisposition"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 73,
+      "kind": "declaration",
+      "source": "DeleteThreadsTagDisposition"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 90,
+      "kind": "declaration",
+      "source": "DeleteExclusiveInactiveThreadsTagDisposition"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 44,
+      "kind": "method",
+      "source": "confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 54,
+      "kind": "method",
+      "source": "confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 65,
+      "kind": "method",
+      "source": "confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 76,
+      "kind": "method",
+      "source": "confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 79,
+      "kind": "method",
+      "source": "deletion_cohort"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 93,
+      "kind": "method",
+      "source": "confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 98,
+      "kind": "method",
+      "source": "deletion_cohort"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 275,
+      "kind": "method",
+      "source": "delete_tag"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 300,
+      "kind": "method",
+      "source": "_change_tag_unlocked"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 58,
+      "kind": "call",
+      "source": "channels._change_tag_unlocked(tag, None, cohort)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 69,
+      "kind": "call",
+      "source": "channels.threads._archive_unlocked(cohort)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 83,
+      "kind": "call",
+      "source": "self.deletion_cohort(channels, tag, cohort)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 84,
+      "kind": "call",
+      "source": "channels.threads._delete_unlocked(selected)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 85,
+      "kind": "call",
+      "source": "channels._change_tag_unlocked(tag, None, tuple((thread for thread in cohort if thread not in selected)))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 298,
+      "kind": "call",
+      "source": "self._change_tag_unlocked(name, replacement, cohort)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 120,
+      "kind": "call",
+      "source": "channels.delete_tag(name, disposition=disposition, confirmed=confirmed)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 279,
+      "kind": "call",
+      "source": "disposition.confirmation(name)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/channel_management.py",
+      "line": 279,
+      "kind": "field-access",
+      "source": "disposition.confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/child_process.py",
+      "line": 759,
+      "kind": "field-access",
+      "source": "self.termination.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli.py",
+      "line": 20,
+      "kind": "import",
+      "source": "from .cli_commands import CliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli.py",
+      "line": 61,
+      "kind": "call",
+      "source": "command.result_exit_code(result)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli.py",
+      "line": 60,
+      "kind": "call",
+      "source": "command.encode_result(result)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 48,
+      "kind": "import",
+      "source": "from .channel_management import TagDisposition, KeepThreadsTagDisposition, TagChangeResult"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 166,
+      "kind": "declaration",
+      "source": "TargetAction"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 210,
+      "kind": "declaration",
+      "source": "TargetOutcome"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 219,
+      "kind": "declaration",
+      "source": "TargetCompleted"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 230,
+      "kind": "declaration",
+      "source": "TargetFailed"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 237,
+      "kind": "declaration",
+      "source": "TargetBatchResult"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 250,
+      "kind": "declaration",
+      "source": "TargetEdit"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 309,
+      "kind": "declaration",
+      "source": "CliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 545,
+      "kind": "declaration",
+      "source": "ToolsCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 555,
+      "kind": "declaration",
+      "source": "RepairInputRoutingCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 566,
+      "kind": "declaration",
+      "source": "ImportThreadCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 606,
+      "kind": "declaration",
+      "source": "InvokeCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 624,
+      "kind": "declaration",
+      "source": "SendCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 637,
+      "kind": "declaration",
+      "source": "PinConstraintCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 691,
+      "kind": "declaration",
+      "source": "CorrectAnnotationCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 707,
+      "kind": "declaration",
+      "source": "AnnotationsCalibrationCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 726,
+      "kind": "declaration",
+      "source": "SupersedeConstraintCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 743,
+      "kind": "declaration",
+      "source": "DropConstraintCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 760,
+      "kind": "declaration",
+      "source": "ExportRetainedCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 772,
+      "kind": "declaration",
+      "source": "RetainedContextCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 791,
+      "kind": "declaration",
+      "source": "InboxCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 800,
+      "kind": "declaration",
+      "source": "AckCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 809,
+      "kind": "declaration",
+      "source": "WhoCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 817,
+      "kind": "declaration",
+      "source": "StatusCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 835,
+      "kind": "declaration",
+      "source": "HistoryCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 872,
+      "kind": "declaration",
+      "source": "ExportWireCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 932,
+      "kind": "declaration",
+      "source": "ChannelsCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 940,
+      "kind": "declaration",
+      "source": "ThreadsCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 949,
+      "kind": "declaration",
+      "source": "ThreadCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 961,
+      "kind": "declaration",
+      "source": "RegisterCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 991,
+      "kind": "declaration",
+      "source": "HeartbeatCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1001,
+      "kind": "declaration",
+      "source": "AttachSessionCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1019,
+      "kind": "declaration",
+      "source": "ActivityCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1031,
+      "kind": "declaration",
+      "source": "StopCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1051,
+      "kind": "declaration",
+      "source": "RestartCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1078,
+      "kind": "declaration",
+      "source": "ReleaseCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1088,
+      "kind": "declaration",
+      "source": "ArchiveCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1106,
+      "kind": "declaration",
+      "source": "RenameSelfCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1120,
+      "kind": "declaration",
+      "source": "ForkCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1147,
+      "kind": "declaration",
+      "source": "LedgerCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1164,
+      "kind": "declaration",
+      "source": "PollCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1173,
+      "kind": "declaration",
+      "source": "CompactionStatusCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1199,
+      "kind": "declaration",
+      "source": "ContextCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1282,
+      "kind": "declaration",
+      "source": "TargetActionsCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1297,
+      "kind": "declaration",
+      "source": "TargetActionCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1316,
+      "kind": "declaration",
+      "source": "StartCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1341,
+      "kind": "declaration",
+      "source": "ThreadTagsCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1357,
+      "kind": "declaration",
+      "source": "ExactTagCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1402,
+      "kind": "declaration",
+      "source": "ArchiveChannelCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1439,
+      "kind": "declaration",
+      "source": "DeleteViewCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1456,
+      "kind": "declaration",
+      "source": "PinChannelCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1475,
+      "kind": "declaration",
+      "source": "ChannelActivityCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1498,
+      "kind": "declaration",
+      "source": "ReadTargetCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1521,
+      "kind": "declaration",
+      "source": "PinThreadCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 122,
+      "kind": "field-declaration",
+      "source": "declaration: Field"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 168,
+      "kind": "field-declaration",
+      "source": "bound: tuple[CliCommand, ...]"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 169,
+      "kind": "field-declaration",
+      "source": "targets: tuple[str, ...]"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 188,
+      "kind": "method",
+      "source": "confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 192,
+      "kind": "method",
+      "source": "edited"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 196,
+      "kind": "method",
+      "source": "with_confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 212,
+      "kind": "field-declaration",
+      "source": "successful: ClassVar[bool] = False"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 214,
+      "kind": "method",
+      "source": "reconnect_targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 223,
+      "kind": "field-declaration",
+      "source": "successful: ClassVar[bool] = True"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 225,
+      "kind": "method",
+      "source": "reconnect_targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 238,
+      "kind": "field-declaration",
+      "source": "outcomes: tuple[TargetCompleted | TargetFailed, ...]"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 244,
+      "kind": "method",
+      "source": "reconnect_targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 252,
+      "kind": "field-declaration",
+      "source": "declaration: type[CliCommand]"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 311,
+      "kind": "field-declaration",
+      "source": "multiple_targets: ClassVar[bool] = False"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 314,
+      "kind": "method",
+      "source": "catalog_declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 319,
+      "kind": "method",
+      "source": "selected_targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 326,
+      "kind": "method",
+      "source": "selection_channel"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 332,
+      "kind": "method",
+      "source": "thread_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 336,
+      "kind": "method",
+      "source": "channel_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 340,
+      "kind": "method",
+      "source": "member_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 351,
+      "kind": "method",
+      "source": "bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 360,
+      "kind": "method",
+      "source": "target_catalog"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 383,
+      "kind": "method",
+      "source": "for_editor"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 386,
+      "kind": "method",
+      "source": "describe"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 390,
+      "kind": "method",
+      "source": "encode_result"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 393,
+      "kind": "method",
+      "source": "result_exit_code"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 397,
+      "kind": "method",
+      "source": "reconnect_targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 401,
+      "kind": "method",
+      "source": "editor_arguments"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 421,
+      "kind": "method",
+      "source": "confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 424,
+      "kind": "method",
+      "source": "with_confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 429,
+      "kind": "method",
+      "source": "edited"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 438,
+      "kind": "method",
+      "source": "execute_target"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 721,
+      "kind": "method",
+      "source": "encode_result"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1037,
+      "kind": "method",
+      "source": "thread_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1042,
+      "kind": "method",
+      "source": "channel_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1094,
+      "kind": "method",
+      "source": "thread_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1134,
+      "kind": "method",
+      "source": "thread_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1292,
+      "kind": "method",
+      "source": "encode_result"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1311,
+      "kind": "method",
+      "source": "result_exit_code"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1322,
+      "kind": "method",
+      "source": "thread_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1327,
+      "kind": "method",
+      "source": "channel_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1331,
+      "kind": "method",
+      "source": "reconnect_targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1348,
+      "kind": "method",
+      "source": "thread_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1365,
+      "kind": "method",
+      "source": "channel_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1390,
+      "kind": "method",
+      "source": "confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1393,
+      "kind": "method",
+      "source": "with_confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1409,
+      "kind": "method",
+      "source": "catalog_declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1413,
+      "kind": "method",
+      "source": "channel_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1416,
+      "kind": "method",
+      "source": "confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1430,
+      "kind": "method",
+      "source": "catalog_declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1434,
+      "kind": "method",
+      "source": "channel_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1444,
+      "kind": "method",
+      "source": "channel_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1447,
+      "kind": "method",
+      "source": "confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1463,
+      "kind": "method",
+      "source": "catalog_declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1467,
+      "kind": "method",
+      "source": "channel_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1481,
+      "kind": "method",
+      "source": "channel_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1505,
+      "kind": "method",
+      "source": "thread_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1509,
+      "kind": "method",
+      "source": "channel_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1512,
+      "kind": "method",
+      "source": "for_editor"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1529,
+      "kind": "method",
+      "source": "thread_bindings"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 453,
+      "kind": "field-declaration",
+      "source": "outcomes: list[TargetCompleted | TargetFailed] = []"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1095,
+      "kind": "import",
+      "source": "from .tools import CommsArchiveTool"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 226,
+      "kind": "call",
+      "source": "type(self.command).reconnect_targets(self.result)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 259,
+      "kind": "call",
+      "source": "self.declaration.editor_arguments(self.arguments)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 260,
+      "kind": "call",
+      "source": "self.declaration.execute_target(ctx, self.target, arguments, confirmed=self.confirmed, channel=self.channel)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 357,
+      "kind": "call",
+      "source": "cls.thread_bindings(comms, thread, snapshot.status(thread.name), channel)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 363,
+      "kind": "call",
+      "source": "cls.selected_targets(target)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 387,
+      "kind": "call",
+      "source": "self.for_editor(comms, target, project)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 388,
+      "kind": "call",
+      "source": "TargetAction((bound,), (target,))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 441,
+      "kind": "call",
+      "source": "cls.selected_targets(target)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 479,
+      "kind": "call",
+      "source": "TargetBatchResult(tuple(sorted(outcomes, key=lambda outcome: selected.index(outcome.target))))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1043,
+      "kind": "call",
+      "source": "cls.member_bindings(comms, channel)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1290,
+      "kind": "call",
+      "source": "CliCommand.target_catalog(ctx, self.target, self.channel, project=self.project)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1308,
+      "kind": "call",
+      "source": "CliCommand.decode(self.operation).execute_target(ctx, self.target, self.arguments, confirmed=self.confirmed, channel=self.channel)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1328,
+      "kind": "call",
+      "source": "cls.member_bindings(comms, channel)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1391,
+      "kind": "call",
+      "source": "self.disposition.confirmation(self.name)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1394,
+      "kind": "call",
+      "source": "super().with_confirmation(confirmed)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1398,
+      "kind": "call",
+      "source": "ctx.channels.delete_tag(self.name, disposition=self.disposition, confirmed=self.confirmed)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 174,
+      "kind": "call",
+      "source": "member.catalog_declaration()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 178,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 185,
+      "kind": "field-access",
+      "source": "self.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 206,
+      "kind": "field-access",
+      "source": "self.confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 354,
+      "kind": "call",
+      "source": "cls.channel_bindings(comms, comms.channels.catalog.read().resolve(target))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 398,
+      "kind": "call",
+      "source": "result.reconnect_targets()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 425,
+      "kind": "call",
+      "source": "self.confirmation()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 443,
+      "kind": "call",
+      "source": "cls.bindings(comms, target, cls.selection_channel(channel, target))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 448,
+      "kind": "field-access",
+      "source": "cls.multiple_targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1333,
+      "kind": "call",
+      "source": "super().reconnect_targets(result)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1391,
+      "kind": "field-access",
+      "source": "self.disposition.confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 128,
+      "kind": "field-access",
+      "source": "self.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 132,
+      "kind": "field-access",
+      "source": "self.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 141,
+      "kind": "field-access",
+      "source": "self.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 173,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 202,
+      "kind": "field-access",
+      "source": "self.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 206,
+      "kind": "field-access",
+      "source": "self.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 207,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 242,
+      "kind": "field-access",
+      "source": "outcome.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 259,
+      "kind": "field-access",
+      "source": "self.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 260,
+      "kind": "field-access",
+      "source": "self.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 381,
+      "kind": "call",
+      "source": "TargetAction(tuple(commands), selected)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 425,
+      "kind": "field-access",
+      "source": "self.confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 426,
+      "kind": "call",
+      "source": "self.confirmation()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 443,
+      "kind": "call",
+      "source": "cls.selection_channel(channel, target)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 452,
+      "kind": "call",
+      "source": "cls.catalog_declaration()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 469,
+      "kind": "call",
+      "source": "command.edited(arguments).with_confirmation(confirmed)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1493,
+      "kind": "call",
+      "source": "TargetEdit(CliCommand.decode(self.operation), self.target, self.arguments, self.confirmed, self.channel)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 128,
+      "kind": "field-access",
+      "source": "self.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 158,
+      "kind": "field-access",
+      "source": "self.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 158,
+      "kind": "field-access",
+      "source": "self.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 174,
+      "kind": "field-access",
+      "source": "self.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 242,
+      "kind": "field-access",
+      "source": "self.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 347,
+      "kind": "call",
+      "source": "cls.thread_bindings(comms, thread, snapshot.status(thread.name), channel.name)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 366,
+      "kind": "field-access",
+      "source": "member.multiple_targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 370,
+      "kind": "call",
+      "source": "member.bindings(comms, name, cls.selection_channel(channel, name))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 378,
+      "kind": "call",
+      "source": "command.for_editor(comms, name, project)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 426,
+      "kind": "field-access",
+      "source": "self.confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 473,
+      "kind": "call",
+      "source": "type(original).bindings(comms, name, cls.selection_channel(channel, name))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 476,
+      "kind": "call",
+      "source": "TargetCompleted(name, command, command.apply(comms))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 1312,
+      "kind": "field-access",
+      "source": "result.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 136,
+      "kind": "field-access",
+      "source": "self.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 189,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 193,
+      "kind": "call",
+      "source": "command.edited(type(command).editor_arguments(arguments))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 197,
+      "kind": "call",
+      "source": "command.with_confirmation(confirmed)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 204,
+      "kind": "field-access",
+      "source": "self.editable_fields"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 205,
+      "kind": "field-access",
+      "source": "self.editable_fields"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 245,
+      "kind": "field-access",
+      "source": "self.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 246,
+      "kind": "call",
+      "source": "outcome.reconnect_targets()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 370,
+      "kind": "call",
+      "source": "cls.selection_channel(channel, name)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 376,
+      "kind": "call",
+      "source": "member.catalog_declaration()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 445,
+      "kind": "call",
+      "source": "bindings[0].edited(arguments).with_confirmation(confirmed)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 463,
+      "kind": "call",
+      "source": "TargetFailed(name, type(error).__name__, str(error))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 469,
+      "kind": "call",
+      "source": "command.edited(arguments)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 474,
+      "kind": "call",
+      "source": "cls.selection_channel(channel, name)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 478,
+      "kind": "call",
+      "source": "TargetFailed(name, type(error).__name__, str(error))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 190,
+      "kind": "call",
+      "source": "command.confirmation()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 193,
+      "kind": "call",
+      "source": "type(command).editor_arguments(arguments)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 194,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 198,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 451,
+      "kind": "call",
+      "source": "member.catalog_declaration()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 458,
+      "kind": "call",
+      "source": "member.bindings(comms, name, cls.selection_channel(channel, name))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 190,
+      "kind": "field-access",
+      "source": "command.confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 445,
+      "kind": "call",
+      "source": "bindings[0].edited(arguments)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 459,
+      "kind": "call",
+      "source": "cls.selection_channel(channel, name)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/compaction_outcomes.py",
+      "line": 65,
+      "kind": "field-declaration",
+      "source": "outcomes: tuple[SelectedCompactionOutcome, ...]"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/compaction_outcomes.py",
+      "line": 71,
+      "kind": "field-access",
+      "source": "self.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 363,
+      "kind": "field-access",
+      "source": "outcome.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/config_options.py",
+      "line": 57,
+      "kind": "method",
+      "source": "describe"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/config_options.py",
+      "line": 94,
+      "kind": "method",
+      "source": "describe"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/config_options.py",
+      "line": 220,
+      "kind": "call",
+      "source": "self.catalog_for(member).describe(thread)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/context_segments/response.py",
+      "line": 18,
+      "kind": "field-access",
+      "source": "self.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/coordination_schema.py",
+      "line": 81,
+      "kind": "field-access",
+      "source": "member.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/execution_states.py",
+      "line": 170,
+      "kind": "field-access",
+      "source": "row.lifecycle.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/goal_actions.py",
+      "line": 247,
+      "kind": "field-access",
+      "source": "review.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/goal_management.py",
+      "line": 183,
+      "kind": "field-access",
+      "source": "wait.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/goal_management.py",
+      "line": 252,
+      "kind": "field-access",
+      "source": "wait.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/goal_management.py",
+      "line": 248,
+      "kind": "field-access",
+      "source": "wait.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 26,
+      "kind": "field-declaration",
+      "source": "targets: tuple[GoalWaitTarget, ...]"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 89,
+      "kind": "field-declaration",
+      "source": "targets: tuple[GoalWaitTarget, ...]"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 39,
+      "kind": "field-access",
+      "source": "self.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 115,
+      "kind": "field-access",
+      "source": "self.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 199,
+      "kind": "field-access",
+      "source": "wait.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 72,
+      "kind": "field-access",
+      "source": "self.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 244,
+      "kind": "field-access",
+      "source": "wait.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 75,
+      "kind": "field-declaration",
+      "source": "targets: frozenset[str] | None"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/historical_views.py",
+      "line": 81,
+      "kind": "field-access",
+      "source": "self.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/obligation_states.py",
+      "line": 17,
+      "kind": "field-declaration",
+      "source": "successful: ClassVar[bool] = False"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/pi_helper.py",
+      "line": 67,
+      "kind": "field-access",
+      "source": "outcome.outcome.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 523,
+      "kind": "field-access",
+      "source": "self.stop_reason.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/pi_payloads.py",
+      "line": 550,
+      "kind": "field-access",
+      "source": "reason.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 363,
+      "kind": "field-declaration",
+      "source": "targets: frozenset[str] | None"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 388,
+      "kind": "field-access",
+      "source": "self.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 399,
+      "kind": "field-access",
+      "source": "self.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 399,
+      "kind": "field-access",
+      "source": "other.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 405,
+      "kind": "field-access",
+      "source": "self.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/read_basis.py",
+      "line": 405,
+      "kind": "field-access",
+      "source": "self.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/recovery_gateway.py",
+      "line": 323,
+      "kind": "field-access",
+      "source": "result.outcome.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/routing.py",
+      "line": 23,
+      "kind": "field-declaration",
+      "source": "targets: tuple[str, ...]"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/routing.py",
+      "line": 27,
+      "kind": "field-access",
+      "source": "self.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/routing.py",
+      "line": 82,
+      "kind": "field-access",
+      "source": "self.reply.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/routing.py",
+      "line": 77,
+      "kind": "field-access",
+      "source": "self.reply.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/routing.py",
+      "line": 33,
+      "kind": "field-access",
+      "source": "self.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 135,
+      "kind": "field-access",
+      "source": "batch.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/selected_result.py",
+      "line": 83,
+      "kind": "field-access",
+      "source": "participant.batch.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/selected_source_batch.py",
+      "line": 102,
+      "kind": "field-access",
+      "source": "self.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/selected_source_batch.py",
+      "line": 123,
+      "kind": "field-access",
+      "source": "self.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/selected_source_batch.py",
+      "line": 125,
+      "kind": "field-access",
+      "source": "self.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 129,
+      "kind": "field-access",
+      "source": "participant.batch.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 244,
+      "kind": "field-access",
+      "source": "participant.batch.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/thread_management.py",
+      "line": 505,
+      "kind": "method",
+      "source": "_archive_unlocked"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/thread_management.py",
+      "line": 510,
+      "kind": "method",
+      "source": "_delete_unlocked"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/thread_management.py",
+      "line": 503,
+      "kind": "call",
+      "source": "self._archive_unlocked((self.registry.require(name),))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/tools.py",
+      "line": 11,
+      "kind": "import",
+      "source": "from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/tools.py",
+      "line": 902,
+      "kind": "declaration",
+      "source": "CommsArchiveTool"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/tools.py",
+      "line": 681,
+      "kind": "field-access",
+      "source": "self.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/transcript_outcomes.py",
+      "line": 28,
+      "kind": "field-access",
+      "source": "source.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/transcript_outcomes.py",
+      "line": 27,
+      "kind": "field-access",
+      "source": "source.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 47,
+      "kind": "field-declaration",
+      "source": "outcomes: CompactionOutcomeCursor | None = None"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 514,
+      "kind": "field-access",
+      "source": "outcomes.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 56,
+      "kind": "field-access",
+      "source": "self.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 91,
+      "kind": "field-access",
+      "source": "self.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 519,
+      "kind": "field-access",
+      "source": "frontier.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 51,
+      "kind": "field-access",
+      "source": "self.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 51,
+      "kind": "field-access",
+      "source": "self.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 95,
+      "kind": "field-access",
+      "source": "self.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 96,
+      "kind": "field-access",
+      "source": "self.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 537,
+      "kind": "field-access",
+      "source": "outcomes.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 96,
+      "kind": "field-access",
+      "source": "self.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/transcripts.py",
+      "line": 60,
+      "kind": "field-access",
+      "source": "self.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/turn_context.py",
+      "line": 796,
+      "kind": "field-declaration",
+      "source": "targets: tuple[str, ...]"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/turn_context.py",
+      "line": 799,
+      "kind": "field-access",
+      "source": "self.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 115,
+      "kind": "field-access",
+      "source": "self.routing.reply.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/working_memory_labels.py",
+      "line": 46,
+      "kind": "field-access",
+      "source": "question.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "src/agent_comms/working_memory_requests.py",
+      "line": 36,
+      "kind": "field-access",
+      "source": "question.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 605,
+      "kind": "field-access",
+      "source": "self.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 701,
+      "kind": "field-access",
+      "source": "round_.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1091,
+      "kind": "field-access",
+      "source": "round_.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/compaction_retention_fixture.py",
+      "line": 1092,
+      "kind": "field-access",
+      "source": "controls[round_.identity].outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/guards/test_field_codec_ownership.py",
+      "line": 45,
+      "kind": "field-access",
+      "source": "node.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/native_backend_fixture.py",
+      "line": 56,
+      "kind": "field-access",
+      "source": "result.outcome.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/round2/test_typed_table_guards.py",
+      "line": 21,
+      "kind": "field-access",
+      "source": "node.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channel_display.py",
+      "line": 185,
+      "kind": "call",
+      "source": "comms.channels.delete_tag('services')"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 11,
+      "kind": "import",
+      "source": "from agent_comms.channel_management import ArchiveThreadsTagDisposition, DeleteThreadsTagDisposition, DeleteExclusiveInactiveThreadsTagDisposition"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 121,
+      "kind": "import",
+      "source": "from agent_comms.cli_commands import CliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 87,
+      "kind": "call",
+      "source": "DeleteExclusiveInactiveThreadsTagDisposition()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 91,
+      "kind": "call",
+      "source": "comms.channels.delete_tag('remove', disposition=disposition, confirmed=True)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 112,
+      "kind": "call",
+      "source": "comms.channels.delete_tag('remove', disposition=DeleteExclusiveInactiveThreadsTagDisposition(), confirmed=True)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 131,
+      "kind": "call",
+      "source": "action.edited({'disposition': FieldCodec.encode(disposition)})"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 205,
+      "kind": "call",
+      "source": "observer.channels.delete_tag('api')"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 236,
+      "kind": "call",
+      "source": "comms.channels.delete_tag('temporary')"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 611,
+      "kind": "call",
+      "source": "comms.channels.delete_tag('backend')"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 56,
+      "kind": "call",
+      "source": "DeleteThreadsTagDisposition()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 89,
+      "kind": "call",
+      "source": "comms.channels.delete_tag('remove', disposition=disposition)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 132,
+      "kind": "field-access",
+      "source": "edited.confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 58,
+      "kind": "call",
+      "source": "comms.channels.delete_tag('cohort', disposition=disposition)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 59,
+      "kind": "call",
+      "source": "disposition.confirmation('cohort')"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 61,
+      "kind": "call",
+      "source": "comms.channels.delete_tag('cohort', disposition=disposition, confirmed=True)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 113,
+      "kind": "call",
+      "source": "DeleteExclusiveInactiveThreadsTagDisposition()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 59,
+      "kind": "field-access",
+      "source": "disposition.confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 126,
+      "kind": "call",
+      "source": "CliCommand.target_catalog(comms, '#api', project=str(tmp_path))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 129,
+      "kind": "field-access",
+      "source": "action.editable_fields"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_channels.py",
+      "line": 127,
+      "kind": "field-access",
+      "source": "action.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_child_process.py",
+      "line": 117,
+      "kind": "field-access",
+      "source": "result.outcome.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_child_process.py",
+      "line": 448,
+      "kind": "field-access",
+      "source": "outcome.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 239,
+      "kind": "import",
+      "source": "from agent_comms.cli_commands import CliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 294,
+      "kind": "import",
+      "source": "from agent_comms.cli_commands import StopCliCommand, TargetBatchResult, TargetEdit"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 329,
+      "kind": "import",
+      "source": "from agent_comms.cli_commands import PinThreadCliCommand, TargetEdit"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 343,
+      "kind": "import",
+      "source": "from agent_comms.cli_commands import ReadTargetCliCommand, TargetEdit"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 372,
+      "kind": "import",
+      "source": "from agent_comms.cli_commands import ArchiveCliCommand, CliCommand, ForkCliCommand, TargetEdit"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 242,
+      "kind": "call",
+      "source": "CliCommand.target_catalog(comms, ('alpha', 'beta', '#team'), {'alpha': '#team', 'beta': '#other'}, project=str(tmp_path))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 253,
+      "kind": "call",
+      "source": "catalog['archive'].edited({}).with_confirmation(True)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 323,
+      "kind": "call",
+      "source": "StartCliCommand.bindings(comms, '#team')"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 375,
+      "kind": "call",
+      "source": "CliCommand.target_catalog(comms, ('missing', 'alpha'), project=str(tmp_path))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 249,
+      "kind": "field-access",
+      "source": "catalog['pin-thread'].editable_fields"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 252,
+      "kind": "call",
+      "source": "catalog['archive'].edited({}).with_confirmation(False)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 254,
+      "kind": "field-access",
+      "source": "reviewed.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 302,
+      "kind": "field-access",
+      "source": "result.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 306,
+      "kind": "call",
+      "source": "result.reconnect_targets()"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 335,
+      "kind": "field-access",
+      "source": "result.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 364,
+      "kind": "field-access",
+      "source": "result.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 378,
+      "kind": "field-access",
+      "source": "result.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 246,
+      "kind": "field-access",
+      "source": "action.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 248,
+      "kind": "field-access",
+      "source": "catalog['pin-thread'].bound"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 250,
+      "kind": "field-access",
+      "source": "catalog['archive'].confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 253,
+      "kind": "call",
+      "source": "catalog['archive'].edited({})"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 301,
+      "kind": "call",
+      "source": "TargetEdit(StopCliCommand, ('#team', 'alpha'), {})"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 303,
+      "kind": "field-access",
+      "source": "result.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 307,
+      "kind": "call",
+      "source": "StopCliCommand.execute_target(comms, 'alpha', {})"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 333,
+      "kind": "call",
+      "source": "TargetEdit(PinThreadCliCommand, ('alpha', 'beta', '#team'), {}, channel={'alpha': '#team', 'beta': '#other'})"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 362,
+      "kind": "call",
+      "source": "TargetEdit(ReadTargetCliCommand, ('alpha', '#team'), {'worktree': str(tmp_path)})"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 377,
+      "kind": "call",
+      "source": "TargetEdit(ArchiveCliCommand, ('missing', 'alpha'), {})"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 379,
+      "kind": "field-access",
+      "source": "result.outcomes[0].successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 252,
+      "kind": "call",
+      "source": "catalog['archive'].edited({})"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 257,
+      "kind": "field-access",
+      "source": "catalog['read-target'].editable_fields"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 304,
+      "kind": "field-access",
+      "source": "result.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 335,
+      "kind": "field-access",
+      "source": "result.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 376,
+      "kind": "field-access",
+      "source": "action.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 382,
+      "kind": "call",
+      "source": "TargetEdit(ForkCliCommand, ('alpha', 'beta'), {})"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 379,
+      "kind": "field-access",
+      "source": "result.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 379,
+      "kind": "field-access",
+      "source": "result.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 380,
+      "kind": "field-access",
+      "source": "result.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cli.py",
+      "line": 364,
+      "kind": "field-access",
+      "source": "result.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_cohort_foreground.py",
+      "line": 726,
+      "kind": "field-declaration",
+      "source": "outcomes: dict[str, dict[str, object]] = {}"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_command_families.py",
+      "line": 14,
+      "kind": "import",
+      "source": "from agent_comms.cli_commands import CliCommand, option"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_command_families.py",
+      "line": 71,
+      "kind": "declaration",
+      "source": "ContractProbeCliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 54,
+      "kind": "field-access",
+      "source": "first_view.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 100,
+      "kind": "field-access",
+      "source": "CompactionJournal.snapshot(journal.path, str(session), ThreadIncarnation('renamed', 1.0), renamed).outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 115,
+      "kind": "field-access",
+      "source": "observe(original).outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 152,
+      "kind": "field-access",
+      "source": "observe(original).outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 51,
+      "kind": "field-access",
+      "source": "empty.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 103,
+      "kind": "field-access",
+      "source": "CompactionJournal.snapshot(journal.path, str(session), ThreadIncarnation('owner', 2.0), reused).outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 119,
+      "kind": "field-access",
+      "source": "observe(original).outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 132,
+      "kind": "field-access",
+      "source": "CompactionJournal.snapshot(absent, '/original', ThreadIncarnation('owner', 1.0), snapshot).outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 81,
+      "kind": "field-access",
+      "source": "retired.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_context_source_inspection.py",
+      "line": 230,
+      "kind": "call",
+      "source": "command.encode_result(command.apply(comms))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_coordination_response.py",
+      "line": 419,
+      "kind": "field-declaration",
+      "source": "outcomes: list[str] = []"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_mcp_acceptance.py",
+      "line": 79,
+      "kind": "field-access",
+      "source": "outcome.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 214,
+      "kind": "call",
+      "source": "model_catalog.describe(thread)"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_outbound_native_journey.py",
+      "line": 120,
+      "kind": "field-access",
+      "source": "sent[0].routing.reply.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 229,
+      "kind": "field-access",
+      "source": "sent.routing.reply.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_restart_queue.py",
+      "line": 113,
+      "kind": "field-access",
+      "source": "outcome.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 209,
+      "kind": "field-access",
+      "source": "value.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 33,
+      "kind": "field-access",
+      "source": "self.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 187,
+      "kind": "field-access",
+      "source": "value.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 191,
+      "kind": "field-access",
+      "source": "value.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 326,
+      "kind": "field-access",
+      "source": "final[0].routing.reply.targets"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 190,
+      "kind": "field-access",
+      "source": "value.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_s1_event_behavior.py",
+      "line": 192,
+      "kind": "field-access",
+      "source": "value.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_s3_legality_behavior.py",
+      "line": 301,
+      "kind": "field-access",
+      "source": "response.successful"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_turn_context_wire.py",
+      "line": 241,
+      "kind": "call",
+      "source": "compare.encode_result(compare.apply(reopened))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_turn_context_wire.py",
+      "line": 239,
+      "kind": "call",
+      "source": "recorded.encode_result(recorded.apply(reopened))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_turn_context_wire.py",
+      "line": 245,
+      "kind": "call",
+      "source": "latest.encode_result(latest.apply(reopened))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_turn_context_wire.py",
+      "line": 203,
+      "kind": "call",
+      "source": "recorded.encode_result(recorded.apply(reopened))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/test_turn_context_wire.py",
+      "line": 205,
+      "kind": "call",
+      "source": "difference.encode_result(difference.apply(reopened))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 414,
+      "kind": "call",
+      "source": "compare.encode_result(compare.apply(service))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 419,
+      "kind": "call",
+      "source": "command.encode_result(command.apply(service))"
+    },
+    {
+      "repo": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 811,
+      "kind": "field-access",
+      "source": "args.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/acp/agent_session.py",
+      "line": 245,
+      "kind": "field-access",
+      "source": "self.agent.controller.session.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/acp/agent_session.py",
+      "line": 120,
+      "kind": "field-access",
+      "source": "self.agent.controller.session.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/acp/agent_session.py",
+      "line": 76,
+      "kind": "field-access",
+      "source": "self.agent.controller.session.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/acp/status.py",
+      "line": 49,
+      "kind": "call",
+      "source": "turns.describe(' '.join(title.splitlines()))"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/application_actions.py",
+      "line": 37,
+      "kind": "method",
+      "source": "bindings"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/application_actions.py",
+      "line": 61,
+      "kind": "method",
+      "source": "bindings"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/conversation_kind.py",
+      "line": 170,
+      "kind": "field-access",
+      "source": "scope.targets"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/conversation_submission.py",
+      "line": 99,
+      "kind": "call",
+      "source": "view.turns.describe(waiting)"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/conversation_turn.py",
+      "line": 160,
+      "kind": "method",
+      "source": "describe"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/conversation_turn.py",
+      "line": 187,
+      "kind": "method",
+      "source": "describe"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/conversation_turn.py",
+      "line": 230,
+      "kind": "method",
+      "source": "describe"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/conversation_turn.py",
+      "line": 266,
+      "kind": "method",
+      "source": "describe"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/conversation_turn.py",
+      "line": 267,
+      "kind": "call",
+      "source": "self.binding.describe(activity)"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/input_history.py",
+      "line": 106,
+      "kind": "field-access",
+      "source": "history.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/mcp_decision.py",
+      "line": 116,
+      "kind": "field-access",
+      "source": "original.successful"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/question_actions.py",
+      "line": 17,
+      "kind": "method",
+      "source": "bindings"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/question_actions.py",
+      "line": 76,
+      "kind": "method",
+      "source": "bindings"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/screens/permissions.py",
+      "line": 65,
+      "kind": "call",
+      "source": "SelectKindAction.bindings(priority=True)"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/screens/workspace.py",
+      "line": 333,
+      "kind": "field-declaration",
+      "source": "targets: set[DOMNode] = set()"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/setting_widgets.py",
+      "line": 15,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/setting_widgets.py",
+      "line": 52,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/setting_widgets.py",
+      "line": 67,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/setting_widgets.py",
+      "line": 78,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/setting_widgets.py",
+      "line": 73,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/setting_widgets.py",
+      "line": 37,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/setting_widgets.py",
+      "line": 59,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/setting_widgets.py",
+      "line": 62,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/setting_widgets.py",
+      "line": 91,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/setting_widgets.py",
+      "line": 24,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/setting_widgets.py",
+      "line": 40,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/setting_widgets.py",
+      "line": 40,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/setting_widgets.py",
+      "line": 39,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/setting_widgets.py",
+      "line": 61,
+      "kind": "field-access",
+      "source": "self.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/settings.py",
+      "line": 162,
+      "kind": "field-access",
+      "source": "self.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/settings.py",
+      "line": 172,
+      "kind": "field-access",
+      "source": "self.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/target_commands.py",
+      "line": 16,
+      "kind": "import",
+      "source": "from agent_comms.cli_commands import CliCommand, TargetAction"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/target_commands.py",
+      "line": 43,
+      "kind": "call",
+      "source": "CliCommand.target_catalog(self.comms, self.subject, self.channel, project=str(self.project))"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/target_commands.py",
+      "line": 122,
+      "kind": "field-access",
+      "source": "self.definition.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/terminal_execution.py",
+      "line": 115,
+      "kind": "field-access",
+      "source": "self.original.successful"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/thread_actions.py",
+      "line": 10,
+      "kind": "import",
+      "source": "from agent_comms.cli_commands import TargetAction, TargetEdit"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/thread_actions.py",
+      "line": 117,
+      "kind": "field-access",
+      "source": "definition.editable_fields"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/thread_actions.py",
+      "line": 117,
+      "kind": "field-access",
+      "source": "definition.confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/thread_actions.py",
+      "line": 99,
+      "kind": "call",
+      "source": "self.request.declaration.reconnect_targets(result)"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/thread_actions.py",
+      "line": 111,
+      "kind": "call",
+      "source": "TargetEdit(declaration=definition.declaration, target=ctx.subject, arguments=arguments, confirmed=bool(definition.edited(arguments).confirmation()), channel=ctx.channel)"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/thread_actions.py",
+      "line": 99,
+      "kind": "field-access",
+      "source": "self.request.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/thread_actions.py",
+      "line": 111,
+      "kind": "field-access",
+      "source": "definition.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/thread_actions.py",
+      "line": 112,
+      "kind": "call",
+      "source": "definition.edited(arguments).confirmation()"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/thread_actions.py",
+      "line": 112,
+      "kind": "field-access",
+      "source": "definition.edited(arguments).confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/thread_actions.py",
+      "line": 112,
+      "kind": "call",
+      "source": "definition.edited(arguments)"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/transcript_publication.py",
+      "line": 58,
+      "kind": "field-access",
+      "source": "prefix.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widget_actions.py",
+      "line": 15,
+      "kind": "call",
+      "source": "declaration.bindings()"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/command_pane.py",
+      "line": 45,
+      "kind": "field-access",
+      "source": "completion.successful"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/command_pane.py",
+      "line": 46,
+      "kind": "field-access",
+      "source": "completion.successful"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/comms_command_dialog.py",
+      "line": 4,
+      "kind": "import",
+      "source": "from agent_comms.cli_commands import TargetAction"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/comms_command_dialog.py",
+      "line": 65,
+      "kind": "call",
+      "source": "self.definition.edited(arguments).with_confirmation(self.query_one('#command-confirmed', Checkbox).value)"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/comms_command_dialog.py",
+      "line": 79,
+      "kind": "call",
+      "source": "self.definition.edited(self.arguments()).confirmation()"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/comms_command_dialog.py",
+      "line": 31,
+      "kind": "field-access",
+      "source": "self.definition.editable_fields"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/comms_command_dialog.py",
+      "line": 79,
+      "kind": "field-access",
+      "source": "self.definition.edited(self.arguments()).confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/comms_command_dialog.py",
+      "line": 81,
+      "kind": "field-access",
+      "source": "self.definition.confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/comms_command_dialog.py",
+      "line": 29,
+      "kind": "field-access",
+      "source": "self.definition.confirmation"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/comms_command_dialog.py",
+      "line": 65,
+      "kind": "call",
+      "source": "self.definition.edited(arguments)"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/comms_command_dialog.py",
+      "line": 79,
+      "kind": "call",
+      "source": "self.definition.edited(self.arguments())"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/conversation.py",
+      "line": 1486,
+      "kind": "call",
+      "source": "self.turns.describe('Thinking\u2026')"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/conversation.py",
+      "line": 562,
+      "kind": "field-access",
+      "source": "self.turns.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/conversation.py",
+      "line": 1395,
+      "kind": "call",
+      "source": "self.turns.describe('Writing response\u2026')"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/conversation.py",
+      "line": 1812,
+      "kind": "field-access",
+      "source": "self.turns.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/conversation.py",
+      "line": 2055,
+      "kind": "call",
+      "source": "self.turns.describe('Cancelling\u2026')"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/patch_diff.py",
+      "line": 194,
+      "kind": "field-declaration",
+      "source": "bound: dict[int, Content] = {}"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/route_header.py",
+      "line": 60,
+      "kind": "field-access",
+      "source": "self.route.targets"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/route_header.py",
+      "line": 38,
+      "kind": "field-access",
+      "source": "route.targets"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/route_header.py",
+      "line": 34,
+      "kind": "field-access",
+      "source": "route.targets"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/route_header.py",
+      "line": 61,
+      "kind": "field-access",
+      "source": "self.route.targets"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/route_header.py",
+      "line": 34,
+      "kind": "field-access",
+      "source": "route.targets"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/route_header.py",
+      "line": 34,
+      "kind": "field-access",
+      "source": "route.targets"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/terminal_tool.py",
+      "line": 66,
+      "kind": "field-access",
+      "source": "outcome.successful"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/terminal_tool.py",
+      "line": 68,
+      "kind": "field-access",
+      "source": "outcome.successful"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "src/toad/widgets/terminal_tool.py",
+      "line": 67,
+      "kind": "field-access",
+      "source": "outcome.successful"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/application_actions_installed_journey.py",
+      "line": 88,
+      "kind": "field-access",
+      "source": "w.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/application_actions_installed_journey.py",
+      "line": 134,
+      "kind": "field-access",
+      "source": "w.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/application_actions_installed_journey.py",
+      "line": 87,
+      "kind": "field-access",
+      "source": "w.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/blank_presentation_pilot.py",
+      "line": 74,
+      "kind": "field-access",
+      "source": "w.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/blank_presentation_pilot.py",
+      "line": 79,
+      "kind": "field-access",
+      "source": "w.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/blank_presentation_pilot.py",
+      "line": 72,
+      "kind": "field-access",
+      "source": "w.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/compaction_summary_stream_native_installed_pilot.py",
+      "line": 323,
+      "kind": "field-access",
+      "source": "snapshot.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/compaction_summary_stream_native_installed_pilot.py",
+      "line": 324,
+      "kind": "field-access",
+      "source": "snapshot.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/compaction_summary_stream_native_installed_pilot.py",
+      "line": 325,
+      "kind": "field-access",
+      "source": "snapshot.outcomes"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/conftest.py",
+      "line": 70,
+      "kind": "field-access",
+      "source": "result.outcome.successful"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/declared_target_actions_installed_pilot.py",
+      "line": 18,
+      "kind": "import",
+      "source": "from agent_comms.cli_commands import CliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/declared_target_actions_installed_pilot.py",
+      "line": 19,
+      "kind": "import",
+      "source": "from agent_comms.channel_management import ArchiveThreadsTagDisposition, DeleteThreadsTagDisposition"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/declared_target_actions_installed_pilot.py",
+      "line": 69,
+      "kind": "field-access",
+      "source": "dialog.definition.editable_fields"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/declared_target_actions_installed_pilot.py",
+      "line": 181,
+      "kind": "field-access",
+      "source": "item.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/declared_target_actions_installed_pilot.py",
+      "line": 217,
+      "kind": "field-access",
+      "source": "item.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/first_fork_native_installed_pilot.py",
+      "line": 38,
+      "kind": "call",
+      "source": "ForkCliCommand.target_catalog(comms, parent.name, project=str(project))"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/guards/test_application_actions.py",
+      "line": 25,
+      "kind": "field-access",
+      "source": "n.targets"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/guards/test_application_actions.py",
+      "line": 28,
+      "kind": "field-access",
+      "source": "n.targets"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/l0a_archive_history_pilot.py",
+      "line": 5,
+      "kind": "import",
+      "source": "from agent_comms.cli_commands import CliCommand"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/maintenance_boundary_pilot.py",
+      "line": 22,
+      "kind": "field-access",
+      "source": "(await child.wait()).successful"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/native_terminal_retention_pilot.py",
+      "line": 72,
+      "kind": "field-access",
+      "source": "execution.outcome.successful"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/native_terminal_retention_pilot.py",
+      "line": 222,
+      "kind": "field-access",
+      "source": "execution.outcome.successful"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/native_terminal_retention_pilot.py",
+      "line": 111,
+      "kind": "field-access",
+      "source": "running.outcome.successful"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/quit_save_installed_pilot.py",
+      "line": 29,
+      "kind": "field-access",
+      "source": "editor.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/quit_save_installed_pilot.py",
+      "line": 67,
+      "kind": "field-access",
+      "source": "w.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/quit_save_installed_pilot.py",
+      "line": 65,
+      "kind": "field-access",
+      "source": "w.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/runtime_fixture.py",
+      "line": 205,
+      "kind": "import",
+      "source": "from agent_comms.cli_commands import CliCommand, TargetEdit"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/runtime_fixture.py",
+      "line": 211,
+      "kind": "call",
+      "source": "TargetEdit(target=subject, declaration=command, arguments={})"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/runtime_fixture.py",
+      "line": 208,
+      "kind": "call",
+      "source": "CliCommand.target_catalog(comms, subject, project=str(app.project_dir))"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/runtime_fixture.py",
+      "line": 210,
+      "kind": "field-access",
+      "source": "item.declaration"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/saved_state_user_journey_pilot.py",
+      "line": 501,
+      "kind": "call",
+      "source": "ForkCliCommand.editor_arguments({'tags': app.screen.query_one('#command-field-tags', Input).value})"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/settings_tree_pilot.py",
+      "line": 183,
+      "kind": "field-access",
+      "source": "w.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/settings_tree_pilot.py",
+      "line": 193,
+      "kind": "field-access",
+      "source": "w.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/settings_tree_pilot.py",
+      "line": 206,
+      "kind": "field-access",
+      "source": "w.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/settings_tree_pilot.py",
+      "line": 229,
+      "kind": "field-access",
+      "source": "w.bound"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/test_t8_boundaries.py",
+      "line": 158,
+      "kind": "field-access",
+      "source": "node.targets"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/tools/record_installed_tui.py",
+      "line": 258,
+      "kind": "field-access",
+      "source": "FieldCodec.decode(ChildOutcome, parent_exit['outcome']).successful"
+    },
+    {
+      "repo": "/home/ts/wt/toad-current-installed-integration-20261006",
+      "path": "tests/typed_comms_command_pilot.py",
+      "line": 94,
+      "kind": "field-access",
+      "source": "outcome.successful"
+    }
+  ],
+  "ownership": "CliCommand binds selections once through original declarations; TargetAction projects that binding. Original lifecycle/registry/channel/history owners execute. TagDisposition extends one deletion cohort hook.",
+  "limits": [
+    "Toad consumer evidence is the original coordination revision; Parent owns its new selection/dialog/completion changes.",
+    "AST attribute sites are source evidence; ambiguous dynamic callback identities are not behavioral proof."
+  ],
+  "removed_competing_work": [
+    "TargetAction no longer stores a copy of editable field declarations.",
+    "Tag deletion uses the original canonical tag-change operation after the original guarded cohort deletion.",
+    "The UI needs no action-specific command list or eligibility state."
+  ]
+}
