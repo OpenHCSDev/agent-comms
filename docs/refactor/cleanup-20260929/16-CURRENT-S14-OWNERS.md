@@ -61,9 +61,23 @@ The original objective remains incomplete. CI is deferred as a merge gate.
   Same built wheels,600/240/20/2 bounds. The one installed proof passed3.478s;
   both processes joined/are absent, all953/full69 source assets match, and the
   original typed Core member is included in the thirteen-file App map. Bohr
-  consumed/disabled that proof; App/source capture still require the separate
-  actual execution/source receipts and final release. Completed old motion
-  review preserves source-bound body/writer evidence without latency acceptance.
+  consumed/disabled that proof. Physical02 then passed its sole controller in
+  208.526s: saved-source/tab/editor/draft/Undo native checks and sidebar/context
+  gestures passed, using a real42.7MB source/two private SDK saved forks and zero
+  submitted inputs. Original restoration passed once0.272s; exact original
+  floor/origins, process absence and fresh private census are verified. Bohr
+  independently CLOSED the existing purpose and Sch's private/source closures
+  are preserved. Whole/raw/two journals remain held.
+  Footage review does not qualify transcript wheel motion: wheel-up widens the
+  right sidebar while history reflows at its bottom; down/reverse retain
+  scroll_y=maximum585 and produce no body outputs. Parent published the honest
+  result on Toad485 at2f2ffc209. Parent owns recorder motion acceptance; Arendt
+  owns the native queued press/move/release/capture source trace. No rerun or
+  fresh authority is inferred. Independently, Parent published Toad486 at
+  5abb6fd4: remove CommsRow.show_menu's unnecessary focus request, which can
+  scroll an unopened row before opening its explicit-target context menu.
+  Source compile/AST/diff pass; actual mounted right-click acceptance and live
+  publication remain outstanding.
 - Actual visible pointer App: right median50.4ms/p9558.5ms/max112.9ms; left
   median54.5ms/p9571.6ms/max185.5ms, empty stderr. Earlier429/424ms measurements
   selected a hidden zero-size sidebar and are invalid visible-toggle results,
