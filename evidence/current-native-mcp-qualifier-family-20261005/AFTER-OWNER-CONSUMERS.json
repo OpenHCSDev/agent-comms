@@ -1,0 +1,271 @@
+{
+  "tree": "3fe8ef2e3806f5d2992def6d33d596f300a9e846",
+  "collector": "original audit.findings.Package/audit.repository.Repository",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 324,
+      "omissions": []
+    },
+    {
+      "root": "tests",
+      "parsed": 373,
+      "omissions": []
+    }
+  ],
+  "qualifier_sites": [
+    {
+      "line": 9,
+      "kind": "import",
+      "source": "from __future__ import annotations"
+    },
+    {
+      "line": 11,
+      "kind": "import",
+      "source": "import asyncio"
+    },
+    {
+      "line": 12,
+      "kind": "import",
+      "source": "import importlib.util"
+    },
+    {
+      "line": 13,
+      "kind": "import",
+      "source": "import json"
+    },
+    {
+      "line": 14,
+      "kind": "import",
+      "source": "import os"
+    },
+    {
+      "line": 15,
+      "kind": "import",
+      "source": "import pty"
+    },
+    {
+      "line": 16,
+      "kind": "import",
+      "source": "import select"
+    },
+    {
+      "line": 17,
+      "kind": "import",
+      "source": "import shutil"
+    },
+    {
+      "line": 18,
+      "kind": "import",
+      "source": "import subprocess"
+    },
+    {
+      "line": 19,
+      "kind": "import",
+      "source": "import sys"
+    },
+    {
+      "line": 20,
+      "kind": "import",
+      "source": "import threading"
+    },
+    {
+      "line": 21,
+      "kind": "import",
+      "source": "import time"
+    },
+    {
+      "line": 22,
+      "kind": "import",
+      "source": "from contextlib import AsyncExitStack, asynccontextmanager, contextmanager"
+    },
+    {
+      "line": 23,
+      "kind": "import",
+      "source": "from functools import partial"
+    },
+    {
+      "line": 24,
+      "kind": "import",
+      "source": "from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer"
+    },
+    {
+      "line": 25,
+      "kind": "import",
+      "source": "from pathlib import Path"
+    },
+    {
+      "line": 27,
+      "kind": "import",
+      "source": "import pytest"
+    },
+    {
+      "line": 29,
+      "kind": "import",
+      "source": "from agent_comms.acp_extension import McpClientReceiptUpdate, TurnChangedUpdate, decode_updates"
+    },
+    {
+      "line": 34,
+      "kind": "import",
+      "source": "from agent_comms.comms import wire"
+    },
+    {
+      "line": 35,
+      "kind": "import",
+      "source": "from agent_comms.coordinator import Coordination"
+    },
+    {
+      "line": 36,
+      "kind": "import",
+      "source": "from agent_comms.field_codec import FieldCodec"
+    },
+    {
+      "line": 37,
+      "kind": "import",
+      "source": "from agent_comms.runtime import RuntimeProxy"
+    },
+    {
+      "line": 38,
+      "kind": "import",
+      "source": "from delivery_owner_fixture import canonical_agent"
+    },
+    {
+      "line": 160,
+      "kind": "call",
+      "source": "os.close(slave)"
+    },
+    {
+      "line": 187,
+      "kind": "call",
+      "source": "os.close(master)"
+    },
+    {
+      "line": 189,
+      "kind": "call",
+      "source": "os.close(slave)"
+    },
+    {
+      "line": 279,
+      "kind": "call",
+      "source": "server.shutdown()"
+    },
+    {
+      "line": 295,
+      "kind": "call",
+      "source": "imports.syspath_prepend(str(Path(path).resolve().parent))"
+    },
+    {
+      "line": 300,
+      "kind": "call",
+      "source": "module.open_observer(case, root)"
+    },
+    {
+      "line": 346,
+      "kind": "call",
+      "source": "environment.setattr(os, 'environ', env)"
+    },
+    {
+      "line": 366,
+      "kind": "call",
+      "source": "canonical_agent(wire(tmp_path / 'wire'), agent_bin=binary, agent_args=args, runtime_enabled=True, auto_wake=False)"
+    },
+    {
+      "line": 373,
+      "kind": "call",
+      "source": "retirement.push_async_callback(owner.shutdown)"
+    },
+    {
+      "line": 391,
+      "kind": "call",
+      "source": "decode_updates(update.field_meta)"
+    },
+    {
+      "line": 400,
+      "kind": "call",
+      "source": "decode_updates(update.get('_meta'))"
+    },
+    {
+      "line": 406,
+      "kind": "call",
+      "source": "fact.state.matches(attachment_turn.managed_id)"
+    },
+    {
+      "line": 408,
+      "kind": "call",
+      "source": "fact.state.matches(attachment_turn.managed_id)"
+    },
+    {
+      "line": 423,
+      "kind": "call",
+      "source": "owner.new_session(cwd=str(project), mcp_servers=[])"
+    },
+    {
+      "line": 425,
+      "kind": "call",
+      "source": "canonical_agent(owner._comms, auto_wake=False)"
+    },
+    {
+      "line": 426,
+      "kind": "call",
+      "source": "retirement.push_async_callback(attached.shutdown)"
+    },
+    {
+      "line": 428,
+      "kind": "call",
+      "source": "RuntimeProxy(attached, session_id, owner._runtime.path)"
+    },
+    {
+      "line": 429,
+      "kind": "call",
+      "source": "retirement.push_async_callback(proxy.close)"
+    },
+    {
+      "line": 430,
+      "kind": "call",
+      "source": "proxy.subscribe()"
+    },
+    {
+      "line": 449,
+      "kind": "call",
+      "source": "Coordination.run_worker(partial(owner.turns.turn_state, session_id))"
+    },
+    {
+      "line": 461,
+      "kind": "call",
+      "source": "Coordination.run_worker(partial(owner.turns.turn_state, session_id))"
+    },
+    {
+      "line": 469,
+      "kind": "call",
+      "source": "proxy.close()"
+    },
+    {
+      "line": 475,
+      "kind": "call",
+      "source": "Coordination.run_worker(partial(owner.turns.turn_state, session_id))"
+    },
+    {
+      "line": 510,
+      "kind": "call",
+      "source": "decode_updates(row['update'].get('_meta'))"
+    },
+    {
+      "line": 516,
+      "kind": "call",
+      "source": "fact.state.matches(active.managed_id)"
+    },
+    {
+      "line": 518,
+      "kind": "call",
+      "source": "fact.state.matches(active.managed_id)"
+    },
+    {
+      "line": 522,
+      "kind": "call",
+      "source": "active.matches(fact.turn_id)"
+    }
+  ],
+  "production_stack_pin_pyproject_changes": [],
+  "dynamic_limit": "arbitrary future AC_MCP_TOAD_ADAPTER selectors are not enumerable; selected adapter owns its import dependencies and context lifetime",
+  "remaining_legacy_consumers": "other unqualified legacy modules are retained; this qualifier and paired Toad472 only"
+}

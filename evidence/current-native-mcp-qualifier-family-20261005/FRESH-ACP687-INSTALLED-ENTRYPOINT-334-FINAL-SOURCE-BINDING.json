@@ -1,0 +1,61 @@
+{
+  "state": "SOURCE ONLY final334 metadata binding; package/native/runtime UNRUN",
+  "source_head": "e8f0284a7a4951785db4d3f84af1fce2b49cda0f",
+  "original_de86": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/FRESH-ACP687-INSTALLED-ENTRYPOINT-NATIVE-OPERANDS.json",
+    "sha256": "de86e1bce6300feaace6b8f6348dab800bcdd76ce532ba77a68dcc86cf87f6fd",
+    "bytes": 37665
+  },
+  "original_source_binding": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/FRESH-ACP687-INSTALLED-ENTRYPOINT-SOURCE-BINDING.json",
+    "sha256": "24aa3c0b74639d653252be4c0a8fbe01391a915ee171a2cb4359487222218e55",
+    "bytes": 4197
+  },
+  "actual_floor": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel687-installed-entrypoint-at-grant-floor-readback.json",
+    "sha256": "7a359da88ebe045eff67ea1b3c5ab1645709df7082414f5aac8546e7c9546d38",
+    "bytes": 25104
+  },
+  "actual_census": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel687-installed-entrypoint-at-grant-borrowers.json",
+    "sha256": "d3a1e0bdc1aacacf7c81811dbe38944d7bc7bdefa7f0d8e3a8777d1b6d32d57f",
+    "bytes": 2110
+  },
+  "actual_classification": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel687-installed-entrypoint-at-grant-reference-classification.json",
+    "sha256": "1a93253f164aca576078e73ff5da93fc0e5a75ede3ecdd826b0074b7812e347c",
+    "bytes": 5244
+  },
+  "actual_source_artifacts": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Mendel687-installed-entrypoint-source-artifact-readback.json",
+    "sha256": "87d79beddff02f6c6d0e85f89006a5d1d44011f688869d804f64e0e4b1334e00",
+    "bytes": 9409
+  },
+  "actual_original_floor_records": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Einstein686-Toad477-mounted-routing-target-issued-grant.json",
+    "sha256": "55ccf6a14d5476fda65162def017e39227da15ae5eabef2749ae05f1284b898a",
+    "bytes": 1910018
+  },
+  "preceding_paired_closed": {
+    "path": "/home/ts/.cache/agent-scratch/disk-cleanup-owner-20261002/334-Einstein686-Toad477-mounted-routing-target-lifecycle.json",
+    "sha256": "822f7b7ba3c8da8b080fc46624d65f0bcfce9bd3a70460e41cf40a984192e1cd",
+    "bytes": 17679
+  },
+  "operative_delta_to_de86": [],
+  "preserved_operands": [
+    "interpreter-adjacent pi-comms-native",
+    "original fourcases",
+    "stage three selected normal filewheels",
+    "8c8f proof",
+    "5d595 controller",
+    "all8 helpers",
+    "all953 historical assets",
+    "all bounds/joins",
+    "four normal floor restore wheels/argv",
+    "all6 proxy unsets",
+    "m687n03 shortroot and100B sockets"
+  ],
+  "grant_lifecycle_READ_EXEC_UNBOUND": true,
+  "no_reservation_or_current_prefix_access": true,
+  "selected_source_relation": "Historical bee3e/4b/b2e/16c9 only; no main432/688/478/690 resource or source fold/rebuild"
+}

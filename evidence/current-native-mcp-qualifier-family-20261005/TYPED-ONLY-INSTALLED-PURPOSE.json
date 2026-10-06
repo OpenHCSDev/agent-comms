@@ -1,0 +1,164 @@
+{
+  "status": "SOURCE PREPARED ONLY; no prefix access before actual immutable Bohr issue/proof/release",
+  "operator": "original Mendel sole operator/package claim/floor return after purpose issue; lifecycle Bohr",
+  "historical_proposal": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/FUTURE-INSTALLED-PURPOSE.json",
+    "sha256": "849bc21dd59688f1202459bf88a06774612bde44ba4746140d2f99df38ad3110",
+    "immutable": true
+  },
+  "source": {
+    "core_determining_head": "003c30742fce6a34a9a27e3d4430adfd55c5b095",
+    "toad_head": "8c84f6d40e4c0ad4515f45e83c38c9f3987a6092",
+    "source_compile_and_Git_ZIP_receipt": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/INSTALLED-PREPARATION-SOURCE.json",
+      "sha256": "24dc8436ca1f3379f64d519e911303bf6a7317441a1577f0440136fb3c8b3e48"
+    },
+    "core_control": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_mcp_acceptance.py",
+      "sha256": "6c0ecd541246443eb7833827c01d2f7f20737143fa50a9fb2f5d6990ad71fb41"
+    },
+    "toad_adapter": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/native_permission_ui.py",
+      "sha256": "8e9d11da1538b82f24595e5db6285d99f6ff1dc970d46f55030e0a026857536b"
+    },
+    "metadata_producer": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/mcp_observation_fixture.py",
+      "sha256": "63fabd727fa12c0dafdac992a5ee0bc653915c3a89ec07ce9838791c76ecc4cc"
+    },
+    "typed_consumer": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/typed_comms_command_pilot.py",
+      "sha256": "e783896329e4616a44e8dac320916eb6302293cbf496b5b222d1f8c6453345a3"
+    },
+    "canonical_owner": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/delivery_owner_fixture.py",
+      "sha256": "b03ab1801372c8d45e6cdbf91ebd2e7013ffeec9485e392e45d0479606caae5f"
+    },
+    "core_pytest_fixture": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/conftest.py",
+      "sha256": "ced0353a6dcf25e847a2e023d705358841bc10f869a8d5f988f03f43b7f415a4"
+    },
+    "toad_app_resource": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/runtime_fixture.py",
+      "sha256": "987399f81781f57e5cca89dc0e5214c59663d97a01bcb5bad18f35d7f8eb686f"
+    },
+    "CSS": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/src/toad/toad.tcss",
+      "sha256": "8569c3275b198cb1f1e30e4ebb804b48fb61d33585fb3277b3a39a37c4e08636"
+    }
+  },
+  "production_artifacts": {
+    "Core": {
+      "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl",
+      "sha256": "3fe14077293b691000394831ed7458ecae92afd9b667af4501be2945ab86051d",
+      "assets": 355,
+      "Git": "3931f16feb8bcb2dbcc3041446ca342dea665024"
+    },
+    "Toad": {
+      "wheel": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/viewport-worker-custody-20261005/wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "sha256": "b2e420e5b2eed1aaa96d815b2abf38f990272a047417c2ca5082c01d9149a151",
+      "assets": 319,
+      "Git": "289f1c6cd7667abf985ddba265d6469a95e3ea48"
+    },
+    "Textual": {
+      "wheel": "/home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native67-filewheel-20261005/textual-8.2.8-py3-none-any.whl",
+      "sha256": "16c9f5e7a1aca9f7a339fdb859c1743bbc0ba8f17327ba3debd4b13959ca927d",
+      "assets": 266,
+      "Git": "d7337ee084f6dcda42cbd8a41c7417e87d60ae78"
+    }
+  },
+  "holder": {
+    "issued_grant": null,
+    "fresh_floor_and_keepers": null,
+    "eligible_nonlive_candidate": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002",
+    "candidate_interpreter": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python",
+    "eligibility": "UNBOUND, Bohr actual floor/ref/custody issue only, never PUBLIC485",
+    "truthful_candidate_source_proof": null,
+    "typed_execution_release": null
+  },
+  "scope": {
+    "typed_metadata_mounted_runs": 1,
+    "native_inputs": 0,
+    "native_SDK_processes": 0,
+    "provider_inputs": 0,
+    "public_source_operations": 0,
+    "native_EXEC": false,
+    "FullTrust_chosen": false,
+    "FullTrust_reason": "No native job or SDK process; installed product Git/ZIP/resources/origin proof only. If actual issued proof scope chooses FullTrust, separately matched SchREAD is required before any artifact read.",
+    "four_native_MCP_cases": "HELD/excluded from this purpose; new guard/pin/source/matching authority independently pending"
+  },
+  "serial_command": {
+    "family": "authored registry lease/typed metadata/mounted phase/stale CAS/terminal/goal-clear",
+    "argv": [
+      "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python",
+      "-B",
+      "/home/ts/wt/toad-original-reply-handling-20261002/tests/typed_comms_command_pilot.py",
+      "--output",
+      "/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/typed"
+    ],
+    "cwd": "/home/ts/wt/toad-original-reply-handling-20261002",
+    "native_inputs": 0,
+    "provider_posts": 0,
+    "status": "Package/import/execution grant unissued; prepare independently of native guard."
+  },
+  "wrapper": {
+    "owner": "original BoundedRun.session/AttachedChild/ChildProcess + join_retirement",
+    "timeout_seconds": 90,
+    "new_product_timer": false,
+    "inline_source": "import asyncio,json,os,sys,time\nfrom pathlib import Path\nfrom agent_comms.child_process import BoundedRun,ProcessIdentity,join_retirement\nfrom agent_comms.field_codec import FieldCodec\n\nasync def main():\n    output=Path(sys.argv[1])\n    command=tuple(sys.argv[2:])\n    controller=ProcessIdentity.capture(os.getpid())\n    started=time.monotonic()\n    child=exchange=outcome=None\n    error=None\n    stdout=stderr=b\"\"\n    try:\n        async with BoundedRun.session(command,timeout=90,cwd='/home/ts/wt/toad-original-reply-handling-20261002',env=dict(os.environ)) as child:\n            (output/\"typed-child-identity.json\").write_text(json.dumps(FieldCodec.encode(child.identity))+\"\\n\")\n            exchange=asyncio.create_task(child.process.communicate())\n            stdout,stderr=await asyncio.shield(exchange)\n            outcome=await child.wait()\n    except BaseException as failure:\n        error=repr(failure)\n    finally:\n        if exchange is not None:\n            try:\n                stdout,stderr=await join_retirement(exchange)\n            except BaseException as failure:\n                if error is None:\n                    error=repr(failure)\n        (output/\"typed.stdout.log\").write_bytes(stdout)\n        (output/\"typed.stderr.log\").write_bytes(stderr)\n        receipt={\"controller\":FieldCodec.encode(controller),\"child\":FieldCodec.encode(child.identity) if child else None,\n                 \"outcome\":FieldCodec.encode(outcome) if outcome else None,\"error\":error,\n                 \"duration_seconds\":time.monotonic()-started,\"native_inputs\":0,\"provider_inputs\":0,\n                 \"child_retired\":child.retired if child else None,\n                 \"remaining_groups\":tuple(FieldCodec.encode(member) for member in child.platform.group_members(child.identity)) if child else ()}\n        (output/\"typed-terminal.json\").write_text(json.dumps(receipt,indent=2)+\"\\n\")\n    return 0 if error is None and outcome is not None and outcome.successful and child.retired else 1\n\nraise SystemExit(asyncio.run(main()))\n",
+    "inline_source_sha256": "7cac05a42e3b75adfedfbaa87171ddefa66bc0bd1b1fca406baf86ae149cbb04",
+    "argv": [
+      "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python",
+      "-B",
+      "-c",
+      "import asyncio,json,os,sys,time\nfrom pathlib import Path\nfrom agent_comms.child_process import BoundedRun,ProcessIdentity,join_retirement\nfrom agent_comms.field_codec import FieldCodec\n\nasync def main():\n    output=Path(sys.argv[1])\n    command=tuple(sys.argv[2:])\n    controller=ProcessIdentity.capture(os.getpid())\n    started=time.monotonic()\n    child=exchange=outcome=None\n    error=None\n    stdout=stderr=b\"\"\n    try:\n        async with BoundedRun.session(command,timeout=90,cwd='/home/ts/wt/toad-original-reply-handling-20261002',env=dict(os.environ)) as child:\n            (output/\"typed-child-identity.json\").write_text(json.dumps(FieldCodec.encode(child.identity))+\"\\n\")\n            exchange=asyncio.create_task(child.process.communicate())\n            stdout,stderr=await asyncio.shield(exchange)\n            outcome=await child.wait()\n    except BaseException as failure:\n        error=repr(failure)\n    finally:\n        if exchange is not None:\n            try:\n                stdout,stderr=await join_retirement(exchange)\n            except BaseException as failure:\n                if error is None:\n                    error=repr(failure)\n        (output/\"typed.stdout.log\").write_bytes(stdout)\n        (output/\"typed.stderr.log\").write_bytes(stderr)\n        receipt={\"controller\":FieldCodec.encode(controller),\"child\":FieldCodec.encode(child.identity) if child else None,\n                 \"outcome\":FieldCodec.encode(outcome) if outcome else None,\"error\":error,\n                 \"duration_seconds\":time.monotonic()-started,\"native_inputs\":0,\"provider_inputs\":0,\n                 \"child_retired\":child.retired if child else None,\n                 \"remaining_groups\":tuple(FieldCodec.encode(member) for member in child.platform.group_members(child.identity)) if child else ()}\n        (output/\"typed-terminal.json\").write_text(json.dumps(receipt,indent=2)+\"\\n\")\n    return 0 if error is None and outcome is not None and outcome.successful and child.retired else 1\n\nraise SystemExit(asyncio.run(main()))\n",
+      "/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005",
+      "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python",
+      "-B",
+      "/home/ts/wt/toad-original-reply-handling-20261002/tests/typed_comms_command_pilot.py",
+      "--output",
+      "/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/typed"
+    ],
+    "cwd": "/home/ts/wt/toad-original-reply-handling-20261002",
+    "controller_output_creation": "Only after issue: fresh private owner output directory must exist0700; original typed --output leaf must remain absent before launch."
+  },
+  "environment": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "absent; installed product imports only; original owned sibling helpers allowed",
+    "TOAD_TEST_ATTEMPT": "mendel-mcp472-682-typed-only-installed01-20261005",
+    "unset": [
+      "AGENT_COMMS_ROOT",
+      "AGENT_COMMS_THREAD",
+      "PI_AGENT_ID",
+      "PI_CODING_AGENT_DIR",
+      "PI_SESSION_FILE",
+      "NODE_OPTIONS",
+      "NODE_PATH",
+      "NODE_COMPILE_CACHE",
+      "PI_COMPACTION_TEST_PACKAGE",
+      "AC_MCP_NATIVE_BIN",
+      "AC_MCP_TOAD_ADAPTER",
+      "AC_MCP_RETIRE_SURFACE",
+      "AC_MCP_PERMISSION_ANSWER",
+      "AGENT_COMMS_NATIVE_ORIGIN"
+    ],
+    "XDG": "original unchanged control sets config/data/state under its --output before App; no public UI state access",
+    "scope": "No guard/native/provider selectors adopted from historical four-case proposal"
+  },
+  "owned_output": {
+    "path": "/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005",
+    "typed_leaf": "/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/typed",
+    "original_private_producer_outputs": [
+      "producer.jsonl",
+      "producer.stderr",
+      "producer-exit.json"
+    ],
+    "operator_outputs": [
+      "typed-child-identity.json",
+      "typed.stdout.log",
+      "typed.stderr.log",
+      "typed-terminal.json"
+    ],
+    "acceptance": "Original control assertions/typed-consumer.json and actual successful parent outcome with full child/group/socket retirement; no authored native witness or automatic success substitute"
+  },
+  "stop_and_return": "First failure or uncertainty stops with raw stdout/stderr/metadata/source preserved; no retry/SDK/four-case continuation. Join original BoundedRun and pipe exchange, then exact actual issued floor+versions/origins/protected files restored and whole handback to Bohr. No next purpose inferred."
+}

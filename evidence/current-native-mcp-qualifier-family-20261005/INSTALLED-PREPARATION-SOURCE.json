@@ -1,0 +1,260 @@
+{
+  "scope": "source/compile/retained Git-ZIP only; no application import, collection, runtime, holder or artifact operation",
+  "core_source_head": "3c6a0907fdd4593222dbfe811beb31a7bedee40d",
+  "toad_source_head": "8c84f6d40e4c0ad4515f45e83c38c9f3987a6092",
+  "roots": [
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "head": "3c6a0907fdd4593222dbfe811beb31a7bedee40d",
+      "root": "src/agent_comms",
+      "parsed": 324,
+      "omissions": []
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "head": "3c6a0907fdd4593222dbfe811beb31a7bedee40d",
+      "root": "tests",
+      "parsed": 373,
+      "omissions": []
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "head": "8c84f6d40e4c0ad4515f45e83c38c9f3987a6092",
+      "root": "src/toad",
+      "parsed": 288,
+      "omissions": []
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "head": "8c84f6d40e4c0ad4515f45e83c38c9f3987a6092",
+      "root": "tests",
+      "parsed": 398,
+      "omissions": []
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "head": "8c84f6d40e4c0ad4515f45e83c38c9f3987a6092",
+      "root": "tools",
+      "parsed": 40,
+      "omissions": []
+    }
+  ],
+  "controls_compiled": [
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_mcp_acceptance.py",
+      "sha256": "6c0ecd541246443eb7833827c01d2f7f20737143fa50a9fb2f5d6990ad71fb41",
+      "bytes": 24683
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/delivery_owner_fixture.py",
+      "sha256": "b03ab1801372c8d45e6cdbf91ebd2e7013ffeec9485e392e45d0479606caae5f",
+      "bytes": 2266
+    },
+    {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/conftest.py",
+      "sha256": "ced0353a6dcf25e847a2e023d705358841bc10f869a8d5f988f03f43b7f415a4",
+      "bytes": 2819
+    },
+    {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/mcp_observation_fixture.py",
+      "sha256": "63fabd727fa12c0dafdac992a5ee0bc653915c3a89ec07ce9838791c76ecc4cc",
+      "bytes": 6342
+    },
+    {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/native_permission_ui.py",
+      "sha256": "8e9d11da1538b82f24595e5db6285d99f6ff1dc970d46f55030e0a026857536b",
+      "bytes": 9794
+    },
+    {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/typed_comms_command_pilot.py",
+      "sha256": "e783896329e4616a44e8dac320916eb6302293cbf496b5b222d1f8c6453345a3",
+      "bytes": 8099
+    },
+    {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/runtime_fixture.py",
+      "sha256": "987399f81781f57e5cca89dc0e5214c59663d97a01bcb5bad18f35d7f8eb686f",
+      "bytes": 18712
+    }
+  ],
+  "retained_artifacts": [
+    {
+      "package": "Core",
+      "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl",
+      "wheel_sha256": "3fe14077293b691000394831ed7458ecae92afd9b667af4501be2945ab86051d",
+      "selected_git": "3931f16feb8bcb2dbcc3041446ca342dea665024",
+      "asset_count": 355,
+      "Git_ZIP_mismatches": [],
+      "retained_relation": {
+        "path": "/home/ts/wt/toad-prompt-action-owner-20261002/evidence/merged466-worker-functional-receiving-20261005/CORE-WHEEL-SOURCE-RELATION.json",
+        "sha256": "a22f8ceb3d52562590cefe33646d8007e1cb9e1e54e9f37f66688d21b02b135d",
+        "bytes": 114488
+      },
+      "metadata": [
+        {
+          "member": "agent_comms-0.1.0.dist-info/METADATA",
+          "sha256": "9a02a0a276afadd2f609acae02a93606f53d85a904f40f0ef162f9ceafa1fc0c",
+          "bytes": 5673
+        },
+        {
+          "member": "agent_comms-0.1.0.dist-info/RECORD",
+          "sha256": "c09b53223a3f5be9ccab560178c4a1190f6dc0de62200d8d2b67df7299ad96c5",
+          "bytes": 32173
+        },
+        {
+          "member": "agent_comms-0.1.0.dist-info/WHEEL",
+          "sha256": "58b82a17209f9bf2804afe161f2632d0fde933f9bb2792fd936b2474a2e2ac2f",
+          "bytes": 87
+        },
+        {
+          "member": "agent_comms-0.1.0.dist-info/entry_points.txt",
+          "sha256": "6e56bfd47c28174d7978791d6e7673645c69cb06141e3306961b4a88fac53a72",
+          "bytes": 292
+        },
+        {
+          "member": "agent_comms-0.1.0.dist-info/licenses/LICENSE",
+          "sha256": "1fe81c33f0cdfbcea8ce2fa4bf5cc98604be54a954ff7c59cea0ff02e3c15741",
+          "bytes": 1070
+        }
+      ],
+      "forced_assets": [
+        {
+          "source": ".pi/APPEND_SYSTEM.md",
+          "member": "agent_comms/_native/APPEND_SYSTEM.md",
+          "sha256": "fe4f4bcc2b11f340c64676e1761790a23fafff18fbeec5ea30b3dabd86dbaa31",
+          "bytes": 15885,
+          "git_mode": "100644",
+          "Git_blob": "7c15b822bec471eb7b33128b7872bc35e950bea0"
+        },
+        {
+          "source": "stack/native-compaction-commit-child.mjs",
+          "member": "agent_comms/_native/native-compaction-commit-child.mjs",
+          "sha256": "186abb2f107b40327ff6410749727e83c9dd9df1487ade76051565544ec0a2a8",
+          "bytes": 5351,
+          "git_mode": "100644",
+          "Git_blob": "bb291263f1a6e98d13994d834cbdc2928810e0ff"
+        },
+        {
+          "source": "stack/pi-native.sha256",
+          "member": "agent_comms/_native/pi-native.sha256",
+          "sha256": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+          "bytes": 6969,
+          "git_mode": "100644",
+          "Git_blob": "b2b2038bbd7133ac46d78277ae4664c066a212aa"
+        }
+      ]
+    },
+    {
+      "package": "Toad",
+      "wheel": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/viewport-worker-custody-20261005/wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+      "wheel_sha256": "b2e420e5b2eed1aaa96d815b2abf38f990272a047417c2ca5082c01d9149a151",
+      "selected_git": "289f1c6cd7667abf985ddba265d6469a95e3ea48",
+      "asset_count": 319,
+      "Git_ZIP_mismatches": [],
+      "retained_relation": {
+        "path": "/home/ts/wt/toad-prompt-action-owner-20261002/evidence/merged466-worker-functional-receiving-20261005/TOAD-WHEEL-SOURCE-RELATION.json",
+        "sha256": "41b757626bea2665ff55506e50b4e3d58cfcb74c24409155a0c88b0e82f27e3d",
+        "bytes": 99370
+      },
+      "metadata": [
+        {
+          "member": "batrachian_toad-0.6.20.dist-info/METADATA",
+          "sha256": "3fde2bfef1346f91a2bad2c6dfbca28a40710dc38ca987f66266a6064c3c43ee",
+          "bytes": 13336
+        },
+        {
+          "member": "batrachian_toad-0.6.20.dist-info/RECORD",
+          "sha256": "6572172ca3407508398e363274da8d9f19ae84772e5a1591fcff2a83ee9e9b48",
+          "bytes": 26884
+        },
+        {
+          "member": "batrachian_toad-0.6.20.dist-info/WHEEL",
+          "sha256": "58b82a17209f9bf2804afe161f2632d0fde933f9bb2792fd936b2474a2e2ac2f",
+          "bytes": 87
+        },
+        {
+          "member": "batrachian_toad-0.6.20.dist-info/entry_points.txt",
+          "sha256": "12cacbee8134076f2a99542ab81f8682c88f39cbea62228e9c3b950d319d4528",
+          "bytes": 39
+        },
+        {
+          "member": "batrachian_toad-0.6.20.dist-info/licenses/LICENSE",
+          "sha256": "4df3c306dddaaf4baffdff5ca820cc679ac8cd6dc263c6a74517783e42fa7a3b",
+          "bytes": 34522
+        }
+      ],
+      "forced_assets": []
+    },
+    {
+      "package": "Textual",
+      "wheel": "/home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native67-filewheel-20261005/textual-8.2.8-py3-none-any.whl",
+      "wheel_sha256": "16c9f5e7a1aca9f7a339fdb859c1743bbc0ba8f17327ba3debd4b13959ca927d",
+      "selected_git": "d7337ee084f6dcda42cbd8a41c7417e87d60ae78",
+      "asset_count": 266,
+      "Git_ZIP_mismatches": [],
+      "retained_relation": {
+        "path": "/home/ts/wt/toad-prompt-action-owner-20261002/evidence/merged466-worker-functional-receiving-20261005/RETAINED-TEXT-NRA-SOURCE-RELATIONS.json",
+        "sha256": "304ed56a358715ad60d4f346c0161630d4d1d87305f80e227a4a2fe2f92e1b13",
+        "bytes": 92120
+      },
+      "metadata": [
+        {
+          "member": "textual-8.2.8.dist-info/METADATA",
+          "sha256": "fa4831c4001c94a8d8177cccd05099d8fa021575c81a3bd53eae3b995eb22f1e",
+          "bytes": 9077
+        },
+        {
+          "member": "textual-8.2.8.dist-info/RECORD",
+          "sha256": "0393f9cf3006230595932d6e72e25789717b22dffe7ab482f3b6bb21faa1a7d9",
+          "bytes": 22068
+        },
+        {
+          "member": "textual-8.2.8.dist-info/WHEEL",
+          "sha256": "ce9d029fb26c1685f6013b4e86d685608884dab985003e0e70c86d5248bc5b75",
+          "bytes": 88
+        },
+        {
+          "member": "textual-8.2.8.dist-info/licenses/LICENSE",
+          "sha256": "94f290a762376dfdb7768e42070618b0abfd2a2799eab1b1c097816c3a39eb57",
+          "bytes": 1069
+        }
+      ],
+      "forced_assets": []
+    }
+  ],
+  "core_production_delta": [
+    "src/agent_comms/compaction_records.py"
+  ],
+  "delta_meaning": "four read-only NativeForkCreation ancestry methods; deleting those additions from AST leaves all declarations/fields/other bodies identical; these controls do not consume added methods",
+  "toad_production_and_runtime_helper_delta": [],
+  "text_local_source": "newer dirty checkout explicitly excluded; selected Git/ZIP Text67 only",
+  "offline_guard": {
+    "status": "Qualifier removed inactive preload and now supplies AGENT_COMMS_NATIVE_ORIGIN to Sch original bootstrap deployment owner; existing7a has no guard implementation, native execution UNBOUND",
+    "owner_source_review": {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/mendel472-682-native-mcp-network-guard-source-review-20261005.json",
+      "sha256": "6ddd60096365725e228ae208c5de9f0a488f868c9d002ead9fe640260197f1cc",
+      "bytes": 9869
+    },
+    "original_Node_preload_removed_by": "Original bootstrap stripped it; authored local-only.cjs/NODE_OPTIONS are now deleted from qualifier",
+    "approved_extension_count": 7,
+    "new_guard_extension": "refused by original loadApprovedExtension; never bypass loader",
+    "deployment_seam": "original committed pi_project_bootstrap.mjs before SDK import; original deployment owner coordination pending",
+    "strength_limit": "fetch-origin policy is not all-process egress isolation",
+    "deployment_owner": "Sch; canonical pi_project_bootstrap.mjs source seam only; exact commitment and new consuming pin pending",
+    "required_qualification": "actual localhost SDK positive and reached SDK external-origin refusal BEFORE external dispatch under committed guard; no all-process egress claim"
+  },
+  "typed_output_contract": "original ParentedProcess.launch passes two PIPE requests through Popen: separate stdout/stderr; typed pilot restored unchanged after complete source trace",
+  "scheduler_scope": "original tests/conftest autouse candidate maintenance scheduling suppressed; no background maintenance acceptance claim",
+  "source_changes": "setup/trust/stdio/ledger/PTY all take same selected immutable native MCP subtree; no repo-local node_modules or SDK duplicate",
+  "runtime_status": "UNRUN",
+  "current_core_source_head": "003c30742fce6a34a9a27e3d4430adfd55c5b095",
+  "final_delta_parse": {
+    "previous_full_Package_head": "3c6a0907fdd4593222dbfe811beb31a7bedee40d",
+    "current_head": "003c30742fce6a34a9a27e3d4430adfd55c5b095",
+    "changed_files": [
+      "tests/test_mcp_acceptance.py"
+    ],
+    "parsed": 1,
+    "omissions": [],
+    "check": "Git source delta single qualifier only; original full roots unchanged except this parsed/compiled source"
+  }
+}

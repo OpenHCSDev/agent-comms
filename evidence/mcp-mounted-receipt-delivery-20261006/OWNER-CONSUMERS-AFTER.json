@@ -1,0 +1,94 @@
+{
+  "parser_owner": "audit.findings.Package.load / audit.repository.Repository",
+  "unchanged_roots_and_modules": [
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "head": "da6b2663bb71b4941ecb862c6aa81f4191b7b44e",
+      "root": "src/agent_comms",
+      "modules": 324,
+      "unparsed": []
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "head": "da6b2663bb71b4941ecb862c6aa81f4191b7b44e",
+      "root": "tests",
+      "modules": 374,
+      "unparsed": []
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "head": "da6b2663bb71b4941ecb862c6aa81f4191b7b44e",
+      "root": "tools",
+      "modules": 54,
+      "unparsed": []
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "head": "afc657ef60e5994a16c6d19412ccacfe9f0d36ea",
+      "root": "src/toad",
+      "modules": 288,
+      "unparsed": []
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "head": "afc657ef60e5994a16c6d19412ccacfe9f0d36ea",
+      "root": "tests",
+      "modules": 398,
+      "unparsed": []
+    },
+    {
+      "repository": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "head": "afc657ef60e5994a16c6d19412ccacfe9f0d36ea",
+      "root": "tools",
+      "modules": 40,
+      "unparsed": []
+    }
+  ],
+  "before": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/mcp-mounted-receipt-delivery-20261006/OWNER-CONSUMERS-BEFORE.json",
+    "sha256": "a1774c3a22bf789544228f16f993809b696d6b5875bac44ac8ea4c41734b8083",
+    "bytes": 113427
+  },
+  "changed_source": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_mcp_acceptance.py",
+    "sha256": "64ac8f5389fe2539ef92fda7266a0638161e0c7b1946888f51a6061777b33a29",
+    "bytes": 31662
+  },
+  "changed_sites": [
+    {
+      "line": 413,
+      "context": "Store"
+    },
+    {
+      "line": 375,
+      "context": "Load"
+    },
+    {
+      "line": 433,
+      "context": "Load"
+    },
+    {
+      "line": 313,
+      "context": "Load"
+    },
+    {
+      "line": 666,
+      "context": "Load"
+    },
+    {
+      "line": 505,
+      "context": "Load"
+    }
+  ],
+  "deleted_operational_authority": "Audit.session_update receipt_seen.set",
+  "sole_operational_authority": "Attachment.session_update receipt_seen.set after original mounted Observer.session_update",
+  "unchanged_cleanup_unblocks": [
+    "test_real_pi_mcp_acp_link finally",
+    "_mock_model finally"
+  ],
+  "production_reset_snapshot_binding_owners_unchanged": true,
+  "dynamic_limits": [
+    "AC_MCP_TOAD_ADAPTER selects an external file module.open_observer; only the issued native_permission_ui.py family was read. Unselected third-party adapters are not qualified.",
+    "Source establishes a permitted ordering race, not a captured forwarding task exception or proof of the precise runtime reset path."
+  ]
+}

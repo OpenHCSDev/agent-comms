@@ -1,0 +1,73 @@
+{
+  "status": "SOURCE/retained wheel bound; native/installed acceptance UNRUN; no holder/READ/EXEC authority",
+  "owner": "OriginalSch685 deployment; OriginalMendel472/682 qualifier",
+  "handoff": {
+    "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/evidence/native-bootstrap-origin-guard-20261005/deployment/ARTIFACT-HANDOFF.json",
+    "sha256": "179fd28a8310cbe3f86ab0c38733e4ff3ce4b54de979e9aa1d181d32818f0c1e"
+  },
+  "joined683_relation": {
+    "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/evidence/native-bootstrap-origin-guard-20261005/deployment/NORMAL683-JOINED-WHEEL-RELATION.json",
+    "sha256": "b1d97d222a9778a776e17a042e124f877127abda652a906ab1548110f7b70f49"
+  },
+  "native": {
+    "native_package": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent",
+    "native_manifest": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+    "native_tree": "63f18710cb9329be6ade27bac3b4dd822e2b36f013756fa8e6717b8073a4592c"
+  },
+  "native_runtime_FULLTRUST_performed_by_Mendel": false,
+  "Core": {
+    "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/.artifacts/native-origin-deployment-20261005/core-wheel/wheel/agent_comms-0.1.0-py3-none-any.whl",
+    "sha256": "5d6617d99f43e5aabf44f985d9fbcf1847b4c6404f976143a9a38986b33f0137",
+    "bytes": 906547,
+    "source": "575db4a232d7736261dacd5bf0da4a750e885fdd",
+    "assets": 355,
+    "Git_ZIP_equal": true,
+    "local_source_check": "Sch handoff asserts all355 Git/local/ZIP; Mendel independently checks selected Git/ZIP, not qualifier WT source equality"
+  },
+  "whole_source_changed_vs_prior_selected3931": [
+    "src/agent_comms/compaction_records.py",
+    "src/agent_comms/pi_project_bootstrap.mjs",
+    "stack/bin/prepare-pi-native",
+    "stack/pi-native.sha256",
+    "stack/prepare-native-import-boundary.py"
+  ],
+  "packaged_runtime_delta": [
+    "src/agent_comms/compaction_records.py",
+    "src/agent_comms/pi_project_bootstrap.mjs",
+    "stack/pi-native.sha256"
+  ],
+  "original_builder_source_delta": [
+    "stack/bin/prepare-pi-native",
+    "stack/prepare-native-import-boundary.py"
+  ],
+  "builder_source_relation": "Existing owner extends verified immutable MCP dependency input; assembly receipt owns runtime payload delta. Read source semantically, no separate build or execution claim.",
+  "bootstrap": {
+    "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/src/agent_comms/pi_project_bootstrap.mjs",
+    "sha256": "b9af81dbe003fde1c4d80dbd77fa7ae08f4a1c017deb8a94f8520452da47de27"
+  },
+  "matching_original_launcher": {
+    "path": "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/bin/pi-native",
+    "sha256": "4fa65fe575ef47358346b63d03f3dc1fa6bf5e27563483bdce59a2b1f1328474",
+    "source_role": "Original stack/bin/pi-native derives package from adjacent new4b manifest; old qualifier WT launcher points to old pin and must not substitute."
+  },
+  "guard_control": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_mcp_acceptance.py",
+    "sha256": "797cdcb4d37debce6aefa276c7a102f9e54603bbc077fa6181aea4367854e2c6"
+  },
+  "paired_observer": {
+    "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/native_permission_ui.py",
+    "sha256": "8e9d11da1538b82f24595e5db6285d99f6ff1dc970d46f55030e0a026857536b"
+  },
+  "native_fourcase_purpose": {
+    "holder": null,
+    "actual_floor": null,
+    "installed_sourceproof": null,
+    "FullTrust_READ": null,
+    "EXEC": null,
+    "command_release": null
+  },
+  "runner_dependency": "Normal69 excludes pytest. Future original runner must borrow EXISTING /usr/lib/python3.14/site-packages pytest/pytest_asyncio after installed app paths, no install/newenv/product overlay; literal body/hash still to bind before launch. Paths verified as source files only, no runner import/collection.",
+  "typed_only_current_result": "Package proof PASS; own admission mapping error stopped before wrapper/App. Whole original CURRENT465 floor restored/claims returned71a78; Bohr independently CLOSED29026. Typed remains unqualified; new specific purpose required.",
+  "public474_product_unchanged": true,
+  "no_build_run_prefix_or_native_artifact_read": true
+}

@@ -1,0 +1,26 @@
+{
+  "argv": [
+    "/usr/bin/node",
+    "--no-global-search-paths",
+    "--import",
+    "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent/dist/agent-comms-import-fence.mjs",
+    "--import",
+    "/home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/@earendil-works/pi-coding-agent/dist/agent-comms-project-bootstrap.mjs",
+    "--input-type=module",
+    "-e",
+    "import assert from 'node:assert/strict';\nimport {channel} from 'node:diagnostics_channel';\nconst allowed=\"http://127.0.0.1:42117\",requested=\"https://127.0.0.1:42117\";\nconst dispatched=[], report={allowed_origin:allowed,requested_origin:requested};\nlet firstDispatcher;\nconst requests=channel('undici:request:create');\nconst observe=({request})=>dispatched.push({origin:new URL(String(request.origin)).origin,path:request.path});\nrequests.subscribe(observe);\nconst {configureHttpDispatcher}=await import(\"file:///home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/%40earendil-works/pi-coding-agent/dist/core/http-dispatcher.js\");\nconst {getGlobalDispatcher}=await import(\"file:///home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/%40earendil-works/pi-coding-agent/node_modules/undici/index.js\");\ntry {\n  await configureHttpDispatcher();\n  firstDispatcher=getGlobalDispatcher();\n  const firstFetch=globalThis.fetch;\n  const positive=await fetch(allowed+'/guard-positive');\n  assert.equal(positive.status,200); await positive.text();\n  assert(dispatched.some(row=>row.origin===allowed && row.path==='/guard-positive'));\n  const {OpenAI}=await import(\"file:///home/ts/wt/comms-native-bootstrap-origin-guard-20261005/stack/.pi-native-4b687d2ddcafeea5/node_modules/%40earendil-works/pi-coding-agent/node_modules/openai/client.mjs\");\n  const client=new OpenAI({baseURL:requested+'/v1',apiKey:'offline-fixture-no-real-key',maxRetries:0});\n  await configureHttpDispatcher();\n  assert.notEqual(globalThis.fetch,firstFetch);\n  assert.notEqual(getGlobalDispatcher(),firstDispatcher);\n  report.dispatcher_reconfigured=true; report.refusals=[];\n  const replacement=new OpenAI({baseURL:requested+'/v1',apiKey:'offline-fixture-no-real-key',maxRetries:0});\n  for (const sdk of [client,replacement]) {\n    let failure;\n    try { await sdk.chat.completions.create({model:'z-ai/glm-5.3-flash',messages:[{role:'user',content:'Authored origin refusal; never dispatched.'}]}); }\n    catch(error) { failure=error; report.refusals.push({name:error.name,message:error.message,cause:{code:error.cause?.code,allowed_origin:error.cause?.allowed_origin,requested_origin:error.cause?.requested_origin}}); }\n    assert.equal(failure?.cause?.code,'ERR_AGENT_COMMS_NATIVE_ORIGIN_REFUSED');\n    assert.equal(failure.cause.allowed_origin,allowed);\n    assert.equal(failure.cause.requested_origin,requested);\n  }\n  assert(!dispatched.some(row=>row.origin!==allowed));\n  let redirected=false;\n  try { const response=await fetch(allowed+'/guard-redirect'); await response.text(); redirected=true; }\n  catch(error) { report.redirect_error={name:error.name,message:error.message,cause_message:error.cause?.message}; }\n  assert.equal(redirected,false);\n  assert(report.redirect_error);\n  assert(dispatched.some(row=>row.origin===allowed && row.path==='/guard-redirect'));\n  assert(!dispatched.some(row=>row.origin!==allowed));\n  report.localhost_positive=true; report.sdk_origin_refused=true; report.redirect_refused=true;\n} finally {\n  report.dispatched=dispatched; console.log(JSON.stringify(report));\n  requests.unsubscribe(observe);\n  try { if(firstDispatcher) await firstDispatcher.close(); }\n  finally { if(getGlobalDispatcher()!==firstDispatcher) await getGlobalDispatcher().close(); }\n}"
+  ],
+  "cwd": "/home/ts/.cache/agent-scratch/m682n02/n/test_real_pi_mcp_acp_link_allo0/project",
+  "identity": {
+    "pid": 2339072,
+    "start_time": 72161992
+  },
+  "outcome": {
+    "kind": "exited",
+    "code": 0
+  },
+  "error": null,
+  "output_complete": true,
+  "retired": true,
+  "remaining_groups": []
+}

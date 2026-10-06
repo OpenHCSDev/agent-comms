@@ -1,0 +1,72 @@
+{
+  "state": "SOURCE ONLY/future grants UNBOUND",
+  "qualifier_head": "98816b1fbc236ce687e9dbbe3170449c3ce7fa14",
+  "wheel_build_head": "3e109632e95dc15972d53d459dc5e19a99b16732",
+  "all_src_stack_pi_pyproject_byte_equal": true,
+  "Core": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/fresh-acp687-successor-wheel-20261005/wheel/agent_comms-0.1.0-py3-none-any.whl",
+    "sha256": "bee0813b18f84df00595113eeb32283ef0051cdc5acf0315afcbc21247c7d6c6",
+    "bytes": 906687,
+    "source": "3e109632e95dc15972d53d459dc5e19a99b16732",
+    "assets": 355,
+    "Git_ZIP_equal": true,
+    "local_source_check": "Full355 Git/local/ZIP equality on build3e109632; qualifier normal join keeps all consumed product/stack/pin/pyproject bytes equal"
+  },
+  "source_helpers": {
+    "metadata_producer": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/mcp_observation_fixture.py",
+      "sha256": "63fabd727fa12c0dafdac992a5ee0bc653915c3a89ec07ce9838791c76ecc4cc"
+    },
+    "typed_consumer": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/typed_comms_command_pilot.py",
+      "sha256": "e783896329e4616a44e8dac320916eb6302293cbf496b5b222d1f8c6453345a3"
+    },
+    "canonical_owner": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/delivery_owner_fixture.py",
+      "sha256": "b03ab1801372c8d45e6cdbf91ebd2e7013ffeec9485e392e45d0479606caae5f"
+    },
+    "core_pytest_fixture": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/conftest.py",
+      "sha256": "ced0353a6dcf25e847a2e023d705358841bc10f869a8d5f988f03f43b7f415a4"
+    },
+    "toad_app_resource": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/runtime_fixture.py",
+      "sha256": "987399f81781f57e5cca89dc0e5214c59663d97a01bcb5bad18f35d7f8eb686f"
+    },
+    "CSS": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/src/toad/toad.tcss",
+      "sha256": "8569c3275b198cb1f1e30e4ebb804b48fb61d33585fb3277b3a39a37c4e08636"
+    },
+    "core_control": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_mcp_acceptance.py",
+      "sha256": "e010e078b9bd6e377b3edca4387869c46f74c04052dd0e08b0037df5dce3ccda"
+    },
+    "toad_adapter": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/native_permission_ui.py",
+      "sha256": "8e9d11da1538b82f24595e5db6285d99f6ff1dc970d46f55030e0a026857536b"
+    }
+  },
+  "source_controls": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/fresh-acp-owner-publication-20261005/SOURCE-AND-WHEEL-CHECKPOINT.json",
+    "sha256": "a3314137894fcd0206e13ca624841fbb032f4d387f87dcd191c036d231a5da5e"
+  },
+  "guard_reuse": {
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/native-bootstrap-origin-guard-20261005/qualification/SCOPED-GUARD-READY.json",
+    "sha256": "9a3ee85b9e37f68dfa347e9f1b5dec629589048b93399a7c1c3b43f8286833a8",
+    "native_manifest": "4b687d2ddcafeea5b8baad92f4e88217f8dc78b38c3b608a024abc7e4ec31e50",
+    "native_tree": "63f18710cb9329be6ade27bac3b4dd822e2b36f013756fa8e6717b8073a4592c",
+    "source_bootstrap_unchanged": true,
+    "all_355_assets_except_lifecycle_equal_original5d": true,
+    "standalone_guard_repeat": false
+  },
+  "methods_unchanged_except_removed_standalone_guard_invocation": true,
+  "new_owned_output_absent": "/home/ts/.cache/agent-scratch/m687n01",
+  "max_socket_bytes": 100,
+  "native_authority": "NEWREAD+EXEC and specific new holder lifecycle required; closed9b not reused",
+  "selected_source_wrapper_correction": {
+    "published_687_head": "19bb027f624fb8b82909e44e54cb313b66e9e3b7",
+    "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_coordinated_runtime.py",
+    "sha256": "16f0efe4ab5a680639ec5a09929ac93af9106ed49a1161b6efa2f63f8ace63ad",
+    "scope": "Only selected_runner/racing_runner original control bodies: session.creation/path and identity.session_file; compilation and AST comparison only; no qualified control or native repeat; production ZERO wheelbuild3e109632"
+  }
+}

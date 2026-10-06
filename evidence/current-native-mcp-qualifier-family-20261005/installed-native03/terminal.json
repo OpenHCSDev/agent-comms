@@ -1,0 +1,15 @@
+{
+  "outcome": {
+    "kind": "exited",
+    "code": 1
+  },
+  "exit_code": 1,
+  "error": null,
+  "duration_seconds": 11.123729360057041,
+  "child": {
+    "pid": 2535012,
+    "start_time": 72490153
+  },
+  "group_remaining": [],
+  "issued_sha256": "25cee9a6cb928f5f41d68f1d2032b0f591d564f8955abc50e5e48e1c56dd52d5"
+}

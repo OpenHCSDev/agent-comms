@@ -1,0 +1,194 @@
+{
+  "status": "PREPARED/UNRUN: holder and native authority UNBOUND; native command additionally awaits active committed guard",
+  "operator": {
+    "name": "original Mendel",
+    "thread": "01a0eed6-20e1-7b80-988b-cc860742a21d",
+    "integration_owner": "Parent",
+    "holder_lifecycle_owner": "Bohr",
+    "native_deployment_and_keeper_owner": "Original Sch assigned canonical pi_project_bootstrap.mjs source seam; original direct route now works"
+  },
+  "scope": {
+    "typed_protocol_mounted_runs": 1,
+    "native_original_cases": [
+      "allow",
+      "no_controller",
+      "revoke_midturn",
+      "disconnect"
+    ],
+    "native_prompts": 4,
+    "localhost_provider_posts_at_most": 8,
+    "external_paid_provider": 0,
+    "public_inputs": 0,
+    "original_input_replay": 0,
+    "saved_user_source_access": 0,
+    "new_environment": 0,
+    "native_build_or_copy": 0,
+    "physical_capture_movie": 0,
+    "accepted_previous_controls_repeated": 0
+  },
+  "source": {
+    "core_determining_head": "003c30742fce6a34a9a27e3d4430adfd55c5b095",
+    "toad_head": "8c84f6d40e4c0ad4515f45e83c38c9f3987a6092",
+    "source_compile_and_Git_ZIP_receipt": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/current-native-mcp-qualifier-family-20261005/INSTALLED-PREPARATION-SOURCE.json",
+      "sha256": "24dc8436ca1f3379f64d519e911303bf6a7317441a1577f0440136fb3c8b3e48"
+    },
+    "core_control": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_mcp_acceptance.py",
+      "sha256": "6c0ecd541246443eb7833827c01d2f7f20737143fa50a9fb2f5d6990ad71fb41"
+    },
+    "toad_adapter": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/native_permission_ui.py",
+      "sha256": "8e9d11da1538b82f24595e5db6285d99f6ff1dc970d46f55030e0a026857536b"
+    },
+    "metadata_producer": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/mcp_observation_fixture.py",
+      "sha256": "63fabd727fa12c0dafdac992a5ee0bc653915c3a89ec07ce9838791c76ecc4cc"
+    },
+    "typed_consumer": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/typed_comms_command_pilot.py",
+      "sha256": "e783896329e4616a44e8dac320916eb6302293cbf496b5b222d1f8c6453345a3"
+    },
+    "canonical_owner": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/delivery_owner_fixture.py",
+      "sha256": "b03ab1801372c8d45e6cdbf91ebd2e7013ffeec9485e392e45d0479606caae5f"
+    },
+    "core_pytest_fixture": {
+      "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/conftest.py",
+      "sha256": "ced0353a6dcf25e847a2e023d705358841bc10f869a8d5f988f03f43b7f415a4"
+    },
+    "toad_app_resource": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/tests/runtime_fixture.py",
+      "sha256": "987399f81781f57e5cca89dc0e5214c59663d97a01bcb5bad18f35d7f8eb686f"
+    },
+    "CSS": {
+      "path": "/home/ts/wt/toad-original-reply-handling-20261002/src/toad/toad.tcss",
+      "sha256": "8569c3275b198cb1f1e30e4ebb804b48fb61d33585fb3277b3a39a37c4e08636"
+    }
+  },
+  "eligible_holder": {
+    "binding": null,
+    "issued_grant": null,
+    "candidate_nonlive_prefix": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002",
+    "candidate_interpreter": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python",
+    "candidate_eligibility": "Only a proposal of an existing full69 prefix; no current import/write/client claim. Bohr fresh actual floor/archive/borrowers and specific issue determine eligibility. If occupied, request another existing eligible prefix, never new env. PUBLIC485 is excluded.",
+    "package_writer": null,
+    "actual_floor_versions_origins_protected_paths_restore_wheels": null
+  },
+  "production_artifacts": {
+    "relation": "Retained Core3fe/Toadb2e/Text67 match consumed declarations; Core current ancestry-only addition is not used by these controls. No rebuild for test-only changes. Any newly committed native guard/manifest requires truthful forced-resource source/pin relation; current Core3fe cannot falsely represent it.",
+    "current_cohort_candidate": {
+      "Core": {
+        "wheel": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/same-owner-native-fork676-corrected-wheel-20261005/agent_comms-0.1.0-py3-none-any.whl",
+        "sha256": "3fe14077293b691000394831ed7458ecae92afd9b667af4501be2945ab86051d",
+        "assets": 355,
+        "Git": "3931f16feb8bcb2dbcc3041446ca342dea665024"
+      },
+      "Toad": {
+        "wheel": "/home/ts/wt/toad-regression-widget-cost-20261001/.artifacts/viewport-worker-custody-20261005/wheel/batrachian_toad-0.6.20-py3-none-any.whl",
+        "sha256": "b2e420e5b2eed1aaa96d815b2abf38f990272a047417c2ca5082c01d9149a151",
+        "assets": 319,
+        "Git": "289f1c6cd7667abf985ddba265d6469a95e3ea48"
+      },
+      "Textual": {
+        "wheel": "/home/ts/wt/textual-native-subtree-strips-20261002/.artifacts/native67-filewheel-20261005/textual-8.2.8-py3-none-any.whl",
+        "sha256": "16c9f5e7a1aca9f7a339fdb859c1743bbc0ba8f17327ba3debd4b13959ca927d",
+        "assets": 266,
+        "Git": "d7337ee084f6dcda42cbd8a41c7417e87d60ae78"
+      }
+    },
+    "NRA_Diff": "unchanged normal retained NRA8d ten assets / Diff8fa three; full cohort 953 assets/69 distributions if specifically issued; installed exact equality, truthful ArchiveDirectURL and all protected floor keepers required before run",
+    "install": "Only through future issued package purpose, normal retained file wheels --no-deps --no-cache; no VCS URL rebase, source overlay or dependency resolve."
+  },
+  "native_dependency": {
+    "matching_READ_EXEC_issue": null,
+    "FullTrust_installed_proof": null,
+    "current_7a_manifest": "7a2e4aabdbc5af49dd9af942190d92086df2eb3489903674a74af51cf831cd33",
+    "current_7a_tree": "0d7ff54a04d4f0ff175fc889e936ca3cea8b1f98eb8b73ed6215c3373cbd984d",
+    "current_7a_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-7a2e4aabdbc5af49/node_modules/@earendil-works/pi-coding-agent",
+    "guard_review": {
+      "path": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/mendel472-682-native-mcp-network-guard-source-review-20261005.json",
+      "sha256": "6ddd60096365725e228ae208c5de9f0a488f868c9d002ead9fe640260197f1cc"
+    },
+    "guard_status": "Qualifier carries actual origin via AGENT_COMMS_NATIVE_ORIGIN; inactive file/preload deleted. Sch owns original bootstrap guard. Existing7a still lacks implementation; future native command cannot execute until new guard commitment and matching consuming pin are bound.",
+    "required_guard_strength": "Localhost provider positive plus reached external-origin refusal BEFORE dispatch, under actually active reviewed fetch-origin guard; do not claim all-process network isolation.",
+    "future_native_pin_package_command": null,
+    "guard_data": "AGENT_COMMS_NATIVE_ORIGIN=http://127.0.0.1:<actual original _mock_model bound port>; initialized by original bootstrap BEFORE SDK import, source contract pending exact Sch head",
+    "reached_sdk_refusal_control": "exact SDK API/control source pending Sch handoff; current native argv not yet frozen for execution"
+  },
+  "environment": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": {
+      "required": "absent; installed application packages first; original test helper imports only"
+    },
+    "TOAD_TEST_ATTEMPT": "mendel-mcp472-682-installed01-20261005",
+    "AC_MCP_TOAD_ADAPTER": "/home/ts/wt/toad-original-reply-handling-20261002/tests/native_permission_ui.py",
+    "AC_MCP_RETIRE_SURFACE": "1",
+    "AC_MCP_PERMISSION_ANSWER": "allow",
+    "AC_MCP_NATIVE_BIN": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/stack/bin/pi-native",
+    "PI_COMPACTION_TEST_PACKAGE": "current7a path above is descriptive only; final native value must bind actual guard-deployment pin",
+    "inherited_selectors_to_unset": [
+      "AGENT_COMMS_ROOT",
+      "AGENT_COMMS_THREAD",
+      "PI_AGENT_ID",
+      "PI_CODING_AGENT_DIR",
+      "PI_SESSION_FILE",
+      "NODE_OPTIONS",
+      "NODE_PATH",
+      "NODE_COMPILE_CACHE"
+    ],
+    "XDG": "each original control sets its own fresh private config/data/state before App; Core carries observer selection into scoped environment; no live UI state writes",
+    "credentials": "original fixture minimal HOME, dummy offline key and authored local models.json; no real auth access",
+    "AGENT_COMMS_NATIVE_ORIGIN": "Original _mock_model returns actual bound loopback origin; scoped before native acquisition; no hardcoded provider port."
+  },
+  "serial_commands": [
+    {
+      "family": "authored registry lease/typed metadata/mounted phase/stale CAS/terminal/goal-clear",
+      "argv": [
+        "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python",
+        "-B",
+        "/home/ts/wt/toad-original-reply-handling-20261002/tests/typed_comms_command_pilot.py",
+        "--output",
+        "/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/typed"
+      ],
+      "cwd": "/home/ts/wt/toad-original-reply-handling-20261002",
+      "native_inputs": 0,
+      "provider_posts": 0,
+      "status": "Package/import/execution grant unissued; prepare independently of native guard."
+    },
+    {
+      "family": "original four-case real Pi SDK/MCP/ACP + mounted permission/remount/disconnect",
+      "argv": [
+        "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-native-style22-20261002/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "-o",
+        "addopts=",
+        "--maxfail=1",
+        "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/test_mcp_acceptance.py",
+        "--basetemp=/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/native",
+        "--junitxml=/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005/native.xml"
+      ],
+      "cwd": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "status": "NOT executable until truthful committed active guard + matching source/native custody bound; no same7a bypass",
+      "existing_bounds": "Original TIMEOUT40s waits, 12s receipt/model gates, 15s node/PTY, 3s PTY cleanup and model join, mounted permission10s; unchanged. Serial execution and first-failure stop; no deadline/status exemption."
+    }
+  ],
+  "owned_output": {
+    "path": "/home/ts/.cache/agent-scratch/mendel-mcp472-682-installed01-20261005",
+    "creation": "future explicit purpose only, fresh private persistent output, no currently created basetemp",
+    "keepers": [
+      "command/env/source/helper hash receipt",
+      "truthful installed filewheel inventory/origin + FullTrust under newREAD",
+      "parent controller/child birth/exit/group/socket cleanup",
+      "typed producer stdout/stderr/SDK JSON + mounted SVG/receipt",
+      "native starts/calls/model requests/errors/ledger/PTy outputs + ACP update/states and permission SVG/rebind/answer",
+      "raw first failure/Started/UNKNOWN and original private wire/history/proofs",
+      "final whole-floor/keepers handback and Bohr privileged refs closure"
+    ]
+  },
+  "stop_and_return": "First failure/uncertainty stops; never replay a failed/UNKNOWN prompt, skip remaining families/cases as appropriate. Join original owner/proxy/SDK/App/process lifetimes and permission tasks; preserve original wire/history/input/UNKNOWN. Restore exact future issued actual floor normally, return all client/package/native authorities, Bohr independently closes purpose. No rerun/next purpose inferred.",
+  "claims": "Controlled localhost native/MCP/ACP + headless mounted consumer strength only, not configured real-provider or physical/continuous/full workflow/performance. No existing source compiler or observe02 qualification is borrowed as native readiness."
+}
