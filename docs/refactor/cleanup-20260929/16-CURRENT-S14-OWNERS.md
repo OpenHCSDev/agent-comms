@@ -4,6 +4,26 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Paired source pin aligned — 2026-10-06
+
+Parent Toad478 now explicitly selects Corece24e9fd in pyproject and all three
+lock-file locator occurrences, replacing the earlier c34 source. This reviewed
+Core checkpoint includes the original689 partial-retirement/admission changes and
+clean691 producer. TOML parsing/literal checks and diff checking pass; no resolver,
+build, install, prefix, native body, live route or issued purpose is changed.
+Toad commitsd199acd6 and25d9a8d0 publish the pin and current source handoff. The
+sparse documentation path was staged explicitly with git add --sparse; the first
+ordinary add staged only the two root files. No package/operator step was repeated.
+The source comparison with c34 has exactly four production owner-admission files;
+combined installed/live acceptance still needs an actual matched future pair.
+
+Current3808 separate EXEC9f522 and Bohr releasea53e85 are issued for original
+Mendel's sole four-case purpose. Its historical bee/4b/b2e/16c9 cohort does not use
+or inherit this Parent pin. Result remains pending, with same original bounds and
+normal whole floor/authority return required at terminal. No new Parent launch or
+replay follows this source alignment. Heis and Einstein retain their independent
+source closure and next specific qualification boundaries.
+
 ### Reader witness joined and operative handoff seam assigned — 2026-10-06
 
 Parent reviewed originalHeis a216/bd3e ReaderCheckpoint correction against
