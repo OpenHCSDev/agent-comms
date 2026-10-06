@@ -11,8 +11,10 @@ remaining cases passed; accepted allow and guard were excluded. Original floor
 and restoration, recorded process joins, raw results and authored files remain
 verified and retained. No further693 operation is pending.
 
-Heis published DraftToad481 b4bf2355 with fixed operator helper paths and repaired
-410c/Core6b426/Textbc47 selection. Configured485 remains unissued. Parent traced
+Heis published Toad481 b4bf2355 with fixed operator helper paths and repaired
+410c/Core6b426/Textbc47 selection. Parent normally merged481 into478; GitHub
+records481 merged into that integration branch, not fork main. Production/tests/
+build inputs remain unchanged. Configured485 remains unissued. Parent traced
 the original configured producer: it selects the installed sibling native launcher
 and retains original provider/model settings; no backend correction is needed.
 Parent asked Heis to justify the newly proposed150-second outer bound against the
@@ -23,6 +25,10 @@ Mendel received the published fixed loaded-helper handoff for returned334. Its
 original loaded acceptance is unchanged; the actual outer bound and complete
 fresh purpose remain to be bound. Configured and loaded work keep separate owners;
 no helper fork, rebuild, holder reservation or runtime authority follows preparation.
+
+Einstein append-only same-format publication selection now uses the same repaired
+410c artifact and is normally joined into Parent Core. Original proposals remain
+retained; source/target recovery checks and unbound runtime commands are unchanged.
 
 ### Independent loaded acceptance assigned — 2026-10-06
 
