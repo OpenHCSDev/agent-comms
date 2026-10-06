@@ -5270,3 +5270,12 @@ The paired public installation and retained original histories remain unchanged.
 - [ ] Reviewed paired public delivery and actual fresh attachment.
 
 The physical04 command retains the original600/240 bounds, two new private saved forks and zero submitted inputs. Physical03 remains CLOSED with its failed gestures and footage retained. Current public installation is unchanged. The new proposal is evidence/real-app-pump-physical-20261006/FINAL-PHYSICAL-OPERANDS.json in the fixed Parent selected-target worktree.
+
+
+### Recorder integrated; physical04 stage complete
+
+Toad485 is merged at4cce8adc after source review and the actual Physical02 return/result check. Its saved-history/peer/draft/Undo assertions passed; footage did not qualify wheel delivery or latency. The PR body now states both facts and retains the later Physical03 failure. Native74 remains the separately reviewed real-App task fix.
+
+Physical04 actual grant98d868 permits only the new owned root and exact three-wheel stage. The stage passed once in0.265077274s; rootprepare/installer/controller are joined and directly absent. Joined receipt is `.artifacts/sidebar-latency-physical04-20261006/485-installed-purpose/stage-whole-join.json` in the fixed selected-target worktree. Bohr and Sch received the actual stage for consumption and the fresh matching READ. Proof, source capture and App are still held; no phase follows from this note.
+
+Two operator-interpreter refusals occurred before root/Popen: an absent developer interpreter and a stale developer environment lacking child_process. Both are held in parent-sidebar-physical04 scratch; the issued interpreter then ran the still-unused stage once. No product/helper/backend workaround or repeated install was introduced. PUBLIC475 remains unchanged. Physical04's exact original three-package return is mandatory after its terminal.
