@@ -111,8 +111,14 @@ build inputs: no failures. Mounted acceptance remains UNRUN; no prefix/native
 purpose follows from the build. The lost446 canonical-wire triage consumer was
 restored byte-equal747138; original readonly control and676 SDK fork ownership
 remain intact. Full446 is not yet superseded, and configured/fully-loaded source
-adaptation continues with Heis.
-
+adaptation continues with Heis. Latest ede70 adds a separate loaded-histories
+producer using original spawn/admission/ACP owners: 4/16/32/64 loaded logical
+views of two real journals, not distinct journals or concurrent native trees.
+Nonempty committed source and actual saved bodies precede loaded membership;
+strong witness references are cleared before native resource counting. Warm
+retained identity/raw-reads-zero return and genuine eviction/Undo/non-tail
+restoration remain separate mandatory outcomes. Warm e781 and loaded2d1c are
+source-only operands; no holder is reserved or issued.
 
 MCP472/682 preparation identified an inactive network preload. OriginalSch
 published685 canonical pre-SDK fetch-origin guard; one necessary native assembly
@@ -146,8 +152,15 @@ proposal. Parent relayed it to originalBohr successfully. Mendel published appen
 lifecycle, avoiding immutable-holder/receipt cyclic hashing, and verifies its
 holder/package/manifest/tree before FullTrust. Original133e/b0dd are preserved;
 two wheel sizes and prefix-specific first pytest suffixes are now truthful.
-Fresh issue, installed proof, matching4b READ/EXEC and actual four-case acceptance
-are still future.
+Bohr subsequently issued actual334 purpose9b320 at fresh1468/945/full69 floor
+and zero private references. Mendel staged the exact three wheels once in0.247s
+and joined all three identities. New matching4b READfcf9 is bound in lifecycle
+f330; the sole installed proof passed6.499s with953 Git/ZIP/installed assets,
+full69 truthful origins,428 protected/1883 other records/five environment
+nodes/PREFIX and original4b FullTrust. Both proof identities are absent. Final
+controller operandsf63e are delivered; the separate matching EXEC and Bohr
+control release remain pending. No native case/input has executed, and this
+purpose does not inherit or retry the earlier typed-only attempt.
 
 S4 source683 is normally merged208b8f07 after review of complete arm acquisition,
 inputs/cuts/probes and cleanup clocks. Four authored orchestration controls and
@@ -180,7 +193,14 @@ Recorded reads cannot admit or settle live turns. Einstein and Heis received
 exact Toad reader/snapshot/historical-loader coordination before consumer writes;
 no peer worktree, new decoder, registry rewrite or runtime authority is allowed.
 The stopped routing qualifier must report central_batch_used=false; genuine
-old-owner live batch remains a separate unqualified relationship.
+old-owner live batch remains a separate unqualified relationship. Source
+checkpoint7244 now implements the recorded acquisition/archive/read family and
+three coordinated Toad consumers. Parent reviewed actual owner methods and the
+original720 codec declarations: no target old-registry decode or live settlement
+from recorded evidence is introduced. Dynamic family registration and strict
+codec/currentness behavior are not established by compilation; Einstein owns
+one final affected source-check batch before the separately scoped installed
+old720 routing/SDK acceptance. No accepted684 qualifier is replayed.
 
 Core681 fork-source delivery is actually merged38a0533e at frozen3dc11331.
 Its nine authored source checks support recorded inheritance, not independent
