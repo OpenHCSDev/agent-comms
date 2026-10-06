@@ -7,56 +7,29 @@ The original objective remains incomplete. CI is deferred as a merge gate.
 
 ### Next installed checkpoint
 
-Batch04 is CLOSED after its one App progressed through mounted menu/read/pin
-checks, then failed at select_rows157. The final selected tuple was unrecorded;
-my initial suggestion of another fixture-order bug was premature. Ctrl toggles
-and appends in click order; Shift derives projection order. No missing member,
-ordering defect or backend cause is proved at this later boundary.
+Batch05 and matching READ/EXEC are independently CLOSED. Its initial Shift
+selection retained only batch-a instead of the admitted c,b,a range; actual
+click-time geometry was not recorded, so sole cause remains unproved. One
+original restoration/full floor and clear private census were verified. Raw
+files and both journals remain held.
 
-One original three-package restore passed0/.253810486; exact1467/953/full69
-origins/keepers/PREFIX,10 absent original identities and clear207-process census
-are verified. Wholec2b28452 retains85raw/50fixtures/two journals and explicitly
-returns private READ/EXEC; holder independently CLOSED, artifact issuer closure
-separate. Clipped60-row and later native batch phases remain unqualified.
+PR491 is merged as the working acceptance helper, not whole feature acceptance.
+PR496 retains the production deletion of viewport clipping from logical Shift
+range acquisition and all five native mounted menu/dialog acquisitions.
+Native77 is merged at qualified2d45091584a7f9b386baa2a8edf8fb3a3ba8a3d6.
+Pilot borrows actual App FIFO admission/Click and Screen recipient rather than
+authoring synthetic clicks or caching the first hit; no Toad override migration
+is required. Qualified native source checks do not prove installed performance.
 
-Draft491 now records original canonical state/identity/projection/native
-admission at every boundary through select_rows and all eight consumers. All124
-assertion predicates/actions/15/20/600 unchanged; production/wheels unchanged.
-Complete Package1735 modules parses0omissions;45 related modules/138 sites read.
-Source compilation/diff pass without imports; diagnostic App is unrun.
-Batch05 sole App failed at initial Shift210: actual snapshot retains onlybatch-a,
-expected original projectionc,b,a. Preceding selection diagnostics record ready
-admission/no pending observation; no final pointer geometry/cause is proved.
-Later menu/clipped60/native batch phases were unreached. One original restore
-passed0/.256676; full1467/953/69RAW origins/keepers/PREFIX exact,10 recorded IDs
-absent and fresh206 census refs/gaps0. Whole52221704 retains84raw/46files/2journals
-and explicitly returns private custody; holder and matching private READ/EXEC
-are independently CLOSED. Raw/journals and prior negatives remain held.
-PR491 is now merged as the working acceptance helper and retained diagnostics,
-not a production/readiness claim. Normal join included current main/pin495;
-production/pins have no determining delta. Changed control/template compile;
-retained literal template-diff whitespace and finally-return warning are honest
-source limitations, not altered evidence. PR496's production range remains open. Current f9bba21a normally joins491/main
-and migrates all five menu/dialog acquisitions in its original range control to
-native is_mounted before reading children. All assertion predicates/actions and
-waits remain unchanged; compile/diff checks pass, affected control still unrun.
-The sole production delta is still deletion of viewport clipping from logical
-range acquisition. Arendt has confirmed both native Pilot contract problems and
-is moving delivery onto the original App input owner; no parallel native edit.
-Published native77 c18ea16ad is source-reviewed: Pilot no longer authors Click
-or caches its first hit. Original App admission returns its matched Click;
-original Screen fills MouseEvent.widget from actual capture/geometry and the
-existing dispatch completion carries that delivered message. Raw App completion
-is kept separate from the routed offset event; release consumes its press.
-No Toad production on_event override needs migration. Native changed-path App
-checks are underway; this is not Batch05 causality or installed acceptance.
-Public publisher review confirms the existing same-format owner installation,
-complete audience/witness and evidence preservation remain final delivery
-requirements; private restored floor is not public candidate activation.
-Arendt has taken the concrete native Pilot contract correction: documented final-event bool
-caches first hit, whereas driver owns down/up Click admission. No backend fix or
-sole runtime cause is claimed. Parent owns Toad consumers and broader live
-performance/public delivery; the original objective remains incomplete.
+Toad496 f61776f3 pins native77 in pyproject/lock. One serial cached build passed
+full Git/archive/ZIP and RECORD checks. Nativea59 is new; Toad1c14 is byte-identical
+to the retained wheel and is explicitly reused; Coreb55/d846 stays unchanged.
+SELECTED-WHEEL-READBACK.json in native77-selection-pair records selected paths.
+Fresh readonly returned485 assessment is requested for Batch06, with current
+helper dependencies after the normal main join. No purpose or access follows
+that request. Installed clipped60-row/range and later native batch acceptance,
+physical latency, continuous configured/loaded journeys and public cutover remain
+open. The full original objective remains active.
 
 ### Current priority: sidebar and scrolling responsiveness
 
