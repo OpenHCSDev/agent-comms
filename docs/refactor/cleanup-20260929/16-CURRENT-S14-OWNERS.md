@@ -4,6 +4,26 @@ This section is the current summary. Later dated sections preserve original
 evidence and decisions; their old pending states and floors do not override it.
 The original goal is ACTIVE again and remains incomplete. CI is deferred as a merge gate.
 
+### Native closure complete; repaired-pair operators published — 2026-10-06
+
+Bohr independently closed693 and bound Sch matching READ/EXEC closure. All three
+remaining cases passed; accepted allow and guard were excluded. Original floor
+and restoration, recorded process joins, raw results and authored files remain
+verified and retained. No further693 operation is pending.
+
+Heis published DraftToad481 b4bf2355 with fixed operator helper paths and repaired
+410c/Core6b426/Textbc47 selection. Configured485 remains unissued. Parent traced
+the original configured producer: it selects the installed sibling native launcher
+and retains original provider/model settings; no backend correction is needed.
+Parent asked Heis to justify the newly proposed150-second outer bound against the
+full six-input configured journey, including automatic processing, large-source
+fork and reader/channel/DM phases. Inner readiness checks remain unchanged.
+
+Mendel received the published fixed loaded-helper handoff for returned334. Its
+original loaded acceptance is unchanged; the actual outer bound and complete
+fresh purpose remain to be bound. Configured and loaded work keep separate owners;
+no helper fork, rebuild, holder reservation or runtime authority follows preparation.
+
 ### Independent loaded acceptance assigned — 2026-10-06
 
 Mendel completed the original MCP return and published compact result evidence;
