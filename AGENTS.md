@@ -1,5 +1,9 @@
 # Working on agent-comms and the paired Toad stack
 
+- Protect uninterrupted semantic work. Coordinate only for actual shared-file conflicts, necessary dependencies or owner decisions, failures that change another owner's work, and concrete delivery handoffs. Batch useful information with low recipient involvement. Delete routine acknowledgments, duplicate relays and receipt/status chatter; do not invent approval gates for authorized routine work. Reinforce this at ordinary checkpoints, not through a reminder mechanism.
+
+- Reason semantically first. If the complete owner and consumer relationships are hard to explain, admit it and refactor that structure until behavior is clear. Shared behavior belongs in the existing abstractions through polymorphism; delete competing decisions and cross-owner orchestration. Heuristics, mock tests, repeated runs and extra verification machinery are not substitutes for that decision and implementation. Confirm the coherent change with tests and the actual application last. Revisit this instruction at delegation and implementation checkpoints through this existing file; do not add a reminder store, timer or injection mechanism.
+
 Read the current project prompt at `.pi/APPEND_SYSTEM.md` when available and the
 standing owner decisions in `docs/DECISIONS.md`. Follow the latest NRA and
 refactor-audit skills. Current owner instructions supersede old plan holds.
