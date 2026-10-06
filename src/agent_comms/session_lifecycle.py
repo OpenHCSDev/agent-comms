@@ -148,16 +148,18 @@ class SessionLifecycle:
             )
 
     def declare_thread(self, cwd: str, owner_pid: int) -> Thread:
-        return self.comms.threads.claim_thread(
+        """Publish the declared participant before acquiring its live process."""
+        thread = self.comms.threads.claim_thread(
             self.thread_name_for(cwd),
             tags=frozenset({"acp"}),
             worktree=cwd,
-            pid=owner_pid,
             start_at_latest=True,
             model=self.agent_args.model,
             thinking_level=self.agent_args.thinking,
             auto_title_pending=True,
         )
+        self.comms.threads.restore_stopped(self.comms.registry.snapshot(), (thread.name,))
+        return self.comms.owners.acquire_thread(thread.name, owner_pid=owner_pid)
 
     def validated_thread(self, cwd: str, session_id: str) -> Thread:
         thread = self.comms.registry.require(session_id)
