@@ -5302,3 +5302,8 @@ The authentic42.7MB source/two SDK forks/witness were returned separately. One n
 - [x] Toad493 pairs the merged Textual75 execution owner through the existing dependency pin. Only native revision changes in pyproject.toml/uv.lock; all other records are exact, both TOML files parse and uv lock --check resolves the same 99 packages. No developer environment sync or public installation occurred.
 - [x] Physical04 holder lifecycle independently records closed_at and disabled execution after one control and one restoration. Its capture failure/visible saved paint and held evidence are preserved.
 - [ ] Fresh paired installed/physical acceptance and public delivery remain open; the existing capture completion trace is still unresolved.
+
+### Remote capture boundary correction
+
+- [x] Toad494 publishes the existing capture helper correction: target entry is recorded before observer/exporter imports; original loader/invocation exceptions become existing error receipts and are re-raised. CPython remote_exec only acknowledges scheduling. An actual disposable CPython target confirmed entry plus a real import-refusal traceback rather than pending; target joined, five related helpers parse/compile.
+- [ ] Review/integrate494 and select its exact helper for fresh paired physical acceptance. Physical04 has no such entry receipt, so its missing DTO cannot prove an executed history wait or a sole callback cause. No readiness checks or deadlines were weakened, no public runtime changed, frozen roots/evidence remain held.
