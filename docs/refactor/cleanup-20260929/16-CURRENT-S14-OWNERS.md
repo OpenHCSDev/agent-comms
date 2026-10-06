@@ -5229,3 +5229,31 @@ requirement through the existing route. This is a source defect, not proof of
 the sole physical03 cause: no task stack was captured. Parent retains the
 recorder geometry trace and installed selected-target acceptance. Native task
 custody belongs to Arendt; no competing Toad override, queue or timing patch.
+
+### Selected action acceptance prepared; native real-entry repair published
+
+Draft Toad491 extends the existing declared-target installed control on clean
+main: native selected menus and private-store read/pin/partial archive/exact-tag
+outcomes, plus the existing zero-prompt SDK/ACP fixture's two-owner batch
+start/stop/dedup/reconnect and real active tag survivors. It changes no production
+module, wheel or pin. Full original Package census has zero omissions; changed
+helper compilation and diff check pass. Behavioral execution is UNRUN. The new
+modes keep the old ordinary/accepted MCP controls separate, and final PASS waits
+for original App and fixture shutdown. Actual native/package purpose remains a
+future bound operation, not permission from this source checkpoint.
+Stable helper and preparation:
+/home/ts/wt/toad-sidebar-selected-targets-20261006/tests/declared_target_actions_installed_pilot.py
+/home/ts/wt/toad-sidebar-selected-targets-20261006/evidence/selected-target-installed-20261006/PREPARED.md.
+
+Arendt published native74 at9b504468d. MessagePump owns actual task acquisition
+and release around the App/widget polymorphic processing body; run_test's
+separate task write and Screen's premature clear are removed. Parent reviewed
+the original App prelude/dispatch-loop AST as unchanged. The actual run_async
+FIFO/shutdown checks remain with that original native owner before integration.
+No missing-task exception, copied queue, timing change or Toad override is added.
+
+The partial physical03 capture measured layout refresh p95 19.99 ms/max37.31 ms,
+compositor refresh p95 3.29 ms/max27.03 ms, and writer completion p95 2.88 ms.
+These are captured work durations only. The failed gesture path and lack of task
+stacks prevent an input responsiveness, emulator paint, FPS or smoothness claim.
+The paired public installation and retained original histories remain unchanged.
