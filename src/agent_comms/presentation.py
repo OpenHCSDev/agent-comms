@@ -448,6 +448,8 @@ class ChannelView:
         }
         views: list[ChannelView] = []
         for channel in channels.values():
+            if channel.archived and not show_archived:
+                continue
             pinned_members = pins.get(channel.name, frozenset())
             members = tuple(
                 sorted(
