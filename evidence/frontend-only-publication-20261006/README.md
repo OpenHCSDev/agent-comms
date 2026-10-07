@@ -36,3 +36,32 @@ wrong-member/untagged refusals and renderer preflight passed. The installed
 508-widget/ten-tab sidebar App passed with empty stderr. Focus processing took
 5.56ms left and 6.97ms right across three calls; overall first-paint medians were
 38.4/38.3ms with long tails. No physical smoothness or baseline gain is claimed.
+
+The renderer successor was published through this owner after review. The live
+launcher opened original saved history and completed scrolling up/down, reversal
+and End with unchanged backend processes/route and no private cleanup remainder.
+743 native writer completions had 5.91ms median and 23.25ms p95 enqueue-to-writer;
+these are acknowledgements, not input-to-photon or a reliable speedup. Inspected
+upward-scroll footage shows painted history and repeated frames. General latency,
+activity bursts and pointer/multi-selection acceptance remain incomplete. The
+original result is retained at `.artifacts/sidebar-live-candidate-20261006/
+native-focus-wheel/live-entrypoint-check.json`; the recorder raw files are under
+`/home/ts/.cache/agent-scratch/sidebar-focus-live-entrypoint-20261006`.
+
+The subsequent full-damage renderer update is now the default for new UI launches.
+It removes redundant geometry comparison when the original damage already covers
+the whole screen. All nineteen backend owners stayed unchanged. The installed
+native selection control passed thread/channel Ctrl toggling and Shift ranges,
+offscreen range endpoints, right-click scroll preservation, archive and honest
+partial-failure notification. The actual default launcher then completed saved
+history up/down, reversal and End with exit zero and no cleanup remainder.
+799 native writer acknowledgements measured 6.27ms median and 24.21ms p95; these
+are not input-to-photon latency or a proven speedup. Inspected footage still has
+repeated frames. Response bursts, complete bulk action acceptance and general
+smoothness remain unresolved. The original result and raw recording are bound
+in `native-full-damage-wheel/live-entrypoint-check.json` under the existing artifact
+root. Existing windows keep their prior runtime until relaunched.
+
+The retained-sidebar repair (Toad505, merged c28d4a333) is published for new UI launches. Context-tree and relationship workers admitted while visible may now complete into their retained hidden panels; source identity, native-resource and unmount fences still reject stale work. Three installed private App checks passed, including actual hidden preparation/tab return/paint; a resource-tracker cleanup warning is preserved. The default launcher completed real saved-history up/down/reversal/End with unchanged original owner and no submitted input. Inspected upward-scroll image contains painted original history. This fixes concrete preparation loss; general smoothness and response bursts remain unresolved. Exact installed, publication and live receipts are in `sidebar-parking-wheel` under the existing artifact root. The frame-preparation experiment and publication-control repair are excluded from this installed wheel.
+
+The acquired-frame successor (Toad506/Textual82) is now the default frontend for new windows. Actual installed publication App passed1297 native updates with zero blank/partial/unmounted body publications and zero paint into held history. Original backend resources and19 process identities remained unchanged. The real default launcher completed original saved-history up/down/reversal/End; source owner remained unchanged and cleanup is clear. In the single20Hz GIL profile, writer acknowledgements were median5.72/p9522.06/p9931.8/max77.84ms, with one sampling error. Upward scroll still consumed93%of one CPU core; large writer-output gaps remain. These are writer receipts, not terminal frame timing or a demonstrated smoothness improvement. Matched files/proof/publication/live evidence are retained in `frame-cohort-wheel`; actual saved stacks and footage are at `/home/ts/.cache/agent-scratch/frame-cohort-live-scroll-profile-20261006`. Native arrangement/invalidation follow-through is assigned to Arendt; response-burst sidebar work remains Heis-owned.
