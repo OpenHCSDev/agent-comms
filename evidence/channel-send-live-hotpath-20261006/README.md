@@ -476,3 +476,20 @@ that all stalls are fixed. Visible sent-message and roster captures are held.
 through the existing frontend publication owner. New UI launches get this
 build; existing open clients and backend workers were not restarted. Archived
 channel visibility remains included.
+
+## Transcript read lifetime successor
+
+Mendel81f5beda integrated as da9504fb7. Native ancestry is acquired before the
+coordinator read. NativeTranscript owns input selection; fragment reply queries
+remain atomic, with one session header decode per fragment. All callers and
+malformed-record dispatch inspected; three contributor private checks passed.
+
+The actual installed saved-history App painted and exited0 in11.52s, no submitted
+input, original source owner unchanged, clean teardown.953 assets/full69 match.
+Evidence: `/home/ts/.cache/agent-scratch/transcript-lifetime-installed-20261006`.
+Default publication: transcript-lifetime-wheel/publication.json. Initial publish
+refused output-directory permissions before changing links; corrected the owned
+directory to0700 and published without repeating the App. This removes proved
+lock lifetime; historical database-busy cause remains unknown. Backend workers
+were not restarted. An evidence append command was refused by the duplicate hook
+because of its quotation parser; no runtime phase repeated.
