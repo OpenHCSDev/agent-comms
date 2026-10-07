@@ -1400,6 +1400,7 @@ class RenameTagCliCommand(ExactTagCliCommand, declared_name='rename-tag'):
 @dataclass(frozen=True, kw_only=True)
 class DeleteTagCliCommand(ExactTagCliCommand, declared_name='delete-tag'):
     help = 'Remove tag, archive tagged threads, or delete tagged threads'
+    multiple_targets = True
     disposition: TagDisposition = option('--disposition', default_factory=KeepThreadsTagDisposition,
                                         help='Choose what happens to tagged threads')
     confirmed: bool = option('--confirmed', default=False, target_bound=True)
