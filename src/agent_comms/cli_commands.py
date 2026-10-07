@@ -335,13 +335,15 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return ()
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot) -> tuple[Self, ...]:
+    def channel_bindings(cls, comms, channel, *, snapshot=None) -> tuple[Self, ...]:
         return ()
 
     @classmethod
-    def member_bindings(cls, comms, channel, *, snapshot) -> tuple[Self, ...]:
+    def member_bindings(cls, comms, channel, *, snapshot=None) -> tuple[Self, ...]:
         """Use original roster membership and each command's thread eligibility."""
         from .presentation import ThreadView
+        if snapshot is None:
+            snapshot = comms.registry.snapshot()
         return tuple(bound for thread in snapshot.threads.values()
                      if channel.matches(thread.tags) and ThreadView.visible(
                          thread, snapshot, show_stopped=True, show_archived=False)
@@ -353,12 +355,12 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                  *, snapshot: RegistrySnapshot | None = None,
                  catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
         from .channel_targets import is_channel_target
-        if snapshot is None:
-            snapshot = comms.registry.snapshot()
         if is_channel_target(target):
             if catalog is None:
                 catalog = comms.channels.catalog.read()
             return cls.channel_bindings(comms, catalog.resolve(target), snapshot=snapshot)
+        if snapshot is None:
+            snapshot = comms.registry.snapshot()
         thread = snapshot.require(target)
         return cls.thread_bindings(comms, thread, snapshot.status(thread.name), channel,
                                    catalog=catalog)
@@ -1054,7 +1056,7 @@ class StopCliCommand(CliCommand):
         return (cls(name=thread.name),) if CommsStopTool.available_for_thread(thread, status) else ()
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot):
+    def channel_bindings(cls, comms, channel, *, snapshot=None):
         return cls.member_bindings(comms, channel, snapshot=snapshot)
 
     def apply(self, ctx: Comms) -> ThreadStoppedResult:
@@ -1339,7 +1341,7 @@ class StartCliCommand(CliCommand):
         return (cls(name=thread.name),) if CommsStartTool.available_for_thread(thread, status) else ()
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot):
+    def channel_bindings(cls, comms, channel, *, snapshot=None):
         return cls.member_bindings(comms, channel, snapshot=snapshot)
 
     @classmethod
@@ -1377,7 +1379,7 @@ class ExactTagCliCommand(CliCommand):
         return cls(name=name)
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot):
+    def channel_bindings(cls, comms, channel, *, snapshot=None):
         return (cls.for_tag(channel.name.removeprefix('#')),) if channel.exact else ()
 
 
@@ -1425,7 +1427,7 @@ class ArchiveChannelCliCommand(CliCommand, declared_name='archive-channel'):
         return ArchiveCliCommand
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot):
+    def channel_bindings(cls, comms, channel, *, snapshot=None):
         return (cls(name=channel.name),) if channel.can_set_archived(cls.archived) else ()
 
     def confirmation(self):
@@ -1446,7 +1448,7 @@ class RestoreChannelCliCommand(ArchiveChannelCliCommand, declared_name='restore-
         return cls
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot):
+    def channel_bindings(cls, comms, channel, *, snapshot=None):
         return (cls(name=channel.name),) if channel.can_set_archived(cls.archived) else ()
 
 
@@ -1456,7 +1458,7 @@ class DeleteViewCliCommand(CliCommand, declared_name='delete-view'):
     name: str = option('--name', target_bound=True)
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot):
+    def channel_bindings(cls, comms, channel, *, snapshot=None):
         return (cls(name=channel.view.name),) if channel.view is not None else ()
 
     def confirmation(self):
@@ -1479,7 +1481,7 @@ class PinChannelCliCommand(CliCommand, declared_name='pin-channel'):
         return PinThreadCliCommand
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot):
+    def channel_bindings(cls, comms, channel, *, snapshot=None):
         return (cls(name=channel.name, pinned=not channel.pinned),) if channel.exact else ()
 
     def apply(self, ctx: Comms) -> Channel:
@@ -1493,7 +1495,7 @@ class ChannelActivityCliCommand(CliCommand, declared_name='channel-activity'):
     enabled: bool = option('--enabled', default=False, target_bound=True)
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot):
+    def channel_bindings(cls, comms, channel, *, snapshot=None):
         return (cls(name=channel.name, enabled=not channel.any_mode),) if channel.exact else ()
 
     def apply(self, ctx: Comms) -> Channel:
@@ -1521,7 +1523,7 @@ class ReadTargetCliCommand(CliCommand, declared_name='read-target'):
         return (cls(target=thread.name),)
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot):
+    def channel_bindings(cls, comms, channel, *, snapshot=None):
         return (cls(target=channel.name),)
 
     def for_editor(self, comms, target, project):
