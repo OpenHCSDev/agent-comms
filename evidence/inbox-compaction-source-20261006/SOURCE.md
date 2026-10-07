@@ -577,3 +577,24 @@ before genuine isolated saved-session compaction and resumed-input acceptance.
 The immutable 4b runtime cannot be labelled source-equal to this repair. Original
 failed cuts, both diagnostics, input uncertainty and all receipts remain preserved;
 current inspection totals do not establish the exact payload of those failed cuts.
+
+Native artifact preparation completed through `prepare-pi-native --update-pins`.
+The existing native_package owner now writes its existing diagnostic/tree manifest;
+normal builder verification and existing-target refusal remain. One stock copy
+reused the verified original MCP subtree, with no resolution/provider/runtime run.
+Package: `stack/.pi-native-062ef93941fde89e/node_modules/@earendil-works/pi-coding-agent`.
+Manifest: `062ef93941fde89ea1c58b245ba918d28a9ae807a483fbf564c8db9d4781576f`;
+tree: `e65cd9ca7065db03807b81fb11b775a89f3b4448373b4c282b41248cf0ce44a8`.
+All 21,276 nodes/19,190 files preserve old4b membership and modes. Only the six
+expected agent-session/compaction policy+implementation+declaration/session-context/
+RPC files changed. Old4b's original tree still matches; the new files are sealed.
+Assembly log and exact comparison: `/home/ts/.cache/agent-scratch/mnc01/prepare.log`
+and `package-relation.json`. Parent owns consuming runtime build/publication.
+The affected original configured check is
+`tests/compaction_source_successor_installed_journey.py:run`: acquire a fresh saved
+SDK fork, compact through original ACP with actual configured system/tools/model,
+verify journal/native commit, then one distinct private input and joined shutdown.
+It must use the matched new package/runtime, not old4b or original failed inputs.
+The existing cold-retained manual/adaptive tests additionally check fresh native
+reopen, but their `--no-tools` launch cannot by itself qualify full tool admission.
+All application/provider checks remain unrun by this artifact preparation.
