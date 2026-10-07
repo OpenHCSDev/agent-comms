@@ -421,3 +421,37 @@ This is an affected behavior/delivery result, not a smoothness claim. The
 read-only run's77 native writer intervals had median43.05ms and p95502.9ms;
 stationary time and diagnostic captures are included. Those acknowledgments
 are not monitor frame times or proof of a busy-agent latency improvement.
+
+## Archived channel visibility after the reported removal
+
+The user reported success when removing `#pr126-fixes`, but it remained visible.
+A read of the original backend found that explicit tag still declared, no
+members, and its channel preference archived. The exact original action is
+not reconstructed; no removal or user input was retried.
+
+The concrete owner defect was `ChannelView.roster`: show_archived filtered
+thread members but never the channel itself. The shared roster now hides
+archived channels unless that existing setting is enabled. Both channel_views
+and CoordinationSnapshot consume this owner. Routing, catalog declarations,
+history and the archive state stay canonical and unchanged. Toad names the
+existing setting 'Show archived channels and threads?'.
+
+The affected original metadata/routing control passes in0.46s and verifies
+hidden normal roster, explicit archived visibility and original routing. The
+first29-control channel batch had26 passes and3 failures: my added viewer
+assertion used a store without a private protocol marker; two unrelated old
+controls assume a native launcher and an obsolete Activity.readiness member.
+I removed the out-of-scope viewer assertion from that storage fixture and reran
+only the affected metadata control. Product admission was not weakened.
+Existing Package parsed324 production,380 test and54 tool modules, omissions0;
+the shared roster's two production callers were inspected.
+
+The actual installed saved App finished normally in13.67s with unchanged source
+owner and no owned cleanup remainder/errors. The installed current viewer
+projection excludes `#pr126-fixes` normally and includes it with show_archived.
+The tag and original archive state remain stored. Raw App/visibility evidence:
+`/home/ts/.cache/agent-scratch/channel-archive-installed-20261006`.
+The selected installed candidate is `channel-archive-wheel` /
+`runtime-channel-archive`;953 assets/full69 packages match the selected source.
+The independent equal-publication fanout correction is integrated at Toad
+5e7a6d7f9 for the next affected App check; it is not in this visibility build.
