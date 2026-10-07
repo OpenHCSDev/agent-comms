@@ -596,3 +596,31 @@ No broad latency or full sidebar-return claim follows.953 assets/full69 matched;
 the original publisher selected runtime-worker-notifications for new UI launches.
 Publication: worker-notifications-wheel/publication.json in the existing candidate
 root. Native87 merged; original backend workers and uncertain inputs untouched.
+
+## Relationship projections delivered
+
+Toad9b526c640 projects relationship unread from the original acquired sidebar
+publication. It no longer reacquires RouteSelection/service metadata for every
+relationship row during native layout. The publication must still belong to the
+observed service and match the bound root; navigation and writes retain their
+original fresh admission checks. No unread cache or competing decision was added.
+The contributor mounted component retained canonical unread across600 projections
+and all group inputs with zero UI RouteSelection captures.
+
+One actual installed saved-history App opened, scrolled, hid and restored the
+right sidebar, exited0 in44.907s, preserved the original source owner and cleaned
+up its owned processes. The same99-widget sidebar and original presentation
+remained through hide/return. Scroll-phase UI CPU was30.55/32.80/29.39/34.89 percent
+of one core. Earlier runs approached a full core; uncontrolled activity and
+diagnostic capture prevent a matched latency claim. Native enqueue-to-writer
+median2.07/p9513.62ms is writer completion, not pixels or input-to-photon timing.
+Evidence: `/home/ts/.cache/agent-scratch/relationship-roster-installed-20261007`.
+All953 assets/full69 matched. Original frontend publication completed and the
+live launcher resolves to runtime-relationship-roster for new UI launches.
+Existing clients/backend workers remain unchanged. Publication evidence is
+relationship-roster-wheel/publication.json under the existing candidate root.
+
+Removed about950MiB of redundant evidence copies from owned disposable Git build
+archives, preserving original published source/evidence, wheels, proofs, runtimes
+and raw runs. Burst activity, context-tree-specific scrolling, tab closing and
+historical backend inbox failures remain distinct incomplete acceptance areas.
