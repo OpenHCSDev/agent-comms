@@ -675,3 +675,44 @@ owns the separate painted-cursor acknowledgment path that still acquires route
 and registry facts synchronously on UI. No relaxed currentness/identity guard,
 extra widget cache or repeated message is proposed. Historical backend inbox
 errors remain unproved and unchanged.
+
+## Channel route and painted-read workers delivered
+
+Toad16da7b04 moves channel startup/refresh/notification/send/receipt route reads
+onto the existing PreparationRuntime. The complete changed family retains root
+checks and rechecks bound reader/view identity after newly introduced awaits.
+Startup uses CoordinationAccess's original shared service once; route replacement
+refuses initialization instead of constructing an alternate stale service.
+No new task queue, cache, admission bypass or retry was introduced. Baseline
+Package parsed288 production modules without omissions; changed declarations and
+all route-read consumers were inspected, changed modules compiled.
+
+Heisadd6121b, integrateda2954d0c1, captures actual painted intent on UI and resolves
+route/service/registry identity together in the original fenced write worker.
+MainScreen shares resolve_session_thread's bound-root contract and drops its
+duplicate identity service. The actual mounted private component retained exact
+saved paint, positive worker acknowledgment, filter/off-tail refusal and refused
+source/route replacement without ledger changes, with zero UI route/identity/ack
+calls. First driver's invalid stopped-thread rename was refused and kept.
+Evidence: `/home/ts/.cache/agent-scratch/painted-read-worker-20261007/result.json`.
+
+The affected existing default-route pilot initially stopped at removed sidebar
+_refresh, then at its obsolete demand that the shared workspace roster stay
+hidden after successor publication. Its caller now uses SidebarObservation;
+visible successor rows must carry the actual successor service, while the old
+conversation stays hidden and old-wire text is absent. All remaining original
+route, late-page, write/refusal, reconnect and strict route-file checks passed
+(exit0); stderr retains an unrelated private fixture command-catalog request for
+an undeclared temporary project thread, so no clean whole-pilot claim. Mounted
+read-only channel retirement passed with unchanged bus and original pin.
+Logs: `/home/ts/.cache/agent-scratch/channel-route-preparation-20261007`.
+
+One actual installed no-input #openhcs open/expand/collapse journey passed,
+exit0/33.296s, original source owner preserved, owned cleanup empty. Actual
+channel messages and canonical statuses painted. CPU during the two disclosure
+phases26.68/23.81% one core; this quieter run is not a matched burst comparison.
+Evidence: `/home/ts/.cache/agent-scratch/channel-route-installed-20261007`.
+953 installed assets/full69 verified. Original frontend publication completed;
+live launcher now selects runtime-channel-route for new UI launches, retaining
+Core64f12229b and native22e54. Backend workers unchanged. Native sizing remains
+Arendt's separate active repair, not a blanket hold on this delivered UI work.
