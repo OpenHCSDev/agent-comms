@@ -72,7 +72,7 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
     comms.messaging.send("bob", "#team", "first")
     bus_path = comms.bus.log.path
     appended = []
-    original = comms.bus.log._record_snapshot
+    original = comms.bus.log._opened_wire_snapshot
 
     @contextmanager
     def append_before_open(*args, **kwargs):
@@ -81,7 +81,7 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
         with original(*args, **kwargs) as boundary:
             yield boundary
 
-    monkeypatch.setattr(comms.bus.log, '_record_snapshot', append_before_open)
+    monkeypatch.setattr(comms.bus.log, '_opened_wire_snapshot', append_before_open)
     snapshot = comms.views.viewer_snapshot(str(tmp_path))
     team = next(view for view in snapshot.channels if view.channel.name == "#team")
     assert snapshot.channel_unread["#team"] == 2
@@ -124,3 +124,72 @@ def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback(tm
         assert decode.call_count == 0
     with patch.object(BusRouteCounts, "sync", side_effect=sqlite3.DatabaseError("unavailable")):
         assert wire(tmp_path).bus.pending_counts(viewer) == expected
+
+
+def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_path):
+    from agent_comms.wire_log import CertifiedOpenedWireSnapshot
+    from test_private_bus_checkpoint import _root
+    from test_turn_context_wire import manifest
+
+    comms, _ = _root(tmp_path)
+    first = comms.messaging.send_initial_cohort('sender', '#team', '@Alice first')
+    comms.bus.log.record_context(manifest(comms.registry.require('Alice')))
+    with comms.views.presentation.snapshot(viewer='Alice') as (_, source):
+        assert isinstance(source, CertifiedOpenedWireSnapshot)
+        # Original lock has ended. A genuine later publication cannot broaden
+        # this descriptor's cut or make the captured observation visible.
+        second = comms.messaging.send_initial_cohort('sender', '#team', '@Alice next')
+        assert [message.message_id for message, _ in source.public_records()] == [first.message_id]
+    assert source.stream.closed
+    assert [message.message_id for message in comms.bus.log.full_history()] == [first.message_id, second.message_id]
+
+    comms.views.viewer_snapshot(str(tmp_path))
+    comms.channels.set_channel_any_mode('#team', True)
+    comms.views.viewer_snapshot(str(tmp_path))
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    checkpoint = BusDisplayIndex(comms.bus.log.path, viewer).path
+    current = json.loads(checkpoint.read_text())
+    assert next(scope for scope in current['semantics']['scopes']
+                if scope['channel'] == '#team')['any_mode'] is True
+
+
+def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path):
+    from agent_comms.wire_log import WireLog, OpenedWireSnapshot
+    from agent_comms.wire_record import ObservationWireRecord, ContextManifestWireObservation
+    from test_turn_context_wire import manifest
+
+    tmp_path.chmod(0o700)
+    log = WireLog(tmp_path / 'bus.jsonl')
+    from agent_comms.wire_metadata import WireMetadata
+    log.write_metadata_unlocked(WireMetadata(writer_protocol_version=1, wire_root_id='0' * 32))
+    owner = Thread('author', frozenset(), str(tmp_path), created_at=17003.0)
+    row = ObservationWireRecord(ContextManifestWireObservation(manifest(owner)))
+    log.path.write_text(json.dumps(row.to_wire()) + '\n')
+    log.path.chmod(0o600)
+    with log._opened_wire_snapshot(need_sequence=False) as source:
+        assert type(source) is OpenedWireSnapshot
+        assert list(source.public_records()) == []
+    log.path.write_text(json.dumps({'observation': {'kind': 'unknown'}}) + '\n')
+    with log._opened_wire_snapshot(need_sequence=False) as source:
+        with pytest.raises((ValueError, TypeError, KeyError)):
+            list(source.public_records())
+
+
+def test_reserved_sequence_preserves_committed_read_cut_without_admission(tmp_path):
+    from agent_comms.wire_log import CertifiedOpenedWireSnapshot
+    from test_private_bus_checkpoint import _root
+
+    comms, _ = _root(tmp_path)
+    first = comms.messaging.send_initial_cohort('sender', '#team', '@Alice first')
+    # This is the original durable state between reservation and append.
+    # No second input or fabricated successful append resolves that uncertainty.
+    with comms.bus.log.locked():
+        marker = comms.bus.log._private_marker_unlocked()
+        marker.last_seq += 1
+        comms.bus.log.write_metadata_unlocked(marker)
+    with comms.bus.log._opened_wire_snapshot(need_sequence=False) as source:
+        assert isinstance(source, CertifiedOpenedWireSnapshot)
+        assert [message.message_id for message, _ in source.public_records()] == [first.message_id]
+    with pytest.raises(RelationViolationError, match='differs from its durable marker'):
+        with comms.bus.log.certified_read() as source:
+            source.require_current()

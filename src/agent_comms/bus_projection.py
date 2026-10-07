@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import BinaryIO
 
@@ -56,14 +56,20 @@ class AppendCheckpoint:
         stream.seek(start)
         return hashlib.sha256(stream.read(offset - start)).hexdigest()
 
-    def digest(self) -> str:
-        payload = FieldCodec.encode(self)
-        del payload["integrity"]
-        raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    @staticmethod
+    def payload_digest(payload: dict) -> str:
+        unsigned = {key: value for key, value in payload.items() if key != "integrity"}
+        raw = json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         return hashlib.sha256(raw.encode()).hexdigest()
 
-    def signed(self):
-        return replace(self, integrity=self.digest())
+    def digest(self) -> str:
+        return self.payload_digest(FieldCodec.encode(self))
+
+    def signed_payload(self) -> dict:
+        """Encode the projection once for both integrity and atomic persistence."""
+        payload = FieldCodec.encode(self)
+        payload["integrity"] = self.payload_digest(payload)
+        return payload
 
     def accepts(self, revision: BusFileRevision, stream: BinaryIO) -> bool:
         if self.integrity != self.digest():
@@ -91,5 +97,5 @@ class BusAppendIndex:
         return record if record.accepts(revision, stream) else None
 
     def write(self, record: AppendCheckpoint, *, fsync_parent: bool = False) -> None:
-        _atomic_write_text(self.path, json.dumps(FieldCodec.encode(record.signed())),
+        _atomic_write_text(self.path, json.dumps(record.signed_payload()),
                            fsync_parent=fsync_parent)

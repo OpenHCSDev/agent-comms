@@ -10,7 +10,7 @@ import stat
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
 from typing import BinaryIO
@@ -47,6 +47,62 @@ from .store_files import (
 )
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord, WireScan
+
+
+@dataclass(frozen=True)
+class OpenedWireSnapshot:
+    """One original descriptor and fixed cut, owned until the reader exits.
+
+    This is read custody, not permission to append or admit a live turn.
+    Uncertified cuts decode every row strictly, including silent observations.
+    """
+
+    metadata: WireMetadata
+    through: int
+    stream: BinaryIO | None
+    revision: BusFileRevision | None
+
+    @property
+    def boundary(self) -> int:
+        return self.revision.size if self.revision is not None else 0
+
+    @staticmethod
+    def messages(record: Mapping) -> tuple[Message, ...]:
+        return WireRecord.public_from_wire(record).messages()
+
+    def public_records(self, offset: int = 0) -> Iterator[tuple[Message, int]]:
+        if self.stream is None:
+            return
+        if not 0 <= offset <= self.boundary:
+            raise ValueError("Public read exceeds its opened source cut")
+        self.stream.seek(offset)
+        for record, raw_size in _iter_jsonl_stream(
+            self.stream, boundary=self.boundary, label="wire snapshot"
+        ):
+            yield from self.public_page_records(record, raw_size, self.metadata)
+
+    @classmethod
+    def public_page_records(cls, record: Mapping, raw_size: int,
+                            metadata: WireMetadata) -> Iterator[tuple[Message, int]]:
+        """Silent facts consume physical bytes, never message/display budgets."""
+        for message in cls.messages(record):
+            if has_private_wire_fields(record):
+                yield message, len(json.dumps(message.to_wire()).encode()) + 1
+            else:
+                message.require_retained_admission(metadata.admission_after_seq)
+                yield message, raw_size
+
+
+class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
+    """Public projection of a cut admitted by the acquired complete WireScan.
+
+    Only original locked acquisition can select this implementation. Later
+    appends stay outside the cut; the closed SQLite reader grants no authority.
+    """
+
+    @staticmethod
+    def messages(record: Mapping) -> tuple[Message, ...]:
+        return WireRecord.certified_public_messages(record)
 
 
 class WireLog:
@@ -247,11 +303,11 @@ class WireLog:
 
     def claim_projection(self) -> ClaimProjection:
         """Derive ownership exclusively from guarded, verified bus envelopes."""
-        with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
-            if not metadata.claims:
+        with self._opened_wire_snapshot(need_sequence=False) as opened:
+            if not opened.metadata.claims:
                 raise RelationViolationError("Claim read barrier is unavailable.")
             projection, _verified_sequence = self._claim_projection(
-                self._snapshot_records(metadata, stream, boundary)
+                self._snapshot_records(opened.metadata, opened.stream, opened.boundary)
             )
             return projection
 
@@ -395,18 +451,6 @@ class WireLog:
             matched, _, _ = self._keyed_receipt_unlocked(intent)
             return matched
 
-    @staticmethod
-    def _public_page_records(
-        record: Mapping, raw_size: int, metadata: WireMetadata
-    ) -> Iterator[tuple[Message, int]]:
-        """Silent facts consume physical bytes, never message/display budgets."""
-        for message in WireRecord.public_from_wire(record).messages():
-            if has_private_wire_fields(record):
-                yield message, len(json.dumps(message.to_wire()).encode()) + 1
-            else:
-                message.require_retained_admission(metadata.admission_after_seq)
-                yield message, raw_size
-
     @contextmanager
     def _opened_wire_snapshot(self, *, need_sequence: bool = True):
         """Own one fixed opened inode/byte boundary beyond physical custody."""
@@ -426,7 +470,22 @@ class WireLog:
                 if stream is not None:
                     stream.seek(0)
                 revision = BusFileRevision.capture(stream) if stream is not None else None
-            yield metadata, through, stream, boundary, revision
+                snapshot_type = OpenedWireSnapshot
+                if lock.source is not None:
+                    source = lock.certified_read()
+                    source.require_marker(metadata)
+                    # A reserved but unappended sequence revokes admission,
+                    # not the original committed bytes of this read-only cut.
+                    source.require_open_prefix()
+                    # Bind the separate retained descriptor to the exact admitted
+                    # inode/revision while original physical custody is held.
+                    if (stream is None or revision != BusFileRevision.capture(source.stream)
+                            or os.fstat(stream.fileno()).st_dev != source.witness.device
+                            or boundary != source.witness.offset):
+                        raise RelationViolationError("Opened read differs from its certified source cut")
+                    snapshot_type = CertifiedOpenedWireSnapshot
+                opened = snapshot_type(metadata, through, stream, revision)
+            yield opened
 
     @contextmanager
     def verified_snapshot(self) -> Iterator[Iterator[WireRecord]]:
@@ -435,8 +494,8 @@ class WireLog:
         Uncertified streams retain the same complete validation algorithm.
         This resource is a fixed read, not a current append/admission permit.
         """
-        with self._opened_wire_snapshot(need_sequence=False) as (metadata, _, stream, boundary, _):
-            yield self._snapshot_records(metadata, stream, boundary)
+        with self._opened_wire_snapshot(need_sequence=False) as opened:
+            yield self._snapshot_records(opened.metadata, opened.stream, opened.boundary)
 
     @contextmanager
     def projection_snapshot(self):
@@ -446,10 +505,10 @@ class WireLog:
         acquisition fails, the strict record iterator reads that SAME cut.
         Its stream remains owned here; no projection acquires bus authority.
         """
-        with self._opened_wire_snapshot(need_sequence=False) as (
-            metadata, _, stream, boundary, revision,
-        ):
-            yield metadata, revision, stream, self._snapshot_records(metadata, stream, boundary)
+        with self._opened_wire_snapshot(need_sequence=False) as opened:
+            yield opened.metadata, opened.revision, opened.stream, self._snapshot_records(
+                opened.metadata, opened.stream, opened.boundary
+            )
 
     @staticmethod
     def _snapshot_records(metadata, stream, boundary):
@@ -463,21 +522,9 @@ class WireLog:
     @contextmanager
     def page_snapshot(self, *, need_sequence: bool = False):
         """Lend the original opened cut to indexed and sequential page readers."""
-        with self._opened_wire_snapshot(need_sequence=need_sequence) as (
-            metadata, through, stream, boundary, revision,
-        ):
-            records = (
-                (
-                    page_row
-                    for record, size in _iter_jsonl_stream(
-                        stream, boundary=boundary, label="wire snapshot"
-                    )
-                    for page_row in self._public_page_records(record, size, metadata)
-                )
-                if stream is not None
-                else iter(())
-            )
-            yield metadata, through, revision, stream, records
+        with self._opened_wire_snapshot(need_sequence=need_sequence) as opened:
+            yield (opened.metadata, opened.through, opened.revision, opened.stream,
+                   opened.public_records())
 
     @contextmanager
     def _record_snapshot(

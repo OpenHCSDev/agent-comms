@@ -48,6 +48,17 @@ class WireRecord(ABC):
             return FieldCodec.decode(ObservationWireRecord, value)
         return PublicWireRecord(Message.from_wire(value))
 
+    @classmethod
+    def certified_public_messages(cls, value: Mapping) -> tuple[Message, ...]:
+        """Public output of a row already admitted by the complete WireScan.
+
+        Silent observations have no public messages. Their original manifests
+        were validated by certification and need no second reconstruction.
+        """
+        if "observation" in value:
+            return ()
+        return cls.public_from_wire(value).messages()
+
     def messages(self) -> tuple[Message, ...]:
         return ()
 

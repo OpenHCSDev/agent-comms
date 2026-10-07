@@ -13,7 +13,6 @@ from .activity import ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import BusDisplayIndex, DisplayCheckpoint, DisplayMetricScope
-from .bus_projection import BusFileRevision
 from .channel_targets import is_channel_target
 from .channels import Channel
 from .display_order import ChannelSort
@@ -46,7 +45,7 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .agent_activity import RecipientActivity
-    from .wire_log import WireLog
+    from .wire_log import WireLog, OpenedWireSnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -283,7 +282,7 @@ class BusPresentation:
     @contextmanager
     def snapshot(
         self, viewer: str | None = None, target: str | None = None
-    ) -> Iterator[tuple[DisplaySelection, Iterator[tuple[Message, int]], tuple | None]]:
+    ) -> Iterator[tuple[DisplaySelection, OpenedWireSnapshot]]:
         """Capture display inputs once through their original document resources.
 
         Open the bus before acquiring document resources: publication's lock
@@ -294,18 +293,15 @@ class BusPresentation:
         """
         with ExitStack() as stack:
             with _store_lock(self._wire_lock_path, shared=True):
-                bus_revision = file_revision(self.bus.log.path)
-                _, records = stack.enter_context(
-                    self.bus.log._record_snapshot(need_sequence=False)
+                source = stack.enter_context(
+                    self.bus.log._opened_wire_snapshot(need_sequence=False)
                 )
                 with DisplaySelection.reading(
                     self.registry, self.catalog, self.bus.reads, viewer
                 ) as basis:
                     if target is not None:
                         basis.scope(target)
-                if file_revision(self.bus.log.path) != bus_revision:
-                    bus_revision = None
-            yield basis, records, bus_revision
+            yield basis, source
 
     def channel_page(
         self,
@@ -382,12 +378,11 @@ class BusPresentation:
 
     def display_view_metrics(
         self,
-        records: Iterator[tuple[Message, int]],
+        source: OpenedWireSnapshot,
         scopes: tuple[ChannelDisplayScope, ...],
         activity_scopes: tuple[ChannelDisplayScope, ...],
         viewer: str,
         viewer_names: frozenset[str],
-        bus_revision: tuple[int, int, int, int] | None,
     ) -> tuple[Mapping[str, ChannelActivity], Mapping[str, int]]:
         """Activity and human unread from one validated, already-opened bus boundary.
 
@@ -397,22 +392,24 @@ class BusPresentation:
         """
         semantics = DisplayMetricScope(scopes, activity_scopes, viewer_names)
         cached = self._display_metrics.get(viewer)
-        if bus_revision is not None and cached is not None:
-            if cached.current_for(BusFileRevision(*bus_revision), semantics):
+        if source.revision is not None and cached is not None:
+            if cached.current_for(source.revision, semantics):
                 return ({name: ChannelActivity(*clocks) for name, clocks in cached.activity.items()},
                         dict(cached.counts))
         initial = semantics.empty_metrics
         projected = BusDisplayIndex(self._path, viewer).snapshot(
-            bus_revision, semantics, initial,
-            lambda record, metrics: semantics.observe_wire(record, metrics),
+            source, semantics,
         )
         if projected is None:
             metrics = initial
-            for message, _ in records:
+            for message, _ in source.public_records():
                 semantics.observe(message, metrics)
         else:
             metrics = projected.metrics
-            if bus_revision is not None and file_revision(self._path) == bus_revision:
+            if file_revision(self._path) == (
+                projected.source.inode, projected.source.size,
+                projected.source.modified, projected.source.changed,
+            ):
                 self._display_metrics[viewer] = projected
         return ({name: ChannelActivity(*clocks) for name, clocks in metrics[0].items()},
                 dict(metrics[1]))
