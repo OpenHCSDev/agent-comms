@@ -110,3 +110,49 @@ The screenshot identifies the independent compaction failure on
 `openhcs-pr159-viewer-bind-owner` as `CompactionJournalError`. Mendel has that
 actual thread and evidence. No failed compaction or user input was retried;
 this client change claims no compaction repair.
+
+## Combined sidebar read and focus successor
+
+The sidebar display path now borrows the original certified opened wire cut.
+The acquired descriptor and byte boundary remain owned by WireLog; strict
+page/index readers keep their full decoder, while the certified public-message
+projection skips silent records through WireRecord. DisplayMetricScope owns
+its message projection, and AppendCheckpoint encodes its signed payload once.
+Scope-only changes persist even when the original cut length is unchanged.
+A durable reserved sequence does not invalidate the committed read cut; it
+continues to block admission. The new real-store reservation control passed,
+and the changed-cut/scope control passed. Initial environment and assertion
+refusals are retained; no admission guard was weakened.
+
+The actual native focus fix is merged. Screen acquires the geometry needed by
+its original eligible focus chain once, instead of arranging the root for each
+missing offscreen child. Existing focus ordering and overrides remain owners.
+The combined candidate also includes the merged held-layout scroll repair and
+sidebar session-update repair. All three distributions are reinstalled through
+the original installer so each console command names its actual interpreter.
+The full 953-asset/69-package installed source proof passed for this candidate.
+The fresh actual send/tree recording is running; no whole latency result is
+claimed before its terminal and profile are read.
+
+### Combined real channel result
+
+Recording `/home/ts/.cache/agent-scratch/channel-send-focus-installed-20261006`
+sent one distinct new message through the actual native UI and exercised both
+channel disclosure directions. Driver Return begins at video21.167s; retained
+half-second frames show the new message by video21.5s and cleared input by22s.
+This supports visible response within the first second, not a precise
+input-to-photon percentile. The earlier recording retained the draft for many
+seconds. The combined submit trace contains one changed focus stack, versus
+210 disabling-watcher stacks in the old obstruction. These compressed stack
+transitions are not call counts or timing measurements.
+
+UI process CPU over the send interval fell from about84% to65%; collapse is
+still about83% and expand61%. Tree/whole-frame latency remains unfinished.
+The actual App exited0 and original cleanup retained no owned processes or
+errors. The st wrapper exited1 with a terminal Input/output error after the
+recorded App exit. The recording preserves this negative; no message or App
+was replayed. Retained-only review completed and showed actual message paint
+and tree changes. All runtime module readbacks select the combined interpreter
+and packages. The original source agent stayed alive and unchanged. This
+useful client successor is published through the existing atomic link owner;
+backend processes and route remain unchanged.
