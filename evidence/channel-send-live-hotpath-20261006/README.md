@@ -837,3 +837,39 @@ observed authorized backend-link change remain in their original raw receipts;
 the existing native review was rerun offline without an App replay. The own
 completed4.26MB Git-archive build source was removed after a clear privileged
 process census; installed prefixes, wheels, evidence and journals remain held.
+
+## Context reader, native measurement and cold ACP defaults — October 7
+
+Core706 and Toad517 are merged; native92 was already merged. The built
+`runtime-context-scroll-acp` contains the exact reviewed source checkpoints.
+Context-tree rebind retains the native cursor without scrolling an already
+selected node back into view, and schedules detail preparation once. The Core
+change keeps the complete native tree and trust checks, using filesystem path
+strings inside the traversal instead of constructing a Path at each node.
+Native92 retains the original stored-extent measurement owner and invalidation.
+
+The first combined physical recording stopped before its journey. Blocking
+py-spy sampling reported progressively increasing lag, reaching21.7s. Its long
+stack spans cannot establish a product cause. The unprofiled comparison attached
+the same frame observer and completed left/right sidebar interaction, transcript
+wheel/reversal/End, context scrolling and saved agent return. All11 original
+history/editor checks passed, the App exited0, the public source owner was
+unchanged, and original cleanup had no remaining processes or errors. The final
+review import-path mistake is preserved; the existing review decoded retained
+captures offline, without repeating the App:
+`/home/ts/.cache/agent-scratch/context-scroll-acp-unprofiled-live-20261007/completed-journey-review.json`.
+This is affected behavior evidence, not a terminal smoothness or latency win.
+
+The same publication owner advanced frontend and future backend command defaults
+to the reviewed prefix, preserving the actual native route and running owners.
+Publication results are in
+`.artifacts/sidebar-live-candidate-20261006/context-scroll-acp-wheel/{frontend,backend}-publication.json`.
+All69 distributions and2787 hashed RECORD entries were verified after publication.
+The unchanged Diff dependency's installer cache metadata was retained from the
+previous installation; the new installer metadata and RECORD remain preserved
+alongside its explicit resource-retention record. The actual-default agent-tab
+open/close/reopen observation is in progress, on its original handle, under
+`/home/ts/.cache/agent-scratch/context-scroll-acp-default-live-20261007`.
+No actual-default latency gain is claimed yet. Remaining eager SDK imports were
+traced to real protocol model consumers; no lazy alias or speculative cache was
+added to conceal that initialization cost.
