@@ -106,6 +106,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         no_reply_window: float | None = None,
         reply_quiet: float | None = None,
         runtime_enabled: bool = False,
+        use_unstable_protocol: bool = False,
         auto_wake: bool = True,
         private_nk_native_package: Path | None = None,
         private_nk_wire_root_id: str | None = None,
@@ -124,6 +125,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         self._private_nk_native_package = private_nk_native_package
         self._private_nk_wire_root_id = private_nk_wire_root_id
         self._comms = comms
+        self.use_unstable_protocol = use_unstable_protocol
         # Enabled for verified native owners by default. Explicit construction
         # may disable it; model/tool content cannot change this owner policy.
         self._runtime = RuntimeServer(self)
@@ -330,6 +332,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
         return await self.turns.cancel(session_id, **kwargs)
+
+    async def close_session(self, session_id: str, **kwargs: Any):
+        return await self.sessions.close_session(session_id)
 
     async def set_config_option(
         self, config_id: str, session_id: str, value: str | bool, **kwargs: Any
@@ -554,6 +559,7 @@ def main() -> int:
             agent = CommsClient(
                 comms,
                 runtime_enabled=True,
+                use_unstable_protocol=True,
                 private_nk_native_package=private_nk.native_package if private_nk else None,
                 private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None,
             )
@@ -569,7 +575,8 @@ def main() -> int:
             if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
                 conn_kwargs["observers"] = [observe]
             try:
-                await run_agent(agent, **conn_kwargs)  # type: ignore[arg-type]
+                await run_agent(agent, use_unstable_protocol=agent.use_unstable_protocol,
+                                **conn_kwargs)  # type: ignore[arg-type]
             finally:
                 await agent.shutdown()
 

@@ -297,6 +297,7 @@ class RuntimeConnection:
         self.path = path
         self._comms = comms
         self._closed = False
+        self._requests: set[asyncio.Task] = set()
         self._identity = comms.registry.require(session_id).incarnation
         self._root_identity = comms.root.stat()
 
@@ -357,8 +358,16 @@ class RuntimeConnection:
                 raise
 
     async def request(self, action: str, **kwargs: Any) -> dict[str, Any]:
-        reader, writer = await self._connect_current()
+        if self._closed:
+            raise ConnectionError("Owner attachment was closed before request dispatch")
+        task = asyncio.current_task()
+        assert task is not None
+        self._requests.add(task)
+        writer = None
         try:
+            reader, writer = await self._connect_current()
+            if self._closed:
+                raise ConnectionError("Owner attachment was closed before request dispatch")
             writer.write(
                 (
                     json.dumps(
@@ -377,10 +386,20 @@ class RuntimeConnection:
             _raise_owner_error(data)
             return cast(dict[str, Any], data["result"])
         finally:
-            writer.close()
+            try:
+                if writer is not None:
+                    writer.close()
+                    with suppress(OSError, ConnectionError):
+                        await writer.wait_closed()
+            finally:
+                self._requests.discard(task)
 
     async def close(self):
         self._closed = True
+        tasks = tuple(self._requests)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 class RuntimeProxy(RuntimeConnection):
@@ -509,9 +528,7 @@ class RuntimeProxy(RuntimeConnection):
             except ValueError:
                 return
             self._controller_token = None
-            for permission in self._permission_tasks.values():
-                permission.cancel()
-            self._permission_tasks.clear()
+            await self.close_permissions()
             if self.writer is not None:
                 self.writer.close()
             while not self._closed:
@@ -531,14 +548,22 @@ class RuntimeProxy(RuntimeConnection):
                 except (OSError, RuntimeError):
                     await asyncio.sleep(0.1)
 
+    async def close_permissions(self) -> None:
+        tasks = tuple(self._permission_tasks.values())
+        for permission in tasks:
+            permission.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
     async def close(self) -> None:
         self._closed = True
         self._controller_token = None
-        for permission in self._permission_tasks.values():
-            permission.cancel()
-        self._permission_tasks.clear()
         if self.writer is not None:
             self.writer.close()
         if self.task is not None:
             self.task.cancel()
             await asyncio.gather(self.task, return_exceptions=True)
+        await self.close_permissions()
+        await super().close()
+        if self.writer is not None:
+            with suppress(OSError, ConnectionError):
+                await self.writer.wait_closed()
