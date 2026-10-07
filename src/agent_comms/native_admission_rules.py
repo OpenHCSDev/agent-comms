@@ -27,9 +27,23 @@ class RegistryIdentityCheck(RuleCheck):
     admission: int | None
     process: ProcessIdentity
 
+    def worktree_matches(self) -> bool:
+        return self.actual.worktree == self.expected.worktree
+
 
 class RegistryAdmissionCheck(RegistryIdentityCheck):
     """A send also requires the captured active turn to remain unchanged."""
+
+
+class RegistryPublicationCheck(RegistryAdmissionCheck):
+    """Publish this turn's observations after a declared next-project change.
+
+    This grants no input admission. The same lease/process/source must remain;
+    the captured executing directory must still belong to this conversation.
+    """
+
+    def worktree_matches(self) -> bool:
+        return self.actual.contains_worktree(self.expected.worktree)
 
 
 class GoalRegistryIdentityCheck(RegistryIdentityCheck):
@@ -80,7 +94,7 @@ class RegistryWorktreeRule(ReservationRule):
     explanation = "The captured owner worktree changed."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
-        return check.actual.worktree != check.expected.worktree
+        return not check.worktree_matches()
 
 
 class RegistryModelRule(ReservationRule):

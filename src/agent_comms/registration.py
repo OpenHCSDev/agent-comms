@@ -60,7 +60,10 @@ class Registration:
         with _store_lock(self.store.path.parent / "wire", shared=True), self.store.editing() as edit:
             change = edit.document.prepare_native_source(original, session_file)
             self._commit_registration(edit, change)
-            return replace(original, thread=change.installed_thread)
+            # The document owns the next project. This admitted operation keeps
+            # its executing project until end-turn continuation consumes it.
+            observed = replace(change.installed_thread, worktree=original.thread.worktree)
+            return replace(original, thread=observed)
 
     def selected_native_fork(self, original: RegistryOwner, creation: NativeForkCreation, *,
                              retain: Callable[[RegistryOwner], None]) -> RegistryOwner:

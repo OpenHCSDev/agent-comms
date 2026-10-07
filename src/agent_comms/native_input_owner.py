@@ -19,8 +19,8 @@ from .errors import RelationViolationError
 from .native_admission_rules import (
     GoalRegistryAdmissionCheck,
     GoalRegistryIdentityCheck,
-    RegistryAdmissionCheck,
     RegistryIdentityCheck,
+    RegistryPublicationCheck,
 )
 from .registry_document import RegistrySnapshot
 from .reservation_rules import ReservationViolationError
@@ -134,10 +134,12 @@ class RegistryOwner:
         Goal authority belongs to input admission. A legitimate goal change
         during this turn does not revoke its source observation; the exact
         lease, process, admission and source/configuration must still match.
+        A declared next-project change retains this conversation's executing
+        directory; it does not grant another input in that directory.
         """
         self.require_active_turn()
         return self._snapshot_owner(
-            snapshot, "Native source owner changed before publication", RegistryAdmissionCheck,
+            snapshot, "Native source owner changed before publication", RegistryPublicationCheck,
         )
 
     def require_idle_source_snapshot(self, snapshot: RegistrySnapshot) -> Thread:
