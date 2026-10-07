@@ -16,6 +16,8 @@ from .registration import Registration
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
+    from .registry_document import RegistrySnapshot
+    from .wire_log import OpenedWireSnapshot
 from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
@@ -205,11 +207,14 @@ class HistoryViews:
             max_bytes=max_bytes,
         )
 
-    def last_sent_timestamps(self) -> Mapping[str, float]:
+    def last_sent_timestamps(
+        self, *, source: OpenedWireSnapshot | None = None,
+        registry: RegistrySnapshot | None = None,
+    ) -> Mapping[str, float]:
         """Canonical projection of the existing target/sender clock authority."""
-        snapshot = self.registry.snapshot()
+        snapshot = self.registry.snapshot() if registry is None else registry
         canonical: dict[str, float] = {}
-        for sender, timestamp in self.bus.last_sent_timestamps().items():
+        for sender, timestamp in self.bus.last_sent_timestamps(source=source).items():
             name = snapshot.canonical_name(sender)
             canonical[name] = max(canonical.get(name, 0.0), timestamp)
         return canonical
@@ -356,8 +361,8 @@ class HistoryViews:
             )
             snapshot = CoordinationSnapshot.capture(
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
-                self.last_sent_timestamps(), display_activity,
-                unread=self.bus.pending_counts(captured_viewer), channel_unread=display_unread,
+                self.last_sent_timestamps(source=source, registry=basis.registry), display_activity,
+                unread=self.bus.pending_counts_opened(source, basis), channel_unread=display_unread,
                 show_stopped=show_stopped, show_archived=show_archived,
                 read_marker_notice=basis.notice,
             )
