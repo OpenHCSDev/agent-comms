@@ -361,3 +361,54 @@ retained, and the fixture now uses the original stopped declaration operation.
 Only that failed check was repeated. All src/tests/tools Python parsed, with 23
 related declaration/call sites and no omissions. No installed App, native input,
 publication, build or restart was performed; Parent carries integration.
+
+## Viewer pending/sent acquisition — 2026-10-07
+
+The original installed channel profile records 29 viewer_snapshot calls taking
+34.934 seconds inclusive. Its 29 pending_counts calls took 5.584 seconds and
+MessageBus.last_sent_timestamps took 3.513 seconds (HistoryViews canonicalization
+inclusive 3.832). These are original overlapping inclusive costs, not additive
+or a measured speedup of the correction.
+
+BusPresentation.snapshot already lends an OpenedWireSnapshot and DisplaySelection:
+fixed bus byte cut, registry incarnation/aliases, catalog membership and selected
+viewer read ledger. HistoryViews nevertheless called pending_counts and
+last_sent_timestamps independently, acquiring two further bus cuts and fresh
+registry/catalog/read documents. The resulting sidebar could also combine answers
+from different appends or acknowledgements.
+
+MessageBus now shares the existing delivery counting implementation through
+_pending_counts. Its ordinary pending APIs keep their original revision cache;
+pending_counts_opened takes the actual opened source and DisplaySelection and
+uses their original registry/catalog/seen relation. DeliveryScope still derives
+actor/channel membership and rejects sender/recipient reincarnations; route index
+sync and unread queries use the captured byte cut. Disposable index refusal falls
+back to the same strict WireScan bounded by that source, not a fresh acquisition.
+No human display scope, activity clock or transcript cursor substitutes for the
+delivery answer. Captured counts do not publish a named-file revision cache.
+
+The existing BusActivityIndex accepts the same opened source for sent clocks.
+HistoryViews canonicalizes through the captured registry rather than rereading
+it. viewer_snapshot feeds both projections from its existing presentation
+lifetime. Its transcript file IO remains after that source closes. The unused
+WireLog.projection_snapshot tuple wrapper is deleted after migrating both actual
+consumers to the existing OpenedWireSnapshot; strict scanner ownership remains.
+No cache/index/protocol/schema/Toad member or backend mechanism was added.
+
+One focused real private-store batch passed all 18 viewer/current-delivery checks
+in 12.56 seconds. A new check observes exactly one opened/closed bus cut per
+viewer_snapshot, with genuine direct delivery, channel display unread and sent
+clock answers. Another keeps its original pending/sent answers across actual
+later append, sparse acknowledgement and rename, then obtains the new answer
+on the next snapshot. Both actual indexed storage and a real unavailable
+SQLite index path pass. Existing reincarnation, sparse read, scope, corrupted
+index, append-boundary and strict uncertified source checks remain passing.
+
+All 759 src/tests/tools modules parse/compile; 461 before/after related AST sites,
+zero omissions. No projection_snapshot consumers remain in that source family;
+external dynamic use is not established by AST. Raw checks, source trace and
+original profile costs: /home/ts/.cache/agent-scratch/mvp01/check.log and
+source-family.json. One initial shell edit was refused by the duplicate-command
+hook before execution; the source changes used apply_patch. No App/public input,
+provider/native process, prefix operation, build or restart occurred. Parent owns
+integration and actual installed latency measurement; no live speedup is claimed.

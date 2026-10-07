@@ -560,19 +560,6 @@ class WireLog:
         with self._opened_wire_snapshot(need_sequence=False) as opened:
             yield self._snapshot_records(opened.metadata, opened.stream, opened.boundary)
 
-    @contextmanager
-    def projection_snapshot(self):
-        """Lend one opened source cut to disposable indexes after bus release.
-
-        The index may seek this stream within its original revision. If index
-        acquisition fails, the strict record iterator reads that SAME cut.
-        Its stream remains owned here; no projection acquires bus authority.
-        """
-        with self._opened_wire_snapshot(need_sequence=False) as opened:
-            yield opened.metadata, opened.revision, opened.stream, self._snapshot_records(
-                opened.metadata, opened.stream, opened.boundary
-            )
-
     @staticmethod
     def _snapshot_records(metadata, stream, boundary):
         scan = WireScan(metadata)
