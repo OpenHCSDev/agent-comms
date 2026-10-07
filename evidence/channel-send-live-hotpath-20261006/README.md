@@ -257,3 +257,34 @@ All953 installed assets and69 package versions match their declared source/wheel
 The combined proof, activation and publication are in `tree-close-wheel`.
 Activity-burst hangs, database read contention and the original pr159 compaction
 failure remain unresolved by these changes. They are separate ongoing work.
+
+## Native paint-only publication delivered
+
+Toad510 and Textual85 are merged. The default client now selects
+`runtime-paint`; its publication is `paint-wheel/publication.json` beneath the
+existing candidate directory. Backend processes and native route are unchanged.
+
+Static owns whether an update needs layout: native leaf Content with unchanged
+text retains geometry while updating actual spans. Custom rendering/measurement,
+containers and changed text retain layout. ChannelParticipants compares complete
+Content identity, including spans, rather than plaintext equality.
+
+The installed real producer check renamed a canonical participant without
+changing its display title. The changed click target and tooltip painted, with
+zero layout invalidations, requests or arrangements (577 widgets, ten tabs).
+Its result is `participant-producer-installed-20261006/result.json` under agent
+scratch. The initial verification had an unguarded multiprocessing entrypoint
+and incorrectly assumed busy changes left plaintext unchanged; those failures
+remain held. The corrected check uses the original managed rename owner.
+
+The actual `paint-burst-installed-20261006` recording sent one distinct new
+message and completed with the saved source unchanged and no cleanup errors.
+Send-phase CPU was70.3% versus70.8% in the preceding burst: no meaningful overall
+latency gain. Native writer completion intervals are not input-to-photon or
+monitor frame times; captures can contribute gaps. Repeated coordination decoding
+and layout remain in the profile. Existing accepted messages were not replayed.
+
+Database attach failures are independently unresolved. The integrated runtime
+diagnostic correction retains the original causal traceback and SQLite store
+context before the unchanged wire error. It has not been installed into running
+backend owners, and it does not identify the historical blocking writer.
