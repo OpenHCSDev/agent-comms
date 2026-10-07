@@ -180,11 +180,7 @@ class SessionLifecycle:
     def validated_thread(self, cwd: str, session_id: str) -> Thread:
         thread = self.comms.registry.require(session_id)
         thread.execution.require_native()
-        known_paths = {
-            str(Path(path).expanduser().resolve())
-            for path in (thread.worktree, *thread.previous_worktrees)
-        }
-        if str(Path(cwd).expanduser().resolve()) not in known_paths:
+        if not thread.contains_worktree(cwd):
             raise RequestError.invalid_params(
                 {"reason": "The saved thread belongs to a different working directory."}
             )
