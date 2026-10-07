@@ -564,3 +564,35 @@ All953 assets/full69 matched; the original frontend publication selected
 runtime-context-resources for new UI launches. Publication evidence is
 context-resources-wheel/publication.json under the existing candidate root.
 Original backend owners stayed running; no uncertain message was replayed.
+
+## Worker diagnostics and recipient observation delivered
+
+Core64f12229b moves MessageNotification's existing recipient selection ahead of
+activity acquisition and projection. Sender/whole windows retain all outcomes;
+strict assignment decoding/duplicates and transcript identity remain unchanged.
+The real private mounted component preserved notifications and busy/idle while
+reducing recipient activity observations8 to1; sender answers retained all8.
+Evidence: `/home/ts/.cache/agent-scratch/observer-recipient-source-20261007`.
+
+Native22e54a3aa (PR87) removes eager work-payload repr from the decorator and
+WorkerManager. Worker owns the direct default; decorated diagnostics borrow the
+callable declaration. Explicit descriptions, including empty strings, and actual
+call arguments/lifetimes remain unchanged.61 original native controls and2 final
+affected controls passed. The actual preceding profile showed retained inspection
+repr on the UI thread through context presentation/contributor workers.
+
+The installed panel attempt in `worker-declaration-installed-20261007` reached
+open/down/up but its final CPython diagnostic request stayed unacknowledged;
+the absent snapshot prevented hide/return. Original86299 exited1 and cleanup
+retired its App; no input, original source unchanged, no remaining owned processes.
+That full interaction remains unverified, with raw video/profile/manifests held.
+An independent startup check first used an insufficient30-second recorder budget:
+only1.25s remained for graceful exit, requiring owned retirement. That negative is
+held in `worker-notifications-startup-installed-20261007`; no App timeout changed.
+The correctly budgeted45-second no-input startup check passed and exited gracefully,
+with saved messages painted and clean original custody/source. Evidence:
+`/home/ts/.cache/agent-scratch/worker-notifications-startup-budgeted-installed-20261007`.
+No broad latency or full sidebar-return claim follows.953 assets/full69 matched;
+the original publisher selected runtime-worker-notifications for new UI launches.
+Publication: worker-notifications-wheel/publication.json in the existing candidate
+root. Native87 merged; original backend workers and uncertain inputs untouched.
