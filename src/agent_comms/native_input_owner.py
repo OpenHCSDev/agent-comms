@@ -133,9 +133,10 @@ class RegistryOwner:
 
         Goal authority belongs to input admission. A legitimate goal change
         during this turn does not revoke its source observation; the exact
-        lease, process, admission and source/configuration must still match.
-        A declared next-project change retains this conversation's executing
-        directory; it does not grant another input in that directory.
+        lease, process, admission and session must still match. The admitted
+        turn retains its captured project/model/thinking while the document
+        may select the next turn's configuration. This observes only the
+        original source; fresh input still requires current configuration.
         """
         self.require_active_turn()
         return self._snapshot_owner(

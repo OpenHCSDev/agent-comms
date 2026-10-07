@@ -6,10 +6,8 @@ import asyncio
 import logging
 import os
 from abc import abstractmethod
-from dataclasses import replace
 from functools import partial
 from typing import TYPE_CHECKING, Any, ClassVar
-from uuid import uuid4
 
 from acp import RequestError
 from acp.schema import (
@@ -28,7 +26,6 @@ from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .native_pi import NativePiUnavailable
 from .owner_launch import RestartEnvironment
-from .pending_requests import PendingRequests
 from .pi_commands import (
     GetAvailableModels,
     GetAvailableThinkingLevels,
@@ -210,7 +207,6 @@ class ConfigOptions:
         self.catalog_publish_lock = asyncio.Lock()
         self.session_catalog_generation: dict[str, int] = {}
         self.session_config_signature: dict[str, tuple[tuple[str, str | None], ...]] = {}
-        self.setting_requests = PendingRequests()
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
         if member not in self.catalogs:
@@ -295,18 +291,22 @@ class ConfigOptions:
         command: SettingCommand,
         timeout_message: str,
     ) -> None:
-        inbox = await self.effects.turns.active_backend_inbox(session_id)
-        if inbox is None:
-            return
-        request_id = uuid4().hex
-        future = self.setting_requests.add(command.result_type, request_id)
-        inbox.put_nowait(replace(command, id=request_id).to_rpc())
         try:
-            await asyncio.wait_for(future, timeout=10)
-        except (TimeoutError, RuntimeError) as error:
+            turn = await self.effects.turns.active_native_session(session_id)
+            if turn is None:
+                return
+            async with command.pending_response(turn.native.reader, turn.native.proc.stdin) as future:
+                response = await asyncio.wait_for(future, timeout=10)
+                if response.success is not True:
+                    raise RuntimeError(response.error or command.error_message)
+        except asyncio.CancelledError as error:
+            if asyncio.current_task().cancelling():
+                raise
+            raise RequestError.invalid_params({
+                "reason": "The native session ended before confirming the configuration change"
+            }) from error
+        except (TimeoutError, RuntimeError, OSError) as error:
             raise RequestError.invalid_params({"reason": str(error) or timeout_message}) from error
-        finally:
-            self.setting_requests.discard(command.result_type, request_id)
 
     async def sync_thread(self, session_id: str) -> None:
         name = await self.sessions.sync_identity(session_id)

@@ -518,7 +518,12 @@ class TurnSession:
         with self.native_acquisition():
             with self.startup.measurements.operation("open_transport"):
                 await self.open_transport(resources)
-            return await self.open_native(reuse=reuse)
+            native = await self.open_native(reuse=reuse)
+        self.owner = asyncio.current_task()
+        if self.owner is not None:
+            self.active[self.owner] = self
+            resources.callback(self.active.pop, self.owner, None)
+        return native
 
     async def open_native(self, *, reuse: bool) -> PiSessionChild:
         """Initial acquisition and prepared continuation share the same custody."""
@@ -544,8 +549,6 @@ class TurnSession:
                 self.native = await self.acquire_native(
                     resources, reuse=self.persistent_session is not None
                 )
-                if self.owner is not None:
-                    self.active[self.owner] = self
                 async with self.native.failures():
                     self.prepare_launch()
                     self.output.sensitive |= self.native.sensitive_diagnostics
@@ -596,12 +599,9 @@ class TurnSession:
                     async for event in self.finish_result():
                         yield event
             finally:
-                try:
-                    await self.stop_forwarding()
-                    if not self.native_session.custody.retained:
-                        await self.native_session.close()
-                finally:
-                    self.active.pop(self.owner, None)
+                await self.stop_forwarding()
+                if not self.native_session.custody.retained:
+                    await self.native_session.close()
 
     async def receive_record(self) -> AsyncIterator[events.AgentEvent]:
         while self.rejected_commands:

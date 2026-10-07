@@ -311,3 +311,107 @@ diagnostic/producer source references: `/home/ts/.cache/agent-scratch/mre01`.
 No provider/input/restart/public mutation/build/prefix operation or failed-input
 replay occurred. Parent owns integration and future installed delivery; original
 UNKNOWN input and diagnostic remain untouched.
+
+## Installed zero-provider native refusal — 2026-10-07
+
+Core724/f162 is installed in Parent's native-refusal-delivery runtime. The
+remaining rejection transport/lifecycle gap was exercised once through that
+actual interpreter and installed modules, using existing NativeBackendFixture,
+saved owner binding, selected-source query, PiRpcChannel and original retirement.
+System pytest and source test helpers supply the control; no src overlay.
+
+The command producer first checks selected idle identity/effective settings,
+then compares requested compaction settings before prepareCompaction/entry-store
+work. An initial read-only settings observation acquired its actual declared
+settings; the sole preparation request supplied a different valid reserve budget.
+The genuine committed4b child returned success:false/error with its original
+request ID and 'Selected preparation settings changed'. The existing readline
+observer only persisted original bytes and returned them unchanged; no fake
+response, separate channel, codec or provider execution supplied the outcome.
+
+Installed selected-source exchange correlated that reply and preserved the native
+error in its actual ValueError/SelectedPiProbeUnknownError causal chain. It retired
+and joined the borrowed child through persistent.close; authentic identity
+4070385/b88222179 was directly absent afterward. Zero localhost POSTs, zero native
+inputs, no input proof and unchanged SDK journal. Original owner/fixture shutdown
+joined and closed its resources. One check PASS4.31 seconds; no failure/retry.
+The final raw-record check also filters ordinary nonresponse Pi events as the
+original exchange does; source compile/diffcheck passed without repeating native.
+
+Raw envelope, stdout and final result:
+`/home/ts/.cache/agent-scratch/mnr01/t/saved-native-owner0/selected-refusal.jsonl`,
+`/home/ts/.cache/agent-scratch/mnr01/check.log`, and `result.json`.
+Fresh journal/config/private wire remain retained there. No public owner/message,
+uncertain input replay, provider request, build, install, prefix mutation or pin
+change occurred. This qualifies the genuine installed refusal path; it neither
+recovers the original4fbfe raw envelope nor proves that historical refusal cause.
+
+
+## Active model selection: one native response owner (2026-10-07)
+
+The actual UI log `Agent_Comms_2026-10-07T16_51_09_782910.txt` reports
+`Model change timed out`. Native rpc-mode set_model checks its available model
+snapshot and authenticates the selected model; it has no busy prohibition.
+Those refusals remain meaningful and are not bypassed.
+
+ConfigOptions previously queued settings in the ACP follow-up inbox and owned
+another PendingRequests store. Selected execution owns that inbox for later
+prompts, never forwards it into TrackedTurnSession, and discards non-input rows
+on return. TrackedTurnSession also correlates replies without emitting the
+ordinary SettingChangeResult projection. Ordinary ACP uses TurnSession's live
+reader; selected execution uses the same inherited acquisition/correlation
+owners. The original PiRpcChannel already owns native request futures.
+
+TurnSession.acquire_native now publishes its live resource under the original
+turn task for both consumers, with removal on original resource retirement.
+PiCommand carries pending_response, shared with NativeQuery. ConfigOptions
+resolves the session's actual active turn resource and waits on that channel's
+original correlated reply. No second reader, inbox, configuration queue, cache,
+state mirror, command alias or timeout increase was added. ConfigOptions'
+second pending store, TurnProgress's result resolver, and PendingRequests'
+obsolete nominal-event resolver were deleted; their source controls migrated.
+A busy turn without an attested child refuses configuration explicitly.
+Native failure/cancellation is retained before any registry setting write.
+
+A genuinely different-model check found a second, independent ownership error:
+ordinary ACP's settling AgentInfo republishes native source. The existing
+RegistryPublicationCheck compared next-turn settings to the captured executing
+settings. Registration would then replace those captured settings on success.
+Publication now retains the admitted model/thinking/project. Fresh admission
+and idle selection still require current model/thinking equality; source
+publication still requires the original process/incarnation/admission/session
+and exact turn lease. It grants no new input. The canonical document keeps the
+new selection and only Registration's returned executing owner retains the
+original selection. Existing native proof/attestation and bootstrap are unchanged.
+
+Confirmed using original private ACP/session/SDK/HTTP owners with current Core
+source and immutable native4b, not a source-equal installed wheel:
+
+- Ordinary ACP: different model and thinking selection confirmed while its
+  original HTTP response was held; missing model returned native Model not found.
+  The original request kept model fixture; the document selected second; the
+  same child/lease remained active. After the publication correction this passed
+  in 4.44s (`mms01/check-publication.log`). Fixture shutdown retired the child.
+- Selected USER turn: the same genuine different-model and refusal checks passed
+  in 11.02s batch's selected member (`mms01/check-model-change.log`); that batch's
+  ordinary member exposed the preserved publication failure. Its captured
+  provider/model remained response-local/fixture. One authored localhost POST,
+  one native input per successful fixture; no public/configured-provider input.
+- Four real-store/correlation checks passed in 0.83s, including fresh-input
+  model mismatch refusal, captured model retention during source publication,
+  replaced owner/lease refusal, and channel family/request correlation.
+  Raw: `mms01/check-source-corrected.log`.
+
+Earlier helper mistakes (reversed ACP prompt operands, then auto-wake with runtime
+explicitly disabled) stopped before provider input. They remain in check.log and
+check-selected.log. Same-model preliminary passes are kept; neither is substituted
+for the different-model checks. The pre-correction publication failure and its
+private diagnostic remain held. No uncertain input was replayed.
+
+Existing refactor-audit Package parsed 324 src,381 tests,54 tools modules;
+current source compiled with zero omissions. Before/after 342 relevant declaration,
+resource/correlation/currentness sites: `mms01/owner-consumers.json`.
+Full private raw/config/journals are retained under
+`/home/ts/.cache/agent-scratch/mms01`.
+No build/install/public worker restart occurred. Parent must integrate and deliver
+this source before claiming the live model-picker failure repaired.

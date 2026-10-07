@@ -482,6 +482,17 @@ class TurnRunner:
         state = await Coordination.run_worker(partial(self.turn_state, session_id))
         return self.inputs.backend_inboxes.get(session_id) if state.accepts_followup else None
 
+    async def active_native_session(self, session_id: str) -> backend.TurnSession | None:
+        """Resolve the live child from this session's original turn task custody."""
+        busy = await Coordination.run_worker(partial(self.session_busy, session_id))
+        if not busy:
+            return None
+        turn = backend.TurnSession.active.get(self.turn_tasks.get(session_id))
+        if (turn is None or not turn.native.attestation.observed
+                or not turn.native.attestation.trustworthy):
+            raise RuntimeError("The active turn's native session is not ready for configuration")
+        return turn
+
     async def close_idle_backend(self, session_id: str) -> None:
         async with self.idle_backend(session_id) as persistent:
             if persistent is not None:
