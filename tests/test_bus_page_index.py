@@ -10,6 +10,7 @@ from agent_comms.comms import Comms
 from agent_comms.messages import Message, MessageType
 from agent_comms.threads import Thread
 from agent_comms.wire_metadata import ArchivedAccess
+from agent_comms.wire_log import OpenedWireSnapshot
 
 
 def retained_source(root, count):
@@ -33,14 +34,14 @@ def test_warm_incoming_cursor_reads_only_selected_wire_rows(tmp_path, monkeypatc
     bus = retained_source(tmp_path, 3000)
     assert bus.incoming_page("b", after=2700, limit=10).newest_seq == 2730
     decoded = 0
-    original = bus.log._public_page_records
+    original = OpenedWireSnapshot.public_page_records
 
     def count(record, size, metadata):
         nonlocal decoded
         decoded += 1
         return original(record, size, metadata)
 
-    monkeypatch.setattr(bus.log, "_public_page_records", count)
+    monkeypatch.setattr(OpenedWireSnapshot, "public_page_records", staticmethod(count))
     page = bus.incoming_page("b", after=2700, limit=10)
     assert [message.seq for message in page.messages] == list(range(2703, 2731, 3))
     assert page.has_older and page.has_newer
