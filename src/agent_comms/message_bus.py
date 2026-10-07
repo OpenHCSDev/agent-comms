@@ -27,9 +27,11 @@ if TYPE_CHECKING:
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .threads import Thread
+    from .presentation import DisplaySelection
+    from .catalog_store import CatalogDocument
 
 from .publisher import Publisher
-from .wire_log import WireLog
+from .wire_log import OpenedWireSnapshot, WireLog
 
 
 class MessageBus:
@@ -97,10 +99,12 @@ class MessageBus:
         self._view_unread_cache[viewer] = ViewUnread(revision, scopes, counts)
         return dict(counts)
 
-    def _activity_clocks(self):
+    def _activity_clocks(self, source: OpenedWireSnapshot | None = None):
         """The existing index borrows the original captured source after release."""
-        with self.log.projection_snapshot() as (_, revision, stream, _records):
-            return self._activity.snapshot(revision, stream, self._bus_activity_fields)
+        if source is not None:
+            return self._activity.snapshot(source.revision, source.stream, self._bus_activity_fields)
+        with self.log._opened_wire_snapshot(need_sequence=False) as opened:
+            return self._activity_clocks(opened)
 
     def channel_activity(self) -> Mapping[str, ChannelActivity]:
         """Aggregate clocks from the single existing append-aware source cache."""
@@ -119,14 +123,16 @@ class MessageBus:
                 message.membership is None and not message.notice,
             )
 
-    def _delivery_scope(self, name: str, snapshot: RegistrySnapshot | None = None) -> DeliveryScope:
+    def _delivery_scope(self, name: str, snapshot: RegistrySnapshot | None = None,
+                        *, catalog: CatalogDocument | None = None) -> DeliveryScope:
         snapshot = snapshot or self._registry.snapshot()
         canonical = snapshot.canonical_name(name)
         if canonical not in snapshot.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         thread = snapshot.threads[canonical]
         return DeliveryScope(
-            thread.name, snapshot.aliases, self._channels.read().targets_for(thread.tags)
+            thread.name, snapshot.aliases,
+            (self._channels.read() if catalog is None else catalog).targets_for(thread.tags)
         )
 
     def inbox(self, name: str, target: str | None = None) -> Sequence[Message]:
@@ -169,15 +175,8 @@ class MessageBus:
         catalog = self._channels.read()
         actors = {name: snapshot.canonical_name(name) for name in names}
         deliveries = {}
-        channel_members: dict[str, set[str]] = {}
         for actor in set(actors.values()):
-            if actor not in snapshot.threads:
-                raise UnregisteredThreadError(f"Thread {actor!r} is not registered.")
-            deliveries[actor] = DeliveryScope(
-                actor, snapshot.aliases, catalog.targets_for(snapshot.threads[actor].tags)
-            )
-            for target in deliveries[actor].channels:
-                channel_members.setdefault(target, set()).add(actor)
+            deliveries[actor] = self._delivery_scope(actor, snapshot, catalog=catalog)
         revision = tuple(
             file_revision(path)
             for path in (
@@ -199,6 +198,30 @@ class MessageBus:
             actor: self.reads.seen_sequences(actor, snapshot, document=document)
             for actor in deliveries
         }
+        with self.log._opened_wire_snapshot(need_sequence=False) as source:
+            counts = self._pending_counts(source, snapshot, deliveries, seen)
+        for name, actor in actors.items():
+            self._pending_cache[name] = PendingCounts(revision, deliveries[actor], counts[actor])
+        return {name: dict(counts[actor]) for name, actor in actors.items()}
+
+    def pending_counts_opened(self, source: OpenedWireSnapshot,
+                              selection: DisplaySelection) -> Mapping[str, int]:
+        """Keep delivery semantics, using the caller's original bus/identity/read cut."""
+        actor = selection.viewer
+        if actor is None:
+            raise ValueError("Delivery projection requires an acquired viewer")
+        delivery = self._delivery_scope(actor, selection.registry, catalog=selection.catalog)
+        return self._pending_counts(source, selection.registry, {actor: delivery},
+                                    {actor: selection.seen})[actor]
+
+    def _pending_counts(
+        self, source: OpenedWireSnapshot, snapshot: RegistrySnapshot,
+        deliveries: Mapping[str, DeliveryScope], seen: Mapping[str, frozenset[int]],
+    ) -> dict[str, dict[str, int]]:
+        channel_members: dict[str, set[str]] = {}
+        for actor, delivery in deliveries.items():
+            for target in delivery.channels:
+                channel_members.setdefault(target, set()).add(actor)
         counts: dict[str, dict[str, int]] = {actor: {} for actor in deliveries}
 
         def recipients(target: str):
@@ -211,52 +234,41 @@ class MessageBus:
                 counts[actor][conversation] = counts[actor].get(conversation, 0) + count
 
         indexed = False
-        with self.log.projection_snapshot() as (metadata, source, stream, records):
-            from functools import partial
+        from functools import partial
 
-            decode = partial(DeliveryMessage.from_wire, root_id=metadata.root_id)
-            try:
-                with BusRouteCounts(self.log.path) as index:
-                    if index.sync(stream, source, decode):
-                        requests = []
-                        for route in index.routes():
-                            for actor in recipients(route.target):
-                                since = deliveries[actor].minimum_timestamp(
-                                    route.sender, route.target, route.sender_lookup, snapshot
-                                )
-                                if since is not None:
-                                    requests.append(
-                                        PendingRoute(
-                                            actor,
-                                            route.target,
-                                            route.sender,
-                                            route.sender_lookup,
-                                            since,
-                                        )
-                                    )
-                        for row in index.unseen_counts(
-                            requests,
-                            [ActorSeen(actor, sequences) for actor, sequences in seen.items()],
-                        ):
-                            add(row.actor, row.sender, row.target, row.count)
-                        indexed = True
-            except (OSError, sqlite3.DatabaseError):
-                # A disposable index outage still uses exactly the same identity filter.
-                pass
-            if not indexed:
-                if stream is not None:
-                    stream.seek(0)
-                for item in (item for record in records for item in record.delivery_messages()):
-                    message = item.message
-                    for actor in recipients(message.target):
-                        if (
-                            deliveries[actor].current(item, snapshot)
-                            and message.seq not in seen[actor]
-                        ):
-                            add(actor, message.sender, message.target, 1)
-        for name, actor in actors.items():
-            self._pending_cache[name] = PendingCounts(revision, deliveries[actor], counts[actor])
-        return {name: dict(counts[actor]) for name, actor in actors.items()}
+        decode = partial(DeliveryMessage.from_wire, root_id=source.metadata.root_id)
+        try:
+            with BusRouteCounts(self.log.path) as index:
+                if index.sync(source.stream, source.revision, decode):
+                    requests = []
+                    for route in index.routes():
+                        for actor in recipients(route.target):
+                            since = deliveries[actor].minimum_timestamp(
+                                route.sender, route.target, route.sender_lookup, snapshot
+                            )
+                            if since is not None:
+                                requests.append(PendingRoute(
+                                    actor, route.target, route.sender, route.sender_lookup, since,
+                                ))
+                    for row in index.unseen_counts(
+                        requests,
+                        [ActorSeen(actor, sequences) for actor, sequences in seen.items()],
+                    ):
+                        add(row.actor, row.sender, row.target, row.count)
+                    indexed = True
+        except (OSError, sqlite3.DatabaseError):
+            # A disposable index outage still uses exactly the same identity filter.
+            pass
+        if not indexed:
+            if source.stream is not None:
+                source.stream.seek(0)
+            records = self.log._snapshot_records(source.metadata, source.stream, source.boundary)
+            for item in (item for record in records for item in record.delivery_messages()):
+                message = item.message
+                for actor in recipients(message.target):
+                    if deliveries[actor].current(item, snapshot) and message.seq not in seen[actor]:
+                        add(actor, message.sender, message.target, 1)
+        return counts
 
     def mark_delivered(self, name: str, target: str | None = None) -> int:
         """Mark unread messages delivered and return the count without retaining them."""
@@ -376,9 +388,9 @@ class MessageBus:
             scope, before=before, after=after, limit=limit, max_bytes=max_bytes
         ).read(self.log)
 
-    def last_sent_timestamps(self) -> Mapping[str, float]:
+    def last_sent_timestamps(self, *, source: OpenedWireSnapshot | None = None) -> Mapping[str, float]:
         """Reuse the same verified activity source; no second projection or body cache."""
-        _, sent = self._activity_clocks()
+        _, sent = self._activity_clocks(source)
         return dict(sent)
 
     def full_history_page(
