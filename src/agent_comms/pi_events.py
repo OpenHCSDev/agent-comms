@@ -743,6 +743,7 @@ class ToolExecutionEnd(PiEvent):
             ok=is_ok,
             output=self.result.text(),
             diff=NativeTool.for_name(name).result_diff(self.result, is_ok),
+            sent_message=self.result.sent_message(is_ok),
         )
 
 
