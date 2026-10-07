@@ -408,3 +408,16 @@ the selected Git/wheels. Its actual saved-session disclosure recording is
 `/home/ts/.cache/agent-scratch/dispatch-installed-20261006`; the original handle
 is followed through completion. No human input is submitted in that run.
 At this checkpoint the candidate has not been published as the default.
+
+The dispatch successor's one installed saved-session disclosure check completed
+exit0 in33.47 seconds. Both actual native disclosure clicks painted the expected
+expanded/collapsed roster. UI and terminal exited0 after Ctrl+Q; original source
+owner was unchanged; cleanup left no owned processes/errors. No message was
+submitted. Default publication through the original reviewed frontend owner
+completed in `dispatch-wheel/publication.json`; new UI launches select
+`runtime-dispatch`, while existing open clients and backend workers are unchanged.
+
+This is an affected behavior/delivery result, not a smoothness claim. The
+read-only run's77 native writer intervals had median43.05ms and p95502.9ms;
+stationary time and diagnostic captures are included. Those acknowledgments
+are not monitor frame times or proof of a busy-agent latency improvement.
