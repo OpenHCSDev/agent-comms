@@ -5,6 +5,13 @@ umask 077
 # Preparation runs Node only for version/syntax checks, never ambient preloads.
 unset NODE_OPTIONS NODE_PATH NODE_COMPILE_CACHE
 export NODE_DISABLE_COMPILE_CACHE=1
+update_pins=false
+if [[ $# -eq 1 && "$1" == --update-pins ]]; then
+    update_pins=true
+elif [[ $# -ne 0 ]]; then
+    printf 'Usage: prepare-pi-native [--update-pins]\n' >&2
+    exit 1
+fi
 
 stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 repo_root=$(cd -- "$stack_root/.." && pwd)
@@ -20,7 +27,7 @@ verify() (
         python3 "$repo_root/src/agent_comms/native_package.py" "$PWD"
 )
 
-if [[ -e "$target" ]]; then
+if [[ "$update_pins" == false && -e "$target" ]]; then
     if verify "$target"; then
         printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
         exit 0
@@ -100,6 +107,11 @@ python3 "$stack_root/prepare-native-import-boundary.py" \
     ${PI_MCP_DEPENDENCY_PACKAGE:+"$PI_MCP_DEPENDENCY_PACKAGE"}
 python3 "$repo_root/src/agent_comms/native_package.py" --share-resources \
     "$stage/node_modules/@earendil-works/pi-coding-agent" "$stack_root"
+if [[ "$update_pins" == true ]]; then
+    python3 "$repo_root/src/agent_comms/native_package.py" --write-manifest "$native_package"
+    build_id=$(sha256sum "$manifest" | cut -c1-16)
+    target="$stack_root/.pi-native-$build_id"
+fi
 verify "$stage"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
@@ -107,5 +119,10 @@ node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$compaction"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$session"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$services"
+if [[ -e "$target" ]]; then
+    verify "$target"
+    printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
+    exit 0
+fi
 mv -- "$stage" "$target"
 printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"

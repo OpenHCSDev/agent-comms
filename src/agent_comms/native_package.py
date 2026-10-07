@@ -16,6 +16,7 @@ import json
 import os
 import stat
 import sys
+import tempfile
 from pathlib import Path
 
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
@@ -176,6 +177,35 @@ def share_native_resources(root: Path, deployments: Path) -> dict[str, int]:
     return {"shared_files": shared_files, "shared_content_bytes": shared_bytes}
 
 
+def write_native_manifest(root: Path) -> None:
+    """Commit an assembled package through the existing diagnostic/tree format.
+
+    Preparation owns this new, sealed package. This does not update an existing
+    deployment or derive a runtime admission from its old commitment.
+    """
+    tree = package_tree_digest(root)
+    lines = []
+    for line in MANIFEST.read_text().splitlines():
+        if line.startswith(TREE_PREFIX):
+            lines.append(TREE_PREFIX + tree)
+        elif line and not line.startswith("#"):
+            _, path = line.split("  ", 1)
+            lines.append(hashlib.sha256((root / path).read_bytes()).hexdigest() + "  " + path)
+        else:
+            lines.append(line)
+    with tempfile.NamedTemporaryFile(dir=MANIFEST.parent, prefix=".pi-native-pin-",
+                                     delete=False) as stream:
+        replacement = Path(stream.name)
+        try:
+            stream.write(("\n".join(lines) + "\n").encode())
+            stream.flush()
+            os.fsync(stream.fileno())
+            os.chmod(replacement, stat.S_IMODE(MANIFEST.stat().st_mode))
+            os.replace(replacement, MANIFEST)
+        finally:
+            replacement.unlink(missing_ok=True)
+
+
 def verify_native_package(root: Path) -> None:
     """Verify the entire copied package against the repository-owned commitment."""
     pins = [
@@ -194,7 +224,9 @@ if __name__ == "__main__":
         print(json.dumps(share_native_resources(Path(sys.argv[2]), Path(sys.argv[3]))), file=sys.stderr)
     elif len(sys.argv) == 3 and sys.argv[1] == "--digest":
         print(package_tree_digest(Path(sys.argv[2])))
+    elif len(sys.argv) == 3 and sys.argv[1] == "--write-manifest":
+        write_native_manifest(Path(sys.argv[2]))
     elif len(sys.argv) == 2:
         verify_native_package(Path(sys.argv[1]))
     else:
-        raise SystemExit("Usage: native_package.py [--digest] PACKAGE_DIR | --share-resources NEW_PACKAGE DEPLOYMENTS")
+        raise SystemExit("Usage: native_package.py [--digest|--write-manifest] PACKAGE_DIR | --share-resources NEW_PACKAGE DEPLOYMENTS")
