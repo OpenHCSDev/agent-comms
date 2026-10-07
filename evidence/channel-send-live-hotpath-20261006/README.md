@@ -57,10 +57,33 @@ small comparison scripts/results are under
   binding-hook callers were absent. Dynamic third-party command extensions
   are not claimed verified.
 
-These Core changes are implemented and checked, **not installed/live yet**.
-The current frontend-only publisher deliberately requires unchanged imported
-Core bytes. Delivery must use the actual reviewed publication/recovery owner;
-do not silently relax that check or edit a PUBLIC installation. The earlier
-real UI profile is the baseline; an affected installed UI check is still due.
-The independently reported compaction error is not identified or diagnosed
-by these findings.
+## Installed result
+
+The second actual native UI recording is retained at
+`/home/ts/.cache/agent-scratch/channel-send-installed-check-20261006`.
+It sent a different new human message once and exercised both disclosure
+directions. Its source owner remained unchanged; capture and cleanup completed.
+The message painted, but the UI still used about 84% of a core during the send
+phase and about 92–94% during disclosure. **Whole send/disclosure latency is
+not fixed by these component changes.** The remaining real stacks show
+`viewer_snapshot -> display_view_metrics -> BusDisplayIndex.snapshot ->
+DisplayMetricScope.observe_wire` decoding silent manifests, plus metric
+projection encoding. That separate owner repair is with Heis.
+
+The default `toad` link now selects the verified same-format client build,
+including the sidebar session-update correction. The existing publisher gained
+a concrete reviewed Core-client member: it changes the UI's imported supply,
+not the running backend processes, commands, native package or active route.
+All original class fields, bases and decorators in the four changed Core
+modules match the running Core. All953 installed assets/full69 dependencies
+match the selected Git/wheels. The final standalone channel resource correction
+passed its two affected original controls; human reader/publisher bytes match
+the physically exercised build. Publication is retained in
+`.artifacts/sidebar-live-candidate-20261006/client-hotpath-final-wheel/publication.json`.
+A default-entrypoint saved-history check is in progress; this is not a claim
+of smooth scrolling or improved whole-frame latency.
+
+The screenshot identifies the independent compaction failure on
+`openhcs-pr159-viewer-bind-owner` as `CompactionJournalError`. Mendel has that
+actual thread and evidence. No failed compaction or user input was retried;
+this client change claims no compaction repair.
