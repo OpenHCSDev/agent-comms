@@ -177,10 +177,7 @@ class TargetAction:
 
     @property
     def editable_fields(self) -> tuple[TargetField, ...]:
-        command = self.bound[0]
-        hints = get_type_hints(type(command))
-        return tuple(TargetField(item, hints[item.name], getattr(command, item.name))
-                     for item in fields(command) if not item.metadata['target_bound'])
+        return self.bound[0].editable_fields
 
     @property
     def label(self) -> str:
@@ -406,6 +403,13 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
 
     def for_editor(self, comms: Comms, target: str, project: str) -> Self:
         return self
+
+    @property
+    def editable_fields(self) -> tuple[TargetField, ...]:
+        """The command owns the parameters offered by its target action."""
+        hints = get_type_hints(type(self))
+        return tuple(TargetField(item, hints[item.name], getattr(self, item.name))
+                     for item in fields(self) if not item.metadata['target_bound'])
 
     def describe(self, comms: Comms, target: str, project: str) -> TargetAction:
         bound = self.for_editor(comms, target, project)
@@ -1078,7 +1082,7 @@ class StopCliCommand(CliCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class RestartCliCommand(CliCommand):
-    help = "Restart idle running owners to reload backend code"
+    help = "Restart process"
     name: str | None = option(
         "--name", help="One running thread (aliases supported)", group="scope", default=None,
         target_bound=True,
@@ -1097,6 +1101,12 @@ class RestartCliCommand(CliCommand):
         default=None,
         normalize=_shell_words,
     )
+
+    @property
+    def editable_fields(self) -> tuple[TargetField, ...]:
+        # A selected thread restart retains its existing launch declaration.
+        # Explicit CLI launch overrides are independent operator arguments.
+        return ()
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):

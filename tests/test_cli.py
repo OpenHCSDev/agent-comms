@@ -269,7 +269,13 @@ class TestSelectedTargetActions:
             comms, 'alpha', project=str(tmp_path))
             if action.declaration is RestartCliCommand)
         assert action.bound == (RestartCliCommand(name='alpha'),)
-        assert not {'name', 'all_'} & {field.name for field in action.editable_fields}
+        assert action.editable_fields == ()
+        assert action.encode()['parameters']['properties'] == {}
+        assert action.edited({}).bound == action.bound
+        explicit = RestartCliCommand(name='alpha', agent_bin='/operator/native',
+                                     agent_args=['--no-extensions'])
+        assert explicit.agent_bin == '/operator/native'
+        assert explicit.agent_args == ['--no-extensions']
         with pytest.raises(ValueError, match='cannot be overridden'):
             action.bound[0].edited({'all': True})
         assert StopCliCommand.help == 'Stop process'
