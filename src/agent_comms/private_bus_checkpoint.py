@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
     from .wire_log import WireLog
     from .messages import Message
+    from .message_reference import MessageReference
     from .coordination_tables.publications import PublicationIntents
     from .turn_context import ContextManifest
     from .retained_task_facts import ExactTaskFact
@@ -135,12 +136,13 @@ class CertifiedSourceRead:
         self.require_open_prefix()
         return self.witness.through_seq
 
-    def public_messages(self) -> Iterator[Message]:
-        """Decode public messages from this already certified complete prefix.
+    def public_message_references(self) -> Iterator[tuple[str, MessageReference]]:
+        """Read original sender/identity from the certified complete prefix.
 
         Certification has validated private envelopes, keys and the entire
         original stream. Public consumers borrow that result rather than
-        reconstructing every recipient's delivery policy a second time.
+        reconstructing message bodies/tasks or delivery policies a second time.
+        Retained public rows remain present even when they have no SQL pointer.
         """
         from .store_files import _iter_jsonl_stream
         from .wire_record import WireRecord
@@ -148,7 +150,7 @@ class CertifiedSourceRead:
         self.require_open_prefix()
         self.stream.seek(0)
         for row, _ in _iter_jsonl_stream(self.stream, boundary=self.witness.offset):
-            yield from WireRecord.certified_public_messages(row)
+            yield from WireRecord.certified_public_references(row)
         self.require_open_prefix()
 
     def capture_sources(self, rows: tuple[WireSourcePointer[OriginalSource], ...]) -> Iterator[OriginalSource]:
