@@ -1,0 +1,44 @@
+{
+  "boundary": "original RegistryStore._decode including JSON parsing; cache-miss document path",
+  "original_revision": "414a5f094",
+  "payload_sha256": "6b3032d9ecafc7f33fcd6598ed178793ebbf2798a1cceed997aaa42a812f8e99",
+  "payload_bytes": 285219,
+  "threads": 124,
+  "results": {
+    "original": {
+      "median_seconds": 0.025088973296806216,
+      "round_seconds": [
+        0.025177623896161093,
+        0.025088973296806216,
+        0.02333387004910037,
+        0.022639087546849623,
+        0.02548965910100378,
+        0.021745728451060133,
+        0.029319690499687568
+      ],
+      "profile_calls": {
+        "get_origin": 12536,
+        "get_args": 6268,
+        "is_dataclass": 4602
+      }
+    },
+    "changed": {
+      "median_seconds": 0.02062042155303061,
+      "round_seconds": [
+        0.02062042155303061,
+        0.01963465620065108,
+        0.025298381398897618,
+        0.020677099050953985,
+        0.019484424346592276,
+        0.020974633196601644,
+        0.019018342497292905
+      ],
+      "profile_calls": {
+        "get_origin": 8730,
+        "get_args": 2462,
+        "is_dataclass": 796
+      }
+    }
+  },
+  "scope": "same readonly canonical cut; no cache-hit/live UI latency claim"
+}
