@@ -515,3 +515,26 @@ or full smoothness claim follows. Parent reviewed actual right-sidebar footage
 stills. Mendel owns scoped manifest/source acquisition; Heis separately owns
 shared sidebar acquisition. Existing panels are retained, so adding another
 panel cache would address the wrong source relationship.
+
+## Shared channel participant acquisition delivered
+
+ChannelConversation.update_roster now borrows CoordinationAccess.read_sidebar
+with its original composer filters (stopped included, archived excluded). Both
+participants and mentions derive from that acquired canonical snapshot instead
+of acquiring coordination again for each channel page. Filter/currentness and
+replacement semantics remain with CoordinationAccess; no additional cache.
+Toad dadc805ead integrates the reviewed contributor change. The real private App
+check held one acquisition across eight consumer requests and checked active-turn
+filtering and replacement; evidence: `/home/ts/.cache/agent-scratch/hroster01`.
+
+One actual installed saved-channel journey painted saved messages, expanded and
+collapsed the channel tree, and exited cleanly in32.997s with zero submitted
+inputs. Original source stayed unchanged; cleanup had no remaining owned process
+or error. Evidence: `/home/ts/.cache/agent-scratch/channel-roster-installed-20261007`.
+All953 assets/full69 matched. The original frontend publisher selected
+runtime-channel-roster as the default, confirmed by the live launcher link;
+publication is channel-roster-wheel/publication.json under the existing candidate
+root. Existing clients and backend workers were not restarted. This confirms the
+affected installed channel path, not a matched latency improvement or smooth
+context-tree/burst behavior. Heis owns remaining row/history preparation;
+Mendel owns scoped context acquisition.
