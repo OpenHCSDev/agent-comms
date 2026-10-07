@@ -125,6 +125,22 @@ class CertifiedSourceRead:
         self.require_open_prefix()
         return self.witness.through_seq
 
+    def public_messages(self) -> Iterator[Message]:
+        """Decode public messages from this already certified complete prefix.
+
+        Certification has validated private envelopes, keys and the entire
+        original stream. Public consumers borrow that result rather than
+        reconstructing every recipient's delivery policy a second time.
+        """
+        from .store_files import _iter_jsonl_stream
+        from .wire_record import WireRecord
+
+        self.require_open_prefix()
+        self.stream.seek(0)
+        for row, _ in _iter_jsonl_stream(self.stream, boundary=self.witness.offset):
+            yield from WireRecord.certified_public_messages(row)
+        self.require_open_prefix()
+
     def capture_sources(self, rows: tuple[WireSourcePointer[OriginalSource], ...]) -> Iterator[OriginalSource]:
         """Lend bounded original bytes, not this lock/connection, to decoding.
 
