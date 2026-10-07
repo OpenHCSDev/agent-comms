@@ -21,6 +21,63 @@ from agent_comms.selected_pi_route import (
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
+async def test_installed_selected_preparation_refusal_without_provider_input(
+    native_backend, monkeypatch,
+):
+    """The real committed command refuses mismatched settings before preparation."""
+    from dataclasses import replace
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.pi_events import Response
+    from agent_comms.pi_rpc import PiRpcChannel
+
+    native = native_backend
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    async with native.open_owner() as (agent, session_id):
+        persistent = agent.turns.persistent_backends[session_id]
+        retained = persistent.custody.idle()
+        child = retained.child.proc
+        model = retained.child.attestation.state.model
+        selected = SelectedModel(model.provider, model.id, model.context_window)
+        decision = await observe_selected_compaction_decision(
+            persistent, session_file=str(native.session), expected_package=package,
+            selected=selected,
+        )
+        settings = decision.summary_settings()
+        mismatched = replace(settings, reserve_tokens=0 if settings.reserve_tokens else 1)
+        original = native.session.read_bytes()
+        raw_path = native.project.parent / "selected-refusal.jsonl"
+        read = retained.child.reader.readline
+
+        async def record_receipt(**options):
+            raw = await read(**options)
+            with raw_path.open("ab") as output:
+                output.write(raw)
+            return raw
+
+        monkeypatch.setattr(retained.child.reader, "readline", record_receipt)
+        with pytest.raises(SelectedPiProbeUnknownError) as refused:
+            await prepare_selected_native_source(
+                persistent, session_file=str(native.session), expected_package=package,
+                selected=selected, settings=mismatched,
+            )
+        reason = "Native request did not succeed: Selected preparation settings changed"
+        assert isinstance(refused.value.__cause__, ValueError)
+        assert str(refused.value.__cause__) == reason
+        replies = [PiRpcChannel.decode_record(raw, strict=True)
+                   for raw in raw_path.read_bytes().splitlines(keepends=True)]
+        response = next(reply for reply in replies
+                        if isinstance(reply, Response)
+                        and reply.command.declared_name == "agent_comms_prepare_compaction")
+        assert response.success is False and response.error == "Selected preparation settings changed"
+        assert not child.alive() and not persistent.available
+        assert native.session.read_bytes() == original
+        assert native.provider.posts == 0 and native.saved_inputs() == []
+        print(json.dumps({"raw_receipt": str(raw_path), "reason": reason,
+            "child": FieldCodec.encode(child.identity), "child_retired": True,
+            "localhost_posts": native.provider.posts, "native_inputs": 0,
+            "journal_unchanged": True}), flush=True)
+
+
 async def test_actual_selected_preparation_uses_owned_store_and_preserves_source(
     native_backend, monkeypatch,
 ):
