@@ -761,3 +761,50 @@ folder mode0755 before publication; corrected to required0700 through original
 path owner, no App repeat. Default contains production5a4661e83; later recorder
 commits do not alter wheel production. Original evidence append command was
 refused before execution by hook shell-quotation parsing; no duplicate append.
+
+
+## Relationship and session identity acquisition, October 7
+
+Parent b50e80f36 binds WireRelationshipSource from the existing observed service
+without a fresh UI RouteSelection capture. If no observed service exists, its
+original background revision/snapshot acquisition opens the bound root; the
+original read lifetime and identity generation still own publication. Navigation
+still uses its original fresh route check. Existing mounted hidden-panel source
+preparation/retained row check passed1/5.29s. Refactor-audit parsed288 production
+modules with zero omissions; both changed modules compile. Log:
+/home/ts/.cache/agent-scratch/relationship-route-worker-source-20261007/test.log.
+
+Heis6d27dffd1 integrated as Parent b115813b8. MainScreen projects its original
+published session identity instead of reacquiring root/registry on every name
+read. Fresh resolution remains explicit at cold unbound mount and launch
+admission. The local-session list is a DM candidate acquisition, not a per-frame
+refresh; no invented frequency or per-frame win. Actual private mounted App
+verified100 projections/zero UI root reads, real managed rename applied after
+original CoordinationChangedUpdate, exact bound resolution and replacement-root
+refusal. Evidence /home/ts/.cache/agent-scratch/session-identity-projection-20261007.
+
+Native88 Ready8b7ee466d merged22f65423d. Production6ab7e324 changes only original
+Widget.is_container predicate order: existing NodeList membership before layout
+style resolution. Real source App568 widgets/equal relative-height answers/
+unchanged geometry/empty stderr and64 affected native checks passed. Timing
+variation overlaps, so this is not a reliable latency improvement. Recursive
+height traversal remains assigned to Arendt; no speculative dependency cache.
+
+Combined installed runtime-relationship-identity assets953/full69/origins matched.
+One installed no-input sidebar_panels physical App completed0/45.178s, original
+source retained, cleanup remaining/errors empty. Right panel opened/scrolled/
+hid/restored; same original ThreadCommsSidebar140667103502224 and
+SessionThreadSidebar140668080809232 visible in opening and restored captures.
+Original screenshot paint inspected. Raw:
+/home/ts/.cache/agent-scratch/relationship-identity-installed-20261007.
+ReviewedFrontendCohort publication session34531 completed0; default toad points
+to runtime-relationship-identity for new launches, backend workers unchanged.
+No provider request/submitted message or repeated accepted MCP/guard.
+
+One intermediate runtime-relationship-bind was prepared before the completed
+identity handoff arrived. It was never published/App-launched. Its source proof,
+native wheel and raw remain retained; the final candidate uses that native wheel.
+Attempt to verify disposal of only the unlaunched223MiB runtime stopped on a
+permission-denied proc environment before deletion. Existing cleanup owner was
+given the exact dependency and actual current/pending runtimes for privileged
+borrower check; no cleanup success is claimed yet. No worktree was added.
