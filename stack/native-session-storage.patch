@@ -1849,7 +1849,7 @@
 +        return { text: textContent, usage: response.usage };
 +    }, signal);
 +}
-+export function prepareCompaction(store, settings, model, leafId=store.lastId, retainedText="") {
++export function prepareCompaction(store, settings, model, leafId=store.lastId, retainedText="", session) {
 +    const last=store.metadata(leafId);
 +    if(!last || last.type==='compaction')return undefined;
 +    const previous=store.latest(leafId,'compaction');
@@ -1868,7 +1868,7 @@
 +    const {readFiles,modifiedFiles}=computeFileLists(fileOps);
 +    const annotations=formatFileOperations(readFiles,modifiedFiles);
 +    const required=createCompactionSummaryMessage(`${retainedText}\n\n${annotations}`,tokensBefore,Date.now());
-+    policy.requireContext([required],model,settings.reserveTokens);
++    policy.requireContext([required],model,settings.reserveTokens,session);
 +    let accumulated=0, cut;
 +    const retained=[];
 +    for(const meta of store.ancestors(leafId)) {
@@ -1877,7 +1877,7 @@
 +        const messages=sessionEntryToContextMessages(entry);
 +        if(meta.type!=='compaction') {
 +            retained.unshift(...messages);
-+            if(!policy.retainedFits(required,retained,model,settings.reserveTokens))break;
++            if(!policy.retainedFits(required,retained,model,settings.reserveTokens,session))break;
 +            if(messages.some(isCutPointMessage))cut=meta;
 +        }
 +        accumulated+=messages.reduce((sum,message)=>sum+estimateTokens(message),0);
@@ -1910,7 +1910,8 @@
  // Main compaction function
 @@ -608,31 +569,53 @@
   */
- export async function compact(preparation, model, apiKey, headers, customInstructions, signal, thinkingLevel, streamFn, env, retry, callbacks, sessionId) {
+-export async function compact(preparation, model, apiKey, headers, customInstructions, signal, thinkingLevel, streamFn, env, retry, callbacks, sessionId) {
++export async function compact(preparation, model, apiKey, headers, customInstructions, signal, thinkingLevel, streamFn, env, retry, callbacks, sessionId, session) {
 -    const { firstKeptEntryId, messagesToSummarize, turnPrefixMessages, isSplitTurn, tokensBefore, previousSummary, fileOps, settings, } = preparation;
 +    const { firstKeptEntryId, messagesToSummarize, turnPrefixMessages, isSplitTurn, tokensBefore, previousSummary, fileOps, settings, retainedText, } = preparation;
 -    // Generate summaries and merge into one
@@ -1939,7 +1940,7 @@
 +    const { readFiles, modifiedFiles } = computeFileLists(fileOps);
 +    const annotations = formatFileOperations(readFiles, modifiedFiles);
 +    contextPolicy.packSummary(retainedText, "", annotations, tokensBefore, preparation.retainedMessages,
-+        model, settings.reserveTokens, createCompactionSummaryMessage);
++        model, settings.reserveTokens, createCompactionSummaryMessage, session);
 +    customInstructions=[customInstructions,
 +        'File annotations are supplied separately; preserve relevant paths in the structured summary without duplicating the cumulative file ledger.']
 +        .filter(Boolean).join('\n\n');
@@ -1976,13 +1977,13 @@
 -    const { readFiles, modifiedFiles } = computeFileLists(fileOps);
 -    summary += formatFileOperations(readFiles, modifiedFiles);
 +    summary = contextPolicy.packSummary(retainedText, summary, annotations,
-+        tokensBefore, preparation.retainedMessages, model, settings.reserveTokens, createCompactionSummaryMessage);
++        tokensBefore, preparation.retainedMessages, model, settings.reserveTokens, createCompactionSummaryMessage, session);
 +    // This is the exact representation SessionContext.restore admits, including
 +    // JSON escaping, summary envelope and the complete file annotations.
 +    const synthesized=createCompactionSummaryMessage(summary,tokensBefore,Date.now());
 +    const policy=CompactionPolicy.fromEnvironment(env);
 +    function* committedContext() {yield synthesized;yield* preparation.retainedMessages;}
-+    policy.requireContext(committedContext(),model,settings.reserveTokens);
++    policy.requireContext(committedContext(),model,settings.reserveTokens,session);
      if (!firstKeptEntryId) {
          throw new Error("First kept entry has no UUID - session may need migration");
      }
@@ -2083,6 +2084,11 @@
          const expandPromptTemplates = options?.expandPromptTemplates ?? true;
          const preflightResult = options?.preflightResult;
          let messages;
+@@ -1802,3 +1806,3 @@
+-        return compact(preparation, requestModel, apiKey, headers, customInstructions, signal, "low", this.agent.streamFunction, env, { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } }, callbacks, undefined);
++        return compact(preparation, requestModel, apiKey, headers, customInstructions, signal, "low", this.agent.streamFunction, env, { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } }, callbacks, undefined, this);
+     }
+     _clearManualCompactionState() {
 @@ -1856,3 +1860,33 @@
      }
 +    get isIdleForCompaction() {
@@ -2125,7 +2131,7 @@
 +            const pathEntries = this.sessionManager.entryStore.branch(this.sessionManager.getLeafId());
              const settings = this.settingsManager.getCompactionSettings();
 -            const preparation = prepareCompaction(pathEntries, settings);
-+            const preparation = prepareCompaction(this.sessionManager.entryStore, settings, this.model, this.sessionManager.getLeafId());
++            const preparation = prepareCompaction(this.sessionManager.entryStore, settings, this.model, this.sessionManager.getLeafId(), "", this);
              if (!preparation) {
                  // Check why we can't compact
 -                const lastEntry = pathEntries[pathEntries.length - 1];
@@ -2170,7 +2176,7 @@
 -            const pathEntries = this.sessionManager.getBranch();
 -            const preparation = prepareCompaction(pathEntries, settings);
 +            const pathEntries = this.sessionManager.entryStore.branch(this.sessionManager.getLeafId());
-+            const preparation = prepareCompaction(this.sessionManager.entryStore, settings, this.model, this.sessionManager.getLeafId());
++            const preparation = prepareCompaction(this.sessionManager.entryStore, settings, this.model, this.sessionManager.getLeafId(), "", this);
              if (!preparation) {
                  return false;
              }
@@ -2520,10 +2526,13 @@
 +    retainedText: string;
  }
 -export declare function prepareCompaction(pathEntries: SessionEntry[], settings: CompactionSettings): CompactionPreparation | undefined;
-+export declare function prepareCompaction(store: EntryStore, settings: CompactionSettings, model: Pick<Model<any>, 'contextWindow'>, leafId?: string | null, retainedText?: string): CompactionPreparation | undefined;
++export declare function prepareCompaction(store: EntryStore, settings: CompactionSettings, model: Pick<Model<any>, 'contextWindow'>, leafId?: string | null, retainedText?: string, session?: import("../agent-session.js").AgentSession): CompactionPreparation | undefined;
  /**
   * Generate summaries for compaction using prepared data.
   * Returns CompactionResult - SessionManager adds uuid/parentUuid when saving.
+@@ -145,1 +117,1 @@
+-export declare function compact(preparation: CompactionPreparation, model: Model<any>, apiKey: string | undefined, headers?: Record<string, string>, customInstructions?: string, signal?: AbortSignal, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string): Promise<CompactionResult>;
++export declare function compact(preparation: CompactionPreparation, model: Model<any>, apiKey: string | undefined, headers?: Record<string, string>, customInstructions?: string, signal?: AbortSignal, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string, session?: import("../agent-session.js").AgentSession): Promise<CompactionResult>;
 --- a/dist/core/export-html/index.js
 +++ b/dist/core/export-html/index.js
 @@ -1,4 +1,4 @@

@@ -7,13 +7,13 @@ captured read; the wire, registry and input document remain the only authorities
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, projected
 from .goals import Goal
 from .input_attempt import StoredInput
 from .messages import Message
@@ -50,6 +50,10 @@ class ExactTaskFact(DeclaredFamily, affix="TaskFact"):
 
     def for_owner(self, owner: Thread, registry: RegistrySnapshot) -> ExactTaskFact:
         return self
+
+    def compaction_record(self):
+        """Required task wording, distinct from original delivery evidence."""
+        return FieldCodec.encode(self)
 
 
 @dataclass(frozen=True)
@@ -191,7 +195,32 @@ class GoalTaskFact(ExactTaskFact):
 
 @dataclass(frozen=True)
 class InputTaskFact(ExactTaskFact):
-    source: StoredInput
+    source: StoredInput = field(metadata={"compaction_exclude": True})
+
+    @projected(view="compaction", name="original")
+    def original(self):
+        return FieldCodec.encode(self.source.context_provenance())
+
+    @projected(view="compaction", name="kind")
+    def compaction_kind(self):
+        return self.declared_name
+
+    @projected(view="compaction", name="content_digest")
+    def content_digest(self):
+        return self.source.digest
+
+    @projected(view="compaction", name="disposition")
+    def disposition(self):
+        return self.source.public_status
+
+    def compaction_record(self):
+        """Keep delivery identity without making its rendered prompt mandatory.
+
+        Native history supplies delivered conversation to the summarizer. The
+        complete frozen row stays in the journal and all admission/coverage
+        checks; this one-way context view never supplies original input text.
+        """
+        return FieldCodec.project(self, "compaction")
 
     def input_sources(self) -> tuple[StoredInput, ...]:
         return (self.source,)
@@ -218,6 +247,11 @@ class HumanInputTaskFact(InputTaskFact, declared_name="historical_human_input"):
 
     def __post_init__(self):
         self.source.origin.require_human()
+
+    def compaction_record(self):
+        # Historical scope does not revoke the human's original instructions.
+        # Pins also resolve their exact wording from these unchanged originals.
+        return FieldCodec.encode(self)
 
     def for_owner(self, owner, registry):
         if self.source.origin.require_human().applies(owner, registry):
@@ -381,6 +415,23 @@ class RetainedTaskFacts:
             + "\n</exact-task-source>"
         )
 
+    @property
+    def compaction_text(self) -> str:
+        """Native mandatory context; the full source remains journal evidence.
+
+        Every human source, declared task, goal and native artifact remains
+        exact. Neutral delivery rows retain provenance, content witness and
+        disposition rather than copying prior rendered conversation into each
+        result. This projection neither changes source membership nor admits
+        an input; native policy still allocates and validates the whole result.
+        """
+        return (
+            "<exact-task-source>\n"
+            + json.dumps({"facts": [fact.compaction_record() for fact in self.facts]},
+                         ensure_ascii=False, sort_keys=True)
+            + "\n</exact-task-source>"
+        )
+
     def require_summary(self, summary: str) -> None:
-        if not summary.startswith(self.text + "\n\n"):
+        if not summary.startswith(self.compaction_text + "\n\n"):
             raise RelationViolationError("Native summary omitted its exact task source")

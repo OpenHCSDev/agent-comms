@@ -433,7 +433,7 @@ def selected_request():
         witness=NativeWitness("session", "/saved.jsonl", "leaf", "kept", "1:2:3:4:5"),
         selected=SelectedModel("fixture", "fixture", 32768),
         settings=PiCompactionSettings(2048, 1024),
-        retained_text=RetainedTaskFacts(()).text,
+        retained_text=RetainedTaskFacts(()).compaction_text,
     )
 
 

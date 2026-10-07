@@ -67,7 +67,7 @@ function acSelectedCompactionPreparation(command, session, conflict) {
     const manager = session.sessionManager;
     const revision = manager.entryStore.revision;
     const prepared = prepareCompaction(manager.entryStore, settings, session.model,
-        manager.getLeafId(), command.retainedText);
+        manager.getLeafId(), command.retainedText, session);
     const preparation = prepared ? {status: "ready",
         witness: manager.captureCompactionWitness(prepared.firstKeptEntryId),
         tokensBefore: prepared.tokensBefore, isSplitTurn: prepared.isSplitTurn}
@@ -211,7 +211,7 @@ function acAdmitSummary(request, session, conflict, spent, host) {
         return { denial: "source_mismatch" };
     if (!acSummaryCompatible(session)) return { denial: "extension_unsupported" };
     let preparation;
-    try { preparation = prepareCompaction(manager.entryStore, settings, model, manager.getLeafId(), request.retainedText); }
+    try { preparation = prepareCompaction(manager.entryStore, settings, model, manager.getLeafId(), request.retainedText, session); }
     catch { return { denial: "unsupported" }; }
     if (!preparation || preparation.firstKeptEntryId !== request.witness.firstKeptEntryId)
         return { denial: "source_mismatch" };
@@ -363,7 +363,7 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
               },
               onSummaryProgress: source => progress("", source),
               onSummaryStart: source => progress("", source),
-              onSummaryResponse: (_usage, source) => progress("", source) }, undefined);
+              onSummaryResponse: (_usage, source) => progress("", source) }, undefined, session);
         await Promise.allSettled([...inFlight]);
         if (slot.controller.signal.aborted ||
             !acSummaryCurrent(session, request, binding) || !acSummaryValidResult(result, request))

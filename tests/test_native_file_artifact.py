@@ -94,7 +94,7 @@ def test_original_file_operation_survives_later_file_change_and_branch_cut(comms
     assert all(fact.source.path == str(saved) for fact in facts)
     assert all(fact.artifact.digest == TextDigest.of(text) for fact in facts)
     assert FieldCodec.decode(RetainedTaskFacts,FieldCodec.encode(source.retained)) == source.retained
-    source.retained.require_summary(source.retained.text+'\n\nNarrative')
+    source.retained.require_summary(source.retained.compaction_text+'\n\nNarrative')
     assert saved.read_bytes() == original_native
     # The same metadata without an original call cannot fabricate a proved pair.
     orphan = NativeEntry.from_evidence(result('orphan','user'))

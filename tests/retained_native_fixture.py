@@ -77,7 +77,7 @@ class RecordedSummaryAssembly:
                            witness=NativeIntent.read(operation).witness,
                            selected=attempt.request.selected,
                            settings=attempt.request.settings,
-                           retained_text=attempt.request.retained.text)
+                           retained_text=attempt.request.retained.compaction_text)
         if self.request != expected:
             raise ValueError("Summary assembly belongs to another original selected source")
 
@@ -1041,7 +1041,7 @@ class RecordedNativeProbe:
         # Encode the exact envelope as a JSON string because measured native
         # segments contain original provider JSON. This is byte presence, not
         # recall credit, semantic interpretation or final HTTP-body evidence.
-        envelope = json.dumps(retained.text, ensure_ascii=False)[1:-1]
+        envelope = json.dumps(retained.compaction_text, ensure_ascii=False)[1:-1]
         present = any(envelope in text for text in texts)
         binding = publications
         if publications["evaluated"]:

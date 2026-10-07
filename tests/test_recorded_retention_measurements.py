@@ -1940,8 +1940,8 @@ class RecordedMeasurementTests(unittest.TestCase):
                                         request, ReservedSummary())
         original_publications = checkpoint.scoped_facts(attempt)['retained_publications']
         context = NativeContextRecord('a' * 32, self.identity.session_id, 'user-entry', 1, 'b' * 64)
-        raw = json.dumps(retained.text, ensure_ascii=False, separators=(',', ':')).encode()
-        segment = SystemLayerSegment(content=retained.text, tokens=12,
+        raw = json.dumps(retained.compaction_text, ensure_ascii=False, separators=(',', ':')).encode()
+        segment = SystemLayerSegment(content=retained.compaction_text, tokens=12,
             sha256=hashlib.sha256(raw).hexdigest(), utf8_bytes=len(raw),
             provenance=(NativeProvenance(self.identity, 1, context.llm_context_digest),))
         data = NativeContextData('fixture-counter', self.identity, (segment,))

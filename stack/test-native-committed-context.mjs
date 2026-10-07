@@ -78,8 +78,8 @@ try {
         const saved=manager.getSessionFile();manager.entryStore.close();
         const reopened=SessionManager.open(saved);
         const messages=reopened.buildContextEntries().flatMap(sessionEntryToContextMessages);
-        const bytes=messages.reduce((total,message)=>total+policy.messageBytes(message),0);
-        assert.ok(bytes<=policy.inputBytes(model,actualSettings.reserveTokens));
+        const tokens=policy.contextTokens(messages,model);
+        assert.ok(tokens<=policy.inputTokens(model,actualSettings.reserveTokens));
         const session={getContextUsage:AgentSession.prototype.getContextUsage,sessionManager:reopened,model,settingsManager:{getCompactionSettings:()=>actualSettings},agent:{state:{messages:[]}}};
         SessionContext.restore(session);
         session.storedContext.requireReady();
@@ -87,7 +87,7 @@ try {
         assert.deepEqual(last.details.readFiles,paths.sort());
         reopened.entryStore.close();
         receipts.push({split,providerRequests:requests.length-before,generatedBytes:Buffer.byteLength(summary),
-            annotationBytes:Buffer.byteLength(annotations),committedBytes:bytes,inputBytes:policy.inputBytes(model,actualSettings.reserveTokens),readyAfterReopen:true});
+            annotationBytes:Buffer.byteLength(annotations),committedTokens:tokens,inputTokens:policy.inputTokens(model,actualSettings.reserveTokens),readyAfterReopen:true});
     }
     console.log(JSON.stringify({paidRequests:0,cases:receipts},null,2));
 } finally {

@@ -4,6 +4,7 @@
  */
 import { ContextBudget, BudgetAdmissionError } from '@earendil-works/pi-ai/api/agent-comms-context-budget';
 import { convertToLlm } from '../messages.js';
+import { SessionContext } from '../session-context.js';
 
 const strategies = Object.freeze({
     serial: Object.freeze({ plan: segments => new CompactionPlan(segments, 1) }),
@@ -137,14 +138,17 @@ export class CompactionPolicy {
     sourceTokens(model, reserveTokens) {
         return Math.floor(this.inputTokens(model, reserveTokens) * this.sourceBudgetRatio);
     }
-    contextTokens(messages, model) {
-        return new ContextBudget(model, convertToLlm(Array.from(messages))).input;
+    contextTokens(messages, model, session) {
+        return new ContextBudget(model,
+            SessionContext.sourceContext(session, convertToLlm(Array.from(messages)))).input;
     }
-    contextFits(messages, model, reserveTokens) {
-        return this.requestFits({messages: convertToLlm(Array.from(messages))}, model, reserveTokens);
+    contextFits(messages, model, reserveTokens, session) {
+        return this.requestFits(
+            SessionContext.sourceContext(session, convertToLlm(Array.from(messages))), model, reserveTokens);
     }
-    requireContext(messages, model, reserveTokens) {
-        this.requireRequest({messages: convertToLlm(Array.from(messages))}, model, reserveTokens);
+    requireContext(messages, model, reserveTokens, session) {
+        this.requireRequest(
+            SessionContext.sourceContext(session, convertToLlm(Array.from(messages))), model, reserveTokens);
     }
     requestFits(context, model, reserveTokens) {
         return new ContextBudget(model, context).input <= this.inputTokens(model, reserveTokens);
@@ -153,23 +157,23 @@ export class CompactionPolicy {
         if (!this.requestFits(context, model, reserveTokens))
             throw new BudgetAdmissionError('Compaction result exceeds its selected context budget');
     }
-    retainedFits(required, messages, model, reserveTokens) {
+    retainedFits(required, messages, model, reserveTokens, session) {
         // Required exact source and cumulative file annotations are allocated
         // first. Recent atomic messages share only the remaining token capacity.
-        const mandatory = this.contextTokens([required], model);
+        const mandatory = this.contextTokens([required], model, session);
         const limit = mandatory + Math.floor(
             (this.inputTokens(model, reserveTokens) - mandatory) * this.sourceBudgetRatio);
-        return this.contextTokens([required, ...messages], model) <= limit;
+        return this.contextTokens([required, ...messages], model, session) <= limit;
     }
     packSummary(exactText, narrative, annotations, tokensBefore, retainedMessages,
-                model, reserveTokens, createSummary) {
+                model, reserveTokens, createSummary, session) {
         // Only narrative may be shortened. Original tool pairs/recent messages
         // remain in Pi's preparation; mandatory source text is never reduced.
         const compose = text => `${exactText}\n\n${text}${annotations}`;
         const fits = text => {
             const synthesized = createSummary(compose(text), tokensBefore, Date.now());
             function* context() { yield synthesized; yield* retainedMessages; }
-            return this.contextFits(context(), model, reserveTokens);
+            return this.contextFits(context(), model, reserveTokens, session);
         };
         if (!fits('')) throw new BudgetAdmissionError('Mandatory exact task source exceeds the selected context budget');
         if (fits(narrative)) return compose(narrative);

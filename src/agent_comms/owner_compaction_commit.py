@@ -198,7 +198,7 @@ class OwnerCompactionCommit:
         # Capture determines the required original facts. Native policy then
         # allocates that exact payload together with its atomic recent suffix;
         # both reads remain tied to the original source revision and leaf.
-        allocated = (await prepare(source.retained.text)).require_ready()
+        allocated = (await prepare(source.retained.compaction_text)).require_ready()
         source = source.at_prepared_cut(allocated.witness)
         await Coordination.run_worker(partial(
             self.require_source_current, owner, owner_generation, source
