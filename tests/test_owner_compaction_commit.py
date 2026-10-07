@@ -105,7 +105,7 @@ async def test_acquired_native_source_survives_commit_and_refuses_rewritten_pref
         ))
         operation = await Coordination.run_worker(partial(
             bridge.commit, owner, generation, witness,
-            source.retained.text + "\n\nOriginal task remains retained", 20,
+            source.retained.compaction_text + "\n\nOriginal task remains retained", 20,
             source=source,
         ))
         committed = source.after_native_commit(operation.committed_outcome())

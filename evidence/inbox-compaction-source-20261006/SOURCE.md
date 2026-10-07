@@ -454,3 +454,126 @@ zero omissions; external dynamic overrides are not established by that trace.
 No build/prefix/App/provider/public input/restart or repeat installed check occurred.
 Parent owns integration and measurement; no remaining historical writer or
 deadlock cause is inferred from this profile or source change.
+
+## Complete compaction context ownership correction (2026-10-07)
+
+The current UX diagnostics `9767127f2bde4a3a8adece454e83bd28.json` and
+`7280a266a255f58f51e7833564ec5acd.json` under the original live route both
+preserve native `Compaction result exceeds its selected context budget`.
+The reached boundary is OwnerCompactionCommit.prepare_source's second native
+preparation, before a selected summary reservation or provider request. The
+earlier decoder failure is separate; upgrading its decoder exposed this refusal.
+Neither failed input nor any original compaction was replayed.
+
+### Required answers and existing owners
+
+RetainedTaskFacts owns captured task facts. Its full codec representation, text
+inspection/export, original input rows, content checks, source membership and
+journal framing remain unchanged. Wire human messages, direct human input rows
+(including historical instructions), task decisions, goals and native artifact
+facts keep exact wording. HumanInputTaskFact supplies this behavior polymorphically;
+current/historical scope never authorizes deleting that wording.
+
+Neutral InputTaskFact rows include the previously rendered native prompt, not a
+second human instruction. OwnedTurn.begin records ScheduledTurn.incoming.prompt
+in those rows. The original wire facts/native conversation already supply that
+content. InputTaskFact now supplies a one-way compaction projection with original
+provenance, content digest and public disposition; the full row remains frozen in
+the journal. This deletes the decision that all durable delivery evidence must
+be repeated verbatim inside every compulsory summary prefix. No durable field,
+decoder, source coverage rule or input admission changes.
+
+OwnerCompactionCommit's allocation, SelectedSummarySlot's request and
+RetainedTaskFacts.require_summary all take this same compaction_text. Full source
+equality is still checked before reservation/commit, including original input
+content and pending input keys. SelectedSummarySource.journal_json still frames
+the complete FieldCodec.encode(retained); NativeIntent still binds the canonical
+summary payload and metadata digests. Recovery retains its original identity,
+fsync, terminal and no-replay requirements. The model projection cannot become
+an original input or recovery receipt.
+
+CompactionPolicy owns context allocation; ContextBudget owns token accounting
+and capability admission. SessionContext supplies the actual system prompt,
+converted messages and tools. Native preparation, suffix allocation, pre-provider
+mandatory packing, generated-result packing and final committed-context admission
+now all consume that original session. The session is passed to compact, not
+stored in CompactionPreparation or exposed through its extension hook payload.
+Manual and automatic paths share AgentSession._runDefaultCompaction, which passes
+this; both preparation callers pass this. Selected preparation/repreparation and
+selected generation pass their already acquired session. The exported declarations
+match. No system/tool copy or retained budget signature is introduced.
+
+The native estimator invalidates older assistant usage after a newer prefix
+timestamp. Packing creates the new summary envelope with Date.now(), so its full
+system/tools/messages estimate cannot reuse the old pre-compaction measured prefix.
+Existing selected model, reserve, policy ratios, atomic suffix rules and complete
+file annotations are unchanged. A mandatory payload that genuinely does not fit
+still refuses. No required human wording or file ledger is shortened to force it.
+
+Map/reduction sources and synthesis are genuine different requests. Their existing
+SummarySource, CompactionPlan and buildSummarizationContext request admission stay
+separate from the conversation that will be restored. Provider generation allowance
+is not the retained result size. Prefix-capable generation still uses its original
+provider/converter/context hook constraints and current source fence.
+
+Offline EntryStore previews have no acquired system/tool owner. Their explicit
+message-only result does not qualify installed session admission. Three existing
+source controls/inspection consumers still called deleted inputBytes/messageBytes
+APIs after the token migration; they now take inputTokens/sourceTokens/contextTokens,
+with token-labelled output. Historical evidence is not rewritten. Real runtime
+callers pass the session; external extension behavior is not proven by a static trace.
+
+### Prior corrections and why this refusal remained reachable
+
+The ancestral source changes fall into the following owner relationships. Branch
+duplicates `fd250c74e`/`4ce8b3e2c` and `5a69655ac`/`9e015800c` carry the same early
+policy/output work. The accidental deletion/restoration `1ca956284`/`7d242186a`
+does not supply another budget policy. Original diffs are retained in scratch.
+
+| Changes | Actual correction | Remaining distinction |
+| --- | --- | --- |
+| 4ce8b3e2c, 2177f0b3a, 9e015800c | Shared native map policy, prior/split-turn summary and output bounded by reserve | Generation output and durable required context remained different budgets |
+| 37796d50f, dadb7c495, 9aef5b8c7, 45cf84218, 351a4930b, 2ebefe8da | Capture before provider, actual settings/trigger, managed admission and typed metadata | Correct source custody did not decide which captured evidence was compulsory model text |
+| 09463db70, 872fb075f, 47c8e70d6, b74774f5b | Original native intent/CAS, file operations/usage, durable pre-request reservation | Early size caps existed on framing and file metadata, separate from context admission |
+| 9c47f42ef, cb5eb5968, 052581ff6, b102fdab8, d4e931306 | Existing transport, typed native responses/recovery and journal transaction owners | Storage/transport identity correctness did not imply a fitting provider context |
+| 75c8364df, b20c8cf7d, 63415f8b9, d42742514 | Remove duplicate source/file caps; indexed streaming source, CLI/history/branch consumers | A large source could be acquired safely yet still be copied into mandatory context |
+| 224cf66e5, c9777c268, 1f6bc3895, 23284c8f3 | Cold native decision, exact committed cut, token rather than byte admission, full restored session context | Preparation and packing still counted messages without original system/tools |
+| 4c69b7027, 79c379ca8, d82316aa7 | Delete dry-run/builder duplicates and repair native source/declaration boundaries | These removed competing paths, not the compulsory evidence/context mismatch |
+| d1f7098ad, 237c70014, c4ceec424, 51e479d0c | Native progress/accounting and bounded rolling/shared source orchestration | Scheduling/accounting cannot make a mandatory payload smaller or change its meaning |
+| 51bbb958b, 5c5792c95 | Explicit pre-stream provider rejection negotiation and requested allowance versus capability | Known provider rejection is not permission to replay an uncertain input; no effect on this pre-provider refusal |
+| 547ea98f9 | Exact task facts and narrative-only packing | Full captured neutral input rows became compulsory text, including prior rendered prompts |
+| fe450f655, 153e999e5, 29df4c810 | Canonical retained payload framing across reservation, intent and recovery | Removing transport caps correctly preserved evidence but did not distinguish its model projection |
+| 6c24cb66d, 0a0025b21, f46f1b5c4 | Token-based source allocation, map/synthesis wrappers and generation intent versus retained context | Second preparation still received full journal text; packing still omitted system/tools |
+| 7e199fa23, 02b0eea42, 9d42ff50e, e88f332d1 | Original prefix provider, original admission/acquired store and ContextBudget-derived observations | Correct acquisition/observations exposed the refusal without repairing those two meanings |
+| 2eac51dfe, 28c08fc43, b9d953c72, 6315b56cf | Exact input content, native artifact facts, human provenance and input constraints | These facts remain authoritative; projection must not remove original human constraints |
+
+The recurring structural error was treating three different answers as one size:
+durable evidence retention, generation request/output, and restored native context.
+The repair changes their existing owners and complete runtime consumers rather
+than increasing one path's cap or shrinking only its recent suffix.
+
+### Source checks and remaining application boundary
+
+Existing Package AST acquisition covers 324 src, 381 tests and 54 tools modules,
+zero Python parse omissions; before/after owner sites are retained in
+`/home/ts/.cache/agent-scratch/mfc01/retained-owner-{before,after}.json`.
+Native JS consumers/imports and SDK declaration/call relationships were read
+directly; node syntax checks passed. An independent JS AST enumerator was not
+available; dynamic external extension behavior remains unqualified.
+
+The two original real private-store retained-context checks passed together in
+2.58 seconds. They check full journal/export equality, omission of neutral rendered
+prompt text only from the model projection, provenance/digest/disposition, strict
+summary-prefix admission and retention of both original human rows with equal
+wording. Raw results: `/home/ts/.cache/agent-scratch/mfc01/retained-projection-check.log`.
+The existing unrelated codec optimization remains outside this checkpoint.
+
+Native syntax and unified patch parsing passed; shared manual/auto call and compact
+declaration were checked against original published SDK source. No native imports,
+provider request, compaction, input, build, artifact mutation or live worker restart
+occurred. This is an implemented source repair, not a demonstrated live fix. Changed
+native deployment source requires a new truthful native commitment/consuming wheel
+before genuine isolated saved-session compaction and resumed-input acceptance.
+The immutable 4b runtime cannot be labelled source-equal to this repair. Original
+failed cuts, both diagnostics, input uncertainty and all receipts remain preserved;
+current inspection totals do not establish the exact payload of those failed cuts.
