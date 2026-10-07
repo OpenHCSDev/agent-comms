@@ -236,39 +236,66 @@ class TestHandlers:
             assert not agent.turns.turn_state(session).busy
         assert native.session.read_bytes() == saved and native.provider.posts == 0
 
-    async def test_live_model_change_waits_for_backend_confirmation(self, native_backend, monkeypatch):
-        from acp import RequestError
+    @pytest.mark.parametrize("selected", [False, True])
+    async def test_live_model_change_waits_for_backend_confirmation(self, native_backend, monkeypatch, selected):
+        """Change settings through the actual ACP owner while native HTTP is active."""
+        from acp.schema import TextContentBlock
+        from agent_comms.coordinator import Coordination
 
-        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture,response-local/second")
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture,response-local/second,response-local/missing")
         native = native_backend
-        await native.author_history()
-        async with native.open_owner() as (agent, session):
-            async with native.original_input(agent, session, "Current response") as turn:
-                inbox = agent.inputs.backend_inboxes[session]
-                for accepted in (False, True):
-                    request = asyncio.create_task(agent.set_config_option("model", session, "response-local/second"))
-                    command = await asyncio.wait_for(inbox.get(), timeout=1)
-                    assert command["type"] == "set_model"
-                    assert command["provider"] == "response-local" and command["modelId"] == "second"
-                    assert agent._comms.registry.require(session).model == "response-local/fixture"
-                    agent.sessions.config.setting_requests.resolve(
-                        ae.ModelChanged(command["id"], accepted, "model unavailable")
-                    )
-                    if accepted:
-                        await request
-                    else:
-                        with pytest.raises(RequestError):
-                            await request
+        models_path = native.config / "models.json"
+        models = json.loads(models_path.read_text())
+        original_model = models["providers"]["response-local"]["models"][0]
+        models["providers"]["response-local"]["models"].append({**original_model, "id": "second"})
+        models_path.write_text(json.dumps(models))
+        native.provider.response_gate = asyncio.Event()
+        async with native.open_owner(auto_wake=selected, runtime_enabled=selected) as (agent, session):
+            prompt = None
+            if selected:
+                await Coordination.run_worker(lambda: agent._comms.messaging.send_user_message(
+                    session, "Settings custody check", worktree=str(native.project)))
+            else:
+                prompt = asyncio.create_task(agent.prompt(session, [TextContentBlock(type="text", text="Settings custody check")]))
+            try:
+                async with asyncio.timeout(10):
+                    while not native.provider.requests:
+                        await asyncio.sleep(0.01)
+                turn = await agent.turns.active_native_session(session)
+                identity = turn.native.proc.identity
+                if selected:
+                    from agent_comms.tracked_turn import TrackedTurnSession
+                    assert isinstance(turn, TrackedTurnSession)
+                    assert (turn.provider, turn.model) == ("response-local", "fixture")
+                lease = agent._comms.registry.require(session).turn_lease
+                with pytest.raises(RequestError, match="Invalid params") as refused:
+                    await agent.set_config_option("model", session, "response-local/missing")
+                assert "Model not found: response-local/missing" in str(refused.value.data)
+                assert agent._comms.registry.require(session).model == "response-local/fixture"
+                await agent.set_config_option("model", session, "response-local/second")
                 assert agent._comms.registry.require(session).model == "response-local/second"
-                request = asyncio.create_task(agent.set_config_option("thinking_level", session, "high"))
-                command = await asyncio.wait_for(inbox.get(), timeout=1)
-                assert command["type"] == "set_thinking_level" and command["level"] == "high"
-                agent.sessions.config.setting_requests.resolve(ae.ThinkingChanged(command["id"], True))
-                await request
-                assert agent._comms.registry.require(session).thinking_level is HighThinkingLevel
-                assert agent.turns.owns_turn(session, turn.turn_id)
-            assert not agent.inputs.backend_inboxes and not agent.turns.turn_state(session).busy
-        assert native.provider.posts == 0
+                if selected:
+                    assert (turn.provider, turn.model) == ("response-local", "fixture")
+                await agent.set_config_option("thinking_level", session, "off")
+                assert turn.native.proc.identity == identity
+                assert turn.native.proc.alive()
+                assert agent._comms.registry.require(session).turn_lease == lease
+                assert native.provider.posts == 1
+            finally:
+                native.provider.response_gate.set()
+                if prompt is not None:
+                    await prompt
+                else:
+                    async with asyncio.timeout(10):
+                        while agent.turns.turn_tasks.get(session) is not None:
+                            await asyncio.sleep(0.01)
+            assert not agent.turns.turn_state(session).busy
+            assert agent._comms.registry.require(session).model == "response-local/second"
+            assert native.provider.requests[0]["model"] == "fixture"
+            print(json.dumps({"selected_turn": selected, "configured_model": "response-local/second",
+                "inflight_request_model": native.provider.requests[0]["model"],
+                "child_retired": not turn.native.proc.alive()}), flush=True)
+        assert native.provider.posts == 1
 
     async def test_snapshot_capability_replays_one_bounded_update(self, tmp_path):
         agent = self._agent(tmp_path)

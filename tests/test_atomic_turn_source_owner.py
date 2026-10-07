@@ -71,3 +71,19 @@ def test_source_attachment_refuses_replaced_original_owner(tmp_path, replacement
         comms.registry.attach_native_session(original, str(tmp_path / "wrong.jsonl"))
     assert comms.registry.store.path.read_bytes() == before
     assert comms.agents.finish_turn(current.turn_lease)
+
+
+def test_native_source_publication_retains_captured_configuration(tmp_path):
+    comms = Comms(tmp_path)
+    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()), model="test/old"))
+    original = comms.agents.begin_turn("owner", "configuration-source-check")
+    comms.threads.set_thread_model("owner", "test/next")
+    with pytest.raises(StaleFence, match="registry_model"):
+        original.require_snapshot(comms.registry.snapshot(), "Fresh input changed")
+    selected = comms.registry.attach_native_session(original, str(tmp_path / "saved.jsonl"))
+    assert selected.thread.model == "test/old"
+    assert selected.thread.thinking_level == original.thread.thinking_level
+    assert selected.turn_lease == original.turn_lease
+    assert comms.registry.require("owner").model == "test/next"
+    assert comms.agents.finish_turn(original.turn_lease)

@@ -200,23 +200,28 @@ async def test_new_activity_declaration_reaches_real_turn_consumer(comms, tmp_pa
 
 
 async def test_request_correlation_separates_families_and_ignores_late_results():
+    from agent_comms.pi_commands import SetModel, SetThinkingLevel
+    from agent_comms.pi_events import Response
+
     pending = PendingRequests()
-    model = pending.add(events.ModelChanged, "same")
-    thinking = pending.add(events.ThinkingChanged, "same")
+    model_command = SetModel(id="same", provider="test", model_id="one")
+    thinking_command = SetThinkingLevel(id="same", level="off")
+    model = pending.add(SetModel, "same", request=model_command)
+    thinking = pending.add(SetThinkingLevel, "same", request=thinking_command)
     with pytest.raises(ValueError):
-        pending.add(events.ModelChanged, "same")
-    pending.resolve(events.ModelChanged("same", False, "unavailable"))
-    with pytest.raises(RuntimeError, match="unavailable"):
-        await model
+        pending.add(SetModel, "same")
+    refused = Response(id="same", command=SetModel, success=False, error="unavailable")
+    assert pending.take(SetModel, "same", refused) is model_command
+    assert await model is refused
     assert not thinking.done()
-    pending.resolve(events.ThinkingChanged("same", True))
-    assert await thinking is None
-    pending.resolve(events.ThinkingChanged("same", False, "late"))
-    pending.discard(events.ThinkingChanged, "same")
-    pending.resolve(events.ThinkingChanged("same", True))
-    cancelled = pending.add(events.ModelChanged, "cancelled")
+    accepted = Response(id="same", command=SetThinkingLevel, success=True)
+    assert pending.take(SetThinkingLevel, "same", accepted) is thinking_command
+    assert await thinking is accepted
+    assert pending.take(SetThinkingLevel, "same", refused) is None
+    cancelled = pending.add(SetModel, "cancelled", request=SetModel(id="cancelled"))
     cancelled.cancel()
-    pending.resolve(events.ModelChanged("cancelled", True))
+    assert pending.take(SetModel, "cancelled", refused).id == "cancelled"
+
 
 
 @pytest.mark.parametrize("publication_fails", [False, True])
