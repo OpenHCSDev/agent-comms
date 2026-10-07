@@ -624,3 +624,18 @@ Removed about950MiB of redundant evidence copies from owned disposable Git build
 archives, preserving original published source/evidence, wheels, proofs, runtimes
 and raw runs. Burst activity, context-tree-specific scrolling, tab closing and
 historical backend inbox failures remain distinct incomplete acceptance areas.
+
+## Installed saved-tab close and return
+
+One no-input installed saved-tab journey opened nra-architecture, clicked its
+actual native close target, returned to openhcs-architecture-memory and reopened
+the peer. All six original checks passed: peer opening, original selection after
+close, original editor/history identity, retired closed tab and new peer admission.
+Original run31515 exited0 in34.994s with clean owned process cleanup; source owners
+were preserved. Parent inspected the actual close-done screenshot. Evidence:
+`/home/ts/.cache/agent-scratch/saved-tab-close-installed-20261007`.
+The close phase includes diagnostic exports and a deliberate settling wait; its
+4.771s interval is not close latency. UI CPU averaged38.78 percent over that
+interval. This proves the affected close/return behavior, not fast physical
+response or burst activity. No message, provider request, source change or extra
+publication occurred.
