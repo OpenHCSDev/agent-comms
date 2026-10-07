@@ -338,38 +338,3 @@ recorded-source requests and CLI diff still consume those original manifests.
 External dynamic consumers are not resolved by the AST trace. Trace and check
 output: /home/ts/.cache/agent-scratch/mendel-context-resource-reuse-20261007.
 Toad integration and installed panel CPU verification remain Parent's next step.
-# Channel archive visibility — 2026-10-07
-
-The actual live catalog already records #pr126-fixes archived=true. Original
-ChannelManagement.set_channel_archived -> CatalogDocument.set_metadata ->
-ChannelCatalog.editing publishes that state atomically and returns it truthfully.
-Archiving intentionally preserves tag vocabulary, member threads, delivery and
-history. The archive command refuses builtins and Restore retains the declaration.
-Those writer/command declarations agree with the selected installed Core64f122.
-
-The visibility defect is that the sidebar uses CoordinationSnapshot.channels,
-which is the full channel relation. ChannelView.roster applies show_archived to
-thread membership, not channel row visibility. Filtering that full relation would
-also remove participants/mention candidates from an already-open archived channel.
-The two answers therefore remain distinct: Channel.in_view owns archived channel
-visibility, and existing CoordinationSnapshot.visible_channels derives the sidebar
-projection using its captured show_archived preference. Existing channels,
-participants, mention_candidates, catalog/history and routing answers are unchanged.
-No duplicate archive flag, registry, codec or durable format is introduced.
-
-Parent Toad handoff: SidebarProjection uses visible_channels for desired row keys,
-visible row iteration and row-derived label widths. Original open-channel and
-member consumers keep channels. This preserves mentions and membership even after
-the row is hidden. No peer Toad file was edited here. Live acceptance still needs
-that consumer migration and installed archive/hide/show/restore confirmation.
-
-The original private-store check exercises actual ArchiveChannelCliCommand and
-RestoreChannelCliCommand execution, saved catalog, viewer snapshot, channel
-mentions, original bus bytes and continued channel delivery. Final check passed in
-0.61s. Earlier implementation filtered the whole roster and was replaced after
-the complete consumer trace exposed the open-view requirement. The first check
-also assumed viewer_snapshot would not register its original user; it does. That
-fixture assertion was corrected to compare the registry immediately before and
-after restore, with both earlier raw results retained. No live catalog/input was
-modified and no provider/native/App operation was performed. Raw checks are under
-/home/ts/.cache/agent-scratch/mendel-channel-archive-visibility-20261007.
