@@ -91,3 +91,60 @@ def test_generated_claim_clock_collision_preserves_allocated_names_and_identitie
     assert first.created_at == 42.0 and second.created_at > first.created_at
     assert comms.registry.require(second.name) == second
     assert first.incarnation != second.incarnation
+
+
+def test_project_change_retains_executing_source_but_refuses_another_input(tmp_path):
+    import os
+    import pytest
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.coordination_errors import StaleFence
+    from agent_comms.coordination_response import LiveResponseOwner
+
+    old, new = tmp_path / 'old', tmp_path / 'new'
+    old.mkdir()
+    new.mkdir()
+    comms = wire(tmp_path / 'wire')
+    comms.registry.declare(Thread('owner', frozenset(), str(old),
+        process_identity=ProcessIdentity.capture(os.getpid())))
+    original = comms.agents.begin_turn('owner', 'original-turn')
+    try:
+        comms.threads.set_project('owner', str(new))
+        with pytest.raises(StaleFence, match='registry_worktree'):
+            original.require_snapshot(comms.registry.snapshot(), 'New input refused')
+        saved = str(old / 'native.jsonl')
+        observed = comms.registry.attach_native_session(original, saved)
+        current = comms.registry.require('owner')
+        assert current.worktree == str(new) and current.previous_worktrees == (str(old),)
+        assert current.session_file == observed.thread.session_file == saved
+        assert observed.thread.worktree == str(old)
+        assert observed.turn_lease == original.turn_lease == current.turn_lease
+        # Later native observations use the same source and preserve old -> new.
+        observed = comms.registry.attach_native_session(observed, saved)
+        assert observed.thread.worktree == str(old)
+        with pytest.raises(StaleFence, match='registry_worktree'):
+            observed.require_snapshot(comms.registry.snapshot(), 'New input refused')
+        LiveResponseOwner(thread=observed.thread,
+            admission_generation=original.admission_generation).require_snapshot(
+                comms.registry.snapshot(), 'Original reply publication')
+    finally:
+        assert comms.agents.finish_turn(original.turn_lease)
+    assert comms.registry.require('owner').turn_lease is None
+
+
+def test_source_publication_refuses_unrecorded_project_replacement(tmp_path):
+    import os
+    import pytest
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.coordination_errors import StaleFence
+
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread('owner', frozenset(), str(tmp_path / 'old'),
+        process_identity=ProcessIdentity.capture(os.getpid())))
+    original = comms.agents.begin_turn('owner', 'original-turn')
+    current = comms.registry.require('owner')
+    comms.registry.register(replace(current, worktree=str(tmp_path / 'other')))
+    before = comms.registry.store.path.read_bytes()
+    with pytest.raises(StaleFence, match='registry_worktree'):
+        comms.registry.attach_native_session(original, str(tmp_path / 'native.jsonl'))
+    assert comms.registry.store.path.read_bytes() == before
+    assert comms.agents.finish_turn(original.turn_lease)

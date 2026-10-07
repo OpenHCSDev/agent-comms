@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import time
+from pathlib import Path
 from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING
 
@@ -76,6 +77,12 @@ class Thread(ThreadProvenance):
     channel_scope_generation: int = 0
     turn_generation: int = 0
     last_finished_turn_id: str | None = None
+
+    def contains_worktree(self, worktree: str) -> bool:
+        """This conversation's current and retained project directories."""
+        selected = str(Path(worktree).expanduser().resolve())
+        return any(selected == str(Path(path).expanduser().resolve())
+                   for path in (self.worktree, *self.previous_worktrees))
 
     @property
     def turn_state(self) -> TurnState:
