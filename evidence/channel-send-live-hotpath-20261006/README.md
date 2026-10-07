@@ -455,3 +455,24 @@ The selected installed candidate is `channel-archive-wheel` /
 `runtime-channel-archive`;953 assets/full69 packages match the selected source.
 The independent equal-publication fanout correction is integrated at Toad
 5e7a6d7f9 for the next affected App check; it is not in this visibility build.
+
+## Equal roster publications: delivered successor
+
+The original projection now retains newly acquired source custody without
+rebuilding unchanged painted row answers. Pending actions still explicitly
+reconcile, and incomplete/cancelled reconciliation invalidates the snapshot.
+There is no new cache or revision mirror. Builtin channel lookup now borrows
+Enum's own value map with an exact-value guard; original routing controls pass.
+
+One actual installed saved App sent one new #openhcs message, opened the channel
+and collapsed/expanded its roster, then exited normally in60.54s. The source
+owner remained unchanged/alive; all owned cleanup completed. Raw evidence is
+`/home/ts/.cache/agent-scratch/equal-roster-burst-installed-20261006`.
+The send phase used54.86% process CPU, versus76.09% in the prior snapshot run.
+Agent activity is uncontrolled, so this is not a matched speedup claim or proof
+that all stalls are fixed. Visible sent-message and roster captures are held.
+
+`equal-roster-wheel/publication.json` records delivery of runtime-equal-roster
+through the existing frontend publication owner. New UI launches get this
+build; existing open clients and backend workers were not restarted. Archived
+channel visibility remains included.
