@@ -191,3 +191,38 @@ held under the persistent mpj02 root.
 The built integrated2072058 backend was checked through the corrected original native/ACP control using installed modules, fresh private SDK journal and two localhost requests. All assertions passed, including original project continuation and stale generation/process/foreign-name refusal; native child retired. Raw: /home/ts/.cache/agent-scratch/installed-project-turn-20261007/check-prepared-root.{stdout,stderr}.log, private journal retained under /home/ts/.cache/agent-scratch/mpj03. Earlier pytest-plugin refusal and overlong socket-root refusal occurred before input and remain held. The short root first needed its parent prepared before fixture creation; no native operation occurred in that setup refusal.
 
 All954 assets/full69 distribution versions and2857 RECORD rows matched. The original ReviewedCommsBackendCohort publisher changed future backend defaults to .artifacts/project-turn-delivery-20261007/runtime; the current frontend/native route and existing running owners were preserved. This is installed/default-delivered, not proof that existing agents loaded the successor. Original user UNKNOWN input and blocked goal were not replayed or resumed.
+
+## Installed idle-worker restart — 2026-10-07
+
+The actual old menu-send interpreter launched an authored private idle worker.
+The installed project-turn successor used existing OwnerRestartRequest and
+PreserveOwnerRuntime: capture authentic original launch, fence idle admission,
+stop and join the old process, then launch through StoppedOwnerBatch with the
+successor interpreter. No production owner, format, runtime wheel or native
+package changed for this control. Original restart/lifecycle/launch/input/goal
+owner sources and Thread durable declarations match across these two runtimes.
+
+The original NativeBackendFixture supplied a fresh SDK journal and private
+settings/worktree. The goal was authored and blocked through original goal
+actions. A genuine retained NotSent observation from closed m687n02 was copied
+through InputDispositions into this new private root. Its original file/root and
+uncertain input were untouched; the observation was never submitted as input.
+This proves retention/non-replay in the new private restart, not recovery or
+redispatch of that historical input.
+
+One installed check passed in 15.87 seconds. Old worker 3819493 became successor
+3819865 through the existing restart owner. Actual attachments loaded both
+workers' original sessions. Journal/settings/auth/models/input-document bytes,
+worktree/session/incarnation, blocked goal, native arguments and config directory
+were unchanged. There were zero localhost POSTs and zero native inputs. Cleanup
+stopped/joined the replacement through the original owner; final direct read
+found both processes absent, owner retired and no runtime sockets.
+
+Execution used successor installed Python/Core and dependencies, read-only system
+pytest and existing source test helpers. The old setup cleared PYTHONPATH and
+used the actual old installed interpreter; replacement launch likewise carried
+no source overlay. No install/build/public restart/provider input occurred.
+Raw output and final owner release are retained at
+`/home/ts/.cache/agent-scratch/mir01/check.log` and `result.json`.
+Parent owns live reload; this private result does not update existing public
+workers or authorize replay of their uncertain inputs.

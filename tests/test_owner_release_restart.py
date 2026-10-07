@@ -17,6 +17,123 @@ from agent_comms.child_process import (
     ParentedProcess,
     SignaledOutcome,
 )
+
+
+@pytest.mark.asyncio
+async def test_installed_idle_worker_retains_state_across_runtime_restart(tmp_path):
+    """Actual installed workers; retained failure is observation, never input."""
+    import asyncio
+    import hashlib
+    import json
+    from contextlib import AsyncExitStack
+    from agent_comms.child_process import BoundedRun
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.owner_launch import RestartEnvironment, RetainedOwnerLaunch
+    from native_backend_fixture import native_backend_fixture
+    from delivery_owner_fixture import canonical_agent
+
+    source_python = os.environ.get('IDLE_RESTART_SOURCE_PYTHON')
+    retained_input = os.environ.get('IDLE_RESTART_RETAINED_INPUT')
+    if not source_python or not retained_input:
+        pytest.skip('Select the actual original runtime and retained input document')
+    assert Path(sys.executable).parent != Path(source_python).parent
+    original_document = InputDispositions(Path(retained_input)).read()
+    assert original_document.rows and all(not row.accepts_reservation
+                                         for row in original_document.rows.values())
+    names = {row.owner for row in original_document.rows.values()}
+    assert len(names) == 1
+    name = names.pop()
+    async with native_backend_fixture(tmp_path) as native, AsyncExitStack() as resources:
+        comms = Comms(native.root)
+        comms.owners.pin_private_nk_launch(native.root,
+            os.environ['AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID'],
+            Path(os.environ['PI_COMPACTION_TEST_PACKAGE']))
+
+        async def retire_owned_worker():
+            selected = comms.registry.snapshot().threads.get(name)
+            if selected is not None and selected.process_alive:
+                await asyncio.to_thread(comms.owners.stop, name)
+            if selected is not None:
+                assert not comms.registry.require(name).process_alive
+
+        resources.push_async_callback(retire_owned_worker)
+        environment = dict(os.environ)
+        for key in ('PYTHONPATH', 'PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK', 'PI_AGENT_ID',
+                    'AGENT_COMMS_THREAD', 'AGENT_COMMS_STARTUP_INPUT_KEY'):
+            environment.pop(key, None)
+        environment.update(PATH=str(Path(source_python).parent)+os.pathsep+environment.get('PATH', ''),
+                           VIRTUAL_ENV=str(Path(source_python).parent.parent))
+        setup = await BoundedRun.run((source_python, '-B', '-c', '''
+import json, os, sys
+from pathlib import Path
+from agent_comms.comms import Comms
+from agent_comms.threads import Thread
+from agent_comms.goal_actions import SetGoalAction, BlockedGoalAction
+from agent_comms.field_codec import FieldCodec
+from agent_comms.owner_launch import RestartEnvironment
+service = Comms(Path(os.environ['AGENT_COMMS_ROOT']))
+with service.bus.log.locked(): root_id = service.bus.log._private_marker_unlocked().root_id
+service.owners.pin_private_nk_launch(service.root, root_id,
+    Path(os.environ['PI_COMPACTION_TEST_PACKAGE']))
+name, project, session = sys.argv[1:]
+service.registry.declare(Thread(name, frozenset(), project, session_file=session,
+    model='response-local/fixture'))
+service.threads.restore_stopped(service.registry.snapshot(), (name,))
+service.goals.update_goal(name, SetGoalAction(text='Preserve this blocked private task'))
+service.goals.update_goal(name, BlockedGoalAction(block_reason='Await original input disposition'))
+arguments = ('--provider','response-local','--model','fixture','--thinking','off',
+             '--offline','--no-extensions','--no-skills','--no-context-files',
+             '--no-prompt-templates','--no-tools')
+result = service.owners.start(name,
+    agent_bin=str(Path(sys.executable).with_name('pi-comms-native')), agent_args=arguments)
+print(json.dumps(FieldCodec.encode(result)), flush=True)
+''', name, str(native.project), str(native.session)), timeout=20,
+            cwd=native.project, env=environment)
+        assert setup.outcome.successful, setup.stderr.decode()
+        InputDispositions(native.root / InputDispositions.filename).replace(original_document)
+        async def attach_current():
+            current = comms.registry.require(name)
+            from agent_comms.runtime import socket_path
+            await asyncio.to_thread(wait_for, socket_path(native.root, current.pid))
+            agent = canonical_agent(comms, auto_wake=False)
+            try:
+                async with asyncio.timeout(20):
+                    await agent.load_session(str(native.project), name)
+            finally:
+                await agent.shutdown()
+            return comms.registry.require(name)
+        original = await attach_current()
+        launch = RetainedOwnerLaunch.capture(original, comms.registry.snapshot(),
+                                            interpreter=source_python)
+        files = (native.session, native.config/'settings.json', native.config/'models.json',
+                 native.config/'auth.json', native.root/InputDispositions.filename)
+        baseline = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}
+        target_environment = dict(environment)
+        target_environment.update(PATH=str(Path(sys.executable).parent)+os.pathsep+os.defpath,
+                                  VIRTUAL_ENV=str(Path(sys.executable).parent.parent))
+        results = await asyncio.to_thread(comms.owners.restart_owners, (name,),
+            agent_bin=str(Path(sys.executable).with_name('pi-comms-native')),
+            runtime=RestartEnvironment.inherit(target_environment),
+            source_interpreter=source_python)
+        assert len(results) == 1 and results[0].previous_pid == original.pid
+        assert not original.process_alive
+        current = await attach_current()
+        replacement = RetainedOwnerLaunch.capture(current, comms.registry.snapshot(),
+                                                 interpreter=sys.executable)
+        assert current.incarnation == original.incarnation
+        assert current.worktree == original.worktree and current.session_file == original.session_file
+        assert current.goal == original.goal and current.goal.state.declared_name == 'blocked'
+        assert current.model == original.model and current.thinking_level == original.thinking_level
+        assert current.turn_lease is None and native.provider.posts == 0
+        assert replacement.arguments == launch.arguments
+        assert RestartEnvironment.inherit(replacement.environment).native_config == RestartEnvironment.inherit(launch.environment).native_config
+        assert baseline == {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}
+        print(json.dumps({'restart': FieldCodec.encode(results),
+            'source_interpreter': launch.interpreter, 'target_interpreter': replacement.interpreter,
+            'localhost_posts': native.provider.posts, 'retained_input_keys': list(original_document.rows),
+            'journal_settings_input_unchanged': True, 'blocked_goal_preserved': True}), flush=True)
+        assert native.provider.posts == 0
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_lifecycle import OwnerRestartSelection
