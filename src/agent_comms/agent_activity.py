@@ -199,7 +199,7 @@ class AgentActivity:
                     self._wire_lock_path.parent,
                     thread=thread, diagnostic=diagnostic, source_error=source_error,
                 )
-                diagnostic = replace(diagnostic, diagnostic_path=str(path))
+                diagnostic = replace(diagnostic, reason=f"{source_error} · Diagnostic: {path}")
             current = self.activity_of(thread)
             if current.readiness.source_diagnostic() == diagnostic:
                 return False

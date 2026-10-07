@@ -51,8 +51,8 @@ conflict or transient contention is claimed as its cause.
 Both existing `InputDrain.observe` failure branches pass the actual exception to
 the activity owner. `AgentActivity.set_drain_diagnostic` checks the original owner
 fence, durably retains the exception chain, then publishes the diagnostic's private
-file reference. `DrainDiagnostic` owns that optional reference; old events still
-decode without it. Availability, stop/propagation and clearing behavior are unchanged.
+file location in the existing human-facing `reason`. No separately decoded path
+member remains. Availability, stop/propagation and clearing behavior are unchanged.
 
 The existing diagnostics module shares exception serialization and durable writing
 between terminal and inbox failures. Traceback locals are excluded. The inbox file
@@ -72,7 +72,7 @@ retain their existing diagnostic-only behavior.
 Two focused source controls passed. The coverage control uses the original
 continued-session fixture, journal and real filesystem refusals. It verifies full
 causal traceback retention, private file mode, changed-cause separation, identical
-observation deduplication, stale-owner refusal, codec roundtrip and unchanged
+observation deduplication, stale-owner refusal, original-format codec roundtrip and unchanged
 session/input bytes with no summary inserted. The second control checks decoding
 an original diagnostic with no private reference. No mock backend or event stream
 was supplied. Initial local check setup errors (pytest xdist arguments, absent
@@ -84,3 +84,44 @@ compaction was retried, no native process or App was started, and no package was
 built, installed or rebound. Integration can use this change to retain the exact
 cause on future independently authorized work; it cannot recover a lost traceback
 or authorize replay of the consumed failure.
+
+
+## Same-format correction and delivery
+
+The earlier optional path field had no behavioral consumer. Complete src/tests/tools
+references found only its declaration, publication, artifact normalization and the
+new source checks. Toad production has no path consumer. Original consumers acquire
+Activity through ActivityLog/FieldCodec, then owner-fenced DrainReadiness, ThreadView,
+thread/history presentation and notifications. They use the existing diagnostic
+summary/reason; no consumer parses a file path. The path field has been deleted.
+
+AgentActivity retains the original chained error through record_drain_failure,
+then exposes the returned artifact location in the existing reason string. The
+artifact derives its original outer reason from source_error, so giving the owner
+an already-presented diagnostic does not duplicate the reference or change its
+artifact identity. There is no path parser, second registry or alternative codec.
+Different causes still produce different immutable files and visible reasons.
+
+The final activity.py, field_codec.py and activity_checkpoint.py are individually
+byte-equal to BOTH installed backend runtime and frontend runtime-send-focus Core
+copies under the sidebar-live-candidate deployment. Original Activity/DrainDiagnostic
+fields and checkpoint schema are unchanged. Both existing affected controls passed
+in one batch: 2 passed in 0.36s, system Python/pytest, private checks06 scratch.
+The first roundtrips the newly presented real refusal through this original decoder;
+the second asserts the exact original diagnostic keys and legacy roundtrip. These
+are the old-reader declarations themselves, not a fabricated compatibility adapter.
+
+The broad reader-cohort cutover and incompatible-rollback requirement described at
+c43064dd are superseded by this correction. Old readers can read future activity
+rows without updating their Core. Installing the failure-preserving backend code
+still requires a truthful wheel/source proof through existing deployment owners;
+no build, installed result or unchanged latest-main source equality is claimed.
+Old workers lack exception preservation but do not lose activity decoding when
+updated workers publish these same-format rows. Rollback readers retain format
+compatibility, and private diagnostic artifacts remain preserved.
+
+pr159 is untouched. Its original coverage refusal remains unresolved; original
+receipts agreeing now cannot recover the lost first cause. No stop, restart, drain,
+input, summary, native process or replay was performed. The previous recovery trace
+identified automatic wake on ordinary worker restart and pending source work; this
+schema correction does not authorize restarting it or settling uncertain input.
