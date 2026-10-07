@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .coordination_errors import StaleFence
@@ -33,6 +34,10 @@ class NativeAdmissionEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeAdmissi
 
     @abstractmethod
     def require_release(self, receipt, snapshot, current) -> None: ...
+
+    @abstractmethod
+    def recovery_session_files(self, row, receipt) -> tuple[Path, ...]:
+        """Original launch selections to inspect after attested owner loss."""
 
 
 @dataclass(frozen=True)
@@ -59,11 +64,15 @@ class UnrecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
             raise StaleFence("native input admission was already bound")
 
     def require_release(self, receipt, snapshot, current) -> None:
-        snapshot.statuses[current.name].require_stopped()
-        actual = snapshot.admission_identity(current.name)
-        released = AdmissionIdentity(receipt.thread.incarnation, receipt.after)
-        if actual != released:
+        if not receipt.current(snapshot, current, receipt.before):
             raise RelationViolationError("Unrecorded native send has no exact stopped release")
+
+    def recovery_session_files(self, row, receipt) -> tuple[Path, ...]:
+        # Selection can launch before get_state/send admission records a session.
+        # The exact stopped declaration still owns an existing saved selection;
+        # an unopened owner instead has only its allocated session directory.
+        saved = receipt.thread.session_file
+        return () if saved is None else (Path(saved),)
 
 
 @dataclass(frozen=True)
@@ -84,3 +93,6 @@ class RecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
         fence = AdmissionIdentity(receipt.thread.incarnation, receipt.before)
         if not fence.includes(sent):
             raise RelationViolationError("Native release predates the sending admission")
+
+    def recovery_session_files(self, row, receipt) -> tuple[Path, ...]:
+        return (row.require_session_identity().path,)
