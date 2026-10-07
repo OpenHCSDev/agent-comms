@@ -335,3 +335,33 @@ the tail. Observed modules select the candidate, original source owner remained
 unchanged, App/st exited0 and cleanup has no remaining processes/errors. No new
 message was submitted. This actual App confirms the affected installed read and
 scroll path, not smooth scrolling or an overall activity latency improvement.
+
+## Shared sidebar publication successor
+
+Toad965c9504 integrates the complete sidebar/tab/unread consumer family from
+Heis470671b79. CoordinationAccess now retains the original acquired publication;
+SidebarSnapshot carries its captured row inputs, service, revision, worktree and
+filters. Local admissions reproject routes without rereading the wire or resolving
+each thread's presentation again. The application-level duplicate snapshot and
+reset callback are deleted. Notification, transcript and context witnesses retain
+their separate original lifetimes.
+
+The private App at `hpub01/result.json` exercised eight consumers, three bursts,
+hidden return, incarnation replacement, filters and service replacement. Each
+distinct revision acquired one viewer snapshot and25 person inputs; reprojection
+added no captures. A burst crossing expiry acquired two distinct revisions as
+required. This verifies removal of duplicate acquisition, not installed latency.
+
+Core05c35409 integrates original journal/recovery/annotation snapshot acquisition
+followed by encoding and inspection outside the SQLite read. Multi-table atomic
+cuts and refusal rules remain intact. This does not identify the historical UX
+blocking writer or replace already-running backend owners.
+
+The successor wheels and runtime-snapshot are prepared; the full953-asset/full69
+source proof passed. The only Core wheel changes from runtime-codec are the three
+reviewed read-lifetime owners. The installed channel-activity capture is using its
+original recorder handle under `snapshot-burst-installed-20261006`; publication
+and overall latency remain unproven until that result and actual review complete.
+An initial recorder invocation supplied a prefix rather than the existing launcher
+contract's bin directory and refused before output creation/App launch/input.
+Correcting that operand did not repeat a submitted input or running App.
