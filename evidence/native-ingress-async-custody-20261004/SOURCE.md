@@ -95,3 +95,49 @@ content array, reached that later strict decoder and failed; only its fixture
 was corrected and that check rerun. Eight other passed checks were not repeated.
 No public start/stop/restart, SDK/provider operation or failed-input replay.
 Parent must integrate/build/deliver before claiming the live failure is repaired.
+
+## Native publication after a declared project change — 2026-10-07
+
+The original agent-comms-ux SDK journal records comms_set_project success at
+2026-10-07T16:03:50.221Z, from /home/ts/.agent-comms to
+/home/ts/wt/comms-post-feature-debt-audit-20260928. The diagnostic
+/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/990b6fdf18304b78b18bb54156bc18a6.json
+then refused native source publication on registry_worktree. This is a proved
+declared project transition, not the earlier unknown SQLite blocking writer.
+The uncertain original input remains untouched and must not be replayed.
+
+ThreadManagement.set_project preserves process, conversation and active turn,
+records the former directory and directs end-turn continuation into the new
+project. OwnedTurn.close_changed_project/continue_changed_project require that
+old/new distinction. RegistryAdmissionCheck previously applied the send's exact
+directory fence to source publication, and Registration returned the complete
+current directory, which would erase that distinction if the check alone were
+relaxed. LiveResponseOwner also used that same send check at reply publication.
+
+RegistryPublicationCheck now shares all original incarnation/process/admission/
+role/model/thinking/session/exact-lease checks through the declaration family.
+Its directory predicate requires the captured project to remain among the same
+conversation's canonical directories. Strict input admission retains exact
+worktree equality. Thread.contains_worktree owns the existing saved-session
+directory relation; SessionLifecycle.validated_thread uses it rather than
+rebuilding that answer. Source publication and response publication select the
+publication check. Registration publishes against the current document while
+returning the admitted operation's original executing directory, preserving
+current source/phase and end-turn old-to-new continuation. No durable field,
+codec, alias, cache or source-format change.
+
+Two actual private-registry checks passed in 0.24s: declared project change plus
+repeated source publication preserves the captured directory/lease and current
+next-project directory; another input still refuses; original reply validation
+accepts. An unrecorded directory replacement still refuses source publication
+without writing the registry. The first check location imported the unavailable
+ACP development dependency and stopped before collection; these original
+registration operations were then checked in their dependency-independent
+registration test family. No environment or installed package was changed.
+Raw logs and source sites:
+/home/ts/.cache/agent-scratch/mendel-project-source-publication-20261007.
+All 759 src/tests/tools modules parse/compile; 510 related declarations/calls/
+worktree writes enumerated, no parse omissions. Dynamic external writers remain
+unresolved; registry/process/source fences remain authoritative. No SDK, live
+attach, restart, provider input, build, publication or failed-input replay.
+Parent carries coherent installed delivery and affected live verification.

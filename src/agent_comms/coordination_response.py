@@ -49,7 +49,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import Message, MessageType
-from agent_comms.native_admission_rules import RegistryAdmissionCheck
+from agent_comms.native_admission_rules import RegistryPublicationCheck
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.obligation_states import PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import OwnerFence
@@ -235,7 +235,7 @@ def _response_boundary(bus: MessageBus, *, blocking: bool = True,
 class LiveResponseOwner(RegistryOwner):
     """One captured registry owner; response finality does not depend on its goal."""
 
-    check_type = RegistryAdmissionCheck
+    check_type = RegistryPublicationCheck
 
     @property
     def recipient_lookup(self) -> str:
