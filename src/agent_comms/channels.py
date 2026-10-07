@@ -78,10 +78,6 @@ class Channel:
         """Only nonbuiltin channels admit a changed archive preference."""
         return self.builtin is None and self.archived != archived
 
-    def in_view(self, *, show_archived: bool = False) -> bool:
-        """Archive hides presentation; it does not retire membership or routing."""
-        return show_archived or not self.archived
-
     @property
     def builtin(self) -> BuiltinChannel | None:
         return BuiltinChannel.lookup(self.name)
