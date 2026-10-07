@@ -11,6 +11,7 @@ from .coordinator import Coordination
 
 import asyncio
 import json
+import logging
 import os
 import secrets
 import socket
@@ -38,6 +39,7 @@ def socket_path(root: Path, pid: int) -> Path:
 UNBOUND_CONTROLLER = object()
 _UNBOUND_PUBLICATION_CLIENT = object()
 ACP_PERMISSION_TIMEOUT_SECONDS = 14.0
+_LOG = logging.getLogger(__name__)
 
 
 class SocketClient:
@@ -252,6 +254,9 @@ class RuntimeServer:
             await request.apply(context)
         except (Exception, asyncio.CancelledError) as error:
             if not isinstance(error, asyncio.CancelledError):
+                # The original owner launch retains stderr. Preserve the chain
+                # before the socket response deliberately reduces it to text.
+                _LOG.exception("Runtime request failed (session=%s)", session_id)
                 try:
                     await client.send(_owner_error(error))
                 except (ConnectionError, OSError):

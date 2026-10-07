@@ -125,3 +125,44 @@ receipts agreeing now cannot recover the lost first cause. No stop, restart, dra
 input, summary, native process or replay was performed. The previous recovery trace
 identified automatic wake on ordinary worker restart and pending source work; this
 schema correction does not authorize restarting it or settling uncertain input.
+
+## Runtime attachment failure preservation
+
+The actual UX log at `.local/state/toad/logs/Agent_Comms_2026-10-06T22_08_43_325438.txt`
+contains initialize and session/load, identity metadata, then the busy-read failure;
+no prompt was submitted and no current-admission input was recorded. Subscription
+runs identity publication, transcript capture/replay, turn and input-ledger notices,
+configuration and ready metadata in order. The failure preceded the snapshot update.
+Transcript capture can read both compaction outcomes and coordinator reply records.
+The old socket error alone cannot distinguish those stores or identify its writer.
+
+RuntimeServer.handle is the caught-failure owner for every decoded runtime request,
+binding and apply operation. It now logs the original non-cancellation exception
+chain before `_owner_error` reduces it to the unchanged socket error. Original
+owner_process_output already directs stderr to a private retained owner log.
+Cancellation, response serialization, subscriber removal, permission denial and
+socket retirement are unchanged. No new diagnostic file or wire field is added.
+CoordinationStore.observing adds store path, original timeout and SQLite name/code
+to the original OperationalError as exception notes before the existing busy
+classification. The traceback preserves the failing SQL call and consumer chain;
+notes are private exception evidence, not response text or retry authority.
+
+No OS lock-holder capture was added. SQLite raises after its busy wait has ended;
+Python exposes neither the conflicting SQLite descriptor nor blocking owner.
+The observing boundary then rolls back/closes its read before classifying failure.
+A later `/proc/locks` sample cannot prove it contains the transaction that blocked
+that original read, and SQLITE_LOCKED can be internal connection contention rather
+than an OS lock. The missing observation is the conflicting lock/transaction while
+the original read is actually waiting. This change retains the first concrete
+store/statement failure; it does not guess or patch the historical locking cause.
+
+Two focused source checks passed together (1.37s). The added check uses a real
+owned Unix runtime subscription and the original private compaction journal's
+exclusive transaction. It verifies exact unchanged busy response, full causal
+traceback including the snapshot SQL/store, no ready/controller, subscriber cleanup
+and no input/native session. The existing store cleanup/schema-disposition check
+also passed. Initial check setup refused missing system ACP dependencies and an
+absent scratch parent before test entry; retained dependencies and a persistent
+owned scratch parent resolved those setup issues. No dependency install occurred.
+These are authored private source checks, not an installed UX retry or contention
+repair. Neither UX nor pr159 was restarted, attached, drained or given input.
