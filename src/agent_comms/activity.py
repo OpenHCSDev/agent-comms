@@ -54,7 +54,6 @@ class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
     owner: OwnerIdentity
     error_type: str
     reason: str
-    diagnostic_path: str | None = field(default=None, kw_only=True)
 
     @property
     @abstractmethod

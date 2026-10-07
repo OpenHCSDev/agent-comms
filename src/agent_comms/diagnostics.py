@@ -212,7 +212,10 @@ def record_drain_failure(
     document = {
         "version": 1,
         "thread": thread,
-        "drain": FieldCodec.encode(replace(diagnostic, diagnostic_path=None)),
+        # The artifact owns the exception; activity reason is only presentation.
+        # Derive the original outer reason from that exception, never parse a
+        # file reference out of a previously presented diagnostic.
+        "drain": FieldCodec.encode(replace(diagnostic, reason=str(source_error))),
         "outcome": "inbox observation failed; this record grants no retry authority",
         **_source_error_evidence(source_error),
     }

@@ -3,7 +3,6 @@
 import json
 import sqlite3
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
@@ -32,8 +31,8 @@ def test_coverage_refusal_keeps_chain_and_original_storage(comms, continued):  #
         "owner", owner, diagnostic, source_error=error,
     )
     observed = comms.agents.activity_of("owner").readiness.source_diagnostic()
-    assert observed.diagnostic_path is not None
-    path = Path(observed.diagnostic_path)
+    path, = (comms.root / "diagnostics").glob("drain-*.json")
+    assert observed.reason == f"{error} · Diagnostic: {path.resolve()}"
     document = json.loads(path.read_text())
     assert "FileNotFoundError" in document["source_error"]
     assert "verify_continued_private_session" in document["source_error"]
@@ -76,9 +75,10 @@ def test_coverage_refusal_keeps_chain_and_original_storage(comms, continued):  #
         "owner", owner, diagnostic, source_error=changed.value,
     )
     successor = comms.agents.activity_of("owner").readiness.source_diagnostic()
-    assert successor.diagnostic_path != observed.diagnostic_path
+    successor_path, = set(path.parent.glob("drain-*.json")) - {path}
+    assert successor.reason == f"{changed.value} · Diagnostic: {successor_path.resolve()}"
     assert path.read_bytes() == original_diagnostic
-    assert "ValueError" in Path(successor.diagnostic_path).read_text()
+    assert "ValueError" in successor_path.read_text()
     assert before == (session.read_bytes(), inputs.path.read_bytes())
     with journal.transaction() as db:
         assert db.execute("SELECT count(*) FROM selected_summary_attempts").fetchone()[0] == 0
@@ -88,6 +88,6 @@ def test_legacy_drain_diagnostic_decodes_without_private_reference(comms):
     comms.registry.declare(Thread(name="owner", tags=frozenset(), worktree=str(comms.root)))
     owner = comms.registry.snapshot().owner_identity("owner")
     legacy = FieldCodec.encode(StoppedDrainDiagnostic(owner, "CompactionJournalError", "refused"))
-    legacy.pop("diagnostic_path", None)
+    assert set(legacy) == {"kind", "owner", "error_type", "reason"}
     decoded = FieldCodec.decode(DrainDiagnostic, legacy)
-    assert decoded.diagnostic_path is None
+    assert decoded == StoppedDrainDiagnostic(owner, "CompactionJournalError", "refused")
