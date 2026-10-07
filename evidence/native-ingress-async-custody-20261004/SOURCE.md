@@ -305,3 +305,37 @@ diagnostic/producer source references: `/home/ts/.cache/agent-scratch/mre01`.
 No provider/input/restart/public mutation/build/prefix operation or failed-input
 replay occurred. Parent owns integration and future installed delivery; original
 UNKNOWN input and diagnostic remain untouched.
+
+## Installed zero-provider native refusal — 2026-10-07
+
+Core724/f162 is installed in Parent's native-refusal-delivery runtime. The
+remaining rejection transport/lifecycle gap was exercised once through that
+actual interpreter and installed modules, using existing NativeBackendFixture,
+saved owner binding, selected-source query, PiRpcChannel and original retirement.
+System pytest and source test helpers supply the control; no src overlay.
+
+The command producer first checks selected idle identity/effective settings,
+then compares requested compaction settings before prepareCompaction/entry-store
+work. An initial read-only settings observation acquired its actual declared
+settings; the sole preparation request supplied a different valid reserve budget.
+The genuine committed4b child returned success:false/error with its original
+request ID and 'Selected preparation settings changed'. The existing readline
+observer only persisted original bytes and returned them unchanged; no fake
+response, separate channel, codec or provider execution supplied the outcome.
+
+Installed selected-source exchange correlated that reply and preserved the native
+error in its actual ValueError/SelectedPiProbeUnknownError causal chain. It retired
+and joined the borrowed child through persistent.close; authentic identity
+4070385/b88222179 was directly absent afterward. Zero localhost POSTs, zero native
+inputs, no input proof and unchanged SDK journal. Original owner/fixture shutdown
+joined and closed its resources. One check PASS4.31 seconds; no failure/retry.
+The final raw-record check also filters ordinary nonresponse Pi events as the
+original exchange does; source compile/diffcheck passed without repeating native.
+
+Raw envelope, stdout and final result:
+`/home/ts/.cache/agent-scratch/mnr01/t/saved-native-owner0/selected-refusal.jsonl`,
+`/home/ts/.cache/agent-scratch/mnr01/check.log`, and `result.json`.
+Fresh journal/config/private wire remain retained there. No public owner/message,
+uncertain input replay, provider request, build, install, prefix mutation or pin
+change occurred. This qualifies the genuine installed refusal path; it neither
+recovers the original4fbfe raw envelope nor proves that historical refusal cause.
