@@ -338,3 +338,26 @@ recorded-source requests and CLI diff still consume those original manifests.
 External dynamic consumers are not resolved by the AST trace. Trace and check
 output: /home/ts/.cache/agent-scratch/mendel-context-resource-reuse-20261007.
 Toad integration and installed panel CPU verification remain Parent's next step.
+
+## Implicit project actor command discovery — 2026-10-07
+
+The retained streaming App traceback reaches TargetContext.available_actions,
+CliCommand.target_catalog and RegistrySnapshot.require('project'). A view actor
+does not itself declare a backend thread. Catalog discovery now selects thread
+members through its already-acquired RegistrySnapshot canonical namespace before
+asking command declarations for bindings. Channel bindings are unchanged. There
+is no reserved 'project' spelling: a genuinely declared thread with that name
+still exposes its actions. Execution retains its original strict fresh lookup;
+an absent target cannot become executable by having appeared in a view.
+
+The new real private-store check passes for absent actors, strict execution
+refusal and a genuinely declared project-named thread. The existing mixed
+missing/present batch check also passes, including truthful partial outcomes.
+Raw checks and AST sites are retained under
+/home/ts/.cache/agent-scratch/mendel-project-target-catalog-20261007.
+The first invocation refused unsupported repository xdist options before entry.
+The initial new test incorrectly tried renaming a stopped thread; its failure is
+retained, and the fixture now uses the original stopped declaration operation.
+Only that failed check was repeated. All src/tests/tools Python parsed, with 23
+related declaration/call sites and no omissions. No installed App, native input,
+publication, build or restart was performed; Parent carries integration.
