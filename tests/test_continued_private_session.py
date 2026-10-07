@@ -61,8 +61,16 @@ def continued(tmp_path):
     return CompactionJournal(tmp_path / "compaction-commits.sqlite3"), session, inputs, source
 
 
-def test_continued_private_session_needs_no_fresh_object_and_preserves_history(continued):
+@pytest.mark.parametrize("streaming_behavior", [None, "steer", "followUp"])
+def test_continued_private_session_needs_no_fresh_object_and_preserves_history(continued, streaming_behavior):
     journal, session, inputs, source = continued
+    entries = [json.loads(line) for line in session.read_text().splitlines()]
+    entries[1]["message"]["inputDigest"] = native_request_digest(
+        "old", streaming_behavior=streaming_behavior
+    )
+    session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+    source = replace(source, source=replace(source.source,
+        reserved_revision=SessionRevision.observe(str(session)).require_available()))
     before = session.read_bytes(), inputs.path.read_bytes()
     operation = journal.summaries.reserve(str(session), source)
     assert journal.summaries.get(operation).state.declared_name == "reserved"

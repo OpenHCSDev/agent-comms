@@ -598,3 +598,47 @@ It must use the matched new package/runtime, not old4b or original failed inputs
 The existing cold-retained manual/adaptive tests additionally check fresh native
 reopen, but their `--no-tools` launch cannot by itself qualify full tool admission.
 All application/provider checks remain unrun by this artifact preparation.
+
+## Continued-session queued prompt coverage (2026-10-07)
+
+Parent delivered Core726 and the new native package; the original 147 MB
+configured fork passed summary and a fresh answer. The next UX drain failed
+STARTED user corroboration before a new prompt. Human text did not differ.
+Entry b741a2ea, native input aab39cc6db31e06d87260a283892352c, belongs to
+original input acp:268ba30afc1c4b66b53f02f09b9ea2f4. Its recorded digest
+54e30598ba000511e6fc6a1369fe7dd99e60f7b0706e58b809dd08967f178b6e
+matches the exact original prompt envelope with streamingBehavior=steer.
+Ordinary behavior with the same text yields
+b48ebdcd2796092c3ef335a019a2cc906e9ecfde9afeffdcfa9edfeb2f48e54a.
+Read-only comparison of all 74 original STARTED entries found 69 ordinary
+prompts and five steering prompts, with no changed text or unmatched envelope.
+
+Native _claimNativeInput hashes the full prompt envelope, including queue
+behavior. InputForwarding/send_prompt and InputDrain legitimately emit steering
+prompts; the SDK persists their original digest. The verifier reconstructed only
+an ordinary prompt. Prompt now owns exact digest corroboration over its declared
+ordinary/steer/followUp modes. The original private_sidecar encoding/hash owner
+supplies the envelope; initial prompt binding and private send stage retain
+their ordinary default. No request ledger, mode storage, compatibility decoder
+or native protocol change was introduced. Exact text/content, unique identity,
+owner, live context evidence, ancestry, revision and UNKNOWN/raw-marker refusal
+remain required. Standalone steer/follow_up envelopes, images and changed request
+configurations are not newly accepted. Durable formats remain unchanged.
+
+Existing Package acquisition covered 324 source, 381 tests and 54 tools modules
+with zero parse omissions. Before/current declarations and consumers are in
+/home/ts/.cache/agent-scratch/mfc01/continued-owner-consumers.json.
+Native SDK patch/declarations were read directly; dynamic external extension
+behavior is not proved absent by the Python inventory.
+
+The original private-store continuation check covers all three declared prompt
+modes: three passed in 0.31 seconds. All 14 existing uncertainty, identity, text,
+digest, content-shape and revision refusal cases passed in the first batch.
+Its positive fixture initially wrote the authored journal after capturing the
+reserved revision and correctly failed on session_changed. The fixture now
+captures revision after writing; only the three affected positives were rerun.
+Both logs and authored stores remain in mfc01. No public reservation, compaction,
+prompt, restart or replay occurred. Inputs 780 and 778 remain untouched.
+Parent must integrate/build the changed Core before isolated saved-session
+continuation/summary acceptance. Native package and pin need no rebuild for this
+original-envelope correction. The parked field_codec change is excluded.
