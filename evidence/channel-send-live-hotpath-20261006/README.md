@@ -808,3 +808,32 @@ Attempt to verify disposal of only the unlaunched223MiB runtime stopped on a
 permission-denied proc environment before deletion. Existing cleanup owner was
 given the exact dependency and actual current/pending runtimes for privileged
 borrower check; no cleanup success is claimed yet. No worktree was added.
+
+
+## Future backend defaults and pointer close delivered — October 7
+
+The existing publisher now distinguishes changing future command defaults from
+replacing running owners. Frontend and backend declarations share their actual
+link acquisition/publication/recovery implementation; replacing agents remains
+with the original stopped-owner installation. Private typed-scope and real-link
+recovery checks passed, including preserving an independently changed foreign
+binding. Core PR705 and Toad PR516 are merged.
+
+Future backend commands now select `runtime-session-focus` (Core4745); the Toad
+command selects `runtime-tab-close-focus` (Toadbf9a/nativea2ac). Existing agents
+and the active native route were preserved. Mouse tab-close uses the original
+native FOCUS_ON_CLICK=False declaration, retaining editor focus; keyboard close
+still works. The existing real App control and installed mixed-selection/archive
+control passed. All69 complete RECORDs /2787 hashed entries are verified.
+
+The final actual-default saved-thread App completed and all six native
+open/close/reopen/editor/history checks passed. Original owner and selected
+runtime were unchanged; processes joined and owned cleanup was empty:
+`/home/ts/.cache/agent-scratch/tab-close-focus-default-live-20261007/receipt.json`.
+Connection plus visible saved history took2.84s on first peer open and2.28s on
+reopen in this single run. This is not a latency improvement claim; ACP startup
+remains active work. The candidate recorder import refusals and the concurrently
+observed authorized backend-link change remain in their original raw receipts;
+the existing native review was rerun offline without an App replay. The own
+completed4.26MB Git-archive build source was removed after a clear privileged
+process census; installed prefixes, wheels, evidence and journals remain held.
