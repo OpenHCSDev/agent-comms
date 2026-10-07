@@ -451,6 +451,11 @@ class FieldCodec(Sealed):
                 # WireValue's pre-validation would traverse each subtree again.
                 return representation.from_wire(data)
             return representation.decode(data)
+        if (
+            target is str or target is int or target is bool
+            or target is type(None) or target is float
+        ):
+            return cls._decode_scalar(target, data)
         if target is Any:
             cls.encode(data)  # still require valid JSON data
             return data
@@ -531,6 +536,16 @@ class FieldCodec(Sealed):
             )
         if isinstance(target, type) and issubclass(target, Enum):
             return target(data)
+        return cls._decode_scalar(target, data)
+
+    @staticmethod
+    def _decode_scalar(target: Any, data: Any) -> Any:
+        """The original strict scalar boundary, after representation selection.
+
+        Exact primitive declarations skip structural dispatch. Unknown targets
+        reach this only after that dispatch, preserving custom annotation
+        equality and record/enum construction precedence.
+        """
         if target in (str, int, bool, type(None)) and type(data) is target:
             return data
         if target is float and type(data) in (int, float) and math.isfinite(data):
