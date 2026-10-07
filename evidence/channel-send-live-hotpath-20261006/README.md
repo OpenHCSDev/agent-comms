@@ -194,3 +194,27 @@ through their existing cache owners. The installed default still starts and
 reports its version after cleanup. No source, private/public runtime or original
 history was deleted. Remaining tree cost is assigned through the original
 navigation and command-completion family; no second cache is being introduced.
+
+## Navigation and hidden completion delivered
+
+Toad PR508 is merged and the default `toad` now selects `runtime-navigation`.
+This retains Core fefa72c and Textual be28b; it changes only Toad navigation and
+completion supply. Already-running UIs retain their old imports until reopened.
+
+The installed private App check (`navigation-installed-20261006/result.json`)
+observed no service construction, registry decoding, action discovery or menu
+row rebuild during idle observations. Opening completion still reads choices;
+rename/deletion/new birth and unavailable-route behavior passed. The isolated
+saved-history recording (`navigation-installed-physical-20261006/receipt.json`)
+completed with UI/st exit0, original source unchanged, empty cleanup errors and
+no remaining owned processes. No message was submitted. This is not a total
+frame-time or channel-tree latency qualification.
+
+The original 953 assets/69 packages and protected resources matched. The
+publication is `.artifacts/sidebar-live-candidate-20261006/navigation-wheel/publication.json`.
+A cache cleanup had removed the original Diff wheel. Rebuilding its exact Git
+source reproduced SHA be7089c8 byte for byte; the original cache pathname was
+restored and a durable copy now lives in `retained-artifacts/`. Preserve that
+artifact for the current installed-proof/recovery relation. The initial verifier
+refusal is retained under navigation-wheel/cache-path-refusal. Disposable copied
+Git evidence was removed; original source/evidence/recordings are retained.
