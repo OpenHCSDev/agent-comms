@@ -185,3 +185,9 @@ not an installed successor wheel. Parent still owns build/publication. No instal
 package mutation, backend restart, public participant/input, paid request or new
 native assembly. The two authored completed native inputs and raw keepers remain
 held under the persistent mpj02 root.
+
+### Installed backend and default delivery
+
+The built integrated2072058 backend was checked through the corrected original native/ACP control using installed modules, fresh private SDK journal and two localhost requests. All assertions passed, including original project continuation and stale generation/process/foreign-name refusal; native child retired. Raw: /home/ts/.cache/agent-scratch/installed-project-turn-20261007/check-prepared-root.{stdout,stderr}.log, private journal retained under /home/ts/.cache/agent-scratch/mpj03. Earlier pytest-plugin refusal and overlong socket-root refusal occurred before input and remain held. The short root first needed its parent prepared before fixture creation; no native operation occurred in that setup refusal.
+
+All954 assets/full69 distribution versions and2857 RECORD rows matched. The original ReviewedCommsBackendCohort publisher changed future backend defaults to .artifacts/project-turn-delivery-20261007/runtime; the current frontend/native route and existing running owners were preserved. This is installed/default-delivered, not proof that existing agents loaded the successor. Original user UNKNOWN input and blocked goal were not replayed or resumed.
