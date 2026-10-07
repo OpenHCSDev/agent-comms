@@ -152,3 +152,32 @@ def test_plain_tool_result_keeps_text_content():
     assert tool_result_content("plain", event.text, event.diff) == [
         {"type": "content", "content": {"type": "text", "text": "saved output"}}
     ]
+
+
+def test_successful_send_preserves_original_publication_in_live_and_saved_content(tmp_path):
+    from agent_comms.pi_payloads import ToolResultMessage, PublishedMessageToolDetails
+    from agent_comms.tools import invoke_tool
+    from agent_comms.transcript_events import SentTranscript
+
+    comms = wire(tmp_path / "wire")
+    comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("recipient", frozenset(), str(tmp_path)))
+    published = invoke_tool(comms, "comms_send", {
+        "from": "sender", "to": "recipient", "body": "Original private publication"})
+    raw = {"content": [{"type": "text", "text": json.dumps(published)}], "details": published}
+    result = PiToolResult.from_wire(raw)
+    message, = comms.views.full_history()
+    assert result.sent_message(True) == SentTranscript.from_message(message)
+    assert result.sent_message(False) is None
+    saved = ToolResultMessage.from_wire({
+        "role": "toolResult", "toolCallId": "original-send", "toolName": "comms_send",
+        **raw, "isError": False,
+    }).transcript_events(None)[0]
+    assert saved.sent_message == result.sent_message(True)
+    assert tool_result_content("original-send", saved.text, saved.diff, saved.sent_message) == (
+        tool_result_content("original-send", result.text(), sent_message=result.sent_message(True)))
+    invalid = {**published, "id": "another-message"}
+    with pytest.raises(ValueError):
+        PublishedMessageToolDetails.from_wire(invalid)
+    # Older and unrelated untagged output has no original publication witness.
+    assert PiToolResult.from_wire({**raw, "details": {"id": published["id"]}}).sent_message(True) is None

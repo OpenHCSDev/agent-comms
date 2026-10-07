@@ -144,6 +144,11 @@ class CompactionOutcomeTranscript(NoticeTranscript):
 class SentTranscript(OutgoingRoute, WireTextTranscript):
     """One immutable original wire row, separate from native assistant output."""
 
+    @classmethod
+    def from_message(cls, message):
+        return cls(message.body, timestamp=message.timestamp, source=message.reference,
+                   routing=TurnRouting(reply=MessageRoute(message.sender, (message.target,))))
+
 
 class ThinkingTranscript(SilentTranscript, LiveTextTranscript):
     @property
@@ -175,3 +180,4 @@ class ToolEndTranscript(ToolTranscript):
     text: str = ""
     ok: bool = True
     diff: ToolDiff | None = field(default=None, metadata={"wire_omit_default": True})
+    sent_message: SentTranscript | None = field(default=None, metadata={"wire_omit_default": True})
