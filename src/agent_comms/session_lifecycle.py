@@ -13,12 +13,15 @@ from typing import TYPE_CHECKING, Any
 from acp import RequestError
 from acp.schema import (
     AgentCapabilities,
+    CloseSessionResponse,
     Implementation,
     InitializeResponse,
     LoadSessionResponse,
     NewSessionResponse,
     PromptCapabilities,
     SessionInfoUpdate,
+    SessionCapabilities,
+    SessionCloseCapabilities,
     TerminalAuthMethod,
 )
 
@@ -109,10 +112,19 @@ class SessionLifecycle:
             agent_capabilities=AgentCapabilities(
                 load_session=True,
                 prompt_capabilities=PromptCapabilities(image=True),
+                session_capabilities=self.session_capabilities(),
             ),
             agent_info=Implementation(name="agent-comms", title="Agent Comms", version="0.1.0"),
             auth_methods=methods,
         )
+
+    def session_capabilities(self) -> SessionCapabilities:
+        return SessionCapabilities()
+
+    async def close_session(self, session_id: str) -> CloseSessionResponse:
+        # An executing owner is not an attachment. Its turn/input retirement
+        # remains with shutdown, rather than treating tab close as owner stop.
+        raise RequestError.method_not_found("session/close")
 
     @staticmethod
     def thread_name_for(cwd: str) -> str:
@@ -395,8 +407,12 @@ class SessionLifecycle:
         """Keep custody until the original reader is closed and joined."""
         proxy = self.proxies.get(session_id)
         if proxy is not None:
-            await proxy.close()
-            del self.proxies[session_id]
+            retirement = asyncio.create_task(proxy.close())
+            try:
+                await join_retirement(retirement)
+            finally:
+                if retirement.done() and not retirement.cancelled() and retirement.exception() is None:
+                    del self.proxies[session_id]
 
     async def close_proxies(self) -> None:
         async with self._attachment_lock:
@@ -420,6 +436,20 @@ class SessionLifecycle:
 
 class AttachedSessionLifecycle(SessionLifecycle):
     """A stdio attachment requests a separate executor; it never claims ownership."""
+
+    def session_capabilities(self) -> SessionCapabilities:
+        return SessionCapabilities(close=SessionCloseCapabilities()) if (
+            self.effects.use_unstable_protocol
+        ) else super().session_capabilities()
+
+    async def close_session(self, session_id: str) -> CloseSessionResponse:
+        if not self.effects.use_unstable_protocol:
+            raise RequestError.method_not_found("session/close")
+        async with self._attachment_lock:
+            if session_id not in self.proxies:
+                raise RequestError.invalid_params({"reason": "Unknown attached session"})
+            await self.retire_proxy(session_id)
+        return CloseSessionResponse()
 
     def acquire_declared_thread(self, thread: Thread) -> Thread:
         """Leave the published declaration for the original load admission."""
