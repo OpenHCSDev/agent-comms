@@ -538,3 +538,29 @@ root. Existing clients and backend workers were not restarted. This confirms the
 affected installed channel path, not a matched latency improvement or smooth
 context-tree/burst behavior. Heis owns remaining row/history preparation;
 Mendel owns scoped context acquisition.
+
+## Certified context resources delivered
+
+Core b7bfa90c5 and Toad4e5448603 retain decoded manifests in the existing
+ContextInspection lifetime. Each acquisition still certifies the current source,
+selects current incarnation pointers and captures their exact bytes; unchanged
+source/pointer/bytes reuse the original decoded resource. Annotation, imported
+provenance, SDK revision and model/settings reads remain independent. Writable
+and archived WireAccess own their respective acquisition behavior; archives
+retain strict original scanning. No widget cache or signature was added.
+Contributor private-store checks covered unchanged reuse, new observations,
+rename and tamper refusal. Parent inspected all state/acquisition consumers;
+Package parsed288 source/406 tests/40 tools with no omissions and compiled the
+changed inspection and original widget. External dynamic callers remain unresolved.
+
+One installed saved-history App opened/wheeled/hid/restored the right sidebar,
+exited0 in45.268s, preserved the original source and cleaned up all owned processes.
+No input was submitted. Original recorded request/context resources remained
+available. Evidence: `/home/ts/.cache/agent-scratch/context-resources-installed-20261007`.
+Scroll-phase UI CPU was86.13/40.59/54.27/42.83 percent of one core versus the
+preceding run98.45/97.39/101.33/96.80. This is an uncontrolled single-run comparison
+with diagnostic capture overhead, not input-to-pixel/frame latency acceptance.
+All953 assets/full69 matched; the original frontend publication selected
+runtime-context-resources for new UI launches. Publication evidence is
+context-resources-wheel/publication.json under the existing candidate root.
+Original backend owners stayed running; no uncertain message was replayed.
