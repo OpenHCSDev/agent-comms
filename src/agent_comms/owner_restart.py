@@ -290,6 +290,8 @@ class AdmittedOwnerBatch:
             launches = tuple(RetainedOwnerLaunch.capture(
                 thread, snapshot, interpreter=request.source_interpreter,
             ) for thread, _ in captured)
+            if captured:
+                cutover.require_launch(lifecycle)
             admitted = cls(lifecycle, tuple(captured), launches, request, runtime)
             fenced = admitted.fence()
         return fenced.complete(cutover)

@@ -309,6 +309,23 @@ class OwnerLifecycle:
         self._stop_process(thread, generation)
         self._finish_stopped_owner(thread, generation)
 
+    def require_launch_authority(self) -> PrivateNkLaunch | None:
+        """Check this lifecycle's launch authority without reserving a process.
+
+        Callers hold the wire lock. A preserving restart can check before
+        fencing; every actual launch rechecks the same owner after cutover.
+        """
+        private_launch = self._private_nk_launch
+        if private_launch is None:
+            with self.bus.log.locked():
+                if self.bus.log.read_metadata_unlocked().private:
+                    raise PublicationActivationBlocked(
+                        "private owner launch requires explicit matching root and package"
+                    )
+        else:
+            private_launch.validate()
+        return private_launch
+
     def _launch_owner_unlocked(
         self,
         thread: Thread,
@@ -330,15 +347,7 @@ class OwnerLifecycle:
             PACKAGE_ENV,
         ):
             env.pop(key, None)
-        private_launch = self._private_nk_launch
-        if private_launch is None:
-            with self.bus.log.locked():
-                if self.bus.log.read_metadata_unlocked().private:
-                    raise PublicationActivationBlocked(
-                        "private owner launch requires explicit matching root and package"
-                    )
-        else:
-            private_launch.validate()
+        private_launch = self.require_launch_authority()
         if private_launch is not None:
             if agent_bin == "pi":
                 # The default stock binary cannot attest native input IDs.
