@@ -641,16 +641,19 @@ class WireLog:
         return self.read_metadata_unlocked().last_seq
 
     def claim_gate_enabled(self) -> bool:
+        return self._claim_marker_unlocked() is not None
+
+    def _claim_marker_unlocked(self) -> WireMetadata | None:
         # _store_lock is also used for registry, channels, and marker files.
         # Only the canonical bus may enter this read/durability barrier.
         if self.path.name != "bus.jsonl":
-            return False
+            return None
         metadata = self.read_metadata_unlocked()
         from .private_bus_checkpoint import certificate_enabled
 
         if certificate_enabled(self.path) and not metadata.claims:
             raise RelationViolationError("Private checkpoint lacks its claim read barrier.")
-        return metadata.claims
+        return metadata if metadata.claims else None
 
     @contextmanager
     def verify_before_read_unlocked(self):
@@ -662,10 +665,10 @@ class WireLog:
         treating either the announcement or the claim as committed. This hook is
         entered by the shared bus lock, including ordinary inbox/history readers.
         """
-        if not self.claim_gate_enabled():
+        private_marker = self._claim_marker_unlocked()
+        if private_marker is None:
             yield None
             return
-        private_marker = self.read_metadata_unlocked()
         marker = self.metadata_path
         marker_info = marker.lstat()
         if (
