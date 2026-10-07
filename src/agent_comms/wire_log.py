@@ -70,16 +70,28 @@ class OpenedWireSnapshot:
     def messages(record: Mapping) -> tuple[Message, ...]:
         return WireRecord.public_from_wire(record).messages()
 
-    def public_records(self, offset: int = 0) -> Iterator[tuple[Message, int]]:
+    def public_records(self, offset: int = 0, *, before_offset: int | None = None
+                       ) -> Iterator[tuple[Message, int]]:
         if self.stream is None:
             return
-        if not 0 <= offset <= self.boundary:
+        boundary = self.boundary if before_offset is None else before_offset
+        if not 0 <= offset <= boundary <= self.boundary:
             raise ValueError("Public read exceeds its opened source cut")
         self.stream.seek(offset)
         for record, raw_size in _iter_jsonl_stream(
-            self.stream, boundary=self.boundary, label="wire snapshot"
+            self.stream, boundary=boundary, label="wire snapshot"
         ):
             yield from self.public_page_records(record, raw_size, self.metadata)
+
+    def public_records_for(self, sequences: frozenset[int], *, before_offset: int
+                           ) -> Iterator[tuple[Message, int]]:
+        """An uncertified cut must validate every original row, including silence."""
+        if not 0 <= before_offset <= self.boundary:
+            raise ValueError("Public read exceeds its opened source cut")
+        if sequences:
+            for message, size in self.public_records(before_offset=before_offset):
+                if message.seq in sequences:
+                    yield message, size
 
     @classmethod
     def public_page_records(cls, record: Mapping, raw_size: int,
@@ -103,6 +115,53 @@ class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
     @staticmethod
     def messages(record: Mapping) -> tuple[Message, ...]:
         return WireRecord.certified_public_messages(record)
+
+    def public_records_for(self, sequences: frozenset[int], *, before_offset: int
+                           ) -> Iterator[tuple[Message, int]]:
+        """Resolve sparse read changes in this cut using the original page index.
+
+        Index coverage and offsets are captured atomically. Missing or stale
+        derived evidence falls back to the same bounded source, never absence.
+        This reader neither creates nor updates an index.
+        """
+        import sqlite3
+        from .bus_page_index import BusPageIndex, BusPageSource, StaleBusPageIndexError
+
+        if not 0 <= before_offset <= self.boundary:
+            raise ValueError("Public read exceeds its opened source cut")
+        if not sequences or self.stream is None:
+            return
+        rows = None
+        try:
+            with BusPageIndex(Path(self.stream.name), readonly=True) as index:
+                index.connection.execute("BEGIN")
+                saved = BusPageSource.one(index.connection, singleton=1)
+                if saved is not None and saved.covers(self.stream, self.revision):
+                    rows = tuple(
+                        row for seq in sorted(sequences)
+                        for row in index.offsets(lower=seq - 1, upper=seq + 1,
+                                                descending=False, targets=None,
+                                                before_offset=before_offset)
+                    )
+        except (OSError, sqlite3.DatabaseError, StaleBusPageIndexError, ValueError, TypeError):
+            rows = None
+        records = None
+        if rows is not None:
+            try:
+                records = tuple(
+                    record for row in rows
+                    for record in self.public_page_records(
+                        *BusPageIndex.record(self.stream, row,
+                                             max_bytes=before_offset - row.offset),
+                        self.metadata,
+                    )
+                )
+            except (OSError, StaleBusPageIndexError):
+                pass
+        if records is not None:
+            yield from records
+        else:
+            yield from super().public_records_for(sequences, before_offset=before_offset)
 
 
 class WireLog:
@@ -217,6 +276,9 @@ class WireLog:
             self._append_private_unlocked(marker, record.to_wire())
 
     def context_manifests(self, name: str, registry):
+        return tuple(resource.value for resource in self.context_manifest_resources(name, registry))
+
+    def context_manifest_resources(self, name: str, registry, *, previous=()):
         """Capture original source and rename membership before decoding.
 
         The original wire -> bus -> registry order selects the read snapshot;
@@ -226,7 +288,8 @@ class WireLog:
             with self.certified_read() as source:
                 snapshot = registry.snapshot()
                 incarnation = snapshot.require(name).incarnation
-                captured = source.context_manifests(incarnation, snapshot)
+                captured = source.marker.access.context_resources(
+                    source, incarnation, snapshot, previous=previous)
         return tuple(captured)
 
     @contextmanager

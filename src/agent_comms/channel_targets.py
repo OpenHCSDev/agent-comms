@@ -13,7 +13,10 @@ class BuiltinChannel(StrEnum):
 
     @classmethod
     def lookup(cls, name: str) -> BuiltinChannel | None:
-        return next((channel for channel in cls if name == channel.value), None)
+        channel = cls._value2member_map_.get(name)
+        # The enum owns value lookup. Added value aliases are not declared
+        # channel targets; retain the original exact-value contract.
+        return channel if channel is not None and name == channel.value else None
 
     @classmethod
     def exact_stored_target(cls, name: str) -> bool:

@@ -89,12 +89,13 @@ class CompactionJournal:
         empty = {table.declared_name: [] for table in tables}
 
         def read(db):
-            return {table.declared_name: [row.inspection() for row in table.for_session(
-                db, session_file)] for table in tables}
+            return {table.declared_name: table.for_session(db, session_file) for table in tables}
 
+        captured = cls.observe_readonly(path, read, absent=empty)
         return dict(session_file=session_file,
                     scope="original journal rows for this saved-session path; historical owners remain recorded",
-                    tables=cls.observe_readonly(path, read, absent=empty))
+                    tables={name: [row.inspection() for row in rows]
+                            for name, rows in captured.items()})
 
     @classmethod
     def retained_changes(cls, path: Path, session_file: str) -> dict[str, object]:
@@ -104,18 +105,18 @@ class CompactionJournal:
                 where="session_file=? ORDER BY rowid DESC LIMIT 2", parameters=(session_file,))
             if len(attempts) != 2:
                 raise ValueError("Retained-source diff requires two original selected compaction attempts")
-            current, previous = attempts
-            return dict(scope="last two original selected compaction source cuts; not current native context",
-                        previous=FieldCodec.encode(previous.identity),
-                        current=FieldCodec.encode(current.identity),
-                        **current.request.retained.changed_from(previous.request.retained))
+            return attempts
 
         # A missing journal has the same precise contract as insufficient cuts.
-        return cls.observe_readonly(path, read, absent={
-            "scope": "last two original selected compaction source cuts; not current native context",
-            "available": False,
-            "reason": "No original compaction journal exists",
-        })
+        attempts = cls.observe_readonly(path, read, absent=None)
+        scope = "last two original selected compaction source cuts; not current native context"
+        if attempts is None:
+            return dict(scope=scope, available=False, reason="No original compaction journal exists")
+        current, previous = attempts
+        return dict(scope=scope,
+                    previous=FieldCodec.encode(previous.identity),
+                    current=FieldCodec.encode(current.identity),
+                    **current.request.retained.changed_from(previous.request.retained))
 
     def __init__(self, path: Path):
         self.path = path

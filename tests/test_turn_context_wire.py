@@ -23,6 +23,48 @@ def manifest(owner, generation=1):
     return ContextManifest(owner.incarnation,RecordedContextTurn(TurnId('original-turn'),TurnIdentity(owner.incarnation,generation)),(segment,),'pi.estimateTokens')
 
 
+def test_context_resources_revalidate_selected_bytes_without_redecoding(tmp_path, monkeypatch):
+    from agent_comms.private_bus_checkpoint import ContextManifestSources
+
+    comms, _ = _root(tmp_path)
+    owner = comms.registry.require('Alice')
+    originals = tuple(manifest(owner, generation) for generation in range(1, 21))
+    for original in originals:
+        comms.bus.log.record_context(original)
+    decoded = []
+    original_decode = ContextManifestSources.decode_bytes
+
+    def measured(pointer, raw, root):
+        decoded.append(pointer.offset)
+        return original_decode(pointer, raw, root)
+
+    monkeypatch.setattr(ContextManifestSources, 'decode_bytes', measured)
+    acquired = comms.bus.log.context_manifest_resources('Alice', comms.registry)
+    assert tuple(item.value for item in acquired) == originals
+    assert len(decoded) == 20
+    decoded.clear()
+    # A different owner's context changes the global source, not Alice's originals.
+    comms.bus.log.record_context(manifest(comms.registry.require('Bob')))
+    current = comms.bus.log.context_manifest_resources('Alice', comms.registry, previous=acquired)
+    assert all(new is old for new, old in zip(current, acquired, strict=True))
+    assert decoded == []
+    comms.registry.rename('Alice', 'Renamed-Alice')
+    renamed = comms.bus.log.context_manifest_resources('Renamed-Alice', comms.registry, previous=current)
+    assert renamed == current
+    assert decoded == []
+    later = manifest(comms.registry.require('Renamed-Alice'), 21)
+    comms.bus.log.record_context(later)
+    appended = comms.bus.log.context_manifest_resources('Renamed-Alice', comms.registry, previous=renamed)
+    assert tuple(item.value for item in appended) == (*originals, later)
+    assert len(decoded) == 1
+    assert all(new is old for new, old in zip(appended[:-1], renamed, strict=True))
+    # Prior acquisitions are observations, never permission to ignore changed bytes.
+    with comms.bus.log.path.open('ab') as output:
+        output.write(b'{}\n')
+    with pytest.raises(ValueError):
+        comms.bus.log.context_manifest_resources('Renamed-Alice', comms.registry, previous=appended)
+
+
 @pytest.mark.asyncio
 async def test_installed_context_callbacks_share_original_writer_custody(tmp_path):
     """Both real event owners publish original observations without blocking.

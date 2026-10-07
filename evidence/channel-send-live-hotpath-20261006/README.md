@@ -218,3 +218,593 @@ restored and a durable copy now lives in `retained-artifacts/`. Preserve that
 artifact for the current installed-proof/recovery relation. The initial verifier
 refusal is retained under navigation-wheel/cache-path-refusal. Disposable copied
 Git evidence was removed; original source/evidence/recordings are retained.
+
+## Retained disclosure and prompt tab closure delivered
+
+Toad509 is merged. The default client now selects
+`.artifacts/sidebar-live-candidate-20261006/runtime-tree-close`; publication uses
+the existing frontend publisher and changes only the Toad entrypoint. Backend
+commands, processes, native package and route remain unchanged. Open clients
+retain their existing imports until reopened.
+
+Collapsed channel and relationship groups retain admitted row/prepared identities;
+unchanged reopen no longer constructs rows or recaptures every member. Hidden
+rows are excluded from navigation/ranges/animation; original publications still
+retire stale membership, incarnation and route resources. The selected tab now
+returns to its survivor before original teardown joins; cleanup remains awaited.
+Channel participant output uses its original Static content and a single
+presentation read for each member, with independent tooltip updates.
+
+The combined installed private workspace check passed with empty stderr:
+`/home/ts/.cache/agent-scratch/tab-close-20261006/installed.{stdout,stderr}.log`.
+It preserves the surviving original editor, draft and Undo while removing the
+closed admission/view. The initial source check emitted unregistered-thread
+errors because its fixture lacked the canonical private declaration; the existing
+fixture was corrected and the clean source/installed results retained separately.
+
+Actual isolated-st saved-history disclosure recording completed normally under
+`/home/ts/.cache/agent-scratch/tree-disclosure-installed-20261006`. Both native
+clicks changed the tree, original source identity stayed unchanged, and cleanup
+has no remaining owned processes/errors. No new message was submitted. Per-gesture
+receipt timestamps bracket xdotool submission, not handler completion. Retained
+10fps contact sheets show the changed tree near those submissions; no precise
+input-to-photon claim is made. Initial expansion/collapse phase UI CPU was about
+34%/27%, versus prior quiet33.5%/29.7%; this does not establish a reliable overall
+performance gain. Previous baseline labels were reversed and remain preserved;
+new labels are first/second disclosure rather than assumed direction.
+
+All953 installed assets and69 package versions match their declared source/wheels.
+The combined proof, activation and publication are in `tree-close-wheel`.
+Activity-burst hangs, database read contention and the original pr159 compaction
+failure remain unresolved by these changes. They are separate ongoing work.
+
+## Native paint-only publication delivered
+
+Toad510 and Textual85 are merged. The default client now selects
+`runtime-paint`; its publication is `paint-wheel/publication.json` beneath the
+existing candidate directory. Backend processes and native route are unchanged.
+
+Static owns whether an update needs layout: native leaf Content with unchanged
+text retains geometry while updating actual spans. Custom rendering/measurement,
+containers and changed text retain layout. ChannelParticipants compares complete
+Content identity, including spans, rather than plaintext equality.
+
+The installed real producer check renamed a canonical participant without
+changing its display title. The changed click target and tooltip painted, with
+zero layout invalidations, requests or arrangements (577 widgets, ten tabs).
+Its result is `participant-producer-installed-20261006/result.json` under agent
+scratch. The initial verification had an unguarded multiprocessing entrypoint
+and incorrectly assumed busy changes left plaintext unchanged; those failures
+remain held. The corrected check uses the original managed rename owner.
+
+The actual `paint-burst-installed-20261006` recording sent one distinct new
+message and completed with the saved source unchanged and no cleanup errors.
+Send-phase CPU was70.3% versus70.8% in the preceding burst: no meaningful overall
+latency gain. Native writer completion intervals are not input-to-photon or
+monitor frame times; captures can contribute gaps. Repeated coordination decoding
+and layout remain in the profile. Existing accepted messages were not replayed.
+
+Database attach failures are independently unresolved. The integrated runtime
+diagnostic correction retains the original causal traceback and SQLite store
+context before the unchanged wire error. It has not been installed into running
+backend owners, and it does not identify the historical blocking writer.
+
+Default-entrypoint confirmation completed in33.18s at
+`paint-default-live-20261006`: observed modules/interpreter select runtime-paint,
+both channel disclosure directions visibly changed the native tree, original
+saved owner remained unchanged, App/st exited0 and cleanup has no remaining
+owned processes/errors. No message was submitted in this confirmation. This
+proves default selection and affected interaction, not smooth scrolling or a
+whole activity latency win. The visible pr159 compaction error remains unresolved.
+
+## Native tab-close observation and scalar decode delivery
+
+The original SavedTabCloseJourney now resolves the captured native peer label and
+its SessionTabClose through NativeFocusTarget. Seven guessed-coordinate options
+and their duplicate screen-range validation are deleted. PhysicalJourney owns the
+existing shared visible-history readiness command; warm and close consumers inherit
+it. Review requires the peer admission to disappear, original selection/editor/
+history identity to survive and reopening to create a fresh admission. Toad
+checkpoint542d4a59 changes these two helper files only, with all other declarations
+AST-equal except the shared readiness move and obsolete argument removal.
+
+The first actual run is preserved under `tab-close-physical-20261006/run`. Its
+unread badge cleared after capture, moving the close control five columns left.
+Retained22.2–23.0s top-bar footage shows the pointer beyond the moved button at
+the recorded22.493s submission; the tab remained open. This is a missed target,
+not a measured slow close. No message was submitted. The second fresh App uses
+the already-viewed peer and is retained under `read-settled` in that same scratch
+root. Every native close/return/reopen check passed; footage shows the original
+tab returning within roughly the first half-second of the gesture. This is one
+observed settled case, not a latency percentile or proof against moving controls.
+Both Apps/st exited0 and original cleanup completed without remaining processes.
+
+Core704 is merged. FieldCodec retains representation precedence and the original
+strict scalar validator, but exact scalar declarations reach it before unrelated
+structural dispatch. Original real-registry measurement is25.09→20.62ms with equal
+decoded documents; no new decoded-value cache or wire-format change. The reviewed
+frontend wheel also contains the integrated same-format failure evidence changes.
+They do not upgrade already-running backend owners or resolve the historical
+SQLite blocker/compaction refusal.
+
+The default client now selects `runtime-codec`; publication is the original
+`codec-wheel/publication.json`. The953-asset/full69 proof passed. Actual isolated
+saved-history scrolling completed in50.28s at `codec-scroll-installed-20261006`: 
+PageUp, PageDown, reversal and End changed native reader/paint; End returned to
+the tail. Observed modules select the candidate, original source owner remained
+unchanged, App/st exited0 and cleanup has no remaining processes/errors. No new
+message was submitted. This actual App confirms the affected installed read and
+scroll path, not smooth scrolling or an overall activity latency improvement.
+
+## Shared sidebar publication successor
+
+Toad965c9504 integrates the complete sidebar/tab/unread consumer family from
+Heis470671b79. CoordinationAccess now retains the original acquired publication;
+SidebarSnapshot carries its captured row inputs, service, revision, worktree and
+filters. Local admissions reproject routes without rereading the wire or resolving
+each thread's presentation again. The application-level duplicate snapshot and
+reset callback are deleted. Notification, transcript and context witnesses retain
+their separate original lifetimes.
+
+The private App at `hpub01/result.json` exercised eight consumers, three bursts,
+hidden return, incarnation replacement, filters and service replacement. Each
+distinct revision acquired one viewer snapshot and25 person inputs; reprojection
+added no captures. A burst crossing expiry acquired two distinct revisions as
+required. This verifies removal of duplicate acquisition, not installed latency.
+
+Core05c35409 integrates original journal/recovery/annotation snapshot acquisition
+followed by encoding and inspection outside the SQLite read. Multi-table atomic
+cuts and refusal rules remain intact. This does not identify the historical UX
+blocking writer or replace already-running backend owners.
+
+The successor wheels and runtime-snapshot are prepared; the full953-asset/full69
+source proof passed. The only Core wheel changes from runtime-codec are the three
+reviewed read-lifetime owners. The installed channel-activity capture is using its
+original recorder handle under `snapshot-burst-installed-20261006`; publication
+and overall latency remain unproven until that result and actual review complete.
+An initial recorder invocation supplied a prefix rather than the existing launcher
+contract's bin directory and refused before output creation/App launch/input.
+Correcting that operand did not repeat a submitted input or running App.
+
+The original recorder completed once in60.63s. Actual source identity was unchanged,
+App and st exited0, and cleanup retained no owned processes/errors. The new channel
+message and responding agents painted; both channel-disclosure states were reviewed
+from native screenshots. All observed modules select runtime-snapshot. There is no
+overall latency gain established: send-phase UI CPU76.09% versus the prior70.35%,
+with different uncontrolled live activity. Writer completion intervals had median
+26.49ms/p95143.01ms/p99500.60ms/max3061.39ms; these are not monitor frames or
+input-to-photon timings, and diagnostic capture can contribute gaps.
+
+The existing reviewed frontend publisher selected runtime-snapshot as the default;
+`snapshot-wheel/publication.json` is the original successful publication. Backend
+owners and native package remain unchanged. The default link and version were
+checked after publication. Tab labels and goal mentions still resolve original
+ThreadView.presentation independently; Heis owns this remaining captured-presentation
+consumer work. Shared acquisition is delivered, but the activity-hang problem,
+historical attach blocker and pr159 compaction refusal remain unresolved.
+
+## Captured tabs, sparse read progress and native dispatch successor
+
+The integration now borrows the original sidebar publication for tab labels,
+unread answers and goal mention titles. Native tabs validate the original wire
+root and incarnation before borrowing the captured row; raw titles and marked
+labels remain distinct answers. This deletes additional process-presentation
+reads on the UI task.
+
+Core display checkpoints now retain activity clocks independently of sparse
+read progress and derive unread deltas from the existing certified page index.
+Changed membership or alias inclusion still rebuilds the affected projection;
+missing or stale page evidence falls back to the original bounded stream. No
+new index, state store or weakened source decoder was added.
+
+Textual PR86 is merged. Its existing message pump borrows each live class
+mapping once per dispatch owner, constructs the private method name once and
+filters message ancestry only when decorated handlers need it. Live replacement,
+C3 delivery, selectors, instance binding and bubbling remain unchanged.
+
+The selected three-wheel successor is `dispatch-wheel` / `runtime-dispatch`.
+All953 assets, complete installed inventories and69 dependency versions match
+the selected Git/wheels. Its actual saved-session disclosure recording is
+`/home/ts/.cache/agent-scratch/dispatch-installed-20261006`; the original handle
+is followed through completion. No human input is submitted in that run.
+At this checkpoint the candidate has not been published as the default.
+
+The dispatch successor's one installed saved-session disclosure check completed
+exit0 in33.47 seconds. Both actual native disclosure clicks painted the expected
+expanded/collapsed roster. UI and terminal exited0 after Ctrl+Q; original source
+owner was unchanged; cleanup left no owned processes/errors. No message was
+submitted. Default publication through the original reviewed frontend owner
+completed in `dispatch-wheel/publication.json`; new UI launches select
+`runtime-dispatch`, while existing open clients and backend workers are unchanged.
+
+This is an affected behavior/delivery result, not a smoothness claim. The
+read-only run's77 native writer intervals had median43.05ms and p95502.9ms;
+stationary time and diagnostic captures are included. Those acknowledgments
+are not monitor frame times or proof of a busy-agent latency improvement.
+
+## Archived channel visibility after the reported removal
+
+The user reported success when removing `#pr126-fixes`, but it remained visible.
+A read of the original backend found that explicit tag still declared, no
+members, and its channel preference archived. The exact original action is
+not reconstructed; no removal or user input was retried.
+
+The concrete owner defect was `ChannelView.roster`: show_archived filtered
+thread members but never the channel itself. The shared roster now hides
+archived channels unless that existing setting is enabled. Both channel_views
+and CoordinationSnapshot consume this owner. Routing, catalog declarations,
+history and the archive state stay canonical and unchanged. Toad names the
+existing setting 'Show archived channels and threads?'.
+
+The affected original metadata/routing control passes in0.46s and verifies
+hidden normal roster, explicit archived visibility and original routing. The
+first29-control channel batch had26 passes and3 failures: my added viewer
+assertion used a store without a private protocol marker; two unrelated old
+controls assume a native launcher and an obsolete Activity.readiness member.
+I removed the out-of-scope viewer assertion from that storage fixture and reran
+only the affected metadata control. Product admission was not weakened.
+Existing Package parsed324 production,380 test and54 tool modules, omissions0;
+the shared roster's two production callers were inspected.
+
+The actual installed saved App finished normally in13.67s with unchanged source
+owner and no owned cleanup remainder/errors. The installed current viewer
+projection excludes `#pr126-fixes` normally and includes it with show_archived.
+The tag and original archive state remain stored. Raw App/visibility evidence:
+`/home/ts/.cache/agent-scratch/channel-archive-installed-20261006`.
+The selected installed candidate is `channel-archive-wheel` /
+`runtime-channel-archive`;953 assets/full69 packages match the selected source.
+The independent equal-publication fanout correction is integrated at Toad
+5e7a6d7f9 for the next affected App check; it is not in this visibility build.
+
+## Equal roster publications: delivered successor
+
+The original projection now retains newly acquired source custody without
+rebuilding unchanged painted row answers. Pending actions still explicitly
+reconcile, and incomplete/cancelled reconciliation invalidates the snapshot.
+There is no new cache or revision mirror. Builtin channel lookup now borrows
+Enum's own value map with an exact-value guard; original routing controls pass.
+
+One actual installed saved App sent one new #openhcs message, opened the channel
+and collapsed/expanded its roster, then exited normally in60.54s. The source
+owner remained unchanged/alive; all owned cleanup completed. Raw evidence is
+`/home/ts/.cache/agent-scratch/equal-roster-burst-installed-20261006`.
+The send phase used54.86% process CPU, versus76.09% in the prior snapshot run.
+Agent activity is uncontrolled, so this is not a matched speedup claim or proof
+that all stalls are fixed. Visible sent-message and roster captures are held.
+
+`equal-roster-wheel/publication.json` records delivery of runtime-equal-roster
+through the existing frontend publication owner. New UI launches get this
+build; existing open clients and backend workers were not restarted. Archived
+channel visibility remains included.
+
+## Transcript read lifetime successor
+
+Mendel81f5beda integrated as da9504fb7. Native ancestry is acquired before the
+coordinator read. NativeTranscript owns input selection; fragment reply queries
+remain atomic, with one session header decode per fragment. All callers and
+malformed-record dispatch inspected; three contributor private checks passed.
+
+The actual installed saved-history App painted and exited0 in11.52s, no submitted
+input, original source owner unchanged, clean teardown.953 assets/full69 match.
+Evidence: `/home/ts/.cache/agent-scratch/transcript-lifetime-installed-20261006`.
+Default publication: transcript-lifetime-wheel/publication.json. Initial publish
+refused output-directory permissions before changing links; corrected the owned
+directory to0700 and published without repeating the App. This removes proved
+lock lifetime; historical database-busy cause remains unknown. Backend workers
+were not restarted. An evidence append command was refused by the duplicate hook
+because of its quotation parser; no runtime phase repeated.
+
+## Actual right-sidebar acquisition profile
+
+The original recorder now has a no-input sidebar_panels journey through existing
+native target capture/click/wheel owners. One default installed App opened the
+right sidebar, wheeled its viewport down/up, hid and restored it. It exited0 in
+45.91s; original source owner stayed alive, cleanup had no owned remainder/error.
+Evidence: `/home/ts/.cache/agent-scratch/right-sidebar-panels-installed-20261006`.
+The same SessionThreadSidebar object140435932944704 retained99 widgets across
+hide/return. Context records remained present and native context preparation
+completed. This was a single-view hide/return, not a tab/eviction qualification.
+
+Process CPU during open/wheel phases was97-101% of one core. The sampled original
+call relation identifies ContextInspection.read -> WireLog.context_manifests ->
+indexed_context_manifests -> original manifest decoding as substantial work.
+It already selects this owner through ContextManifestSources; it is not decoding
+unrelated manifests. Chrome transitions are not call counts or CPU attribution;
+native DTO capture itself contributes observer cost. No input-to-pixel latency
+or full smoothness claim follows. Parent reviewed actual right-sidebar footage
+stills. Mendel owns scoped manifest/source acquisition; Heis separately owns
+shared sidebar acquisition. Existing panels are retained, so adding another
+panel cache would address the wrong source relationship.
+
+## Shared channel participant acquisition delivered
+
+ChannelConversation.update_roster now borrows CoordinationAccess.read_sidebar
+with its original composer filters (stopped included, archived excluded). Both
+participants and mentions derive from that acquired canonical snapshot instead
+of acquiring coordination again for each channel page. Filter/currentness and
+replacement semantics remain with CoordinationAccess; no additional cache.
+Toad dadc805ead integrates the reviewed contributor change. The real private App
+check held one acquisition across eight consumer requests and checked active-turn
+filtering and replacement; evidence: `/home/ts/.cache/agent-scratch/hroster01`.
+
+One actual installed saved-channel journey painted saved messages, expanded and
+collapsed the channel tree, and exited cleanly in32.997s with zero submitted
+inputs. Original source stayed unchanged; cleanup had no remaining owned process
+or error. Evidence: `/home/ts/.cache/agent-scratch/channel-roster-installed-20261007`.
+All953 assets/full69 matched. The original frontend publisher selected
+runtime-channel-roster as the default, confirmed by the live launcher link;
+publication is channel-roster-wheel/publication.json under the existing candidate
+root. Existing clients and backend workers were not restarted. This confirms the
+affected installed channel path, not a matched latency improvement or smooth
+context-tree/burst behavior. Heis owns remaining row/history preparation;
+Mendel owns scoped context acquisition.
+
+## Certified context resources delivered
+
+Core b7bfa90c5 and Toad4e5448603 retain decoded manifests in the existing
+ContextInspection lifetime. Each acquisition still certifies the current source,
+selects current incarnation pointers and captures their exact bytes; unchanged
+source/pointer/bytes reuse the original decoded resource. Annotation, imported
+provenance, SDK revision and model/settings reads remain independent. Writable
+and archived WireAccess own their respective acquisition behavior; archives
+retain strict original scanning. No widget cache or signature was added.
+Contributor private-store checks covered unchanged reuse, new observations,
+rename and tamper refusal. Parent inspected all state/acquisition consumers;
+Package parsed288 source/406 tests/40 tools with no omissions and compiled the
+changed inspection and original widget. External dynamic callers remain unresolved.
+
+One installed saved-history App opened/wheeled/hid/restored the right sidebar,
+exited0 in45.268s, preserved the original source and cleaned up all owned processes.
+No input was submitted. Original recorded request/context resources remained
+available. Evidence: `/home/ts/.cache/agent-scratch/context-resources-installed-20261007`.
+Scroll-phase UI CPU was86.13/40.59/54.27/42.83 percent of one core versus the
+preceding run98.45/97.39/101.33/96.80. This is an uncontrolled single-run comparison
+with diagnostic capture overhead, not input-to-pixel/frame latency acceptance.
+All953 assets/full69 matched; the original frontend publication selected
+runtime-context-resources for new UI launches. Publication evidence is
+context-resources-wheel/publication.json under the existing candidate root.
+Original backend owners stayed running; no uncertain message was replayed.
+
+## Worker diagnostics and recipient observation delivered
+
+Core64f12229b moves MessageNotification's existing recipient selection ahead of
+activity acquisition and projection. Sender/whole windows retain all outcomes;
+strict assignment decoding/duplicates and transcript identity remain unchanged.
+The real private mounted component preserved notifications and busy/idle while
+reducing recipient activity observations8 to1; sender answers retained all8.
+Evidence: `/home/ts/.cache/agent-scratch/observer-recipient-source-20261007`.
+
+Native22e54a3aa (PR87) removes eager work-payload repr from the decorator and
+WorkerManager. Worker owns the direct default; decorated diagnostics borrow the
+callable declaration. Explicit descriptions, including empty strings, and actual
+call arguments/lifetimes remain unchanged.61 original native controls and2 final
+affected controls passed. The actual preceding profile showed retained inspection
+repr on the UI thread through context presentation/contributor workers.
+
+The installed panel attempt in `worker-declaration-installed-20261007` reached
+open/down/up but its final CPython diagnostic request stayed unacknowledged;
+the absent snapshot prevented hide/return. Original86299 exited1 and cleanup
+retired its App; no input, original source unchanged, no remaining owned processes.
+That full interaction remains unverified, with raw video/profile/manifests held.
+An independent startup check first used an insufficient30-second recorder budget:
+only1.25s remained for graceful exit, requiring owned retirement. That negative is
+held in `worker-notifications-startup-installed-20261007`; no App timeout changed.
+The correctly budgeted45-second no-input startup check passed and exited gracefully,
+with saved messages painted and clean original custody/source. Evidence:
+`/home/ts/.cache/agent-scratch/worker-notifications-startup-budgeted-installed-20261007`.
+No broad latency or full sidebar-return claim follows.953 assets/full69 matched;
+the original publisher selected runtime-worker-notifications for new UI launches.
+Publication: worker-notifications-wheel/publication.json in the existing candidate
+root. Native87 merged; original backend workers and uncertain inputs untouched.
+
+## Relationship projections delivered
+
+Toad9b526c640 projects relationship unread from the original acquired sidebar
+publication. It no longer reacquires RouteSelection/service metadata for every
+relationship row during native layout. The publication must still belong to the
+observed service and match the bound root; navigation and writes retain their
+original fresh admission checks. No unread cache or competing decision was added.
+The contributor mounted component retained canonical unread across600 projections
+and all group inputs with zero UI RouteSelection captures.
+
+One actual installed saved-history App opened, scrolled, hid and restored the
+right sidebar, exited0 in44.907s, preserved the original source owner and cleaned
+up its owned processes. The same99-widget sidebar and original presentation
+remained through hide/return. Scroll-phase UI CPU was30.55/32.80/29.39/34.89 percent
+of one core. Earlier runs approached a full core; uncontrolled activity and
+diagnostic capture prevent a matched latency claim. Native enqueue-to-writer
+median2.07/p9513.62ms is writer completion, not pixels or input-to-photon timing.
+Evidence: `/home/ts/.cache/agent-scratch/relationship-roster-installed-20261007`.
+All953 assets/full69 matched. Original frontend publication completed and the
+live launcher resolves to runtime-relationship-roster for new UI launches.
+Existing clients/backend workers remain unchanged. Publication evidence is
+relationship-roster-wheel/publication.json under the existing candidate root.
+
+Removed about950MiB of redundant evidence copies from owned disposable Git build
+archives, preserving original published source/evidence, wheels, proofs, runtimes
+and raw runs. Burst activity, context-tree-specific scrolling, tab closing and
+historical backend inbox failures remain distinct incomplete acceptance areas.
+
+## Installed saved-tab close and return
+
+One no-input installed saved-tab journey opened nra-architecture, clicked its
+actual native close target, returned to openhcs-architecture-memory and reopened
+the peer. All six original checks passed: peer opening, original selection after
+close, original editor/history identity, retired closed tab and new peer admission.
+Original run31515 exited0 in34.994s with clean owned process cleanup; source owners
+were preserved. Parent inspected the actual close-done screenshot. Evidence:
+`/home/ts/.cache/agent-scratch/saved-tab-close-installed-20261007`.
+The close phase includes diagnostic exports and a deliberate settling wait; its
+4.771s interval is not close latency. UI CPU averaged38.78 percent over that
+interval. This proves the affected close/return behavior, not fast physical
+response or burst activity. No message, provider request, source change or extra
+publication occurred.
+
+Parent also reviewed16 consecutive film samples at10Hz over21.25–22.85 video
+seconds (`close-motion.png`). The recorded gesture began at21.76684s and ended
+at21.88085s; the original tab content is present by the21.95s sample. This bounds
+visible return to approximately0.2s after gesture start at100ms sampling granularity
+for this run. Video/sample alignment and terminal rendering limit precision;
+it is neither an exact handler duration nor a universal close latency. Original
+native frames continued through the gesture; no capture/App repeat was performed.
+
+## Real channel activity profile after delivered sidebar repairs
+
+One new authorized human message was submitted through the actual installed
+#openhcs UI: “UI latency check 2026-10-07: please respond tersely if you receive
+this.” It was visibly posted once; the original screen showed nine responding
+agents. Collapse/expand completed during activity. Original91357 exited0 in
+61.291s, original source-owner custody retained and owned cleanup empty. No
+resend follows; this is not evidence that all nine provider turns completed.
+Raw film/profile/state/commands: `/home/ts/.cache/agent-scratch/channel-burst-installed-20261007`.
+
+UI CPU averaged70.45% during send/observation,89.51% at the sent boundary,
+89.61/97.91% at collapse/collapsed and77.52% at expand. The profiler recorded
+1388 samples without reported sampling errors. Writer intervals median29.5ms,
+p95130.42ms, largest2868.84ms; enqueue-to-writer median1.3/p9513.93/max210.5ms.
+Idle output gaps are legitimate, and writer completion does not prove changed
+pixels or input-to-photon timing. Parent inspected original film22.5–26.5s;
+message/empty input/pending activity were visible. No blanket smoothness claim.
+
+The largest writer gap at23.283–26.152 video seconds overlaps UI trace
+_measurement.box_depends -> recursive Widget._has_relative_children_height ->
+is_container. Chrome trace groups are not call counts/CPU durations; this is a
+concrete investigation lead, not proof that sizing solely caused the gap.
+Arendt owns complete native dependency/measurement/invalidation semantics; Heis
+owns the separate painted-cursor acknowledgment path that still acquires route
+and registry facts synchronously on UI. No relaxed currentness/identity guard,
+extra widget cache or repeated message is proposed. Historical backend inbox
+errors remain unproved and unchanged.
+
+## Channel route and painted-read workers delivered
+
+Toad16da7b04 moves channel startup/refresh/notification/send/receipt route reads
+onto the existing PreparationRuntime. The complete changed family retains root
+checks and rechecks bound reader/view identity after newly introduced awaits.
+Startup uses CoordinationAccess's original shared service once; route replacement
+refuses initialization instead of constructing an alternate stale service.
+No new task queue, cache, admission bypass or retry was introduced. Baseline
+Package parsed288 production modules without omissions; changed declarations and
+all route-read consumers were inspected, changed modules compiled.
+
+Heisadd6121b, integrateda2954d0c1, captures actual painted intent on UI and resolves
+route/service/registry identity together in the original fenced write worker.
+MainScreen shares resolve_session_thread's bound-root contract and drops its
+duplicate identity service. The actual mounted private component retained exact
+saved paint, positive worker acknowledgment, filter/off-tail refusal and refused
+source/route replacement without ledger changes, with zero UI route/identity/ack
+calls. First driver's invalid stopped-thread rename was refused and kept.
+Evidence: `/home/ts/.cache/agent-scratch/painted-read-worker-20261007/result.json`.
+
+The affected existing default-route pilot initially stopped at removed sidebar
+_refresh, then at its obsolete demand that the shared workspace roster stay
+hidden after successor publication. Its caller now uses SidebarObservation;
+visible successor rows must carry the actual successor service, while the old
+conversation stays hidden and old-wire text is absent. All remaining original
+route, late-page, write/refusal, reconnect and strict route-file checks passed
+(exit0); stderr retains an unrelated private fixture command-catalog request for
+an undeclared temporary project thread, so no clean whole-pilot claim. Mounted
+read-only channel retirement passed with unchanged bus and original pin.
+Logs: `/home/ts/.cache/agent-scratch/channel-route-preparation-20261007`.
+
+One actual installed no-input #openhcs open/expand/collapse journey passed,
+exit0/33.296s, original source owner preserved, owned cleanup empty. Actual
+channel messages and canonical statuses painted. CPU during the two disclosure
+phases26.68/23.81% one core; this quieter run is not a matched burst comparison.
+Evidence: `/home/ts/.cache/agent-scratch/channel-route-installed-20261007`.
+953 installed assets/full69 verified. Original frontend publication completed;
+live launcher now selects runtime-channel-route for new UI launches, retaining
+Core64f12229b and native22e54. Backend workers unchanged. Native sizing remains
+Arendt's separate active repair, not a blanket hold on this delivered UI work.
+
+
+## Context-tree acquisition follow-through, October 7
+
+Original ContextExplorer._read now acquires CoordinationAccess.service on the
+existing preparation worker, then checks captured thread/root and cancellation
+before the original InspectionState.acquire and publication. Only this method
+changed in production (5a4661e8332ff378699e02aa1243a1e175255be4).
+The existing real private mounted sidebar check passed once, 1 passed/7.35s,
+including the same tree/nodes/state across hidden panel and warm tab return.
+Its original tool session54605 completed0; lost observation was recovered from
+original output, without rerunning. Both earlier missing-pytest entry refusals
+occurred before test execution.
+
+Candidate runtime-context-route has verified953 installed assets/full69,
+unchanged Core64f12229b/native22e54 and the context acquisition fix. It is not yet
+the default. The first physical sidebar_wheel recording reached sidebar and
+transcript scrolling, then refused missing captured ContextTree geometry:
+the context panel was expanded but its tree was below the viewport clip.
+Original recording/cleanup held under
+/home/ts/.cache/agent-scratch/context-wheel-installed-20261007. Original source
+owner remained alive, cleanup remaining/errors empty. No context-wheel or full
+warm-return success claim. Recorder now focuses the native panel title, restores
+its expanded state via Enter, and traverses the six declared controls to the
+original tree; no extra wheel-distance guess or geometry fallback.
+Corrected no-submitted-input recording is underway on original session13729,
+/home/ts/.cache/agent-scratch/context-wheel02-installed-20261007. Prior recording
+is terminal and preserved; neither attempt submits a provider message.
+
+
+Corrected installed sidebar_wheel completed0 on original session13729. All11
+saved view/editor/history/draft/Undo/ready-body checks passed. Captured native
+ContextTree focus and actual visible paint accompany context down/up phases;
+right-sidebar hide/return and saved peer A/B/A completed. Cleanup has no remaining
+owned PIDs/errors; no input submitted. Raw evidence is retained at
+/home/ts/.cache/agent-scratch/context-wheel02-installed-20261007. This confirms
+behavior, not matched burst frame-time improvement.
+
+Existing ReviewedFrontendCohort publication completed0 on original session79509.
+Default toad now resolves to runtime-context-route for new launches; original
+backend workers unchanged. Initial publication refused the new owned output
+folder mode0755 before publication; corrected to required0700 through original
+path owner, no App repeat. Default contains production5a4661e83; later recorder
+commits do not alter wheel production. Original evidence append command was
+refused before execution by hook shell-quotation parsing; no duplicate append.
+
+
+## Relationship and session identity acquisition, October 7
+
+Parent b50e80f36 binds WireRelationshipSource from the existing observed service
+without a fresh UI RouteSelection capture. If no observed service exists, its
+original background revision/snapshot acquisition opens the bound root; the
+original read lifetime and identity generation still own publication. Navigation
+still uses its original fresh route check. Existing mounted hidden-panel source
+preparation/retained row check passed1/5.29s. Refactor-audit parsed288 production
+modules with zero omissions; both changed modules compile. Log:
+/home/ts/.cache/agent-scratch/relationship-route-worker-source-20261007/test.log.
+
+Heis6d27dffd1 integrated as Parent b115813b8. MainScreen projects its original
+published session identity instead of reacquiring root/registry on every name
+read. Fresh resolution remains explicit at cold unbound mount and launch
+admission. The local-session list is a DM candidate acquisition, not a per-frame
+refresh; no invented frequency or per-frame win. Actual private mounted App
+verified100 projections/zero UI root reads, real managed rename applied after
+original CoordinationChangedUpdate, exact bound resolution and replacement-root
+refusal. Evidence /home/ts/.cache/agent-scratch/session-identity-projection-20261007.
+
+Native88 Ready8b7ee466d merged22f65423d. Production6ab7e324 changes only original
+Widget.is_container predicate order: existing NodeList membership before layout
+style resolution. Real source App568 widgets/equal relative-height answers/
+unchanged geometry/empty stderr and64 affected native checks passed. Timing
+variation overlaps, so this is not a reliable latency improvement. Recursive
+height traversal remains assigned to Arendt; no speculative dependency cache.
+
+Combined installed runtime-relationship-identity assets953/full69/origins matched.
+One installed no-input sidebar_panels physical App completed0/45.178s, original
+source retained, cleanup remaining/errors empty. Right panel opened/scrolled/
+hid/restored; same original ThreadCommsSidebar140667103502224 and
+SessionThreadSidebar140668080809232 visible in opening and restored captures.
+Original screenshot paint inspected. Raw:
+/home/ts/.cache/agent-scratch/relationship-identity-installed-20261007.
+ReviewedFrontendCohort publication session34531 completed0; default toad points
+to runtime-relationship-identity for new launches, backend workers unchanged.
+No provider request/submitted message or repeated accepted MCP/guard.
+
+One intermediate runtime-relationship-bind was prepared before the completed
+identity handoff arrived. It was never published/App-launched. Its source proof,
+native wheel and raw remain retained; the final candidate uses that native wheel.
+Attempt to verify disposal of only the unlaunched223MiB runtime stopped on a
+permission-denied proc environment before deletion. Existing cleanup owner was
+given the exact dependency and actual current/pending runtimes for privileged
+borrower check; no cleanup success is claimed yet. No worktree was added.

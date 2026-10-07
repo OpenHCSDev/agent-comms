@@ -35,10 +35,12 @@ def test_channel_metadata_round_trips_without_changing_routing(tmp_path):
     assert channel.parent == "#ui" and channel.archived
 
     observer = wire(tmp_path)
-    projected = {view.channel.name: view for view in observer.views.channel_views()}
+    projected = {view.channel.name: view for view in observer.views.channel_views(show_archived=True)}
     assert projected["#api"].channel.parent == "#ui"
     assert projected["#api"].channel.archived
     assert {name: view.members for name, view in projected.items()} == before
+    assert "#api" not in {view.channel.name for view in observer.views.channel_views()}
+    assert "#api" in observer.channels.catalog.read().views(observer.registry.all_threads())
 
     observer.messaging.send("other", "#api", "still routable")
     assert [message.body for message in observer.bus.inbox("a")] == ["still routable"]

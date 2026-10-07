@@ -63,6 +63,80 @@ def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
         wire(tmp_path).views.viewer_snapshot(str(tmp_path))
 
 
+def test_display_read_progress_decodes_only_changed_sparse_rows(tmp_path):
+    """Real page coverage and read receipts keep clocks independent of unread."""
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
+    comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+    messages = [comms.messaging.send_message("bob", "#team", f"message {n}")
+                for n in range(100)]
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    before = comms.views.viewer_snapshot(str(tmp_path))
+    # The real page owner builds the already-existing disposable offset index.
+    page = comms.views.presentation.channel_page("#team", viewer=viewer)
+    assert len(page.messages) == 100
+    comms.bus.reads.mark_displayed(
+        viewer, comms.bus.reads.capture(viewer, (messages[1], messages[90]),
+                                       comms.registry.snapshot(), comms.bus.log.path),
+    )
+    with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
+        after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+        assert after.channel_unread["#team"] == 98
+        assert decode.call_count == 2
+        assert {call.args[0]["seq"] for call in decode.call_args_list} == {
+            messages[1].seq, messages[90].seq,
+        }
+    assert after.channels == before.channels
+    # A new row still contributes once, after the rebased old prefix.
+    comms.messaging.send_message("bob", "#team", "appended")
+    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 99
+
+
+def test_display_read_changes_fall_back_when_page_coverage_is_absent(tmp_path):
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+    messages = [comms.messaging.send_message("bob", "#team", f"message {n}")
+                for n in range(10)]
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    before = comms.views.viewer_snapshot(str(tmp_path))
+    comms.bus.reads.mark_displayed(
+        viewer, comms.bus.reads.capture(viewer, (messages[3],),
+                                       comms.registry.snapshot(), comms.bus.log.path),
+    )
+    index_path = comms.bus.log.path.with_name("bus_page_index.sqlite3")
+    assert not index_path.exists()
+
+    with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
+        after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+        assert after.channel_unread["#team"] == 9
+        assert decode.call_count == 10
+    assert after.channels == before.channels
+    assert not index_path.exists()
+
+
+def test_display_does_not_keep_read_counts_across_viewer_incarnations(tmp_path):
+    from dataclasses import replace
+
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+    message = comms.messaging.send_message("bob", "#team", "retained")
+    viewer = comms.messaging.user_identity(str(tmp_path))
+    comms.views.presentation.channel_page("#team", viewer=viewer.name)
+    comms.views.viewer_snapshot(str(tmp_path))
+    comms.bus.reads.mark_displayed(
+        viewer.name, comms.bus.reads.capture(viewer.name, (message,),
+                                            comms.registry.snapshot(), comms.bus.log.path),
+    )
+    read = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+    assert read.channel_unread["#team"] == 0
+    # Metadata updates preserve identity; removal and a new declaration do not.
+    comms.registry.remove(viewer.name)
+    comms.registry.register(replace(viewer, created_at=viewer.created_at + 1))
+    returned = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+    assert returned.channel_unread["#team"] == 1
+    assert returned.channels == read.channels
+
+
 def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
     tmp_path, monkeypatch
 ):
@@ -173,6 +247,8 @@ def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path):
     with log._opened_wire_snapshot(need_sequence=False) as source:
         with pytest.raises((ValueError, TypeError, KeyError)):
             list(source.public_records())
+        with pytest.raises((ValueError, TypeError, KeyError)):
+            list(source.public_records_for(frozenset({1}), before_offset=source.boundary))
 
 
 def test_reserved_sequence_preserves_committed_read_cut_without_admission(tmp_path):

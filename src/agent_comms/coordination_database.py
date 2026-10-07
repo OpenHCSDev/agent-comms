@@ -69,6 +69,13 @@ class CoordinationStore:
                     if db.in_transaction:
                         db.execute("ROLLBACK")
         except sqlite3.OperationalError as error:
+            # Notes belong to the original exception, not the wire response.
+            # Its traceback identifies the failing SQL call; retain the store
+            # and SQLite classification across the unavailable-read boundary.
+            error.add_note(
+                f"SQLite observation store: {path}; lock timeout: {lock_timeout}; "
+                f"SQLite error: {error.sqlite_errorname} ({error.sqlite_errorcode})"
+            )
             CoordinationReadUnavailable.raise_from(error)
 
     def __init__(self, path: str | os.PathLike[str], *, lock_timeout: float = 5.0) -> None:
