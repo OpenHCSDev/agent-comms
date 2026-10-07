@@ -539,3 +539,67 @@ def test_native_configuration_uses_original_pi_directory_when_not_explicit(tmp_p
     })
     assert configuration.native_config == configuration.agent_directory == tmp_path / "configured-agent"
     assert configuration.for_agent(tmp_path / "output").native_config == tmp_path / "configured-agent"
+
+
+def test_backend_publication_preserves_independent_frontend(tmp_path, monkeypatch):
+    from agent_comms.active_route import ActiveRoute, active_route_path
+    from agent_comms.field_codec import FieldCodec
+
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / 'tools/cutover'))
+    import publish_retained_summary as publisher
+
+    home = tmp_path / 'home'
+    home.mkdir(mode=0o700)
+    monkeypatch.setenv('HOME', str(home))
+    monkeypatch.setattr(publisher, 'ROOT', tmp_path)
+    links = home / '.local/bin'
+    links.mkdir(parents=True)
+    monkeypatch.setattr(publisher, 'LINKS', links)
+    old_backend, target, frontend = (tmp_path / name for name in ('backend', 'target', 'frontend'))
+    (target / 'bin').mkdir(parents=True)
+    for command in publisher.COMMANDS:
+        (target / 'bin' / command).touch()
+        source = frontend if command == 'toad' else old_backend
+        (links / command).symlink_to(source / 'bin' / command)
+    route = ActiveRoute(tmp_path, 'f' * 32, tmp_path / 'native')
+    route_file = active_route_path()
+    route_file.parent.mkdir(parents=True, mode=0o700)
+    route_file.write_text(json.dumps(FieldCodec.encode(route)))
+    route_file.chmod(0o600)
+    artifact = publisher.ReviewedArtifact(tmp_path / 'retained-proof', '0' * 64)
+    cohort = publisher.ReviewedCommsBackendCohort(
+        target, old_backend, route, route.native_package,
+        artifact, artifact, (), frontend,
+    )
+    declaration = publisher.ReviewedRetainedSummaryCohort | publisher.ReviewedBackendCohort
+    decoded = FieldCodec.decode(declaration, FieldCodec.encode(cohort))
+    assert type(decoded) is publisher.ReviewedCommsBackendCohort
+    assert decoded == cohort
+    assert decoded.commands == publisher.COMMANDS[:-1]
+    with pytest.raises(ValueError):
+        FieldCodec.decode(publisher.ReviewedRetainedSummaryCohort, FieldCodec.encode(cohort))
+
+    # A changed UI binding refuses before any backend default is published.
+    (links / 'toad').unlink()
+    (links / 'toad').symlink_to(tmp_path / 'other-ui/bin/toad')
+    with pytest.raises(RuntimeError, match='frontend default changed'):
+        decoded.require_publication_originals()
+    assert all((links / command).readlink() == old_backend / 'bin' / command
+               for command in decoded.commands)
+    (links / 'toad').unlink()
+    (links / 'toad').symlink_to(frontend / 'bin/toad')
+
+    decoded.require_publication_originals()
+    link_directory = os.open(links, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        # Exercise original link effects, not native route admission or owners.
+        decoded.publish_links(link_directory)
+        decoded.require_frontend_original()
+    finally:
+        os.close(link_directory)
+    assert (links / 'toad').readlink() == frontend / 'bin/toad'
+    assert all((links / command).readlink() == target / 'bin' / command
+               for command in decoded.commands)
+    # The existing source recovery check cannot silently restore after commit.
+    with pytest.raises(RuntimeError, match='Original default changed'):
+        decoded.require_publication_originals()
