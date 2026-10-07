@@ -234,11 +234,13 @@ class InputDrain(FutureInputQueue):
                     await Coordination.run_worker(partial(
                         self.comms.agents.set_drain_diagnostic, thread, owner,
                         UnavailableDrainDiagnostic(owner, type(error).__name__, str(error)),
+                        source_error=error,
                     ))
                 except Exception as error:
                     await Coordination.run_worker(partial(
                         self.comms.agents.set_drain_diagnostic, thread, owner,
                         StoppedDrainDiagnostic(owner, type(error).__name__, str(error)),
+                        source_error=error,
                     ))
                     raise
                 else:
