@@ -716,3 +716,48 @@ Evidence: `/home/ts/.cache/agent-scratch/channel-route-installed-20261007`.
 live launcher now selects runtime-channel-route for new UI launches, retaining
 Core64f12229b and native22e54. Backend workers unchanged. Native sizing remains
 Arendt's separate active repair, not a blanket hold on this delivered UI work.
+
+
+## Context-tree acquisition follow-through, October 7
+
+Original ContextExplorer._read now acquires CoordinationAccess.service on the
+existing preparation worker, then checks captured thread/root and cancellation
+before the original InspectionState.acquire and publication. Only this method
+changed in production (5a4661e8332ff378699e02aa1243a1e175255be4).
+The existing real private mounted sidebar check passed once, 1 passed/7.35s,
+including the same tree/nodes/state across hidden panel and warm tab return.
+Its original tool session54605 completed0; lost observation was recovered from
+original output, without rerunning. Both earlier missing-pytest entry refusals
+occurred before test execution.
+
+Candidate runtime-context-route has verified953 installed assets/full69,
+unchanged Core64f12229b/native22e54 and the context acquisition fix. It is not yet
+the default. The first physical sidebar_wheel recording reached sidebar and
+transcript scrolling, then refused missing captured ContextTree geometry:
+the context panel was expanded but its tree was below the viewport clip.
+Original recording/cleanup held under
+/home/ts/.cache/agent-scratch/context-wheel-installed-20261007. Original source
+owner remained alive, cleanup remaining/errors empty. No context-wheel or full
+warm-return success claim. Recorder now focuses the native panel title, restores
+its expanded state via Enter, and traverses the six declared controls to the
+original tree; no extra wheel-distance guess or geometry fallback.
+Corrected no-submitted-input recording is underway on original session13729,
+/home/ts/.cache/agent-scratch/context-wheel02-installed-20261007. Prior recording
+is terminal and preserved; neither attempt submits a provider message.
+
+
+Corrected installed sidebar_wheel completed0 on original session13729. All11
+saved view/editor/history/draft/Undo/ready-body checks passed. Captured native
+ContextTree focus and actual visible paint accompany context down/up phases;
+right-sidebar hide/return and saved peer A/B/A completed. Cleanup has no remaining
+owned PIDs/errors; no input submitted. Raw evidence is retained at
+/home/ts/.cache/agent-scratch/context-wheel02-installed-20261007. This confirms
+behavior, not matched burst frame-time improvement.
+
+Existing ReviewedFrontendCohort publication completed0 on original session79509.
+Default toad now resolves to runtime-context-route for new launches; original
+backend workers unchanged. Initial publication refused the new owned output
+folder mode0755 before publication; corrected to required0700 through original
+path owner, no App repeat. Default contains production5a4661e83; later recorder
+commits do not alter wheel production. Original evidence append command was
+refused before execution by hook shell-quotation parsing; no duplicate append.
