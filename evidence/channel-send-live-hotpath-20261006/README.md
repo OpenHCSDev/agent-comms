@@ -647,3 +647,31 @@ visible return to approximately0.2s after gesture start at100ms sampling granula
 for this run. Video/sample alignment and terminal rendering limit precision;
 it is neither an exact handler duration nor a universal close latency. Original
 native frames continued through the gesture; no capture/App repeat was performed.
+
+## Real channel activity profile after delivered sidebar repairs
+
+One new authorized human message was submitted through the actual installed
+#openhcs UI: “UI latency check 2026-10-07: please respond tersely if you receive
+this.” It was visibly posted once; the original screen showed nine responding
+agents. Collapse/expand completed during activity. Original91357 exited0 in
+61.291s, original source-owner custody retained and owned cleanup empty. No
+resend follows; this is not evidence that all nine provider turns completed.
+Raw film/profile/state/commands: `/home/ts/.cache/agent-scratch/channel-burst-installed-20261007`.
+
+UI CPU averaged70.45% during send/observation,89.51% at the sent boundary,
+89.61/97.91% at collapse/collapsed and77.52% at expand. The profiler recorded
+1388 samples without reported sampling errors. Writer intervals median29.5ms,
+p95130.42ms, largest2868.84ms; enqueue-to-writer median1.3/p9513.93/max210.5ms.
+Idle output gaps are legitimate, and writer completion does not prove changed
+pixels or input-to-photon timing. Parent inspected original film22.5–26.5s;
+message/empty input/pending activity were visible. No blanket smoothness claim.
+
+The largest writer gap at23.283–26.152 video seconds overlaps UI trace
+_measurement.box_depends -> recursive Widget._has_relative_children_height ->
+is_container. Chrome trace groups are not call counts/CPU durations; this is a
+concrete investigation lead, not proof that sizing solely caused the gap.
+Arendt owns complete native dependency/measurement/invalidation semantics; Heis
+owns the separate painted-cursor acknowledgment path that still acquires route
+and registry facts synchronously on UI. No relaxed currentness/identity guard,
+extra widget cache or repeated message is proposed. Historical backend inbox
+errors remain unproved and unchanged.
