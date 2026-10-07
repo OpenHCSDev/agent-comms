@@ -868,8 +868,14 @@ All69 distributions and2787 hashed RECORD entries were verified after publicatio
 The unchanged Diff dependency's installer cache metadata was retained from the
 previous installation; the new installer metadata and RECORD remain preserved
 alongside its explicit resource-retention record. The actual-default agent-tab
-open/close/reopen observation is in progress, on its original handle, under
-`/home/ts/.cache/agent-scratch/context-scroll-acp-default-live-20261007`.
-No actual-default latency gain is claimed yet. Remaining eager SDK imports were
+open/close/reopen observation completed0; all six native close/editor/history
+checks passed, original source and runtime were unchanged, and cleanup was clear:
+`/home/ts/.cache/agent-scratch/context-scroll-acp-default-live-20261007/receipt.json`.
+Visible saved history readiness took2.44s on first peer open and2.51s on reopen.
+The original method observer measured tab switching374/349ms, ACP initialization
+1.74/1.95s and saved session load279/243ms. These are individual observed runs,
+not a reliable latency improvement over the previous2.84/2.28s observations.
+Cold initialization and native view admission remain unfinished performance
+work. Remaining eager SDK imports were
 traced to real protocol model consumers; no lazy alias or speculative cache was
 added to conceal that initialization cost.
