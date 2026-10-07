@@ -47,7 +47,7 @@ def thinking(options):
     return next(option for option in options if option['id'] == 'thinking_level')
 
 
-async def visible_configuration(stage, project, service, name):
+async def visible_configuration(stage, project, service, name, *, menu_contention=False):
     from toad.agent_schema import AgentDefinition
     from toad.app import ToadApp
     import shlex
@@ -76,11 +76,48 @@ async def visible_configuration(stage, project, service, name):
                     break
         assert service.registry.require(name).thinking_level is OffThinkingLevel
         app.save_screenshot(str(stage / 'configured-off.svg'))
+        if menu_contention:
+            import sqlite3
+            from time import monotonic
+            from toad.core.input_events import ChangeModel
+            from toad.db import DB, MODEL_HISTORY_SCHEMA
+            from toad.widgets.comms_menu import ContextMenu
+
+            database = DB()
+            def acquire_writer():
+                writer = sqlite3.connect(database.path, check_same_thread=False)
+                writer.execute(MODEL_HISTORY_SCHEMA)
+                writer.commit()
+                writer.execute('BEGIN IMMEDIATE')
+                return writer
+
+            writer = await asyncio.to_thread(acquire_writer)
+            try:
+                started = monotonic()
+                view.publish_core(ChangeModel(view.agent.configuration.model.current))
+                async with asyncio.timeout(4):
+                    while not isinstance(app.screen, ContextMenu):
+                        await pilot.pause(.01)
+                menu_seconds = monotonic() - started
+                assert writer.in_transaction
+                app.save_screenshot(str(stage / 'thinking-menu-held-writer.svg'))
+                await pilot.press('down', 'escape')
+                assert not isinstance(app.screen, ContextMenu)
+                assert writer.in_transaction
+            finally:
+                await asyncio.to_thread(writer.rollback)
+                await asyncio.to_thread(writer.close)
+            async with asyncio.timeout(4):
+                while view.agent.configuration.model.current not in await database.recent_models(view.model_history_scope):
+                    await pilot.pause(.01)
+            return {'actual_installed_toad_acp': True, 'thinking_menu_seconds': menu_seconds,
+                    'menu_opened_with_writer_held': True, 'keyboard_dismissed_with_writer_held': True,
+                    'recent_model_persisted_after_release': True}
     return {'actual_installed_toad_acp': True, 'configured_off_visibly_painted': True,
             'followup_input_required': False}
 
 
-async def run(stage, package, models, ui):
+async def run(stage, package, models, ui, menu_contention=False):
     stage.mkdir(mode=0o700, parents=True, exist_ok=False)
     project = stage / 'project'
     project.mkdir()
@@ -116,6 +153,10 @@ async def run(stage, package, models, ui):
                               if option['id'] == 'model')
             assert len(advertised['options']) > 1, advertised
             assert model in {choice['value'] for choice in advertised['options']}
+            if menu_contention:
+                visible = await visible_configuration(stage, project, service, name, menu_contention=True)
+                rows.append({'model': model, **visible})
+                continue
             selected = await exchange(service, name, SetConfigOptionRuntimeRequest(
                 thread=name, config_id='model', value=model,
             ))
@@ -169,9 +210,10 @@ def main():
     parser.add_argument('--package', type=Path, required=True)
     parser.add_argument('--model', action='append', required=True)
     parser.add_argument('--ui', action='store_true')
+    parser.add_argument('--menu-db-contention', action='store_true')
     args = parser.parse_args()
     assert args.stage.is_relative_to('/home/ts/wt')
-    print(json.dumps(asyncio.run(run(args.stage, args.package, args.model, args.ui)), indent=2))
+    print(json.dumps(asyncio.run(run(args.stage, args.package, args.model, args.ui, args.menu_db_contention)), indent=2))
 
 
 if __name__ == '__main__':
