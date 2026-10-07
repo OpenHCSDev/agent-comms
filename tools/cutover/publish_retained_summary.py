@@ -361,9 +361,88 @@ class ReviewedRetainedSummaryCohort:
             raise RuntimeError('Target route readback differs')
 
 
+class CommandDefaultPublication:
+    """Future command selection shares original link custody and recovery."""
+
+    publication_scope: ClassVar[str]
+    published_phase: ClassVar[str]
+
+    @abstractmethod
+    def require_preserved_defaults(self): ...
+
+    def publish_defaults(self, receipt: Path):
+        """Change future launches; never stop or replace an existing owner."""
+        if receipt.exists() or receipt.is_symlink():
+            raise RuntimeError('Original default publication attempt requires review; never repeat')
+        PrivateDirectoryRole.require(receipt.parent.lstat())
+        self.require_original()
+        if self.native != self.original_route.native_package:
+            raise RuntimeError('Command defaults cannot change the native route')
+        with guard_default_route_write(self.original_route.root, blocking=False):
+            self._publish_default_links(receipt)
+
+    def _restore_default_links(self, directory: int):
+        """Recover only our target links, preserving any foreign binding."""
+        for command in self.commands:
+            temporary = command + '.retained-summary-publish'
+            try:
+                pending = Path(os.readlink(temporary, dir_fd=directory))
+            except FileNotFoundError:
+                pass
+            else:
+                if pending != self.target / 'bin' / command:
+                    raise RuntimeError('Default recovery has an unknown temporary link')
+                os.unlink(temporary, dir_fd=directory)
+            if Path(os.readlink(command, dir_fd=directory)) == self.target / 'bin' / command:
+                os.symlink(self.current_prefix / 'bin' / command, temporary, dir_fd=directory)
+                os.replace(temporary, command, src_dir_fd=directory, dst_dir_fd=directory)
+        os.fsync(directory)
+        if any(Path(os.readlink(command, dir_fd=directory)) != self.current_prefix / 'bin' / command
+               for command in self.commands):
+            raise RuntimeError('Default recovery preserves an unknown command binding')
+
+    def _publish_default_links(self, receipt: Path):
+        directory = os.open(LINKS, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if os.fstat(directory).st_uid != os.geteuid():
+                raise RuntimeError('Default command directory is not owned')
+            self.require_original()
+            descriptor = os.open(receipt, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(descriptor, 'w') as opened:
+                json.dump({'phase': self.publication_scope + '-originals-verified',
+                           'cohort': FieldCodec.encode(self), 'started': time.time()}, opened, indent=2)
+                opened.flush()
+                os.fsync(opened.fileno())
+            fsync_directory(receipt.parent)
+            try:
+                self.publish_links(directory)
+                self.require_preserved_defaults()
+                _atomic_write_text(receipt, json.dumps({'phase': self.published_phase,
+                    'cohort': FieldCodec.encode(self), 'finished': time.time()}, indent=2)+'\n', fsync_parent=True)
+            except BaseException as cause:
+                recovery_error = None
+                try:
+                    self._restore_default_links(directory)
+                except BaseException as error:
+                    recovery_error = repr(error)
+                phase = self.publication_scope + (
+                    '-failed-original-links-restored' if recovery_error is None
+                    else '-failed-links-unknown')
+                _atomic_write_text(receipt, json.dumps({'phase': phase,
+                    'cohort': FieldCodec.encode(self), 'error': repr(cause),
+                    'recovery_error': recovery_error, 'finished': time.time()}, indent=2)+'\n', fsync_parent=True)
+                raise
+        finally:
+            os.close(directory)
+
+
 @dataclass(frozen=True)
-class ReviewedBackendCohort(ReviewedRetainedSummaryCohort, DeclaredFamily, affix='BackendCohort'):
-    """Stopped backend publication preserves the independently published UI."""
+class ReviewedBackendCohort(CommandDefaultPublication, ReviewedRetainedSummaryCohort, DeclaredFamily, affix='BackendCohort'):
+    """Backend defaults and replacement share one reviewed source identity."""
+
+    publication_scope: ClassVar[str] = 'backend'
+    published_phase: ClassVar[str] = 'backend-defaults-published-live-check-pending'
 
     frontend_prefix: Annotated[Path, PathText]
 
@@ -373,15 +452,15 @@ class ReviewedBackendCohort(ReviewedRetainedSummaryCohort, DeclaredFamily, affix
 
     def require_publication_originals(self):
         super().require_publication_originals()
-        self.require_frontend_original()
+        self.require_preserved_defaults()
 
-    def require_frontend_original(self):
+    def require_preserved_defaults(self):
         if (LINKS / 'toad').readlink() != self.frontend_prefix / 'bin/toad':
             raise RuntimeError('Original frontend default changed; remain stopped')
 
     def publish(self, directory: int, links_directory: int | None = None):
         super().publish(directory, links_directory)
-        self.require_frontend_original()
+        self.require_preserved_defaults()
 
 
 @dataclass(frozen=True)
@@ -390,8 +469,11 @@ class ReviewedCommsBackendCohort(ReviewedBackendCohort):
 
 
 @dataclass(frozen=True)
-class ReviewedFrontendCohort(ReviewedRetainedSummaryCohort, DeclaredFamily, affix='FrontendCohort'):
+class ReviewedFrontendCohort(CommandDefaultPublication, ReviewedRetainedSummaryCohort, DeclaredFamily, affix='FrontendCohort'):
     """Publish reviewed client supply; existing backend owners keep their installation."""
+
+    publication_scope: ClassVar[str] = 'frontend'
+    published_phase: ClassVar[str] = 'frontend-published-live-ui-pending'
 
     current_source_proof: ReviewedArtifact
     backend_source_proof: ReviewedArtifact
@@ -422,6 +504,12 @@ class ReviewedFrontendCohort(ReviewedRetainedSummaryCohort, DeclaredFamily, affi
         backend = FieldCodec.decode(InstalledSourceProof,
                                     json.loads(self.backend_source_proof.path.read_text()))
         target.require_frontend_successor(backend, self.frontend_modules)
+        self.require_preserved_defaults()
+
+    def require_preserved_defaults(self):
+        self.backend_source_proof.require_original()
+        backend = FieldCodec.decode(InstalledSourceProof,
+                                    json.loads(self.backend_source_proof.path.read_text()))
         for command in COMMANDS:
             if command not in self.commands and (LINKS / command).readlink() != backend.prefix / 'bin' / command:
                 raise RuntimeError('Original backend default changed')
@@ -429,58 +517,6 @@ class ReviewedFrontendCohort(ReviewedRetainedSummaryCohort, DeclaredFamily, affi
     def publish_route(self, directory: int):
         if read_active_route() != self.original_route:
             raise RuntimeError('Original route changed during frontend publication')
-
-    def publish_frontend(self, receipt: Path):
-        """One link switch under original client custody; no owner stop/restart."""
-        if receipt.exists() or receipt.is_symlink():
-            raise RuntimeError('Original frontend attempt requires review; never repeat')
-        PrivateDirectoryRole.require(receipt.parent.lstat())
-        self.require_original()
-        with guard_default_route_write(self.original_route.root, blocking=False):
-            self._publish_frontend_links(receipt)
-
-    def _publish_frontend_links(self, receipt: Path):
-        directory = os.open(LINKS, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
-            fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            if os.fstat(directory).st_uid != os.geteuid():
-                raise RuntimeError('Default command directory is not owned')
-            self.require_original()
-            descriptor = os.open(receipt, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-            with os.fdopen(descriptor, 'w') as opened:
-                json.dump({'phase': 'frontend-originals-verified', 'cohort': FieldCodec.encode(self),
-                           'started': time.time()}, opened, indent=2)
-                opened.flush()
-                os.fsync(opened.fileno())
-            fsync_directory(receipt.parent)
-            try:
-                self.publish(directory, directory)
-                _atomic_write_text(receipt, json.dumps({'phase': 'frontend-published-live-ui-pending',
-                    'cohort': FieldCodec.encode(self), 'finished': time.time()}, indent=2)+'\n', fsync_parent=True)
-            except BaseException as cause:
-                # Recovery owns only the link this operation could change.
-                link = 'toad'
-                if Path(os.readlink(link, dir_fd=directory)) == self.target / 'bin/toad':
-                    temporary = 'toad.retained-summary-publish'
-                    try:
-                        os.stat(temporary, dir_fd=directory, follow_symlinks=False)
-                    except FileNotFoundError:
-                        pass
-                    else:
-                        raise RuntimeError('Frontend recovery has uncertain temporary link')
-                    os.symlink(self.current_prefix / 'bin/toad', temporary, dir_fd=directory)
-                    os.replace(temporary, link, src_dir_fd=directory, dst_dir_fd=directory)
-                    os.fsync(directory)
-                phase = ('frontend-failed-original-link-restored'
-                         if Path(os.readlink(link, dir_fd=directory)) == self.current_prefix / 'bin/toad'
-                         else 'frontend-failed-link-unknown')
-                _atomic_write_text(receipt, json.dumps({'phase': phase,
-                    'cohort': FieldCodec.encode(self), 'error': repr(cause),
-                    'finished': time.time()}, indent=2)+'\n', fsync_parent=True)
-                raise
-        finally:
-            os.close(directory)
-
 
 @dataclass(frozen=True)
 class ReviewedToadFrontendCohort(ReviewedFrontendCohort):

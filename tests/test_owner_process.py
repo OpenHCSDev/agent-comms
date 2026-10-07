@@ -594,7 +594,7 @@ def test_backend_publication_preserves_independent_frontend(tmp_path, monkeypatc
     try:
         # Exercise original link effects, not native route admission or owners.
         decoded.publish_links(link_directory)
-        decoded.require_frontend_original()
+        decoded.require_preserved_defaults()
     finally:
         os.close(link_directory)
     assert (links / 'toad').readlink() == frontend / 'bin/toad'
@@ -603,3 +603,26 @@ def test_backend_publication_preserves_independent_frontend(tmp_path, monkeypatc
     # The existing source recovery check cannot silently restore after commit.
     with pytest.raises(RuntimeError, match='Original default changed'):
         decoded.require_publication_originals()
+
+    # Recovery restores this publication's links without changing the route
+    # or the independently selected frontend.
+    link_directory = os.open(links, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        decoded._restore_default_links(link_directory)
+        decoded.require_publication_originals()
+        assert publisher.read_active_route() == route
+        assert (links / 'toad').readlink() == frontend / 'bin/toad'
+
+        decoded.publish_links(link_directory)
+        foreign_command = decoded.commands[0]
+        foreign_target = tmp_path / 'foreign/bin' / foreign_command
+        (links / foreign_command).unlink()
+        (links / foreign_command).symlink_to(foreign_target)
+        with pytest.raises(RuntimeError, match='unknown command binding'):
+            decoded._restore_default_links(link_directory)
+        assert (links / foreign_command).readlink() == foreign_target
+        assert all((links / command).readlink() == old_backend / 'bin' / command
+                   for command in decoded.commands[1:])
+        assert publisher.read_active_route() == route
+    finally:
+        os.close(link_directory)
