@@ -88,10 +88,10 @@ class ProgressWatchdog:
         self.phase = event.observed_phase(self.phase.on(event, active_tools))
 
     def read_timeout(self, session: TurnSession) -> float | None:
-        if session.stats.requested:
-            timeout: float | None = 5.0
-        elif session.awaiting_native_attestation:
-            timeout = max(0.0, self.preflight_deadline - self.clock())
+        if session.awaiting_native_attestation:
+            timeout: float | None = max(0.0, self.preflight_deadline - self.clock())
+        elif session.stats.requested:
+            timeout = 5.0
         elif session.active_tools or self.model_wait_timeout is None:
             timeout = None
         else:

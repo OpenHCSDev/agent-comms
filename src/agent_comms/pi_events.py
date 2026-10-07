@@ -93,6 +93,9 @@ class PiEvent(PiPayload, DeclaredFamily):
     def require_request(self, request: PiCommand) -> PiResponseData:
         raise ValueError("Native event is not a request response")
 
+    def responds_to(self, request: PiCommand) -> bool:
+        return False
+
 
 @dataclass(frozen=True)
 class UnknownPiEvent(PiEvent):
@@ -113,9 +116,17 @@ class AgentEnd(PiEvent):
 
 
 class AgentSettled(PiEvent):
+    def settles(self, session: TurnSession) -> bool:
+        # A prior retained turn may finish while the new state query is
+        # pending. It cannot settle a turn whose admission is not attested.
+        return not session.awaiting_native_attestation
+
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         from . import turn_phase as phases
 
+        if not self.settles(session):
+            session.skip = True
+            return
         session.settlement_count += 1
         if session.persistent_session is not None and session.inputs.pending:
             session.skip = True
@@ -624,9 +635,12 @@ class Response(PiEvent):
     id: str | None = field(default=None, metadata={"wire_name": "id"})
     success: bool | None = field(default=None, metadata={"wire_name": "success"})
 
+    def responds_to(self, request: PiCommand) -> bool:
+        return self.id == request.id and self.command is type(request)
+
     def require_request(self, request: PiCommand) -> PiResponseData:
         """Correlate this original response; correlation grants no input authority."""
-        if self.id != request.id or self.command is not type(request):
+        if not self.responds_to(request):
             raise ValueError("Native response does not match the original request")
         if self.success is not True:
             raise ValueError("Native request did not succeed")

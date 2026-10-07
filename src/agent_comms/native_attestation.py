@@ -11,7 +11,7 @@ from . import pi_commands as commands
 from . import turn_failure as failures
 from .native_pi import CAPABILITY
 from .native_session_reopen import NativeSessionIdentity
-from .pi_events import PiEvent, Response
+from .pi_events import PiEvent
 from .pi_payloads import StateData
 
 if TYPE_CHECKING:
@@ -82,14 +82,12 @@ class PendingAttestation(NativeAttestation):
     def diagnostic_evidence(self):
         return {"control_command": self.request.to_rpc()}
 
-    def accept(self, event: PiEvent) -> ObservedAttestation:
-        if not isinstance(event, Response) or event.command is not commands.GetState:
-            raise AttestationError(
-                failures.InputIdUnavailable(
-                    "Pi native input-ID capability preflight returned another event."
-                )
-            )
-        if event.id != self.request.id or not event.success:
+    def accept(self, event: PiEvent) -> NativeAttestation:
+        # Pi multiplexes events and independent replies on this channel. Only
+        # this original response may change the pending admission state.
+        if not event.responds_to(self.request):
+            return self
+        if event.success is not True:
             raise AttestationError(
                 failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
             )
@@ -103,15 +101,12 @@ class PendingAttestation(NativeAttestation):
             raise AttestationError(
                 failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
             )
-        observed = self.observe(data)
+        observed = ObservedAttestation(data)
         if self.expected is not None and observed.identity != self.expected:
             raise IdentityAttestationError(
                 failures.IdentityUncertain("Pi session identity changed during this turn.")
             )
         return observed
-
-    def observe(self, data):
-        return ObservedAttestation(data)
 
 
 @dataclass

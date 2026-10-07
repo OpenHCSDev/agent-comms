@@ -573,10 +573,11 @@ class TurnSession:
                             except AttestationError as error:
                                 await error.refuse(self)
                                 break
-                            self.startup.release()
-                            await self.input_ready()
-                            if self.finished:
-                                break
+                            if self.native.attestation.observed:
+                                self.startup.release()
+                                await self.input_ready()
+                                if self.finished:
+                                    break
                         async for event in self.payload.consume(self):
                             yield event
                         if self.finished:

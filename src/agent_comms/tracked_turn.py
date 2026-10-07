@@ -358,13 +358,18 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         with self.startup.measurements.operation("get_state_send"):
             await self.send(request)
         with self.startup.measurements.operation("get_state_receive"):
-            event = await self.next_event()
-        if not isinstance(event, pi.Response) or self.native.reader.correlate(event) is not request:
-            raise NativePiUnavailable("Native Pi emitted an unexpected preflight event")
-        try:
-            observed = self.native.attestation.accept(event)
-        except AttestationError as error:
-            raise NativePiUnavailable(str(error)) from error
+            while True:
+                event = await self.next_event()
+                try:
+                    observed = self.native.attestation.accept(event)
+                except AttestationError as error:
+                    raise NativePiUnavailable(str(error)) from error
+                if observed.observed:
+                    if self.native.reader.correlate(event) is not request:
+                        raise NativePiUnavailable("Native Pi preflight response is not owned by its request")
+                    break
+                async for _ in event.consume(self):
+                    pass
         state = observed.state
         if observed.identity is None:
             raise NativePiUnavailable("Native Pi omitted its private session identity")
@@ -485,8 +490,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     @handles(pi.AgentSettled)
     async def settled(self, event: pi.AgentSettled) -> None:
-        with self.startup.measurements.operation("native_agent_settled"):
-            self.finished = True
+        if event.settles(self):
+            with self.startup.measurements.operation("native_agent_settled"):
+                self.finished = True
 
     async def result(self) -> NativeTurnResult:
         with self.startup.measurements.operation("native_terminal_result"):
