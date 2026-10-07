@@ -643,7 +643,8 @@ class Response(PiEvent):
         if not self.responds_to(request):
             raise ValueError("Native response does not match the original request")
         if self.success is not True:
-            raise ValueError("Native request did not succeed")
+            detail = self.error if self.error is not None else "no native error was reported"
+            raise ValueError(f"Native request did not succeed: {detail}")
         return self.data.require_payload()
 
     async def consume(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
@@ -666,9 +667,14 @@ class Response(PiEvent):
     @classmethod
     def normalize_field(cls, target, key, value, record):
         owner = PiCommand.response_owner(record.get("command"))
-        if owner.strict_response and set(record) != {"id", "type", "command", "success", "data"}:
-            raise ValueError("Unexpected selected response envelope")
         if key == "command":
+            if owner.strict_response:
+                success = record.get("success")
+                payload = "data" if success is True else "error" if success is False else None
+                if (payload is None
+                    or set(record) != {"id", "type", "command", "success", payload}
+                    or payload == "error" and not isinstance(record[payload], str)):
+                    raise ValueError("Unexpected selected response envelope")
             return FieldCodec.encode(owner)
         if key == "data":
             return (
