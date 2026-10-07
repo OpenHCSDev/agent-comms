@@ -80,8 +80,25 @@ match the selected Git/wheels. The final standalone channel resource correction
 passed its two affected original controls; human reader/publisher bytes match
 the physically exercised build. Publication is retained in
 `.artifacts/sidebar-live-candidate-20261006/client-hotpath-final-wheel/publication.json`.
-A default-entrypoint saved-history check is in progress; this is not a claim
-of smooth scrolling or improved whole-frame latency.
+The first post-publication saved-history check completed with its original
+source owner unchanged and cleanup reporting no remaining owned processes or
+errors. Native module readback showed that inherited PATH selected the prior
+candidate rather than the newly published default; it cannot establish the
+final default's live behavior. That original recording is preserved at
+`/home/ts/.cache/agent-scratch/channel-client-default-live-20261006`.
+The corrected default-entrypoint check puts the actual default directory first
+and is recorded separately. Neither capture is a smooth-scrolling or frame-time
+improvement claim.
+
+The actual submit stack exposes a larger synchronous obstruction before the
+send worker starts: `CommsChatView.submit_input` disables its focused editor;
+`Widget.watch_disabled -> blur -> Screen._reset_focus -> focus_chain` sorts
+displayed children using `Widget._focus_sort_key -> virtual_region`.
+Geometry lookup repeatedly enters `Compositor.reflow_visible -> _arrange_root`.
+Between video21–34s,211 changed submit stacks include this call chain (210 at
+the disabling watcher). These are compressed stack transitions, not samples
+or duration estimates. The native focus/geometry repair is with Arendt; the
+editor's send-custody protection must not be bypassed.
 
 The screenshot identifies the independent compaction failure on
 `openhcs-pr159-viewer-bind-owner` as `CompactionJournalError`. Mendel has that
