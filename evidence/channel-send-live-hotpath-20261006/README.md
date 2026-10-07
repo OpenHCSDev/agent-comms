@@ -218,3 +218,120 @@ restored and a durable copy now lives in `retained-artifacts/`. Preserve that
 artifact for the current installed-proof/recovery relation. The initial verifier
 refusal is retained under navigation-wheel/cache-path-refusal. Disposable copied
 Git evidence was removed; original source/evidence/recordings are retained.
+
+## Retained disclosure and prompt tab closure delivered
+
+Toad509 is merged. The default client now selects
+`.artifacts/sidebar-live-candidate-20261006/runtime-tree-close`; publication uses
+the existing frontend publisher and changes only the Toad entrypoint. Backend
+commands, processes, native package and route remain unchanged. Open clients
+retain their existing imports until reopened.
+
+Collapsed channel and relationship groups retain admitted row/prepared identities;
+unchanged reopen no longer constructs rows or recaptures every member. Hidden
+rows are excluded from navigation/ranges/animation; original publications still
+retire stale membership, incarnation and route resources. The selected tab now
+returns to its survivor before original teardown joins; cleanup remains awaited.
+Channel participant output uses its original Static content and a single
+presentation read for each member, with independent tooltip updates.
+
+The combined installed private workspace check passed with empty stderr:
+`/home/ts/.cache/agent-scratch/tab-close-20261006/installed.{stdout,stderr}.log`.
+It preserves the surviving original editor, draft and Undo while removing the
+closed admission/view. The initial source check emitted unregistered-thread
+errors because its fixture lacked the canonical private declaration; the existing
+fixture was corrected and the clean source/installed results retained separately.
+
+Actual isolated-st saved-history disclosure recording completed normally under
+`/home/ts/.cache/agent-scratch/tree-disclosure-installed-20261006`. Both native
+clicks changed the tree, original source identity stayed unchanged, and cleanup
+has no remaining owned processes/errors. No new message was submitted. Per-gesture
+receipt timestamps bracket xdotool submission, not handler completion. Retained
+10fps contact sheets show the changed tree near those submissions; no precise
+input-to-photon claim is made. Initial expansion/collapse phase UI CPU was about
+34%/27%, versus prior quiet33.5%/29.7%; this does not establish a reliable overall
+performance gain. Previous baseline labels were reversed and remain preserved;
+new labels are first/second disclosure rather than assumed direction.
+
+All953 installed assets and69 package versions match their declared source/wheels.
+The combined proof, activation and publication are in `tree-close-wheel`.
+Activity-burst hangs, database read contention and the original pr159 compaction
+failure remain unresolved by these changes. They are separate ongoing work.
+
+## Native paint-only publication delivered
+
+Toad510 and Textual85 are merged. The default client now selects
+`runtime-paint`; its publication is `paint-wheel/publication.json` beneath the
+existing candidate directory. Backend processes and native route are unchanged.
+
+Static owns whether an update needs layout: native leaf Content with unchanged
+text retains geometry while updating actual spans. Custom rendering/measurement,
+containers and changed text retain layout. ChannelParticipants compares complete
+Content identity, including spans, rather than plaintext equality.
+
+The installed real producer check renamed a canonical participant without
+changing its display title. The changed click target and tooltip painted, with
+zero layout invalidations, requests or arrangements (577 widgets, ten tabs).
+Its result is `participant-producer-installed-20261006/result.json` under agent
+scratch. The initial verification had an unguarded multiprocessing entrypoint
+and incorrectly assumed busy changes left plaintext unchanged; those failures
+remain held. The corrected check uses the original managed rename owner.
+
+The actual `paint-burst-installed-20261006` recording sent one distinct new
+message and completed with the saved source unchanged and no cleanup errors.
+Send-phase CPU was70.3% versus70.8% in the preceding burst: no meaningful overall
+latency gain. Native writer completion intervals are not input-to-photon or
+monitor frame times; captures can contribute gaps. Repeated coordination decoding
+and layout remain in the profile. Existing accepted messages were not replayed.
+
+Database attach failures are independently unresolved. The integrated runtime
+diagnostic correction retains the original causal traceback and SQLite store
+context before the unchanged wire error. It has not been installed into running
+backend owners, and it does not identify the historical blocking writer.
+
+Default-entrypoint confirmation completed in33.18s at
+`paint-default-live-20261006`: observed modules/interpreter select runtime-paint,
+both channel disclosure directions visibly changed the native tree, original
+saved owner remained unchanged, App/st exited0 and cleanup has no remaining
+owned processes/errors. No message was submitted in this confirmation. This
+proves default selection and affected interaction, not smooth scrolling or a
+whole activity latency win. The visible pr159 compaction error remains unresolved.
+
+## Native tab-close observation and scalar decode delivery
+
+The original SavedTabCloseJourney now resolves the captured native peer label and
+its SessionTabClose through NativeFocusTarget. Seven guessed-coordinate options
+and their duplicate screen-range validation are deleted. PhysicalJourney owns the
+existing shared visible-history readiness command; warm and close consumers inherit
+it. Review requires the peer admission to disappear, original selection/editor/
+history identity to survive and reopening to create a fresh admission. Toad
+checkpoint542d4a59 changes these two helper files only, with all other declarations
+AST-equal except the shared readiness move and obsolete argument removal.
+
+The first actual run is preserved under `tab-close-physical-20261006/run`. Its
+unread badge cleared after capture, moving the close control five columns left.
+Retained22.2–23.0s top-bar footage shows the pointer beyond the moved button at
+the recorded22.493s submission; the tab remained open. This is a missed target,
+not a measured slow close. No message was submitted. The second fresh App uses
+the already-viewed peer and is retained under `read-settled` in that same scratch
+root. Every native close/return/reopen check passed; footage shows the original
+tab returning within roughly the first half-second of the gesture. This is one
+observed settled case, not a latency percentile or proof against moving controls.
+Both Apps/st exited0 and original cleanup completed without remaining processes.
+
+Core704 is merged. FieldCodec retains representation precedence and the original
+strict scalar validator, but exact scalar declarations reach it before unrelated
+structural dispatch. Original real-registry measurement is25.09→20.62ms with equal
+decoded documents; no new decoded-value cache or wire-format change. The reviewed
+frontend wheel also contains the integrated same-format failure evidence changes.
+They do not upgrade already-running backend owners or resolve the historical
+SQLite blocker/compaction refusal.
+
+The default client now selects `runtime-codec`; publication is the original
+`codec-wheel/publication.json`. The953-asset/full69 proof passed. Actual isolated
+saved-history scrolling completed in50.28s at `codec-scroll-installed-20261006`: 
+PageUp, PageDown, reversal and End changed native reader/paint; End returned to
+the tail. Observed modules select the candidate, original source owner remained
+unchanged, App/st exited0 and cleanup has no remaining processes/errors. No new
+message was submitted. This actual App confirms the affected installed read and
+scroll path, not smooth scrolling or an overall activity latency improvement.
