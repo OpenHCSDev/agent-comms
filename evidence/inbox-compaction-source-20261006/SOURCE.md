@@ -237,3 +237,52 @@ No dependency install, live attachment, UX/pr159 restart, drain, input or summar
 replay occurred. The earlier blocking writer/store/statement remains unproved;
 6cee7b71 preserves that causal traceback for an actual future failure. This patch
 removes proved unnecessary lock lifetime without claiming that historical cause.
+
+## Native ancestry outside the attach read
+
+The actual UX load emitted identity/blocked-goal metadata and failed before Ready,
+with no prompt. Its current owner stderr descriptor names
+`/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/owner-66e20696e728cdbd5ca8657e83697130-d92d2112ae8c4f3cb6321482500bcecb.log`:
+29 bytes, only the launch line, no causal traceback. Current source diagnostics do
+not establish what this running worker loaded or identify the historical writer.
+RuntimeProxy.subscribe -> SubscribeRuntimeRequest -> TranscriptReplay ->
+TranscriptSnapshotUpdate capture reads both journal outcomes and coordinator reply
+relations; either observation can export the same reduced busy error.
+
+Proved source defect: AssignedTranscriptSource.native_records held the coordinator
+read while walking native parent records and repeatedly decoding the session header.
+NativeTranscript.input_for now owns input/parent selection for transcript and final
+publication consumers. Bounded-fragment ancestry is acquired before SQL. One header
+lookup remains inside the selected read, preserving detached-history behavior when
+the coordinator is absent; for_native_user receives that captured ID. The separate
+publication_revision retains its existing single header lookup. No identity cache,
+new state, schema or codec was introduced. Input/stage/execution/reply queries remain
+one atomic fragment snapshot; rendering and wire corroboration still follow close.
+
+Read/write lifetime and format consumers were inspected: CoordinationSession,
+CompactionJournal, recovery gateway/projection, native publications, notification,
+continued coverage, optional awareness and working memory. Required reservation/raw
+exclusion remains; PrivateSendAdmission closes its grant before pipe bytes. A shared
+reader can delay a pending writer commit, which can deny later readers; this is a
+possible relationship, not the historical cause. AST inspection covered 758
+src/tests/tools modules with zero omissions, including partial callback references;
+external dynamic callers remain outside that enumeration.
+
+Header preflight remains an unresolved requirement collision. Raw DB-header closes
+can release concurrent same-process POSIX SQLite locks; Python exposes no managed
+header-only inspection that refuses WAL before sidecars and respects changing data.
+Immutable suppresses locks/recovery/change detection and journal_mode reports pager
+mode, not the required raw header answer. No workaround was added.
+
+Three focused private source checks passed. The real zero-timeout coordinator writer
+committed during original ancestry acquisition before the read opened; one header
+lookup and exact events/native IDs were retained. Original bounded decoding and
+malformed/partial traversal passed. Two fixture mistakes (assuming generation1 for
+every callback, then omitting the original native_id) are preserved in raw logs;
+only the failed check was corrected/rerun, with no production change. Evidence:
+`/home/ts/.cache/agent-scratch/mendel-attach-read-lifetime-20261006`.
+This is source ordering, not installed UX recovery. No restart, attach, input,
+compaction, provider, prefix mutation or build occurred. The original failed SQL
+statement and blocking writer still require a causal traceback from an actual
+failure; the lost historical evidence cannot be reconstructed. UX/pr159 uncertain
+work remains untouched.
