@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
     from .delivery_policy import KeyedResponseReceipt
     from .messages import Message
+    from .message_reference import MessageReference
     from .wire_metadata import WireMetadata
 
 
@@ -58,6 +59,20 @@ class WireRecord(ABC):
         if "observation" in value:
             return ()
         return cls.public_from_wire(value).messages()
+
+    @classmethod
+    def certified_public_references(cls, value: Mapping) -> tuple[tuple[str, MessageReference], ...]:
+        """Original sender and identity of an already certified canonical row.
+
+        WireScan validated the stored ID against Message.to_wire, including
+        the body-derived hash. This projection neither decodes the message
+        again nor substitutes a recipient index for the complete public stream.
+        """
+        from .message_reference import MessageReference
+
+        if "observation" in value:
+            return ()
+        return ((value["from"], MessageReference(value["seq"], value["id"])),)
 
     def messages(self) -> tuple[Message, ...]:
         return ()

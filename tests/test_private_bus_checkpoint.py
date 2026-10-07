@@ -54,6 +54,39 @@ def _page(comms: Comms, lookup: str, after: int = 0, limit: int = 100):
     return witness, tuple(captured), more
 
 
+def test_public_identity_scan_keeps_retained_rows_without_delivery_pointers(tmp_path):
+    import json
+    from agent_comms.bus_publication import HumanOrigin
+    from agent_comms.messages import Message, MessageType
+    from agent_comms.private_bus_checkpoint import DeliverySources
+    from agent_comms.wire_metadata import WireMetadata
+
+    comms, root_id = _root(tmp_path)
+    user = comms.messaging.user_identity(str(tmp_path))
+    original = Message(user.name, 'Alice', 'Retained original body', MessageType.INFO,
+                       timestamp=1.0, seq=1, sender_role=user.role)
+    # An authored offline retained cut, installed by the existing certificate
+    # owner. PublicWireRecord deliberately publishes no DeliverySources row.
+    with _store_lock(comms.root / 'wire'), comms.bus.log.locked():
+        comms.bus.log.path.write_text(json.dumps(original.to_wire()) + '\n')
+        comms.bus.log.write_metadata_unlocked(WireMetadata(
+            last_seq=1, admission_after_seq=1, writer_protocol_version=1,
+            wire_root_id=root_id, claim_envelopes_version=1))
+        # Replace only this fixture's derived empty certificate, as for the
+        # original offline retained cutover. No retained bus is discarded.
+        (comms.root / 'private_bus_checkpoint.sqlite3').unlink()
+        install_private_bus_checkpoint(comms.bus.log, _bus_locked=True)
+    with comms.bus.log.certified_read() as source:
+        assert source.connection.execute(
+            f'SELECT COUNT(*) FROM "{DeliverySources.declared_name}"').fetchone()[0] == 0
+        assert tuple(source.public_message_references()) == ((user.name, original.reference),)
+    with pytest.raises(RelationViolationError, match='already exists'):
+        comms.bus.publisher.publish_ordinary(original,
+            _human_origin=HumanOrigin(user.name, user.created_at, user.worktree))
+    fresh = comms.messaging.send_user_message('Alice', 'New private input', worktree=str(tmp_path))
+    assert fresh.seq == 2
+
+
 
 def test_marker_bound_complete_addressed_pages(tmp_path: Path) -> None:
     comms, root_id = _root(tmp_path)

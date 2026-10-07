@@ -84,6 +84,39 @@ publisher read counts are registry 3->1 for channels / 5->1 for direct messages,
 and catalog 2->1 for channels. Human identity acquisition remains separate.
 There is no measured live before/after latency claim.
 
+## Human admission reads certified references
+
+DeliverySources cannot replace this scan: retained PublicWireRecord produces no
+checkpoint row, and sender_lookup differs from the original sender name used by
+duplicate admission. No SQL index, schema, cache or format is added.
+
+WireScan originally validated every canonical Message.to_wire and its stored
+body-derived ID. Certificate installation/recovery and changed-revision admission
+retain full canonical scanning and prefix digest checks. WireRecord now projects
+the original sender and existing MessageReference from the certified raw row.
+CertifiedSourceRead.public_message_references retains the complete bounded JSONL
+scan and beginning/end source checks. Publisher still rejects contiguous-sequence
+gaps, skipped reservations and duplicate sender/IDs. Silent observations allocate
+no public sequence. Full display readers still decode messages. JSON parsing and
+IO remain; Message/FieldCodec reconstruction and repeated body hashing disappear.
+The replaced source.public_messages has no remaining static caller. All 759
+src/tests/tools modules parsed without omissions; external dynamic callers are
+not resolved by this trace.
+
+Twenty-two existing ingress/checkpoint checks passed in 6.03s, including UNKNOWN,
+skipped reservations, duplicate IDs, changed-prefix and sidecar refusal. An added
+real retained-source check passed in .44s: zero DeliverySources rows still yield
+the original reference, refuse its duplicate human input and admit a different
+seq2 input. Its initial setup tried installing over an existing empty certificate
+and correctly refused. Corrected only that authored offline fixture setup and
+reran the affected check. No original/public input was replayed.
+
+One read-only private comparison has identical sender/references: full reading
+decoded and hashed one Message; reference reading decoded and hashed zero.
+Raw profiles/reference-scan.json remain under
+/home/ts/.cache/agent-scratch/mendel-publication-audience-read-20261007/.
+This is not a live timing comparison or installed qualification.
+
 Raw private profile and result:
 /home/ts/.cache/agent-scratch/mendel-publication-audience-read-20261007/.
 The first result extractor used a nonexistent WireLog.read_metadata method after
