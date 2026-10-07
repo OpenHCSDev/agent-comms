@@ -166,3 +166,74 @@ absent scratch parent before test entry; retained dependencies and a persistent
 owned scratch parent resolved those setup issues. No dependency install occurred.
 These are authored private source checks, not an installed UX retry or contention
 repair. Neither UX nor pr159 was restarted, attached, drained or given input.
+
+## SQLite snapshot lifetime correction
+
+The completed source pass found unnecessary CPU work under original read locks.
+RecoveryGateway acquired its entire RecoverySelection and then encoded the wire
+response inside CoordinationStore.observing. CompactionJournal.retained_history
+serialized each captured row inside the all-table read; retained_changes encoded
+identities and compared complete retained payloads inside the two-attempt read.
+WorkingMemoryAnnotations grouped acquired segment answers and evaluated calibration
+cases inside its read. These operations consult captured declarations only; none
+performs another SQL read, admission or publication.
+
+Those existing owners now finish the original complete snapshot before encoding,
+inspection, comparison or evaluation. No query or validation needed to acquire that
+snapshot moved to another transaction. Calibration captures the original model
+answers and every corresponding correction family together before evaluating them.
+The journal still reads every declared table together and verifies original custody
+before returning rows. Missing journal, insufficient cuts, response size refusal,
+UNKNOWN history and exact result shapes remain unchanged.
+
+The shared TypedRow/TypedTable boundary was traced but not changed: iterate owns a
+streaming cursor; eager read/joined close their cursors, but explicit transactions
+belong to their callers. Decoded declarations are needed for subsequent predicates
+and multitable checks. Ending a transaction from a row decoder would split those
+snapshots; fetching all raw JSON rows first would not release an explicit outer
+transaction and would duplicate retained payload memory. FieldCodec is unchanged.
+
+Production AST trace covered all 757 src/tests/tools Python modules without parse
+omissions. All 92 lexical read/transaction/irreversible_admission scopes contain no
+await. This alone does not prove arbitrary callbacks are free of blocking work.
+The relevant source families were read semantically: CoordinationStore observes
+BEGIN through rollback/close; CoordinationSession reuses an enclosing write for
+read and owns write commit/rollback. PrivateSendAdmission commits its exclusive
+admission and durable input disposition before raw prompt dispatch. Response
+publication intentionally keeps the bounded bus append/fsync with its fenced
+receipt transaction. Their atomic publication relations were preserved.
+
+Saved transcript acquisition captures CompactionOutcomeSnapshot with all matching
+summary/commit decisions in one journal read. Source-cut checks happen after that
+read. Native fragment projections collect original admission and publication
+receipts in one coordinator read; rendering happens afterward. Runtime transcript
+replay awaits a worker result, not an open SQL context. Continued private source
+coverage consumes its original journal and native evidence fences; no coverage or
+recovery decision changed. Optional awareness already releases SQL before registry
+inclusion checks and digest/encoding. No independently changing owner was merged.
+
+Consumer trace: SnapshotInvocation.run uses the one gateway snapshot; retained
+context CLI and CompactionBoundary use the original journal inspection/diff owners;
+annotation CLI calibration and runtime segment/context callers share
+WorkingMemoryAnnotations.for_segments. No per-consumer alternative was introduced.
+The separate native_pi inner _decode_row is unrelated to TypedRow. Dynamic caller
+behavior is not inferred absent from the lexical scan.
+
+Three existing private controls passed after instrumenting their actual stores:
+recovery snapshot/one metadata read, original answer/correction/calibration, and
+retained-source inspection/diff/export. Independent real SQLite writers acquire
+exclusive locks during annotation evaluation and journal inspection/comparison.
+The gateway's real participant-generation writer waits while projection reads its
+old snapshot, then commits before encoding; the response still names the captured
+old owner and the next acquisition names the new owner. Measured read lifetime was
+7.509ms; writer finished 3.950ms after release. These are one private observation,
+not a live latency benchmark or identification of the historical blocking writer.
+
+Raw checks: `/home/ts/.cache/agent-scratch/mendel-sqlite-read-lifetime-20261006/checks.log`
+and `gateway-corrected.log`. The first batch had two passes and one instrumentation
+failure: the FieldCodec observer omitted its annotation argument. Corrected observer
+preserves the complete signature; only that failed check was rerun (pass, 0.66s).
+No dependency install, live attachment, UX/pr159 restart, drain, input or summary
+replay occurred. The earlier blocking writer/store/statement remains unproved;
+6cee7b71 preserves that causal traceback for an actual future failure. This patch
+removes proved unnecessary lock lifetime without claiming that historical cause.
