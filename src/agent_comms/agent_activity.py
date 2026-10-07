@@ -184,13 +184,22 @@ class AgentActivity:
         self.activity.emit(replace(activity, diagnostic=current.readiness.source_diagnostic()))
 
     def set_drain_diagnostic(
-        self, thread: str, owner: OwnerIdentity, diagnostic: DrainDiagnostic | None
+        self, thread: str, owner: OwnerIdentity, diagnostic: DrainDiagnostic | None,
+        *, source_error: BaseException | None = None,
     ) -> bool:
         """Persist one transition, fenced to the observer's exact owner incarnation."""
         with _store_lock(self._wire_lock_path, shared=True):
             snapshot = self.registry.snapshot()
             if snapshot.owner_identity(thread) != owner:
                 return False
+            if diagnostic is not None and source_error is not None:
+                from .diagnostics import record_drain_failure
+
+                path = record_drain_failure(
+                    self._wire_lock_path.parent,
+                    thread=thread, diagnostic=diagnostic, source_error=source_error,
+                )
+                diagnostic = replace(diagnostic, diagnostic_path=str(path))
             current = self.activity_of(thread)
             if current.readiness.source_diagnostic() == diagnostic:
                 return False
