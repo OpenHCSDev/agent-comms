@@ -288,3 +288,11 @@ Database attach failures are independently unresolved. The integrated runtime
 diagnostic correction retains the original causal traceback and SQLite store
 context before the unchanged wire error. It has not been installed into running
 backend owners, and it does not identify the historical blocking writer.
+
+Default-entrypoint confirmation completed in33.18s at
+`paint-default-live-20261006`: observed modules/interpreter select runtime-paint,
+both channel disclosure directions visibly changed the native tree, original
+saved owner remained unchanged, App/st exited0 and cleanup has no remaining
+owned processes/errors. No message was submitted in this confirmation. This
+proves default selection and affected interaction, not smooth scrolling or a
+whole activity latency win. The visible pr159 compaction error remains unresolved.
