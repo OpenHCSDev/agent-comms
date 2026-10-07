@@ -167,10 +167,11 @@ def _snapshot(root: Path, database: Path, requested: str) -> bytes:
         if len(count) > _MAX_OWNER_EXECUTIONS:
             raise GatewayUnavailableError("owner projection exceeds bounded scan")
         result = RecoverySelection.project(db, owner.owner_lookup, owner.owner_thread)
-        encoded = (json.dumps(FieldCodec.encode(result), separators=(",", ":")) + "\n").encode()
-        if len(encoded) > _MAX_REPLY:
-            raise GatewayUnavailableError("projection exceeds bounded response")
-        return encoded
+    # The complete projection owns its captured facts; encoding reads no SQL.
+    encoded = (json.dumps(FieldCodec.encode(result), separators=(",", ":")) + "\n").encode()
+    if len(encoded) > _MAX_REPLY:
+        raise GatewayUnavailableError("projection exceeds bounded response")
+    return encoded
 
 
 @dataclass(frozen=True)

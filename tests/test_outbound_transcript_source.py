@@ -60,10 +60,12 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
 def test_gateway_uses_original_snapshot_and_one_metadata_read(tmp_path, monkeypatch):  # noqa: F811
     import json
     import threading
+    import time
     from contextlib import contextmanager
     from agent_comms.coordination_database import CoordinationStore
     from agent_comms.recovery_gateway import _snapshot
     from agent_comms.recovery_projection import RecoverySelection
+    from agent_comms.field_codec import FieldCodec
 
     root, _root_id, comms, _initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"
@@ -73,14 +75,18 @@ def test_gateway_uses_original_snapshot_and_one_metadata_read(tmp_path, monkeypa
     errors, statements = [], []
     project = RecoverySelection.project
     observe = CoordinationStore.observing
+    encode = FieldCodec.encode
+    captured, timings = [], {}
 
     # Instrument the original resource and callback, without substituting SQL,
     # schema, identities, projection results, or transaction ownership.
     @contextmanager
     def traced_read(*args, **kwargs):
         with observe(*args, **kwargs) as db:
+            timings["read_started"] = time.monotonic()
             db.set_trace_callback(statements.append)
             yield db
+        timings["read_released"] = time.monotonic()
 
     def writer():
         try:
@@ -91,6 +97,7 @@ def test_gateway_uses_original_snapshot_and_one_metadata_read(tmp_path, monkeypa
                 store.participants.advance_generation(
                     lookup, "renamed", expected_generation=1
                 )
+            timings["writer_committed"] = time.monotonic()
             committed.set()
         except BaseException as error:
             errors.append(error)
@@ -99,12 +106,24 @@ def test_gateway_uses_original_snapshot_and_one_metadata_read(tmp_path, monkeypa
 
     def during_commit(db, owner_lookup, owner_thread):
         changing.start()
-        assert commit_requested.wait(2)
+        assert commit_requested.wait(2), errors
         assert not committed.is_set()
-        return project(db, owner_lookup, owner_thread)
+        result = project(db, owner_lookup, owner_thread)
+        captured.append(result)
+        return result
+
+    def after_release(value, annotation=None):
+        if captured and value is captured[0]:
+            # The real writer must finish while the captured projection still
+            # names beta. Encoding cannot need the old SQLite read lock.
+            assert "read_released" in timings
+            assert committed.wait(2)
+            timings["encoding_started"] = time.monotonic()
+        return encode(value, annotation)
 
     monkeypatch.setattr(CoordinationStore, "observing", staticmethod(traced_read))
     monkeypatch.setattr(RecoverySelection, "project", staticmethod(during_commit))
+    monkeypatch.setattr(FieldCodec, "encode", staticmethod(after_release))
     try:
         original = json.loads(_snapshot(root, database, "beta"))
     finally:
@@ -114,6 +133,11 @@ def test_gateway_uses_original_snapshot_and_one_metadata_read(tmp_path, monkeypa
     assert original["availability"] == "available" and original["owner"] == "beta"
     assert sum("PRAGMA user_version" in sql for sql in statements) == 1
     assert sum("schema_meta" in sql and sql.startswith("SELECT") for sql in statements) == 1
+    print("Original private recovery read:", json.dumps({
+        "snapshot_seconds": timings["read_released"] - timings["read_started"],
+        "encoding_started_after_writer_commit": committed.is_set(),
+        "writer_release_seconds": timings["writer_committed"] - timings["read_released"],
+    }))
     monkeypatch.setattr(RecoverySelection, "project", project)
     current = json.loads(_snapshot(root, database, "renamed"))
     assert current["availability"] == "available" and current["owner"] == "renamed"

@@ -40,7 +40,7 @@ def test_readers_do_not_create_a_missing_store(tmp_path):
     assert not path.parent.exists()
 
 
-def test_original_answers_human_correction_and_readonly_calibration(tmp_path):
+def test_original_answers_human_correction_and_readonly_calibration(tmp_path, monkeypatch):
     path = tmp_path / "coordination.sqlite3"
     content = "Keep the original instructions."
     source = FileProvenance("original-source", "e" * 64)
@@ -59,6 +59,19 @@ def test_original_answers_human_correction_and_readonly_calibration(tmp_path):
             SpanAnnotationsRow(label=original, created_at_ms=1).insert(db)
         corrected = store.annotations.correct(original, CommitmentSpan, user.incarnation, registry.snapshot())
     assert isinstance(corrected, HumanLabel)
+    effective = SpanAnnotationsRow.effective
+    projections = []
+
+    def after_read(rows):
+        # Projection uses only acquired rows. A real independent writer can
+        # acquire the original store while grouping/evaluation is underway.
+        with sqlite3.connect(path, isolation_level=None, timeout=0) as writer:
+            writer.execute("BEGIN EXCLUSIVE")
+            writer.execute("ROLLBACK")
+        projections.append(tuple(rows))
+        return effective(rows)
+
+    monkeypatch.setattr(SpanAnnotationsRow, "effective", staticmethod(after_read))
     before = path.stat()
     labels = WorkingMemoryAnnotations.for_segments(path,
         (segment.measured_manifest(), segment.measured_manifest()), classifier)
@@ -68,6 +81,7 @@ def test_original_answers_human_correction_and_readonly_calibration(tmp_path):
     report = WorkingMemoryAnnotations.calibration(path, version, classifier)
     assert report.accuracy == 0
     assert len(report.cases) == 1
+    assert len(projections) == 2
     assert FieldCodec.decode(type(report), FieldCodec.encode(report)) == report
     assert (path.stat().st_mtime_ns, path.stat().st_size) == (before.st_mtime_ns, before.st_size)
     different_source = replace(segment.measured_manifest(), source_spans=(
