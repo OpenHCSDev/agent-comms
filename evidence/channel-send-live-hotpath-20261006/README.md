@@ -382,3 +382,29 @@ checked after publication. Tab labels and goal mentions still resolve original
 ThreadView.presentation independently; Heis owns this remaining captured-presentation
 consumer work. Shared acquisition is delivered, but the activity-hang problem,
 historical attach blocker and pr159 compaction refusal remain unresolved.
+
+## Captured tabs, sparse read progress and native dispatch successor
+
+The integration now borrows the original sidebar publication for tab labels,
+unread answers and goal mention titles. Native tabs validate the original wire
+root and incarnation before borrowing the captured row; raw titles and marked
+labels remain distinct answers. This deletes additional process-presentation
+reads on the UI task.
+
+Core display checkpoints now retain activity clocks independently of sparse
+read progress and derive unread deltas from the existing certified page index.
+Changed membership or alias inclusion still rebuilds the affected projection;
+missing or stale page evidence falls back to the original bounded stream. No
+new index, state store or weakened source decoder was added.
+
+Textual PR86 is merged. Its existing message pump borrows each live class
+mapping once per dispatch owner, constructs the private method name once and
+filters message ancestry only when decorated handlers need it. Live replacement,
+C3 delivery, selectors, instance binding and bubbling remain unchanged.
+
+The selected three-wheel successor is `dispatch-wheel` / `runtime-dispatch`.
+All953 assets, complete installed inventories and69 dependency versions match
+the selected Git/wheels. Its actual saved-session disclosure recording is
+`/home/ts/.cache/agent-scratch/dispatch-installed-20261006`; the original handle
+is followed through completion. No human input is submitted in that run.
+At this checkpoint the candidate has not been published as the default.
