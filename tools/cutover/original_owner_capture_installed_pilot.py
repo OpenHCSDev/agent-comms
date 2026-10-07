@@ -13,6 +13,194 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+class SavedHistorySubscriber:
+    def __init__(self):
+        self.updates = []
+
+    def on_connect(self, connection):
+        pass
+
+    async def session_update(self, **kwargs):
+        self.updates.append(kwargs['update'].model_dump(by_alias=True, exclude_none=True))
+
+    async def request_permission(self, **kwargs):
+        raise AssertionError('History attachment must not request permission')
+
+
+async def profile_runtime_attachment():
+    """Measure real cold initialize/load, then profile the same protocol path."""
+    import asyncio
+    import sys
+    import time
+    from acp import spawn_agent_process
+    import agent_comms
+    from agent_comms.comms import Comms
+    from agent_comms.child_process import ProcessIdentity
+    from seed_thread_retirement_fixture import ready
+
+    output = Path(os.environ['AC_ATTACHMENT_PROFILE_OUTPUT'])
+    output.mkdir(mode=0o700)
+    root = Path(os.environ['AGENT_COMMS_ROOT'])
+    target = Path(sys.executable).parent.parent
+    assert Path(agent_comms.__file__).is_relative_to(target)
+    service = Comms(root)
+    package = Path(os.environ['AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE'])
+    service.owners.pin_private_nk_launch(root, os.environ['AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID'], package)
+    original = service.registry.require('replacement-alpha')
+    assert not original.process_alive
+    saved_hash = digest(Path(original.session_file))
+    results = []
+    try:
+        service.owners.start(original.name, agent_args=('--offline', '--no-tools'))
+        owner = service.registry.require(original.name)
+        await ready(root, owner)
+        for phase, args in (
+            ('ordinary', ('-B', '-m', 'agent_comms.acp')),
+            ('profiled', ('-B', '-m', 'cProfile', '-o', str(output / 'cold-acp.pstats'),
+                          '-m', 'agent_comms.acp')),
+        ):
+            subscriber = SavedHistorySubscriber()
+            started = time.perf_counter()
+            with (output / (phase + '.stderr.log')).open('w') as stderr:
+                async with spawn_agent_process(subscriber, sys.executable, *args,
+                        cwd=owner.worktree, env=dict(os.environ),
+                        transport_kwargs={'stderr':stderr}) as (client, process):
+                    spawned = time.perf_counter()
+                    identity = ProcessIdentity.capture(process.pid)
+                    await client.initialize(protocol_version=1, client_capabilities={})
+                    initialized = time.perf_counter()
+                    await client.load_session(cwd=owner.worktree, session_id=owner.name, mcp_servers=[])
+                    loaded = time.perf_counter()
+                    assert any('Original saved answer' in json.dumps(row) for row in subscriber.updates)
+                results.append({'phase':phase, 'pid':identity.pid, 'birth':identity.start_time,
+                    'spawn_seconds':spawned-started, 'initialize_seconds':initialized-spawned,
+                    'load_seconds':loaded-initialized, 'parent_exit':process.returncode,
+                    'joined':not identity.alive()})
+            (output / (phase + '.updates.json')).write_text(json.dumps(subscriber.updates, indent=2)+'\n')
+        assert digest(Path(original.session_file)) == saved_hash
+        (output / 'timings.json').write_text(json.dumps(results, indent=2)+'\n')
+        print(json.dumps(results), flush=True)
+    finally:
+        await asyncio.to_thread(service.owners.stop, original.name)
+
+
+async def runtime_replacement():
+    """Actual installed source workers, stopped publication and ACP reattachment."""
+    import asyncio
+    from dataclasses import replace
+    import sys
+    from acp import spawn_agent_process
+    import agent_comms
+    from agent_comms.active_route import ActiveRoute, active_route_path, publish_active_route
+    from agent_comms.comms import Comms
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.owner_cutover import PreserveOwnerRuntime
+    from agent_comms.owner_launch import RetainedOwnerLaunch
+    from native_schema_carry import NativeSchemaDeclaration
+    import publish_retained_summary as publication
+    import publish_openhcs_recovery as original_publication
+    from runtime_installation import PreserveRuntimeInstallation
+    from seed_thread_retirement_fixture import ready
+
+    output = Path(os.environ['AC_REPLACEMENT_OUTPUT'])
+    output.mkdir(mode=0o700)
+    source = Path(os.environ['AC_REPLACEMENT_SOURCE'])
+    target = Path(sys.executable).parent.parent
+    assert Path(agent_comms.__file__).is_relative_to(target)
+    package = Path(os.environ['PI_COMPACTION_TEST_PACKAGE'])
+    home = output / 'home'
+    links = home / '.local/bin'
+    links.mkdir(mode=0o700, parents=True)
+    os.environ['HOME'] = str(home)
+    route_path = active_route_path()
+    route_path.parent.mkdir(mode=0o700, parents=True)
+    for command in publication.COMMANDS:
+        (links / command).symlink_to(source / 'bin' / command)
+    root = output / 'wire'
+    environment = dict(os.environ)
+    for name in tuple(environment):
+        if name.startswith('AGENT_COMMS_') or name.startswith('PI_'):
+            environment.pop(name)
+    environment['PI_COMPACTION_TEST_PACKAGE'] = str(package)
+    environment['PYTHONPATH'] = str(Path(__file__).parents[2] / 'tests') + ':/usr/lib/python3.14/site-packages'
+    log = (output / 'source.stderr.log').open('w')
+    process = subprocess.Popen((str(source / 'bin/python'),
+        str(Path(__file__).with_name('seed_original_owner_capture.py')),
+        '--runtime-owners', str(root), str(package)),
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log, text=True, env=environment)
+    service = None
+    try:
+        line = await asyncio.to_thread(process.stdout.readline)
+        assert line, 'Source fixture failed; see source.stderr.log'
+        original = json.loads(line)
+        route = ActiveRoute(root, original['root_id'], package)
+        publish_active_route(route, route_path)
+        os.environ.update(AGENT_COMMS_ROOT=str(root),
+            AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=original['root_id'],
+            AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package))
+        service = Comms(root)
+        service.owners.pin_private_nk_launch(root, original['root_id'], package)
+        names = original['names']
+        before = service.registry.snapshot()
+        originals = tuple(before.require(name) for name in names)
+        launches = tuple(RetainedOwnerLaunch.capture(owner, before,
+                         interpreter=str(source / 'bin/python')) for owner in originals)
+        sessions = {owner.session_file: digest(Path(owner.session_file)) for owner in originals}
+
+        async def attach(interpreter, phase):
+            updates = {}
+            for owner in originals:
+                subscriber = SavedHistorySubscriber()
+                async with spawn_agent_process(subscriber, str(interpreter), '-m', 'agent_comms.acp',
+                        env={k:v for k,v in os.environ.items() if k != 'PYTHONPATH'},
+                        cwd=owner.worktree) as (client, child):
+                    await client.initialize(protocol_version=1, client_capabilities={})
+                    await client.load_session(cwd=owner.worktree, session_id=owner.name, mcp_servers=[])
+                    assert any('Original saved answer' in json.dumps(row) for row in subscriber.updates)
+                    updates[owner.name] = subscriber.updates
+            (output / (phase + '-acp.json')).write_text(json.dumps(updates, indent=2)+'\n')
+
+        await attach(source / 'bin/python', 'before')
+        publication.ROOT, publication.LINKS = root, links
+        original_publication.ROOT, original_publication.LINKS = root, links
+        def artifact(path):
+            return publication.ReviewedArtifact(path, digest(path))
+        cohort = publication.ReviewedCommsBackendCohort(target, source, route, package,
+            artifact(Path(os.environ['AC_REPLACEMENT_ACTIVATION'])),
+            artifact(Path(os.environ['AC_REPLACEMENT_PROOF'])),
+            (artifact(Path(os.environ['AC_REPLACEMENT_GATE'])),), source)
+        results = await asyncio.to_thread(publication.publish, cohort, PreserveOwnerRuntime(),
+            PreserveRuntimeInstallation(NativeSchemaDeclaration.observe().goal), output / 'publication.json')
+        after = service.registry.snapshot()
+        for owner, launch in zip(originals, launches, strict=True):
+            current = after.require(owner.name)
+            assert not owner.process_alive
+            assert current.process_identity != owner.process_identity
+            assert replace(current, process_identity=owner.process_identity) == owner
+            retained = RetainedOwnerLaunch.capture(current, after, interpreter=str(target / 'bin/python'))
+            assert retained.arguments == launch.arguments
+            assert retained.environment['BATCH_OWNER_CREDENTIAL'] == launch.environment['BATCH_OWNER_CREDENTIAL']
+            assert retained.environment['PI_CODING_AGENT_DIR'] == launch.environment['PI_CODING_AGENT_DIR']
+            await ready(root, current)
+        await attach(target / 'bin/python', 'after')
+        assert {path:digest(Path(path)) for path in sessions} == sessions
+        assert (links / 'toad').readlink() == source / 'bin/toad'
+        receipt = {'passed':True, 'source':str(source), 'target':str(target),
+            'results':FieldCodec.encode(results), 'saved_history_bytes_preserved':True,
+            'settings_preserved':True, 'actual_source_and_target_ACP_history':True,
+            'frontend_unchanged':True, 'provider_inputs':0, 'public_mutations':0}
+        (output / 'receipt.json').write_text(json.dumps(receipt, indent=2)+'\n')
+        print(json.dumps(receipt), flush=True)
+    finally:
+        if service is not None:
+            for owner in service.registry.snapshot().threads.values():
+                if owner.process_alive:
+                    await asyncio.to_thread(service.owners.stop, owner.name)
+        process.stdin.close()
+        await asyncio.to_thread(process.wait, timeout=10)
+        log.close()
+
+
 def main():
     stage = Path(os.environ['AC_CAPTURE_FIXTURE_STAGE'])
     assert stage.is_relative_to('/home/ts/wt')
@@ -83,4 +271,11 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    if os.environ.get('AC_ATTACHMENT_PROFILE_OUTPUT'):
+        import asyncio
+        asyncio.run(profile_runtime_attachment())
+    elif os.environ.get('AC_REPLACEMENT_OUTPUT'):
+        import asyncio
+        asyncio.run(runtime_replacement())
+    else:
+        main()
