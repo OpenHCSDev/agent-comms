@@ -365,3 +365,20 @@ and overall latency remain unproven until that result and actual review complete
 An initial recorder invocation supplied a prefix rather than the existing launcher
 contract's bin directory and refused before output creation/App launch/input.
 Correcting that operand did not repeat a submitted input or running App.
+
+The original recorder completed once in60.63s. Actual source identity was unchanged,
+App and st exited0, and cleanup retained no owned processes/errors. The new channel
+message and responding agents painted; both channel-disclosure states were reviewed
+from native screenshots. All observed modules select runtime-snapshot. There is no
+overall latency gain established: send-phase UI CPU76.09% versus the prior70.35%,
+with different uncontrolled live activity. Writer completion intervals had median
+26.49ms/p95143.01ms/p99500.60ms/max3061.39ms; these are not monitor frames or
+input-to-photon timings, and diagnostic capture can contribute gaps.
+
+The existing reviewed frontend publisher selected runtime-snapshot as the default;
+`snapshot-wheel/publication.json` is the original successful publication. Backend
+owners and native package remain unchanged. The default link and version were
+checked after publication. Tab labels and goal mentions still resolve original
+ThreadView.presentation independently; Heis owns this remaining captured-presentation
+consumer work. Shared acquisition is delivered, but the activity-hang problem,
+historical attach blocker and pr159 compaction refusal remain unresolved.
