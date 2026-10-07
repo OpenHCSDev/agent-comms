@@ -46,6 +46,16 @@ def test_original_retained_source_inspection_diff_and_narrow_export(comms, tmp_p
         Utf8FileWriteArtifact(str(tmp_path / "original-artifact.py"), TextDigest.of("λ"), 2))
     before = RetainedTaskFacts((GoalTaskFact(goal), *input_facts))
     after = RetainedTaskFacts((*before.facts, artifact, artifact))
+    frozen = FieldCodec.encode(before)
+    original_row, = captured.originals(captured.owner_originals(owner))
+    assert original_row.source_text in before.text
+    assert original_row.source_text not in before.compaction_text
+    assert original_row.key in before.compaction_text
+    assert original_row.digest.value in before.compaction_text
+    assert original_row.public_status in before.compaction_text
+    assert goal.text in before.compaction_text
+    before.require_summary(before.compaction_text + "\n\nNative history narrative")
+    assert FieldCodec.encode(before) == frozen
 
     def command(*args):
         code = main(["--root", str(comms.root), *args])
@@ -224,6 +234,11 @@ def original_input_consumer_journey(tmp_path, command):
         pins.append(reference(result["pin"]))
     snapshot = comms.bus.log.retained_context("beta", comms.registry)
     assert FieldCodec.decode(RetainedSegment, FieldCodec.encode(snapshot)) == snapshot
+    # Distinct original human inputs retain equal wording twice; neutral
+    # delivery evidence cannot decide that they are one human instruction.
+    escaped_wording = wording.replace("\n", "\\n")
+    assert snapshot.retained.compaction_text.count(escaped_wording) == 2
+    assert all(row.key in snapshot.retained.compaction_text for row in originals)
     assert all(row.context_provenance() in snapshot.provenance for row in originals)
     code, inspected = invoke("retained-context", "beta")
     assert code == 0 and inspected["input_supplied"] is False

@@ -109,7 +109,7 @@ class SelectedSummarySlot:
             witness=witness,
             selected=envelope.selected,
             settings=envelope.settings,
-            retained_text=envelope.retained.text,
+            retained_text=envelope.retained.compaction_text,
             custom_instructions=source.summary_instructions(owner, custom_instructions),
         )
         if (

@@ -204,7 +204,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
         facts = tuple(source.retained_task_facts(owner.incarnation))
     retained = RetainedTaskFacts(facts).for_owner(owner, comms.registry.snapshot())
     assert retained.current_authored_sources(owner, comms.registry.snapshot()) == (human,)
-    retained.require_summary(retained.text + "\n\nOptional narrative")
+    retained.require_summary(retained.compaction_text + "\n\nOptional narrative")
     comms.registry.rename(owner.name, "renamed-alpha")
     renamed = comms.registry.require("renamed-alpha")
     assert retained.current_authored_sources(renamed, comms.registry.snapshot()) == (human,)
@@ -248,7 +248,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     assert retained.current_authored_sources(alpha, comms.registry.snapshot()) == (rows[1],)
     with pytest.raises(RelationViolationError, match="omitted"):
         retained.require_summary("Assistant prose cannot replace original authored_sources")
-    retained.require_summary(retained.text + "\n\nNarrative")
+    retained.require_summary(retained.compaction_text + "\n\nNarrative")
     bus = comms.root / "bus.jsonl"
     before = bus.read_bytes()
     monkeypatch.setenv("PI_AGENT_ID", "beta")

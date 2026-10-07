@@ -72,7 +72,7 @@ assert.throws(()=>new CompactionPolicy({concurrency:0}),/Invalid/);
 assert.throws(()=>new CompactionPolicy({concurrency:1.5}),/Invalid/);
 assert.throws(()=>new CompactionPolicy({retry:true}),/Unknown/);
 assert.throws(()=>new CompactionPolicy({inputBudgetRatio:1}),/Invalid/);
-assert.throws(()=>new CompactionPolicy().inputBytes({contextWindow:0},16384),/unavailable/);
+assert.throws(()=>new CompactionPolicy().inputTokens({contextWindow:0},16384),/unavailable/);
 let serialActive=0,serialPeak=0;
 process.env.AGENT_COMMS_COMPACTION_POLICY=JSON.stringify({strategy:'serial'});
 await run(async()=>({result:async()=>{
@@ -162,5 +162,5 @@ await generateSummaryWithUsage([{role:'user',content:[{type:'text',text:body}],t
   {enabled:false,maxRetries:0},{},undefined);
 assert.ok(configuredRequests>1);
 const defaultPolicy=new CompactionPolicy();
-assert.equal(defaultPolicy.summaryTokens(configuredModel,defaultPolicy.inputBytes(configuredModel,16384),16384),4096);
+assert.equal(defaultPolicy.summaryTokens(configuredModel,defaultPolicy.inputTokens(configuredModel,16384),16384),4096);
 console.log(`configured output-reserve PASS requests=${configuredRequests}`);
