@@ -173,3 +173,23 @@ def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path):
     with log._opened_wire_snapshot(need_sequence=False) as source:
         with pytest.raises((ValueError, TypeError, KeyError)):
             list(source.public_records())
+
+
+def test_reserved_sequence_preserves_committed_read_cut_without_admission(tmp_path):
+    from agent_comms.wire_log import CertifiedOpenedWireSnapshot
+    from test_private_bus_checkpoint import _root
+
+    comms, _ = _root(tmp_path)
+    first = comms.messaging.send_initial_cohort('sender', '#team', '@Alice first')
+    # This is the original durable state between reservation and append.
+    # No second input or fabricated successful append resolves that uncertainty.
+    with comms.bus.log.locked():
+        marker = comms.bus.log._private_marker_unlocked()
+        marker.last_seq += 1
+        comms.bus.log.write_metadata_unlocked(marker)
+    with comms.bus.log._opened_wire_snapshot(need_sequence=False) as source:
+        assert isinstance(source, CertifiedOpenedWireSnapshot)
+        assert [message.message_id for message, _ in source.public_records()] == [first.message_id]
+    with pytest.raises(RelationViolationError, match='differs from its durable marker'):
+        with comms.bus.log.certified_read() as source:
+            source.require_current()

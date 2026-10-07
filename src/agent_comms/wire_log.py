@@ -474,7 +474,9 @@ class WireLog:
                 if lock.source is not None:
                     source = lock.certified_read()
                     source.require_marker(metadata)
-                    source.require_current()
+                    # A reserved but unappended sequence revokes admission,
+                    # not the original committed bytes of this read-only cut.
+                    source.require_open_prefix()
                     # Bind the separate retained descriptor to the exact admitted
                     # inode/revision while original physical custody is held.
                     if (stream is None or revision != BusFileRevision.capture(source.stream)
