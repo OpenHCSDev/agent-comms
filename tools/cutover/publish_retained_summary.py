@@ -295,6 +295,10 @@ class ReviewedRetainedSummaryCohort:
     source_proof: ReviewedArtifact
     actual_gates: tuple[ReviewedArtifact, ...]
 
+    def original_command_prefix(self, command: str) -> Path:
+        """Each publication member owns its actual original command supply."""
+        return self.current_prefix
+
     def require_original(self):
         if self.original_route.root != ROOT:
             raise RuntimeError('This reviewed one-use publisher names another public root')
@@ -327,7 +331,7 @@ class ReviewedRetainedSummaryCohort:
         if read_active_route() != self.original_route:
             raise RuntimeError('Original active route changed; recapture/review required')
         for command in self.commands:
-            if (LINKS / command).readlink() != self.current_prefix / 'bin' / command:
+            if (LINKS / command).readlink() != self.original_command_prefix(command) / 'bin' / command:
                 raise RuntimeError('Original default changed; recapture/review required')
             if not (self.target / 'bin' / command).is_file():
                 raise RuntimeError('Reviewed target entrypoint is missing')
@@ -342,13 +346,15 @@ class ReviewedRetainedSummaryCohort:
 
     def publish_route(self, directory: int):
         target_route = replace(self.original_route, native_package=self.native)
+        if target_route == self.original_route:
+            return
         _publish_active_route_locked(target_route, active_route_path(), directory,
                                      expected=self.original_route)
 
     def publish_links(self, directory: int | None = None):
         for command in self.commands:
             link = LINKS / command if directory is None else command
-            if Path(os.readlink(link, dir_fd=directory)) != self.current_prefix / 'bin' / command:
+            if Path(os.readlink(link, dir_fd=directory)) != self.original_command_prefix(command) / 'bin' / command:
                 raise RuntimeError('Default changed during publication; remain stopped')
             temporary = LINKS / (command + '.retained-summary-publish') if directory is None else command + '.retained-summary-publish'
             os.symlink(self.target / 'bin' / command, temporary, dir_fd=directory)
@@ -370,14 +376,19 @@ class CommandDefaultPublication:
     @abstractmethod
     def require_preserved_defaults(self): ...
 
+    @property
+    def default_native_package(self) -> Path:
+        """Ordinary frontend/backend defaults retain the published native supply."""
+        return self.original_route.native_package
+
     def publish_defaults(self, receipt: Path):
         """Change future launches; never stop or replace an existing owner."""
         if receipt.exists() or receipt.is_symlink():
             raise RuntimeError('Original default publication attempt requires review; never repeat')
         PrivateDirectoryRole.require(receipt.parent.lstat())
         self.require_original()
-        if self.native != self.original_route.native_package:
-            raise RuntimeError('Command defaults cannot change the native route')
+        if self.native != self.default_native_package:
+            raise RuntimeError('This default publication member cannot change native supply')
         with guard_default_route_write(self.original_route.root, blocking=False):
             self._publish_default_links(receipt)
 
@@ -394,15 +405,16 @@ class CommandDefaultPublication:
                     raise RuntimeError('Default recovery has an unknown temporary link')
                 os.unlink(temporary, dir_fd=directory)
             if Path(os.readlink(command, dir_fd=directory)) == self.target / 'bin' / command:
-                os.symlink(self.current_prefix / 'bin' / command, temporary, dir_fd=directory)
+                os.symlink(self.original_command_prefix(command) / 'bin' / command, temporary, dir_fd=directory)
                 os.replace(temporary, command, src_dir_fd=directory, dst_dir_fd=directory)
         os.fsync(directory)
-        if any(Path(os.readlink(command, dir_fd=directory)) != self.current_prefix / 'bin' / command
+        if any(Path(os.readlink(command, dir_fd=directory)) != self.original_command_prefix(command) / 'bin' / command
                for command in self.commands):
             raise RuntimeError('Default recovery preserves an unknown command binding')
 
     def _publish_default_links(self, receipt: Path):
         directory = os.open(LINKS, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        route_directory = None
         try:
             fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
             if os.fstat(directory).st_uid != os.geteuid():
@@ -415,7 +427,10 @@ class CommandDefaultPublication:
                 opened.flush()
                 os.fsync(opened.fileno())
             fsync_directory(receipt.parent)
+            route_directory = os.open(active_route_path().parent,
+                                      os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
             try:
+                self.publish_route(route_directory)
                 self.publish_links(directory)
                 self.require_preserved_defaults()
                 _atomic_write_text(receipt, json.dumps({'phase': self.published_phase,
@@ -424,6 +439,13 @@ class CommandDefaultPublication:
                 recovery_error = None
                 try:
                     self._restore_default_links(directory)
+                    target_route = replace(self.original_route, native_package=self.native)
+                    current_route = read_active_route()
+                    if current_route != self.original_route:
+                        if current_route != target_route:
+                            raise RuntimeError('Default recovery preserves an unknown native route')
+                        _publish_active_route_locked(self.original_route, active_route_path(),
+                                                     route_directory, expected=target_route)
                 except BaseException as error:
                     recovery_error = repr(error)
                 phase = self.publication_scope + (
@@ -434,6 +456,8 @@ class CommandDefaultPublication:
                     'recovery_error': recovery_error, 'finished': time.time()}, indent=2)+'\n', fsync_parent=True)
                 raise
         finally:
+            if route_directory is not None:
+                os.close(route_directory)
             os.close(directory)
 
 
@@ -466,6 +490,32 @@ class ReviewedBackendCohort(CommandDefaultPublication, ReviewedRetainedSummaryCo
 @dataclass(frozen=True)
 class ReviewedCommsBackendCohort(ReviewedBackendCohort):
     commands: ClassVar[tuple[str, ...]] = tuple(command for command in COMMANDS if command != 'toad')
+
+
+@dataclass(frozen=True)
+class ReviewedPairedRuntimeCohort(ReviewedBackendCohort):
+    """Publish reviewed same-format client/native supply for future launches.
+
+    Existing owners retain their acquired interpreter, explicit native package,
+    sessions and execution state. Store-format changes still require stopped
+    installation. The actual frontend and backend defaults have independent
+    original installation identities, even when their successor is shared.
+    """
+
+    commands: ClassVar[tuple[str, ...]] = COMMANDS
+    publication_scope: ClassVar[str] = 'paired-runtime'
+    published_phase: ClassVar[str] = 'paired-runtime-defaults-published-live-check-pending'
+
+    @property
+    def default_native_package(self) -> Path:
+        return self.native
+
+    def original_command_prefix(self, command: str) -> Path:
+        return (self.frontend_prefix if command in ReviewedFrontendCohort.commands
+                else self.current_prefix)
+
+    def require_preserved_defaults(self):
+        """This member publishes every command; no foreign default is changed."""
 
 
 @dataclass(frozen=True)
