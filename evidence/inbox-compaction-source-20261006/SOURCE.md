@@ -412,3 +412,45 @@ source-family.json. One initial shell edit was refused by the duplicate-command
 hook before execution; the source changes used apply_patch. No App/public input,
 provider/native process, prefix operation, build or restart occurred. Parent owns
 integration and actual installed latency measurement; no live speedup is claimed.
+
+## Current claim marker acquisition — 2026-10-07
+
+Parent delivered the viewer-cut correction and supplied a new installed profile:
+`/home/ts/.cache/agent-scratch/installed-viewer-cut-header-20261007/ui.pstats`.
+46 viewer snapshots take 18.106 seconds inclusive; pending_counts_opened takes
+0.889 seconds. Different workloads and overlapping/threaded cumulative times do
+not establish a speedup or UI blockage. Marker acquisition/source certification
+remain substantial; FieldCodec.decode is 1.499 seconds across the entire profile,
+not evidence that it alone explains the viewer cost.
+
+RegistryStore already caches decoded registry documents, but private_guard_unlocked
+must verify the marker and original committed guard before every cache hit. These
+are independently changing authority facts. That check remains untouched.
+
+A concrete duplicate exists inside WireLog.verify_before_read_unlocked:
+claim_gate_enabled decoded the current marker, then the barrier decoded it again
+before any publication/durability work. Canonical writers hold the original bus
+lock; neither intervening gate check writes a marker. WireLog now derives the
+boolean gate and barrier's typed marker from _claim_marker_unlocked. The barrier
+carries that acquisition rather than repeating its decode. Nonbus locks, missing
+claim/certificate refusal and owner-only inode admission retain their exact checks.
+
+opened_claim_source_unlocked separately samples _private_marker_unlocked AFTER
+fsync. That is a genuine durability/currentness boundary and is preserved. Later
+_certified_source and opened-reader marker relations also remain current. Total
+claim barrier samples are three to two, not two to one. No cache, retained
+signature, format, timeout, registry bypass or public operation was added.
+
+The two affected original private-store checks passed in the first batch. The new
+observer check incorrectly expected one sample and failed: it had omitted the
+post-fsync owner from its expectation. Production was unchanged; only that failed
+check was corrected/repeated, passing in 0.58 seconds. It observes actual marker
+reads across two real private publications: one gate sample and one post-fsync
+sample each, with correct root/current sequence and certificate. Original
+addressed-source completeness and edited-prefix rejection checks remain passing.
+Raw check.log/check02.log and 340 before/after owner/writer/consumer AST sites are
+retained under `/home/ts/.cache/agent-scratch/mmr01`. All 759 modules parse/compile,
+zero omissions; external dynamic overrides are not established by that trace.
+No build/prefix/App/provider/public input/restart or repeat installed check occurred.
+Parent owns integration and measurement; no remaining historical writer or
+deadlock cause is inferred from this profile or source change.
