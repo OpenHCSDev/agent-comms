@@ -218,3 +218,42 @@ restored and a durable copy now lives in `retained-artifacts/`. Preserve that
 artifact for the current installed-proof/recovery relation. The initial verifier
 refusal is retained under navigation-wheel/cache-path-refusal. Disposable copied
 Git evidence was removed; original source/evidence/recordings are retained.
+
+## Retained disclosure and prompt tab closure delivered
+
+Toad509 is merged. The default client now selects
+`.artifacts/sidebar-live-candidate-20261006/runtime-tree-close`; publication uses
+the existing frontend publisher and changes only the Toad entrypoint. Backend
+commands, processes, native package and route remain unchanged. Open clients
+retain their existing imports until reopened.
+
+Collapsed channel and relationship groups retain admitted row/prepared identities;
+unchanged reopen no longer constructs rows or recaptures every member. Hidden
+rows are excluded from navigation/ranges/animation; original publications still
+retire stale membership, incarnation and route resources. The selected tab now
+returns to its survivor before original teardown joins; cleanup remains awaited.
+Channel participant output uses its original Static content and a single
+presentation read for each member, with independent tooltip updates.
+
+The combined installed private workspace check passed with empty stderr:
+`/home/ts/.cache/agent-scratch/tab-close-20261006/installed.{stdout,stderr}.log`.
+It preserves the surviving original editor, draft and Undo while removing the
+closed admission/view. The initial source check emitted unregistered-thread
+errors because its fixture lacked the canonical private declaration; the existing
+fixture was corrected and the clean source/installed results retained separately.
+
+Actual isolated-st saved-history disclosure recording completed normally under
+`/home/ts/.cache/agent-scratch/tree-disclosure-installed-20261006`. Both native
+clicks changed the tree, original source identity stayed unchanged, and cleanup
+has no remaining owned processes/errors. No new message was submitted. Per-gesture
+receipt timestamps bracket xdotool submission, not handler completion. Retained
+10fps contact sheets show the changed tree near those submissions; no precise
+input-to-photon claim is made. Initial expansion/collapse phase UI CPU was about
+34%/27%, versus prior quiet33.5%/29.7%; this does not establish a reliable overall
+performance gain. Previous baseline labels were reversed and remain preserved;
+new labels are first/second disclosure rather than assumed direction.
+
+All953 installed assets and69 package versions match their declared source/wheels.
+The combined proof, activation and publication are in `tree-close-wheel`.
+Activity-burst hangs, database read contention and the original pr159 compaction
+failure remain unresolved by these changes. They are separate ongoing work.
