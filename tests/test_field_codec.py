@@ -171,6 +171,64 @@ def test_tuple_shape_and_strict_bool():
         FieldCodec.decode(bool, 1)
 
 
+def test_scalar_dispatch_keeps_representation_and_exact_type_contracts():
+    import math
+    from typing import Any, Literal
+    from agent_comms.field_codec import FieldRepresentation
+
+    class NullableInteger(FieldRepresentation):
+        accepts_null = True
+
+        @classmethod
+        def encode(cls, value):
+            return value
+
+        @classmethod
+        def decode(cls, value):
+            return 17 if value is None else FieldCodec.decode(int, value)
+
+    assert FieldCodec.decode(Annotated[int, NullableInteger], None) == 17
+    assert FieldCodec.decode(Annotated[int, "non-representation"], 4) == 4
+    with pytest.raises(TypeError, match="one representation"):
+        FieldCodec.decode(Annotated[int, NullableInteger, PathText], 4)
+    for target, value in ((str, "text"), (int, 4), (bool, False), (type(None), None), (float, 4)):
+        assert FieldCodec.decode(target, value) is value
+
+    class DerivedInt(int):
+        pass
+
+    class DerivedStr(str):
+        pass
+
+    for target, value in ((int, True), (bool, 1), (str, DerivedStr("text")),
+                          (int, DerivedInt(4)), (DerivedInt, 4),
+                          (float, True), (float, math.inf), (float, math.nan), (int, None)):
+        with pytest.raises(ValueError):
+            FieldCodec.decode(target, value)
+    assert FieldCodec.decode(int | None, None) is None
+    assert FieldCodec.decode(Literal[True, 1], True) is True
+    assert type(FieldCodec.decode(Literal[True, 1], 1)) is int
+    with pytest.raises(ValueError):
+        FieldCodec.decode(Literal[1], True)
+    with pytest.raises(TypeError):
+        FieldCodec.decode(Any, math.inf)
+
+
+def test_record_dispatch_precedes_dynamic_scalar_equality():
+    class ScalarEqualMeta(type):
+        def __eq__(cls, other):
+            return other is str or type.__eq__(cls, other)
+
+        __hash__ = type.__hash__
+
+    @dataclass
+    class DynamicRecord(metaclass=ScalarEqualMeta):
+        text: str
+
+    # Arbitrary annotation equality must not run before record construction.
+    assert FieldCodec.decode(DynamicRecord, {"text": "original"}) == DynamicRecord("original")
+
+
 def test_reserved_family_tag_cannot_be_shadowed_by_a_field():
     class Local(DeclaredFamily):
         pass
