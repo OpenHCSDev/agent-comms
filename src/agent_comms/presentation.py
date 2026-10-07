@@ -647,6 +647,12 @@ class CoordinationSnapshot:
             show_archived=show_archived, read_marker_notice=read_marker_notice,
         )
 
+    @property
+    def visible_channels(self) -> tuple[ChannelView, ...]:
+        """Sidebar rows, distinct from still-open channel membership and history."""
+        return tuple(view for view in self.channels
+                     if view.channel.in_view(show_archived=self.show_archived))
+
     def participants(self, channel: str) -> tuple[ThreadView, ...]:
         view = next((view for view in self.channels if view.channel.name == channel), None)
         if view is None:
