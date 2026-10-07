@@ -334,10 +334,10 @@ class TestSelectedTargetActions:
         comms = self.declared(tmp_path)
         actions = CliCommand.target_catalog(
             comms, ("alpha", "beta", "#team"),
-            {"alpha": "#team", "beta": "#other"}, project=str(tmp_path),
+            {"alpha": ("#team",), "beta": ("#other",)}, project=str(tmp_path),
         )
         catalog = {action.declaration.declared_name: action for action in actions}
-        assert set(catalog) == {"start", "stop", "archive", "pin-thread", "read-target"}
+        assert set(catalog) == {"start", "stop", "archive", "pin-thread", "read-target", "delete-tag"}
         assert len(catalog["pin-thread"].bound) == 3
         assert not catalog["pin-thread"].editable_fields
         assert catalog["archive"].confirmation.startswith("Archive #team?")
@@ -424,13 +424,52 @@ class TestSelectedTargetActions:
         comms = self.declared(tmp_path)
         before = {name: comms.registry.require(name).tags for name in ("alpha", "beta")}
         result = TargetEdit(PinThreadCliCommand, ("alpha", "beta", "#team"), {},
-                            channel={"alpha": "#team", "beta": "#other"}).apply(comms)
+                            channel={"alpha": ("#team",), "beta": ("#other",)}).apply(comms)
         assert result.successful and len(result.outcomes) == 3
         catalog = comms.channels.catalog.read()
         assert catalog.resolve("#team").pinned
         assert catalog.pinned_threads("#team") == {"alpha"}
         assert catalog.pinned_threads("#other") == {"beta"}
         assert {name: comms.registry.require(name).tags for name in before} == before
+
+    def test_same_owner_memberships_pin_independently_and_archive_once(self, tmp_path):
+        from agent_comms.cli_commands import ArchiveCliCommand, CliCommand, PinThreadCliCommand, TargetEdit
+
+        comms = self.declared(tmp_path)
+        comms.channels.update_tags("alpha", add=frozenset({"other"}))
+        channels = {"alpha": ("#team", "#other")}
+        action = next(action for action in CliCommand.target_catalog(
+            comms, ("alpha",), channels, project=str(tmp_path))
+            if action.declaration is PinThreadCliCommand)
+        assert tuple(command.channel for command in action.bound) == ("#team", "#other")
+        result = TargetEdit(PinThreadCliCommand, action.targets, {}, channel=channels).apply(comms)
+        assert result.successful and len(result.outcomes) == 2
+        document = comms.channels.catalog.read()
+        assert document.pinned_threads("#team") == {"alpha"}
+        assert document.pinned_threads("#other") == {"alpha"}
+        assert comms.registry.require("alpha").tags == frozenset({"team", "other"})
+        result = TargetEdit(ArchiveCliCommand, ("alpha",), {}, channel=channels).apply(comms)
+        assert result.successful and len(result.outcomes) == 1
+        assert result.outcomes[0].result.archived == "alpha"
+
+    def test_missing_membership_reports_failure_without_losing_other_pin(self, tmp_path):
+        from agent_comms.cli_commands import CliCommand, PinThreadCliCommand, TargetEdit
+
+        comms = self.declared(tmp_path)
+        comms.channels.update_tags("alpha", add=frozenset({"other"}))
+        channels = {"alpha": ("#team", "#other")}
+        action = next(action for action in CliCommand.target_catalog(
+            comms, ("alpha",), channels, project=str(tmp_path))
+            if action.declaration is PinThreadCliCommand)
+        comms.channels.update_tags("alpha", remove=frozenset({"team"}))
+        result = TargetEdit(PinThreadCliCommand, action.targets, {}, channel=channels).apply(comms)
+        assert not result.successful and len(result.outcomes) == 2
+        assert not result.outcomes[0].successful
+        assert "#team" in result.outcomes[0].error
+        assert result.outcomes[1].successful
+        document = comms.channels.catalog.read()
+        assert not document.pinned_threads("#team")
+        assert document.pinned_threads("#other") == {"alpha"}
 
     def test_mixed_read_marks_human_views_without_advancing_executor_delivery(self, tmp_path):
         from agent_comms.cli_commands import ReadTargetCliCommand, TargetEdit
