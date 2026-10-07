@@ -14,6 +14,62 @@ from agent_comms.messages import Message, MessageType
 from agent_comms.threads import Thread
 
 
+@pytest.mark.parametrize("indexed", [True, False])
+def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
+    """Later append/ACK/rename cannot broaden an acquired viewer snapshot."""
+    from dataclasses import replace
+
+    comms = wire(tmp_path)
+    viewer = comms.messaging.user_identity(str(tmp_path))
+    comms.registry.register(replace(viewer, tags=frozenset({"team"})))
+    comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+    direct = comms.messaging.send_message("bob", viewer.name, "direct")
+    channel = comms.messaging.send_message("bob", "#team", "channel")
+    seen = comms.bus.reads.capture(viewer.name, (direct,), comms.registry.snapshot(),
+                                 comms.bus.log.path)
+    comms.bus.reads.mark_displayed(viewer.name, seen)
+    if not indexed:
+        # Genuine disposable-store refusal; canonical source remains readable.
+        comms.bus.log.path.with_name("bus_route_counts.sqlite3").mkdir()
+    with comms.views.presentation.snapshot(viewer=viewer.name) as (basis, source):
+        before = comms.bus.pending_counts_opened(source, basis)
+        sent = comms.views.last_sent_timestamps(source=source, registry=basis.registry)
+        assert before == {"#team": 1}
+        comms.bus.reads.mark_displayed(viewer.name, comms.bus.reads.capture(
+            viewer.name, (channel,), comms.registry.snapshot(), comms.bus.log.path))
+        comms.messaging.send_message("bob", viewer.name, "later direct")
+        comms.registry.rename("bob", "renamed-bob")
+        assert comms.bus.pending_counts_opened(source, basis) == before
+        assert comms.views.last_sent_timestamps(source=source, registry=basis.registry) == sent
+        assert "bob" in sent and "renamed-bob" not in sent
+    latest = comms.views.viewer_snapshot(str(tmp_path))
+    assert latest.unread == {"renamed-bob": 1}
+    assert "renamed-bob" in latest.last_sent and "bob" not in latest.last_sent
+
+
+def test_viewer_snapshot_acquires_one_bus_cut(tmp_path, monkeypatch):
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+    viewer = comms.messaging.user_identity(str(tmp_path))
+    comms.messaging.send_message("bob", viewer.name, "direct")
+    comms.messaging.send_message("bob", "#team", "channel")
+    original = comms.bus.log._opened_wire_snapshot
+    opened = []
+
+    @contextmanager
+    def observed(*args, **kwargs):
+        with original(*args, **kwargs) as source:
+            opened.append(source)
+            yield source
+
+    monkeypatch.setattr(comms.bus.log, "_opened_wire_snapshot", observed)
+    snapshot = comms.views.viewer_snapshot(str(tmp_path))
+    assert snapshot.unread == {"bob": 1}
+    assert snapshot.channel_unread["#team"] == 1
+    assert snapshot.last_sent["bob"] > 0
+    assert len(opened) == 1 and opened[0].stream.closed
+
+
 def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
