@@ -235,6 +235,37 @@ class TestSelectedTargetActions:
             comms.registry.declare(Thread(name, frozenset(tags), str(root)), StoppedThreadStatus())
         return comms
 
+    def test_restart_catalog_uses_original_owner_and_idle_requirements(self, tmp_path):
+        import os
+        from dataclasses import replace
+        from agent_comms.child_process import ProcessIdentity
+        from agent_comms.cli_commands import CliCommand, RestartCliCommand, StopCliCommand
+        from agent_comms.thread_execution import ExternalThreadExecution
+        from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+        from agent_comms.turn_lease import ActiveTurn
+
+        comms = self.declared(tmp_path)
+        # Observe an authentic other process; this check never signals or restarts it.
+        owner = replace(comms.registry.require('alpha'),
+                        process_identity=ProcessIdentity.capture(os.getppid()))
+        status = RunningThreadStatus()
+        comms.registry.register(owner, status)
+        action = next(action for action in CliCommand.target_catalog(
+            comms, 'alpha', project=str(tmp_path))
+            if action.declaration is RestartCliCommand)
+        assert action.bound == (RestartCliCommand(name='alpha'),)
+        assert not {'name', 'all_'} & {field.name for field in action.editable_fields}
+        with pytest.raises(ValueError, match='cannot be overridden'):
+            action.bound[0].edited({'all': True})
+        assert StopCliCommand.help == 'Stop process'
+        assert not RestartCliCommand.thread_bindings(comms, owner, StoppedThreadStatus())
+        assert not RestartCliCommand.thread_bindings(comms,
+            replace(owner, active_turn=ActiveTurn('busy', owner.pid)), status)
+        assert not RestartCliCommand.thread_bindings(comms,
+            replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), status)
+        assert not RestartCliCommand.thread_bindings(comms,
+            replace(owner, execution=ExternalThreadExecution), status)
+
     def test_tag_batch_requires_each_confirmation_before_removing_any_tag(self, tmp_path):
         from agent_comms.cli_commands import CliCommand, DeleteTagCliCommand, TargetEdit
 
