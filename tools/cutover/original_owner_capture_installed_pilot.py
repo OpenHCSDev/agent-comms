@@ -13,6 +13,77 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+class SavedHistorySubscriber:
+    def __init__(self):
+        self.updates = []
+
+    def on_connect(self, connection):
+        pass
+
+    async def session_update(self, **kwargs):
+        self.updates.append(kwargs['update'].model_dump(by_alias=True, exclude_none=True))
+
+    async def request_permission(self, **kwargs):
+        raise AssertionError('History attachment must not request permission')
+
+
+async def profile_runtime_attachment():
+    """Measure real cold initialize/load, then profile the same protocol path."""
+    import asyncio
+    import sys
+    import time
+    from acp import spawn_agent_process
+    import agent_comms
+    from agent_comms.comms import Comms
+    from agent_comms.child_process import ProcessIdentity
+    from seed_thread_retirement_fixture import ready
+
+    output = Path(os.environ['AC_ATTACHMENT_PROFILE_OUTPUT'])
+    output.mkdir(mode=0o700)
+    root = Path(os.environ['AGENT_COMMS_ROOT'])
+    target = Path(sys.executable).parent.parent
+    assert Path(agent_comms.__file__).is_relative_to(target)
+    service = Comms(root)
+    package = Path(os.environ['AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE'])
+    service.owners.pin_private_nk_launch(root, os.environ['AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID'], package)
+    original = service.registry.require('replacement-alpha')
+    assert not original.process_alive
+    saved_hash = digest(Path(original.session_file))
+    results = []
+    try:
+        service.owners.start(original.name, agent_args=('--offline', '--no-tools'))
+        owner = service.registry.require(original.name)
+        await ready(root, owner)
+        for phase, args in (
+            ('ordinary', ('-B', '-m', 'agent_comms.acp')),
+            ('profiled', ('-B', '-m', 'cProfile', '-o', str(output / 'cold-acp.pstats'),
+                          '-m', 'agent_comms.acp')),
+        ):
+            subscriber = SavedHistorySubscriber()
+            started = time.perf_counter()
+            with (output / (phase + '.stderr.log')).open('w') as stderr:
+                async with spawn_agent_process(subscriber, sys.executable, *args,
+                        cwd=owner.worktree, env=dict(os.environ),
+                        transport_kwargs={'stderr':stderr}) as (client, process):
+                    spawned = time.perf_counter()
+                    identity = ProcessIdentity.capture(process.pid)
+                    await client.initialize(protocol_version=1, client_capabilities={})
+                    initialized = time.perf_counter()
+                    await client.load_session(cwd=owner.worktree, session_id=owner.name, mcp_servers=[])
+                    loaded = time.perf_counter()
+                    assert any('Original saved answer' in json.dumps(row) for row in subscriber.updates)
+                results.append({'phase':phase, 'pid':identity.pid, 'birth':identity.start_time,
+                    'spawn_seconds':spawned-started, 'initialize_seconds':initialized-spawned,
+                    'load_seconds':loaded-initialized, 'parent_exit':process.returncode,
+                    'joined':not identity.alive()})
+            (output / (phase + '.updates.json')).write_text(json.dumps(subscriber.updates, indent=2)+'\n')
+        assert digest(Path(original.session_file)) == saved_hash
+        (output / 'timings.json').write_text(json.dumps(results, indent=2)+'\n')
+        print(json.dumps(results), flush=True)
+    finally:
+        await asyncio.to_thread(service.owners.stop, original.name)
+
+
 async def runtime_replacement():
     """Actual installed source workers, stopped publication and ACP reattachment."""
     import asyncio
@@ -76,20 +147,10 @@ async def runtime_replacement():
                          interpreter=str(source / 'bin/python')) for owner in originals)
         sessions = {owner.session_file: digest(Path(owner.session_file)) for owner in originals}
 
-        class Subscriber:
-            def __init__(self):
-                self.updates = []
-            def on_connect(self, connection):
-                pass
-            async def session_update(self, **kwargs):
-                self.updates.append(kwargs['update'].model_dump(by_alias=True, exclude_none=True))
-            async def request_permission(self, **kwargs):
-                raise AssertionError('History attachment must not request permission')
-
         async def attach(interpreter, phase):
             updates = {}
             for owner in originals:
-                subscriber = Subscriber()
+                subscriber = SavedHistorySubscriber()
                 async with spawn_agent_process(subscriber, str(interpreter), '-m', 'agent_comms.acp',
                         env={k:v for k,v in os.environ.items() if k != 'PYTHONPATH'},
                         cwd=owner.worktree) as (client, child):
@@ -210,7 +271,10 @@ def main():
 
 
 if __name__ == '__main__':
-    if os.environ.get('AC_REPLACEMENT_OUTPUT'):
+    if os.environ.get('AC_ATTACHMENT_PROFILE_OUTPUT'):
+        import asyncio
+        asyncio.run(profile_runtime_attachment())
+    elif os.environ.get('AC_REPLACEMENT_OUTPUT'):
         import asyncio
         asyncio.run(runtime_replacement())
     else:
