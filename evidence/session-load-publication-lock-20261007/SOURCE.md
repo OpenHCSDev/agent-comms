@@ -55,3 +55,38 @@ Raw checks, profiles, private stores and measurement scripts are retained in
 The earlier read profile remains in
 `/home/ts/.cache/agent-scratch/mendel-session-load-cost-20261007/`.
 The publisher change is source-checked only; delivery requires normal integration.
+
+## Publication audience acquisition
+
+Established-root ordinary publication previously performed route prevalidation
+through separate Registration reads, then acquired a new RegistrySnapshot and
+CatalogDocument to select its audience. Publisher now validates the route from
+that same acquired snapshot/catalog. Fresh unmarked roots retain prevalidation
+before protocol initialization. The existing initial publisher still owns
+visible sender/target, human origin, canonical incarnation, task source,
+mentions, audience and wake decisions. Keyed/claim validators retain their own
+acquisition paths. No snapshot crosses Messaging's identity-creation write.
+
+Registration.snapshot and ChannelCatalog.read close their document locks before
+returning. Publication's original wire/bus custody remains; before/after file
+revision fences still reject registry/catalog changes before append. Certified
+source, UNKNOWN sequence/ID scan, append durability and typed failure semantics
+are unchanged. Root/metadata currentness checks were not removed merely because
+they repeat: they answer independent admission/source facts.
+
+All 759 src/tests/tools modules parsed without omissions; related publication
+callers were enumerated. External dynamic callers are unresolved. Sixteen
+existing human ingress/current delivery checks passed in 4.50s, and the existing
+stale-goal-publication check passed in 0.33s. One newly authored private channel
+publication retained all 20 recipients; profile records one guarded registry
+read, one catalog read and one route validation. Source-derived established-root
+publisher read counts are registry 3->1 for channels / 5->1 for direct messages,
+and catalog 2->1 for channels. Human identity acquisition remains separate.
+There is no measured live before/after latency claim.
+
+Raw private profile and result:
+/home/ts/.cache/agent-scratch/mendel-publication-audience-read-20261007/.
+The first result extractor used a nonexistent WireLog.read_metadata method after
+the send; corrected read-only certified acquisition inspected the original
+committed row. The input was not sent again. No public/provider/native action,
+installed change or worker restart occurred.
