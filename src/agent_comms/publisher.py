@@ -409,16 +409,19 @@ class Publisher:
                 # availability until explicit operator reconciliation exists.
                 expected_sequence = 1
                 duplicate = False
-                for previous in self.log._iter_log_unlocked():
-                    if previous.seq != expected_sequence:
-                        raise HumanAdmissionBlockedError(
-                            "Private bus sequence gap has UNKNOWN outcome; "
-                            "human send blocked, do not retry."
+                from .private_bus_checkpoint import opened_private_checkpoint_unlocked
+
+                with opened_private_checkpoint_unlocked(self.log, metadata) as source:
+                    for previous in source.public_messages():
+                        if previous.seq != expected_sequence:
+                            raise HumanAdmissionBlockedError(
+                                "Private bus sequence gap has UNKNOWN outcome; "
+                                "human send blocked, do not retry."
+                            )
+                        expected_sequence += 1
+                        duplicate |= (
+                            previous.sender == sender and previous.message_id == stored.message_id
                         )
-                    expected_sequence += 1
-                    duplicate |= (
-                        previous.sender == sender and previous.message_id == stored.message_id
-                    )
                 if metadata.last_seq != expected_sequence - 1:
                     raise HumanAdmissionBlockedError(
                         "Private bus sequence reservation has UNKNOWN outcome; "

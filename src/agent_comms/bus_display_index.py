@@ -2,17 +2,18 @@
 from __future__ import annotations
 
 import hashlib
-import json
-from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from .bus_projection import AppendCheckpoint, BusAppendIndex, BusFileRevision
 from .read_basis import ChannelDisplayScope
 from .read_ledger import ReadLedger
 from .messages import Message
+
+if TYPE_CHECKING:
+    from .wire_log import OpenedWireSnapshot
 
 DisplayMetrics = tuple[dict[str, tuple[float, float]], dict[str, int]]
 
@@ -27,11 +28,6 @@ class DisplayMetricScope:
     def empty_metrics(self) -> DisplayMetrics:
         return ({scope.channel: (0.0, 0.0) for scope in self.activity_scopes},
                 dict.fromkeys((scope.channel for scope in self.scopes), 0))
-
-    def observe_wire(self, record, metrics: DisplayMetrics) -> None:
-        from .wire_record import WireRecord
-        for message in WireRecord.public_from_wire(record).messages():
-            self.observe(message, metrics)
 
     def observe(self, message: Message, metrics: DisplayMetrics) -> None:
         clocks, unread = metrics
@@ -80,43 +76,26 @@ class BusDisplayIndex(BusAppendIndex):
         digest = hashlib.sha256(viewer.encode()).hexdigest()
         super().__init__(bus_path, bus_path.with_name(f"bus_display_{digest}.json"))
 
-    def snapshot(self, revision: tuple[int, int, int, int] | None,
-                 semantics: DisplayMetricScope, initial: DisplayMetrics,
-                 apply: Callable[[Mapping, DisplayMetrics], None]) -> DisplayCheckpoint | None:
-        if revision is None:
+    def snapshot(self, opened: OpenedWireSnapshot,
+                 semantics: DisplayMetricScope) -> DisplayCheckpoint | None:
+        source, stream = opened.revision, opened.stream
+        if source is None or stream is None or not source.opened_by(stream):
             return None
-        source = BusFileRevision(*revision)
-        try:
-            stream = self.bus_path.open("rb")
-        except FileNotFoundError:
-            return None
-        with stream:
-            if not source.opened_by(stream):
+        if source.size:
+            stream.seek(source.size - 1)
+            if stream.read(1) != b"\n":
                 return None
-            if source.size:
-                stream.seek(source.size - 1)
-                if stream.read(1) != b"\n":
-                    return None
-            checkpoint = self.checkpoint(stream, source)
-            if checkpoint is None or checkpoint.semantics != semantics:
-                metrics, offset = (dict(initial[0]), dict(initial[1])), 0
-            else:
-                metrics, offset = checkpoint.metrics, checkpoint.offset
-            stream.seek(offset)
-            while stream.tell() < source.size:
-                raw = stream.readline(source.size - stream.tell())
-                if not raw.endswith(b"\n"):
-                    return None
-                if not raw.strip():
-                    continue
-                record = json.loads(raw)
-                if not isinstance(record, Mapping):
-                    raise ValueError("JSONL bus row must be an object")
-                apply(record, metrics)
-            projected = DisplayCheckpoint(source, source.size,
-                         AppendCheckpoint.fingerprint(stream, source.size),
-                         semantics, *metrics)
-            if offset != source.size:
-                with suppress(OSError):
-                    self.write(projected)
-            return projected
+        checkpoint = self.checkpoint(stream, source)
+        if checkpoint is None or checkpoint.semantics != semantics:
+            metrics, offset = semantics.empty_metrics, 0
+        else:
+            metrics, offset = checkpoint.metrics, checkpoint.offset
+        for message, _ in opened.public_records(offset):
+            semantics.observe(message, metrics)
+        projected = DisplayCheckpoint(source, source.size,
+                     AppendCheckpoint.fingerprint(stream, source.size),
+                     semantics, *metrics)
+        if checkpoint is None or checkpoint.semantics != semantics or offset != source.size:
+            with suppress(OSError):
+                self.write(projected)
+        return projected

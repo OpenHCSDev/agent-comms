@@ -254,12 +254,14 @@ class MessagePageRequest:
         return self.collect(records)
 
     def indexed(self, index, log, marker, source, stream) -> MessagePage:
+        from .wire_log import OpenedWireSnapshot
+
         window = PageWindow(self.limit, self.max_bytes)
         targets = self.scope.index_targets
         opposite = more = False
         with closing(self.traversal.opposite_offsets(index, targets, source.size)) as rows:
             for row in rows:
-                (message, _), = log._public_page_records(
+                (message, _), = OpenedWireSnapshot.public_page_records(
                     *index.record(stream, row, max_bytes=source.size - row.offset), marker
                 )
                 if self.scope.includes(message):
@@ -267,7 +269,7 @@ class MessagePageRequest:
                     break
         with closing(self.traversal.offsets(index, targets, source.size)) as rows:
             for row in rows:
-                (message, size), = log._public_page_records(
+                (message, size), = OpenedWireSnapshot.public_page_records(
                     *index.record(stream, row, max_bytes=source.size - row.offset), marker
                 )
                 if not self.scope.includes(message):

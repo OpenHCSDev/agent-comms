@@ -363,7 +363,7 @@ class ReviewedRetainedSummaryCohort:
 
 @dataclass(frozen=True)
 class ReviewedFrontendCohort(ReviewedRetainedSummaryCohort, DeclaredFamily, affix='FrontendCohort'):
-    """Publish only the UI when every imported backend byte stays unchanged."""
+    """Publish reviewed client supply; existing backend owners keep their installation."""
 
     current_source_proof: ReviewedArtifact
     backend_source_proof: ReviewedArtifact
@@ -466,6 +466,19 @@ class ReviewedTextualFrontendCohort(ReviewedFrontendCohort):
     """Publish the Toad UI with its renderer; backend owners retain their bytes."""
 
     frontend_modules: ClassVar[tuple[str, ...]] = ('toad', 'textual')
+
+
+@dataclass(frozen=True)
+class ReviewedCommsFrontendCohort(ReviewedFrontendCohort):
+    """UI and its reviewed same-format Core client library, without owner replacement.
+
+    Core is also imported by the UI: catalog reads and local human publication
+    run there, independently of the already-running agents. The reviewed actual
+    gates must establish unchanged shared formats and the affected client path;
+    this member grants no schema migration or backend executable publication.
+    """
+
+    frontend_modules: ClassVar[tuple[str, ...]] = ('toad', 'textual', 'agent_comms')
 
 
 @dataclass(frozen=True)
