@@ -296,3 +296,42 @@ saved owner remained unchanged, App/st exited0 and cleanup has no remaining
 owned processes/errors. No message was submitted in this confirmation. This
 proves default selection and affected interaction, not smooth scrolling or a
 whole activity latency win. The visible pr159 compaction error remains unresolved.
+
+## Native tab-close observation and scalar decode delivery
+
+The original SavedTabCloseJourney now resolves the captured native peer label and
+its SessionTabClose through NativeFocusTarget. Seven guessed-coordinate options
+and their duplicate screen-range validation are deleted. PhysicalJourney owns the
+existing shared visible-history readiness command; warm and close consumers inherit
+it. Review requires the peer admission to disappear, original selection/editor/
+history identity to survive and reopening to create a fresh admission. Toad
+checkpoint542d4a59 changes these two helper files only, with all other declarations
+AST-equal except the shared readiness move and obsolete argument removal.
+
+The first actual run is preserved under `tab-close-physical-20261006/run`. Its
+unread badge cleared after capture, moving the close control five columns left.
+Retained22.2–23.0s top-bar footage shows the pointer beyond the moved button at
+the recorded22.493s submission; the tab remained open. This is a missed target,
+not a measured slow close. No message was submitted. The second fresh App uses
+the already-viewed peer and is retained under `read-settled` in that same scratch
+root. Every native close/return/reopen check passed; footage shows the original
+tab returning within roughly the first half-second of the gesture. This is one
+observed settled case, not a latency percentile or proof against moving controls.
+Both Apps/st exited0 and original cleanup completed without remaining processes.
+
+Core704 is merged. FieldCodec retains representation precedence and the original
+strict scalar validator, but exact scalar declarations reach it before unrelated
+structural dispatch. Original real-registry measurement is25.09→20.62ms with equal
+decoded documents; no new decoded-value cache or wire-format change. The reviewed
+frontend wheel also contains the integrated same-format failure evidence changes.
+They do not upgrade already-running backend owners or resolve the historical
+SQLite blocker/compaction refusal.
+
+The default client now selects `runtime-codec`; publication is the original
+`codec-wheel/publication.json`. The953-asset/full69 proof passed. Actual isolated
+saved-history scrolling completed in50.28s at `codec-scroll-installed-20261006`: 
+PageUp, PageDown, reversal and End changed native reader/paint; End returned to
+the tail. Observed modules select the candidate, original source owner remained
+unchanged, App/st exited0 and cleanup has no remaining processes/errors. No new
+message was submitted. This actual App confirms the affected installed read and
+scroll path, not smooth scrolling or an overall activity latency improvement.
