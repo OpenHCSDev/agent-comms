@@ -262,3 +262,52 @@ Source compile and diffcheck passed. Raw check and source trace:
 `/home/ts/.cache/agent-scratch/mendel-restart-admission-20261007/check.log`
 and `source-family.json`. Parent owns integration/delivery; no old uncertain input
 or completed public restart was repeated.
+
+## Selected native rejection envelope — 2026-10-07
+
+Original agent-comms-ux diagnostic:
+`/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/4fbfe3ac651040b99a82452fe9ffeb50.json`.
+Compaction preparation failed in PiRpcChannel -> PiEvent/Response normalization,
+then SelectedPiProbeUnknownError. The raw rejected record was not retained. Its
+exact envelope/native refusal and underlying send cause remain unknown; this
+source correction does not reconstruct or replay that input.
+
+The committed 4b RPC producer's error(id, command, message) emits exactly
+id/type/command/success:false/error. Its selected preparation/settings/summary/
+restoration branches and shared command catch use that original owner. Success
+with a declared selected payload emits id/type/command/success:true/data.
+Response previously accepted only the latter field set for all strict commands,
+so a genuine native refusal was rejected before command correlation and its
+reason could reach the existing diagnostic exception chain.
+
+Response now validates those two exact original outcomes once while decoding
+command: explicit boolean success, exact appropriate payload field set, string
+native error. Mixed data/error, extra fields and null/nonboolean status still
+refuse. Error responses retain existing MissingData; they grant no selected
+payload, preparation, summary, session change, commit or replay authority.
+Response.require_request still requires the exact original command/id and true
+success before payload use, but now retains native refusal text in its existing
+ValueError. Original _exchange_observation/_summary_exchange child retirement and
+uncertainty handling remain unchanged. No new event, codec, response store,
+diagnostic format field, native source/pin/package or authority was introduced.
+
+Open Core719 touches ACP/evidence only, not this response family. No competing
+response/native writer was identified. Original PiCommand strict declarations
+(switch/session, summarize, settings, prepare, restore), PiPayload ingress,
+NativeQuery correlation, selected observers/summary/restoration, pending-response
+consumers and diagnostic rejection projection were traced. Existing Package
+parsed/compiled all 759 src/tests/tools modules, zero omissions; 1046 related
+before/after sites retained. Dynamic external subclasses remain unresolved.
+
+13 boundary checks passed in the first batch. One new success fixture omitted
+SessionSwitchData.cancelled and failed; its retained source requirement was
+restored with cancelled:false, without production changes, and only that failed
+check repeated/pass0.16s. All five strict commands decode the producer's exact
+error envelope; malformed/mixed outcomes, wrong-id refusal, preserved native
+reason, successful typed session outcome and original ordinary/opaque decoder
+checks pass. These are JSON-line ingress checks, not a newly executed native
+failure/provider/application qualification. Raw check.log/check02.log and original
+diagnostic/producer source references: `/home/ts/.cache/agent-scratch/mre01`.
+No provider/input/restart/public mutation/build/prefix operation or failed-input
+replay occurred. Parent owns integration and future installed delivery; original
+UNKNOWN input and diagnostic remain untouched.
