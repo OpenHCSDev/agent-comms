@@ -235,6 +235,21 @@ class TestSelectedTargetActions:
             comms.registry.declare(Thread(name, frozenset(tags), str(root)), StoppedThreadStatus())
         return comms
 
+    def test_catalog_absent_view_actor_has_no_backend_actions(self, tmp_path):
+        from agent_comms.cli_commands import ArchiveCliCommand, CliCommand, TargetEdit
+        from agent_comms.errors import UnregisteredThreadError
+        from agent_comms.thread_status import StoppedThreadStatus
+        from agent_comms.threads import Thread
+
+        comms = self.declared(tmp_path)
+        assert CliCommand.target_catalog(comms, 'project', project=str(tmp_path)) == ()
+        assert CliCommand.target_catalog(comms, 'missing', project=str(tmp_path)) == ()
+        with pytest.raises(UnregisteredThreadError):
+            TargetEdit(ArchiveCliCommand, 'project', {}).apply(comms)
+        comms.registry.declare(Thread('project', frozenset(), str(tmp_path)), StoppedThreadStatus())
+        actions = CliCommand.target_catalog(comms, 'project', project=str(tmp_path))
+        assert any(action.declaration is ArchiveCliCommand for action in actions)
+
     def test_restart_catalog_uses_original_owner_and_idle_requirements(self, tmp_path):
         import os
         from dataclasses import replace

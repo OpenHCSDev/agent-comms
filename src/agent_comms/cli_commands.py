@@ -374,13 +374,20 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         # A catalog is one observation. Declarations borrow its original store
         # resources; execution still acquires and rebinds current state.
         snapshot = comms.registry.snapshot()
+        # View actors (including an implicit project actor) need not declare a
+        # thread. Discovery has no thread actions for absent members; execution
+        # still requires its original current binding. Resolve aliases through
+        # the acquired namespace rather than reserving a special actor spelling.
+        available_targets = tuple(name for name in selected
+                                  if is_channel_target(name)
+                                  or snapshot.canonical_name(name) in snapshot.threads)
         catalog = (comms.channels.catalog.read()
                    if channel or any(is_channel_target(name) for name in selected) else None)
         grouped: dict[type[CliCommand], list[CliCommand]] = {}
         for member in cls.members_with(cls):
             if len(selected) > 1 and not member.multiple_targets:
                 continue
-            for name in selected:
+            for name in available_targets:
                 try:
                     available = member.bindings(
                         comms, name, cls.selection_channel(channel, name),
