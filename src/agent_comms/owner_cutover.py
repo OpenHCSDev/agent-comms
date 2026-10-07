@@ -33,6 +33,10 @@ class OwnerCutover(ABC):
     def require_selection(self, snapshot: RegistrySnapshot, owners: Sequence[Thread]) -> None:
         pass
 
+    def require_launch(self, lifecycle: OwnerLifecycle) -> None:
+        """Installations may supply target launch authority only after stopping."""
+        pass
+
     @abstractmethod
     def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
         """Only acquired all-stopped custody can install and launch a target."""
@@ -103,6 +107,10 @@ class PreserveOwnerRuntime(StoppedOwnerInstallation):
 
     def require_selection(self, snapshot: RegistrySnapshot, owners: Sequence[Thread]) -> None:
         pass
+
+    def require_launch(self, lifecycle: OwnerLifecycle) -> None:
+        # This operation installs nothing and cannot repair missing authority.
+        lifecycle.require_launch_authority()
 
     def after_stopped(self, lifecycle: OwnerLifecycle) -> None:
         pass
