@@ -32,6 +32,47 @@ def decode(record):
     return PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
 
 
+@pytest.mark.parametrize("command", [
+    "switch_session", "agent_comms_summarize_compaction", "agent_comms_compaction_settings",
+    "agent_comms_prepare_compaction", "agent_comms_restore_compaction",
+])
+def test_selected_command_decodes_original_native_error_envelope(command):
+    # Exact error(id, command, message) shape from the committed native RPC owner.
+    event = decode({"id": "original", "type": "response", "command": command,
+                    "success": False, "error": "Selected preparation source changed"})
+    assert isinstance(event, Response)
+    assert event.command is PiCommand.decode(command)
+    assert event.success is False and isinstance(event.data, MissingData)
+    assert event.rejection_details() == {"command": command, "id": "original",
+        "success": False, "error": "Selected preparation source changed"}
+
+
+def test_selected_rejection_keeps_native_reason_without_payload_authority():
+    from agent_comms.pi_commands import SwitchSession
+
+    request = SwitchSession(id="original", session_path="/private/session.jsonl")
+    event = decode({"id": request.id, "type": "response", "command": "switch_session",
+                    "success": False, "error": "Original session is unavailable"})
+    with pytest.raises(ValueError, match="Original session is unavailable"):
+        event.require_request(request)
+    with pytest.raises(ValueError, match="does not match"):
+        event.require_request(SwitchSession(id="different", session_path=request.session_path))
+    successful = decode({"id": request.id, "type": "response", "command": "switch_session",
+                         "success": True, "data": {"cancelled": False}})
+    assert successful.require_request(request) is successful.data
+
+
+@pytest.mark.parametrize("change", [
+    {"data": {}}, {"extra": True}, {"success": True}, {"success": 0},
+    {"success": None}, {"error": None}, {"error": 1},
+])
+def test_selected_error_envelope_rejects_mixed_or_untyped_fields(change):
+    row = {"id": "original", "type": "response", "command": "agent_comms_prepare_compaction",
+           "success": False, "error": "Native refusal"}
+    with pytest.raises(ValueError, match="Unexpected selected response envelope"):
+        decode({**row, **change})
+
+
 def test_known_nested_payload_has_one_typed_authority():
     event = decode(
         {
