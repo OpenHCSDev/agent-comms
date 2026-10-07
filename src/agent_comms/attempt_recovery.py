@@ -8,6 +8,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agent_comms.coordination_contracts import (
     MAX_REASON_CODE_CHARS,
@@ -30,6 +31,9 @@ from agent_comms.coordinator import Coordination
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
+if TYPE_CHECKING:
+    from agent_comms.owner_lifecycle import OwnerReleaseReceipt
+
 _OWNER_LOSS_ISSUER = object()
 
 
@@ -39,6 +43,7 @@ class VerifiedOwnerLoss:
 
     attempt: AttemptRecord
     native_input: NativeRuntimeInput
+    release: OwnerReleaseReceipt
     _issuer: object = field(repr=False)
     _active: bool = field(repr=False)
     _store: Coordination = field(repr=False)
@@ -94,6 +99,7 @@ class VerifiedOwnerLoss:
             for name, value in (
                 ("attempt", attempt),
                 ("native_input", source),
+                ("release", release),
                 ("_issuer", _OWNER_LOSS_ISSUER),
                 ("_active", True),
                 ("_store", store),
@@ -113,6 +119,46 @@ class VerifiedOwnerLoss:
             return self.attempt.authority == attempt.authority and self.attempt.owner_identity == attempt.owner_identity
         except AttributeError:
             return False  # Uninitialized objects have no acquired issuer/custody.
+
+    def require_native_exit(self) -> None:
+        """Inspect the original launch resources while owner exclusion is held.
+
+        Recorded admission supplies the selected journal. Before admission the
+        exact stopped declaration supplies any saved selection instead. Both
+        forms retain the original allocated directory check; missing admission
+        never establishes that a native child did not launch.
+        """
+        if not self.owns(self._store, self.attempt):
+            raise RecoveryBlocked("native exit observation requires acquired owner loss")
+        session_files = self.native_input.sent_owner_admission_generation.recovery_session_files(
+            self.native_input, self.release
+        )
+        session_dir = (
+            self._store.session.path.parent / "native-sessions" / self.native_input.owner_lookup
+        )
+        proc = Path("/proc")
+        if not proc.is_dir():
+            raise RecoveryBlocked("native recovery requires Linux process observation")
+        for entry in proc.iterdir():
+            if not entry.name.isdecimal():
+                continue
+            try:
+                if entry.stat().st_uid != os.getuid():
+                    continue
+                args = (entry / "cmdline").read_bytes().split(b"\0")
+            except (FileNotFoundError, ProcessLookupError):
+                continue
+            except PermissionError as error:
+                raise RecoveryBlocked("native process observation was denied") from error
+            for index, argument in enumerate(args[:-1]):
+                selected = argument == b"--session" and any(
+                    args[index + 1] == os.fsencode(path) for path in session_files
+                )
+                allocated = (
+                    argument == b"--session-dir" and args[index + 1] == os.fsencode(session_dir)
+                )
+                if selected or allocated:
+                    raise RecoveryBlocked("native session subprocess is still running")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -175,10 +221,7 @@ class RecoveryMonitorCapability:
             assert attempt is not None  # Required by the release observer.
             if bool(snapshot.publication_intents):
                 raise PublicationUncertain("UNKNOWN abandonment cannot resolve frozen publication")
-            cls._require_native_session_exited(
-                loss.native_input.require_session_identity(),
-                store.session.path.parent / "native-sessions" / loss.native_input.owner_lookup,
-            )
+            loss.require_native_exit()
             return cls(store, _grant=_MONITOR_GRANT).terminalize_dead_attempt(
                 execution_id,
                 attempt.attempt_ordinal,
@@ -223,7 +266,6 @@ class RecoveryMonitorCapability:
                 raise PublicationUncertain("native failure cannot resolve frozen publication")
             reserved = loss.native_input
             original_session = reserved.require_session_identity()
-            session_dir = store.session.path.parent / "native-sessions" / loss.attempt.owner_lookup
             session_file = Path(session_file).absolute()
             original_session.require_session(str(session_file))
             binding = read_expected_prompt_binding(store, reserved.input_id)
@@ -250,7 +292,7 @@ class RecoveryMonitorCapability:
                     terminal.require_failed_terminal(proof.session_entry_id)
                 except ValueError as error:
                     raise RecoveryBlocked(str(error)) from error
-                cls._require_native_session_exited(original_session, session_dir)
+                loss.require_native_exit()
                 monitor = cls(store, _grant=_MONITOR_GRANT)
                 return monitor.terminalize_dead_attempt(
                     execution_id,
@@ -268,37 +310,6 @@ class RecoveryMonitorCapability:
                         observed_at_ms=int(time.time() * 1000),
                     ),
                 )
-
-    @staticmethod
-    def _require_native_session_exited(identity, session_dir: Path) -> None:
-        """Observe BOTH launch forms of this originally selected RPC source.
-
-        The directory is a launch resource; the original recorded identity owns
-        the saved source. Neither can be inferred from the other's parent.
-        """
-        proc = Path("/proc")
-        if not proc.is_dir():
-            raise RecoveryBlocked("native recovery requires Linux process observation")
-        for entry in proc.iterdir():
-            if not entry.name.isdecimal():
-                continue
-            try:
-                if entry.stat().st_uid != os.getuid():
-                    continue
-                args = (entry / "cmdline").read_bytes().split(b"\0")
-            except (FileNotFoundError, ProcessLookupError):
-                continue  # This process exited during observation.
-            except PermissionError as error:
-                raise RecoveryBlocked("native process observation was denied") from error
-            for index, argument in enumerate(args[:-1]):
-                selected = (
-                    argument == b"--session" and args[index + 1] == os.fsencode(identity.path)
-                )
-                allocated = (
-                    argument == b"--session-dir" and args[index + 1] == os.fsencode(session_dir)
-                )
-                if selected or allocated:
-                    raise RecoveryBlocked("native session subprocess is still running")
 
     def terminalize_dead_attempt(
         self,
