@@ -151,3 +151,72 @@ def test_large_record_retained_in_tail_and_both_page_directions(tmp_path):
     assert list(transcript.tail(max_bytes=size)) == list(transcript.tail())
     # The caller-requested byte window remains a view limit, not a record quota.
     assert list(transcript.tail(max_bytes=512)) == [forward[-1].entry]
+
+
+def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+    from agent_comms.bus_publication import stable_thread_lookup
+    from agent_comms.coordination_database import CoordinationStore
+    from agent_comms.coordination_response import install_private_response_schema
+    from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+    from agent_comms.coordinator import Coordination
+    from agent_comms.transcript_receipts import AssignedTranscriptSource
+
+    root = tmp_path / "wire"
+    comms = wire(root)
+    thread = comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
+    lookup = stable_thread_lookup(thread.created_at)
+    database = root / "coordination.sqlite3"
+    with Coordination(str(database)) as store:
+        install_native_runtime_schema(store)
+        install_private_response_schema(store)
+        store.participants.register(lookup, thread.name, thread.name, committed=True)
+    path = tmp_path / "session.jsonl"
+    path.write_bytes(b"".join(encoded(row) for row in (
+        {"type": "session", "id": "source", "version": 3},
+        {"type": "message", "id": "user", "message": {
+            "role": "user", "content": [{"type": "text", "text": "request"}],
+            "inputId": "a" * 32, "inputDigest": "b" * 64}},
+        {"type": "message", "id": "reply", "parentId": "user", "message": {
+            "role": "assistant", "content": [{"type": "text", "text": "answer"}],
+            "stopReason": "stop"}},
+    )))
+    reader = NativeTranscript(path)
+    records = tuple(reader.forward(0, path.stat().st_size))
+    observe, ancestor = CoordinationStore.observing, NativeTranscript.input_ancestor
+    session_id = NativeTranscript.session_id.fget
+    active, headers, walks = [], [], []
+
+    @contextmanager
+    def traced_read(*args, **kwargs):
+        with observe(*args, **kwargs) as db:
+            active.append(db)
+            try:
+                yield db
+            finally:
+                active.pop()
+
+    def traced_ancestor(self, record):
+        assert not active
+        # A real zero-timeout writer commits while the native parent walk runs.
+        with Coordination(str(database), lock_timeout=0) as writer:
+            generation = writer.participants.get(lookup).participant_generation
+            writer.participants.advance_generation(lookup, thread.name, expected_generation=generation)
+        walks.append(record.entry.id)
+        return ancestor(self, record)
+
+    def traced_header(self):
+        headers.append(self.path)
+        return session_id(self)
+
+    monkeypatch.setattr(CoordinationStore, "observing", traced_read)
+    monkeypatch.setattr(NativeTranscript, "input_ancestor", traced_ancestor)
+    monkeypatch.setattr(NativeTranscript, "session_id", property(traced_header))
+    source = AssignedTranscriptSource.for_thread(root, thread, comms.bus.log)
+    with comms.transcripts.routes.for_session(str(path)) as routes:
+        projected = tuple(source.native_records((records,), routes, reader))
+    assert walks == ["source", "reply"] and headers == [path]
+    assert not active
+    assert tuple(event for _, events in projected for event in events) == (
+        UserTranscript("request", native_id="a" * 32), AssistantTranscript("answer"),
+    )

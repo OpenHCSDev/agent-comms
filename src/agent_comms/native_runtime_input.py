@@ -163,7 +163,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             yield db
 
     @classmethod
-    def for_native_user(cls, db, reader, user):
+    def for_native_user(cls, db, reader, user, *, session_id):
         """The original admitted native file/input owns stage and publication.
 
         Viewer names and current registry owners cannot classify inherited or
@@ -172,7 +172,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         """
         rows = cls.select(
             db, where="input_id=? AND session_file=? AND session_id=?",
-            parameters=(user.input_id, str(reader.path), reader.session_id),
+            parameters=(user.input_id, str(reader.path), session_id),
         )
         for row in rows:
             user.require_tracked_user()
@@ -181,17 +181,16 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         return rows
 
     @classmethod
-    def transcript_projection(cls, db, reader, record, owner_lookup):
+    def transcript_projection(cls, db, reader, record, owner_lookup, *, user, session_id):
         """Borrow original stage/replies; defer rendering until SQL closes.
 
         No current lifecycle witness is retained. These original identities are
         frozen; TranscriptRead's original publication revision fences appends.
         """
         entry = record.entry
-        user = entry if entry.input_boundary else reader.input_ancestor(record)
         originals, publications = (), ()
         if user is not None and user.input_id is not None and db is not None:
-            originals = cls.for_native_user(db, reader, user)
+            originals = cls.for_native_user(db, reader, user, session_id=session_id)
             if entry.final_reply:
                 for original in originals:
                     publications = original.published_replies(db, user, owner_lookup)
