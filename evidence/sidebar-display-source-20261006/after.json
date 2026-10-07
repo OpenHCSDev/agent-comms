@@ -1,0 +1,37 @@
+{
+  "declared_threads": 8,
+  "messages": 32,
+  "silent_context_rows": 64,
+  "segments_per_context": 8,
+  "scope_changes": 4,
+  "mounted_unread": 32,
+  "update_and_paint_seconds": [
+    0.1313620809232816,
+    0.09071813290938735,
+    0.10140406899154186,
+    0.09308075089938939
+  ],
+  "calls": [
+    {
+      "field_decodes": 1986,
+      "viewer_snapshots": 1,
+      "strict_public_rows": 32
+    },
+    {
+      "field_decodes": 1468,
+      "viewer_snapshots": 1,
+      "strict_public_rows": 32
+    },
+    {
+      "field_decodes": 1452,
+      "viewer_snapshots": 1,
+      "strict_public_rows": 32
+    },
+    {
+      "field_decodes": 1468,
+      "viewer_snapshots": 1,
+      "strict_public_rows": 32
+    }
+  ],
+  "strength": "private source headless Channels App; no provider or terminal latency claim"
+}
