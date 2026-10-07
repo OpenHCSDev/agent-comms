@@ -642,3 +642,35 @@ prompt, restart or replay occurred. Inputs 780 and 778 remain untouched.
 Parent must integrate/build the changed Core before isolated saved-session
 continuation/summary acceptance. Native package and pin need no rebuild for this
 original-envelope correction. The parked field_codec change is excluded.
+
+### Original 74-start verifier invocation
+
+`verify-original-continued-coverage.py` invokes the actual continuation verifier,
+not just Prompt.matches_recorded_digest. It acquires shared original wire,
+registry and input locks, borrows the real NativeEvidenceRead, and uses the
+original journal read transaction and PrivateRawInput rows. The verifier itself
+reads/corroborates the coordinator and native context evidence. No writer
+CompactionJournal, reservation, fork, SDK, drain or input send is constructed.
+Existing lock files must already exist; acquisition is nonblocking.
+
+The current registry has no active UX turn. The original failed admission and
+its process-local queue cannot be reconstructed from a diagnostic. This helper
+uses ManualSource as an observational value from the actual current owner,
+recorded last completed turn and current SessionRevision. It claims current
+original historical coverage only, not the failed admission or manual-compaction
+authority. No pending keys or queue exclusions are invented: any unsettled input
+refuses the stricter observation. It requires exactly 74 native STARTED entries
+and preserves the original source-currentness fences. Concurrent changes or
+unavailable locks are failures, not a reason to retry or fabricate a result.
+
+Use the reviewed installed interpreter without PYTHONPATH/source overlays:
+
+```
+env -u PYTHONPATH PYTHONDONTWRITEBYTECODE=1 \
+ /home/ts/wt/toad-sidebar-context-pointer-20261006/.artifacts/continued-input-delivery-20261007/runtime/bin/python -B \
+ /home/ts/wt/comms-goal-ledger-schema-carry-20261002/evidence/inbox-compaction-source-20261006/verify-original-continued-coverage.py \
+ /var/tmp/agent-comms-live-20260927-wzjtqhza agent-comms-ux
+```
+
+Prepared and source-compiled only. Parent owns its actual invocation alongside
+the new installed Core acceptance. Pending inputs remain unmodified.
