@@ -37,6 +37,17 @@ retiring this execution.
   bound certified session identity, and an unambiguous failed terminal. This
   incident does not currently meet those prerequisites.
 
+## Existing drain readiness mechanism (follow-up)
+
+InputDrain.watch already records owner-fenced UnavailableDrainDiagnostic on a
+CoordinationError; DrainReadiness feeds roster presentation and notifications.
+SelectedParticipant.prepare calls participant.pointer.require_idle when pending
+claims exist. The latest recorded comms428 activity has no diagnostic at all.
+Therefore adding a new roster acquisition is premature: first establish whether
+the attached worker actually observes this pending claim, catches the custody
+refusal, and records its existing diagnostic. PeerState does bypass interpreted
+readiness, but the missing diagnostic is a second fact requiring investigation.
+
 ## Next coherent change
 
 Acquire roster delivery-readiness through the existing read-only projection
