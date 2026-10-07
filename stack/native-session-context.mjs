@@ -29,6 +29,9 @@ export class SessionContext {
         return new ContextBudget(session.model, this.sourceContext(session, convertToLlm(messages)));
     }
     static sourceContext(session, messages) {
+        // Offline EntryStore previews have no live system/tool owner. Their
+        // message-only result is not admission of an installed session.
+        if (session === undefined) return {messages};
         return {
             systemPrompt: session.systemPrompt,
             messages,

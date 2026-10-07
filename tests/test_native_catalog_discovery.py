@@ -664,7 +664,7 @@ async def test_known_compaction_retains_original_sdk_context_and_next_input(
             prepared=(await prepare("")).require_ready(), prepare=prepare)
         async def commit():
             return await _commit_native_summary(bridge, owner, generation, native.persistent,
-                prepared, source, NativeSummary(source.retained.text + "\n\nControlled SDK commit.", None, None),
+                prepared, source, NativeSummary(source.retained.compaction_text + "\n\nControlled SDK commit.", None, None),
                 reason=ManualCompactionReason)
 
         if continuation == "receipt_mismatch":

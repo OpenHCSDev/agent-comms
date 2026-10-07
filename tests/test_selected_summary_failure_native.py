@@ -449,7 +449,7 @@ async def test_actual_summary_slot_denies_mutation_and_joins_cancellation(tmp_pa
         request = AgentCommsSummarizeCompaction(
             id="held-summary", version=1, operation_id=operation,
             witness=preparation.witness, selected=selected, settings=settings,
-            retained_text=RetainedTaskFacts(()).text,
+            retained_text=RetainedTaskFacts(()).compaction_text,
         )
         child.stdin.write((json.dumps(request.to_rpc()) + "\n").encode())
         await child.stdin.drain()
