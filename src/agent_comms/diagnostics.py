@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
 import re
 import time
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 from traceback import TracebackException
@@ -21,6 +22,7 @@ from .field_codec import FieldCodec
 _LOG = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from .activity import DrainDiagnostic
     from .pi_events import Response
     from .threads import Thread
 
@@ -194,14 +196,54 @@ def record_terminal_failure(
     }
     if native_response is not None:
         document["native_response"] = native_response.rejection_details()
-    if source_error is not None:
-        document["source_error"] = "".join(
-            TracebackException.from_exception(source_error, capture_locals=False).format(chain=True)
-        )
-        from .native_pi import NativePiUnavailable
+    document.update(_source_error_evidence(source_error))
+    return _write_diagnostic_document(root, turn_id, document)
 
-        if isinstance(source_error, NativePiUnavailable):
-            document["native"] = source_error.diagnostic_evidence
+
+def record_drain_failure(
+    root: Path, *, thread: str, diagnostic: DrainDiagnostic, source_error: BaseException,
+) -> Path:
+    """Retain the original observation error before its owner publishes unavailability.
+
+    Identical observations share a file; a different chained refusal gets its
+    own immutable reference even when its outer type and message are unchanged.
+    No turn, summary attempt or input disposition is fabricated here.
+    """
+    document = {
+        "version": 1,
+        "thread": thread,
+        # The artifact owns the exception; activity reason is only presentation.
+        # Derive the original outer reason from that exception, never parse a
+        # file reference out of a previously presented diagnostic.
+        "drain": FieldCodec.encode(replace(diagnostic, reason=str(source_error))),
+        "outcome": "inbox observation failed; this record grants no retry authority",
+        **_source_error_evidence(source_error),
+    }
+    digest = hashlib.sha256(json.dumps(document, sort_keys=True).encode()).hexdigest()
+    path = root / "diagnostics" / f"drain-{digest}.json"
+    try:
+        original = path.read_text()
+    except FileNotFoundError:
+        return _write_diagnostic_document(root, f"drain-{digest}", document)
+    if original != json.dumps(document, indent=2) + "\n":
+        raise ValueError("Original drain diagnostic differs from its failure document")
+    return path.resolve()
+
+
+def _source_error_evidence(source_error: BaseException | None) -> dict:
+    if source_error is None:
+        return {}
+    document = {"source_error": "".join(
+        TracebackException.from_exception(source_error, capture_locals=False).format(chain=True)
+    )}
+    from .native_pi import NativePiUnavailable
+
+    if isinstance(source_error, NativePiUnavailable):
+        document["native"] = source_error.diagnostic_evidence
+    return document
+
+
+def _write_diagnostic_document(root: Path, name: str, document: dict) -> Path:
     directory = root / "diagnostics"
     directory.mkdir(mode=0o700, exist_ok=True)
     if os.name == "posix":
@@ -210,6 +252,6 @@ def record_terminal_failure(
             os.fsync(fd)
         finally:
             os.close(fd)
-    path = directory / f"{turn_id}.json"
+    path = directory / f"{name}.json"
     _atomic_write_text(path, json.dumps(document, indent=2) + "\n", fsync_parent=True)
     return path.resolve()
