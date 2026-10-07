@@ -51,8 +51,9 @@ conflict or transient contention is claimed as its cause.
 Both existing `InputDrain.observe` failure branches pass the actual exception to
 the activity owner. `AgentActivity.set_drain_diagnostic` checks the original owner
 fence, durably retains the exception chain, then publishes the diagnostic's private
-file reference. `DrainDiagnostic` owns that optional reference; old events still
-decode without it. Availability, stop/propagation and clearing behavior are unchanged.
+file reference. `DrainDiagnostic` owns that optional reference. The new decoder
+reads old events; this does not establish old-decoder compatibility.
+Availability, stop/propagation and clearing behavior are unchanged.
 
 The existing diagnostics module shares exception serialization and durable writing
 between terminal and inbox failures. Traceback locals are excluded. The inbox file
@@ -84,3 +85,68 @@ compaction was retried, no native process or App was started, and no package was
 built, installed or rebound. Integration can use this change to retain the exact
 cause on future independently authorized work; it cannot recover a lost traceback
 or authorize replay of the consumed failure.
+
+## Backend delivery and pr159 recovery
+
+This changes the durable activity declaration. I read both actual installed Core
+copies under the sidebar-live-candidate deployment: backend `runtime` and frontend
+`runtime-send-focus`. Neither installed `DrainDiagnostic` declares
+`diagnostic_path`; both installed `FieldCodec` implementations reject unknown
+dataclass keys. The new encoder includes the field even when null. The passing
+legacy control proves only that the new decoder accepts old rows.
+
+The decoding relation is `Activity.from_wire` -> `FieldCodec` family/dataclass
+decoding -> `ActivityLog._latest_events` -> `AgentActivity.activity_of` ->
+`ThreadView`, thread/history presentation and notifications.
+`ActivityCheckpoint.latest` also contains these Activity declarations. Discarding
+an unreadable derived checkpoint does not bypass authoritative log decoding.
+Backend workers read other owners' activity through this family. Toad sidebar
+coordination access constructs Core Comms/snapshots in its own interpreter, so
+its installed Core decoder must also change. CLI readers and retained clients
+reading this log are affected. ACP configuration metadata is unchanged.
+
+Delivery requires a truthful new Core wheel/proof and a coordinated backend and
+client cutover through the existing OwnerRestartRequest, retained launch handoff
+and stopped-batch publisher. ReviewedFrontendCohort cannot admit this as unchanged
+backend resources. Toad production can remain unchanged, but its frontend prefix
+must contain compatible Core. Retire or upgrade every old reader before a new
+writer emits the field. Compare the final joined source and forced resources to
+the actual deployment; no old wheel/proof/resource identity is relabeled. Native
+bootstrap/package bytes are unchanged by this fix. No build/publication occurred.
+
+After a new diagnostic is written, reinstalling the old Core decoder is not a
+safe rollback. Keep compatible decoding even if the writer is rolled back; do
+not delete authoritative events or relax unknown-field checks. Original
+stopped-batch recovery restores acquired installations/launches, but cannot make
+old decoders understand newly written records.
+
+A plain restart is unsafe for pr159. Worker.run creates CommsAgent with
+runtime_enabled=True and default auto_wake=True; load_session starts the drain.
+replay_unknown_inputs only emits ledger notices, but the drain separately selects
+sealed PendingNotification assignments. The current read found 30 triage_pending
+assignments, sequences 590..619, and an empty execution pointer. Three historical
+triage reservations lack context evidence; their association with this failure
+is unproved. Idle status and no summary operations do not settle those inputs or
+prove the pending batch cannot be selected again.
+
+The safe next operational action is OwnerLifecycle.stop for pr159, using its
+current owner checks and guarded process identity, then keep it stopped during
+delivery. This preserves session, dispositions, raw markers and receipts. No stop
+was performed here. Other owners need not wait for its unresolved cause.
+
+Before enabling its drain, acquire a fresh stable source through the existing
+source owners and run verify_continued_private_session read-only, retaining the
+actual exception. Do not reserve/send a summary, replay an original prompt or
+settle receipts as diagnosis. This checks source revision, input readiness,
+native evidence, coordinator schema/receipts, sidecar corroboration and ancestry;
+manual receipt equality is insufficient. Existing CommsAgent(auto_wake=False)
+supports a session without automatic inbox inputs; the normal headless worker
+has no equivalent launch option. Its ordinary start/restart cannot be called
+read-only inspection. Any acquired runtime/read session still needs actual
+custody; no runtime purpose is supplied by this source change.
+
+The remaining missing fact is the first refusal from that complete current-source
+acquisition. The original failed cut cannot be recovered. A concrete refusal, or
+successful coverage plus explicit disposition of original uncertain inputs, must
+determine continuation. No coverage waiver, participant injection or automatic
+retry is proposed.
