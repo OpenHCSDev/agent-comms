@@ -493,3 +493,25 @@ directory to0700 and published without repeating the App. This removes proved
 lock lifetime; historical database-busy cause remains unknown. Backend workers
 were not restarted. An evidence append command was refused by the duplicate hook
 because of its quotation parser; no runtime phase repeated.
+
+## Actual right-sidebar acquisition profile
+
+The original recorder now has a no-input sidebar_panels journey through existing
+native target capture/click/wheel owners. One default installed App opened the
+right sidebar, wheeled its viewport down/up, hid and restored it. It exited0 in
+45.91s; original source owner stayed alive, cleanup had no owned remainder/error.
+Evidence: `/home/ts/.cache/agent-scratch/right-sidebar-panels-installed-20261006`.
+The same SessionThreadSidebar object140435932944704 retained99 widgets across
+hide/return. Context records remained present and native context preparation
+completed. This was a single-view hide/return, not a tab/eviction qualification.
+
+Process CPU during open/wheel phases was97-101% of one core. The sampled original
+call relation identifies ContextInspection.read -> WireLog.context_manifests ->
+indexed_context_manifests -> original manifest decoding as substantial work.
+It already selects this owner through ContextManifestSources; it is not decoding
+unrelated manifests. Chrome transitions are not call counts or CPU attribution;
+native DTO capture itself contributes observer cost. No input-to-pixel latency
+or full smoothness claim follows. Parent reviewed actual right-sidebar footage
+stills. Mendel owns scoped manifest/source acquisition; Heis separately owns
+shared sidebar acquisition. Existing panels are retained, so adding another
+panel cache would address the wrong source relationship.
