@@ -1964,6 +1964,54 @@ for line in sys.stdin:
 
 # Native per-input proof tests retained from the PR#1 parent.
 class TestNativeInputBinding:
+    def test_only_original_response_can_promote_pending_attestation(self):
+        from agent_comms.native_attestation import PendingAttestation, AttestationError
+        from agent_comms.pi_rpc import PiRpcChannel
+
+        pending = PendingAttestation()
+        def response(identity, capability='pi-native-input-v1-live-only'):
+            return PiRpcChannel.decode_record((json.dumps({
+                'type': 'response', 'command': 'get_state', 'id': identity,
+                'success': True, 'data': {'nativeInputProofCapability': capability},
+            }) + '\n').encode(), strict=True)
+        unrelated = response('another-request')
+        assert pending.accept(unrelated) is pending
+        assert pending.observe(unrelated.data.require_payload()) is pending
+        with pytest.raises(AttestationError):
+            pending.accept(response(pending.request.id, 'unsupported'))
+        assert pending.accept(response(pending.request.id)).observed
+
+    async def test_preflight_consumes_unsolicited_event_before_correlated_response(self, tmp_path):
+        stub = _stub(tmp_path, f'#!{sys.executable}\n' + '''
+import json, sys
+send = lambda event: print(json.dumps(event), flush=True)
+state = json.loads(sys.stdin.readline())
+send({'type':'extension_ui_request', 'method':'setStatus', 'id':'startup-status',
+      'statusKey':'startup', 'statusText':'Extension initialized'})
+send({'type':'agent_settled'})
+send({'type':'response','command':'get_state','id':'unrelated-query',
+      'success':True,'data':{'nativeInputProofCapability':'pi-native-input-v1-live-only'}})
+send({'type':'response','command':'get_state','id':state['id'],
+      'success':True,'data':{'nativeInputProofCapability':'pi-native-input-v1-live-only'}})
+prompt = json.loads(sys.stdin.readline())
+assert prompt['type'] == 'prompt'
+send({'type':'response','command':'prompt','id':prompt['id'],'success':True})
+send({'type':'message_start','message':{'role':'user','content':prompt['message'],
+                                      'inputId':prompt['inputId']}})
+send({'type':'message_end','message':{'role':'assistant','content':[], 'stopReason':'stop'}})
+send({'type':'agent_settled'})
+for line in sys.stdin:
+    request = json.loads(line)
+    if request['type'] == 'get_session_stats':
+        send({'type':'response','command':'get_session_stats','id':request.get('id'),
+              'success':True,'data':{}})
+        break
+''')
+        async with asyncio.timeout(4):
+            events = [event async for event in backend.stream_agent_events(
+                stub, [], 'work', str(tmp_path))]
+        assert events[-1].ok
+
     async def test_owner_revoked_after_preflight_never_writes_prompt(self, tmp_path):
         received = tmp_path / "received-prompt"
         stub = _stub(

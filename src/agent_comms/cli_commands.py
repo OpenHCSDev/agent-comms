@@ -1046,7 +1046,7 @@ class ActivityCliCommand(CliCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class StopCliCommand(CliCommand):
-    help = "Mark thread stopped"
+    help = "Stop process"
     multiple_targets = True
     name: str = option("--name", target_bound=True)
 
@@ -1068,7 +1068,8 @@ class StopCliCommand(CliCommand):
 class RestartCliCommand(CliCommand):
     help = "Restart idle running owners to reload backend code"
     name: str | None = option(
-        "--name", help="One running thread (aliases supported)", group="scope", default=None
+        "--name", help="One running thread (aliases supported)", group="scope", default=None,
+        target_bound=True,
     )
     all_: bool = option(
         "--all",
@@ -1076,6 +1077,7 @@ class RestartCliCommand(CliCommand):
         group="scope",
         default=False,
         wire_name="all",
+        target_bound=True,
     )
     agent_bin: str | None = option("--agent-bin", default=None)
     agent_args: list[str] | None = option(
@@ -1083,6 +1085,17 @@ class RestartCliCommand(CliCommand):
         default=None,
         normalize=_shell_words,
     )
+
+    @classmethod
+    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
+        from .errors import RelationViolationError
+
+        try:
+            thread.require_restart_owner(status)
+            thread.require_idle()
+        except RelationViolationError:
+            return ()
+        return (cls(name=thread.name),)
 
     def apply(self, ctx: Comms) -> Any:
         results = ctx.owners.restart_owners(
@@ -1400,6 +1413,7 @@ class RenameTagCliCommand(ExactTagCliCommand, declared_name='rename-tag'):
 @dataclass(frozen=True, kw_only=True)
 class DeleteTagCliCommand(ExactTagCliCommand, declared_name='delete-tag'):
     help = 'Remove tag, archive tagged threads, or delete tagged threads'
+    multiple_targets = True
     disposition: TagDisposition = option('--disposition', default_factory=KeepThreadsTagDisposition,
                                         help='Choose what happens to tagged threads')
     confirmed: bool = option('--confirmed', default=False, target_bound=True)

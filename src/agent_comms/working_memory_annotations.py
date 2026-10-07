@@ -48,14 +48,17 @@ class WorkingMemoryAnnotations:
             originals = SpanAnnotationsRow.select(db, order_by=("id",),
                 question=question.question, question_version=question.sha256,
                 classifier=classifier.classifier, classifier_pin=classifier.pin, label_kind=ModelLabel)
-            cases = []
+            captured = []
             for row in originals:
                 original = row.label
                 rows = SpanAnnotationsRow.select(db, order_by=("id",),
                     **cls.address(original.span, question, classifier))
-                effective = SpanAnnotationsRow.effective(tuple(rows))
-                cases.extend(effective.evaluate_original(original))
-            return CalibrationReport(question, classifier, tuple(cases))
+                captured.append((original, tuple(rows)))
+        cases = []
+        for original, rows in captured:
+            effective = SpanAnnotationsRow.effective(rows)
+            cases.extend(effective.evaluate_original(original))
+        return CalibrationReport(question, classifier, tuple(cases))
 
     @classmethod
     def for_segment(cls, path, segment, classifier: ClassifierVersion) -> tuple[ModelLabel, ...]:
@@ -85,14 +88,14 @@ class WorkingMemoryAnnotations:
             originals.setdefault(segment.sha256, []).append(segment)
         with cls.reading(path) as db:
             rows = SpanAnnotationsRow.for_digests(db, tuple(originals), classifier)
-            grouped = {}
-            for row in rows:
-                label = row.label
-                if any(segment.contains_span(label.span)
-                       for segment in originals[label.span.segment_sha256]):
-                    key = tuple(cls.address(label.span, label.question, label.classifier).values())
-                    grouped.setdefault(key, []).append(row)
-            return tuple(SpanAnnotationsRow.effective(tuple(rows)) for rows in grouped.values())
+        grouped = {}
+        for row in rows:
+            label = row.label
+            if any(segment.contains_span(label.span)
+                   for segment in originals[label.span.segment_sha256]):
+                key = tuple(cls.address(label.span, label.question, label.classifier).values())
+                grouped.setdefault(key, []).append(row)
+        return tuple(SpanAnnotationsRow.effective(tuple(rows)) for rows in grouped.values())
 
     def reserve(self, request: DisclosureRequest, grant) -> AnnotationRequestsRow:
         key = self.address(request.span, request.question, request.classifier)

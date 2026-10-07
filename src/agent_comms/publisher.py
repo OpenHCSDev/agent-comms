@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from collections.abc import Sequence
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     from .private_bus_checkpoint import CertifiedSourceRead
 
 from .catalog_store import ChannelCatalog
+from .catalog_document import CatalogDocument
 from .wire_log import WireLog
 from .wire_metadata import WireMetadata
 
@@ -77,9 +78,10 @@ class Publisher:
         self._private_claim_writes = private_claim_writes
 
     def _validate_publish_request(
-        self, message: Message, *, registry_snapshot: RegistrySnapshot | None = None
+        self, message: Message, *, registry_snapshot: RegistrySnapshot | None = None,
+        catalog: CatalogDocument | None = None,
     ) -> tuple[str, str]:
-        """Resolve the public route, optionally using a locked registry revision."""
+        """Resolve the public route from the acquired declarations when supplied."""
 
         def canonical(name: str) -> str:
             if registry_snapshot is None:
@@ -95,7 +97,8 @@ class Publisher:
             raise UnregisteredThreadError(f"Sender {message.sender!r} is not a registered thread.")
         if BuiltinChannel.aggregate_target(message.target) or (
             is_channel_target(message.target)
-            and self._channels.read().is_view_target(message.target)
+            and (catalog if catalog is not None else self._channels.read()).is_view_target(
+                message.target)
         ):
             raise RelationViolationError(
                 f"View {message.target!r} is a projection, not a routable target."
@@ -157,8 +160,11 @@ class Publisher:
         if _human_origin is not None and type(_human_origin) is not HumanOrigin:
             raise RelationViolationError("Human origin must be a typed local USER identity.")
         with guard_original_root_write(self.log.path.parent), self.log.locked() as bus_lock:
-            self._validate_publish_request(message)
             if not self.log.read_metadata_unlocked().private:
+                # Refuse invalid input before creating a protocol on a fresh
+                # root. Established roots validate against the same guarded
+                # snapshot that selects the audience below.
+                self._validate_publish_request(message)
                 self._initialize_private_protocol_unlocked()
             return self.publish_initial_cohort(
                 message, _bus_lock=bus_lock, _human_origin=_human_origin
@@ -325,15 +331,25 @@ class Publisher:
         classification = ControlClassification(control)
         if not classification.supports_initial:
             raise RelationViolationError("System-control initial issuer is not available.")
-        with nullcontext(_bus_lock) if _bus_lock is not None else self.log.locked() as bus_lock:
+        with (
+            (nullcontext(_bus_lock) if _bus_lock is not None else self.log.locked()) as bus_lock,
+            ExitStack() as resources,
+        ):
             _require_no_private_owner_rename(self.log.path.parent)
             metadata = self.log._private_marker_unlocked()
             metadata.access.require_append()
-            from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+            from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
-            previous_sequence = verify_private_bus_checkpoint_unlocked(
-                self.log, metadata
-            ).through_seq
+            # Fresh initialization occurs after lock acquisition and has no
+            # acquired source. Existing roots already borrowed this exact cut
+            # from the lock's durability owner; keep using it until append.
+            source = bus_lock.source
+            if source is None:
+                source = resources.enter_context(
+                    opened_private_checkpoint_unlocked(self.log, metadata)
+                )
+            source.require_marker(metadata)
+            previous_sequence = source.committed_sequence()
             if metadata.last_seq >= MAX_WIRE_SEQ:
                 raise RelationViolationError("Private bus sequence is exhausted.")
             source_paths = (
@@ -343,7 +359,9 @@ class Publisher:
             before_revisions = tuple(file_revision(path) for path in source_paths)
             snapshot = self._registry.snapshot()
             snapshot.require_unambiguous_ownership()
-            sender = snapshot.canonical_name(message.sender)
+            catalog = self._channels.read()
+            sender, target = self._validate_publish_request(
+                message, registry_snapshot=snapshot, catalog=catalog)
             sender_thread = snapshot.threads.get(sender)
             if sender_thread is None or not snapshot.statuses[sender].visible:
                 raise RelationViolationError("Initial sender must be visible and registered.")
@@ -356,12 +374,6 @@ class Publisher:
                 _human_origin.require_registered(snapshot)
                 if message.sender != _human_origin.sender:
                     raise RelationViolationError("Local USER origin differs from registered identity.")
-            catalog = self._channels.read()
-            if BuiltinChannel.aggregate_target(message.target) or catalog.is_view_target(
-                message.target
-            ):
-                raise RelationViolationError("A saved/aggregate view is not routable.")
-            target = message.target
             if not is_channel_target(target):
                 # Bind the alias in this guarded publication snapshot. The
                 # envelope and frozen audience carry its canonical incarnation.
@@ -398,7 +410,7 @@ class Publisher:
                 target=target,
                 sequence=max(metadata.last_seq, previous_sequence) + 1,
                 snapshot=snapshot,
-                original_source=bus_lock.source,
+                original_source=source,
             )
             if _human_origin is not None:
                 # The marker reserves a sequence before the row. A crash after
@@ -409,19 +421,16 @@ class Publisher:
                 # availability until explicit operator reconciliation exists.
                 expected_sequence = 1
                 duplicate = False
-                from .private_bus_checkpoint import opened_private_checkpoint_unlocked
-
-                with opened_private_checkpoint_unlocked(self.log, metadata) as source:
-                    for previous in source.public_messages():
-                        if previous.seq != expected_sequence:
-                            raise HumanAdmissionBlockedError(
-                                "Private bus sequence gap has UNKNOWN outcome; "
-                                "human send blocked, do not retry."
-                            )
-                        expected_sequence += 1
-                        duplicate |= (
-                            previous.sender == sender and previous.message_id == stored.message_id
+                for previous_sender, previous in source.public_message_references():
+                    if previous.seq != expected_sequence:
+                        raise HumanAdmissionBlockedError(
+                            "Private bus sequence gap has UNKNOWN outcome; "
+                            "human send blocked, do not retry."
                         )
+                    expected_sequence += 1
+                    duplicate |= (
+                        previous_sender == sender and previous.message_id == stored.message_id
+                    )
                 if metadata.last_seq != expected_sequence - 1:
                     raise HumanAdmissionBlockedError(
                         "Private bus sequence reservation has UNKNOWN outcome; "

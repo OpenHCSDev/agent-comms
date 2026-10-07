@@ -72,7 +72,8 @@ class Channel:
     def matches(self, tags: frozenset[str]) -> bool:
         if self.view is not None:
             return self.view.predicate.matches(tags)
-        return self.builtin.matches(tags) if self.builtin else bool(self.tags & tags)
+        builtin = self.builtin
+        return builtin.matches(tags) if builtin is not None else bool(self.tags & tags)
 
     def can_set_archived(self, archived: bool) -> bool:
         """Only nonbuiltin channels admit a changed archive preference."""
@@ -84,7 +85,8 @@ class Channel:
 
     @property
     def aggregate(self) -> bool:
-        return self.builtin is not None and self.builtin.aggregate
+        builtin = self.builtin
+        return builtin is not None and builtin.aggregate
 
     @property
     def exact(self) -> bool:
@@ -94,7 +96,8 @@ class Channel:
     def history_targets(self) -> frozenset[str] | None:
         if self.view is not None:
             return self.view.history_targets
-        return self.builtin.history_targets if self.builtin else frozenset({self.name})
+        builtin = self.builtin
+        return builtin.history_targets if builtin is not None else frozenset({self.name})
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode(self)

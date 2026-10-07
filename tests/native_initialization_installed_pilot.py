@@ -51,11 +51,8 @@ async def run(root: Path, package: Path) -> dict:
     }
     try:
         assert child.proc.stdin is not None
-        child.proc.stdin.write(child.reader.encode(request))
-        await child.proc.stdin.drain()
         async with asyncio.timeout(admission.policy.readiness_seconds):
-            event = await child.reader.receive(strict=True)
-        assert child.reader.correlate(event) is request
+            event = await request.exchange(child.reader, child.proc.stdin, strict=True)
         child.attestation = child.attestation.accept(event)
         state = child.attestation.state
         assert state is not None and state.message_count == state.pending_message_count == 0

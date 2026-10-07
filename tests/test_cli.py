@@ -235,6 +235,84 @@ class TestSelectedTargetActions:
             comms.registry.declare(Thread(name, frozenset(tags), str(root)), StoppedThreadStatus())
         return comms
 
+    def test_restart_catalog_uses_original_owner_and_idle_requirements(self, tmp_path):
+        import os
+        from dataclasses import replace
+        from agent_comms.child_process import ProcessIdentity
+        from agent_comms.cli_commands import CliCommand, RestartCliCommand, StopCliCommand
+        from agent_comms.thread_execution import ExternalThreadExecution
+        from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+        from agent_comms.turn_lease import ActiveTurn
+
+        comms = self.declared(tmp_path)
+        # Observe an authentic other process; this check never signals or restarts it.
+        owner = replace(comms.registry.require('alpha'),
+                        process_identity=ProcessIdentity.capture(os.getppid()))
+        status = RunningThreadStatus()
+        comms.registry.register(owner, status)
+        action = next(action for action in CliCommand.target_catalog(
+            comms, 'alpha', project=str(tmp_path))
+            if action.declaration is RestartCliCommand)
+        assert action.bound == (RestartCliCommand(name='alpha'),)
+        assert not {'name', 'all_'} & {field.name for field in action.editable_fields}
+        with pytest.raises(ValueError, match='cannot be overridden'):
+            action.bound[0].edited({'all': True})
+        assert StopCliCommand.help == 'Stop process'
+        assert not RestartCliCommand.thread_bindings(comms, owner, StoppedThreadStatus())
+        assert not RestartCliCommand.thread_bindings(comms,
+            replace(owner, active_turn=ActiveTurn('busy', owner.pid)), status)
+        assert not RestartCliCommand.thread_bindings(comms,
+            replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), status)
+        assert not RestartCliCommand.thread_bindings(comms,
+            replace(owner, execution=ExternalThreadExecution), status)
+
+    def test_tag_batch_requires_each_confirmation_before_removing_any_tag(self, tmp_path):
+        from agent_comms.cli_commands import CliCommand, DeleteTagCliCommand, TargetEdit
+
+        comms = self.declared(tmp_path)
+        selected = ('#team', '#other')
+        action = next(action for action in CliCommand.target_catalog(
+            comms, selected, project=str(tmp_path))
+            if action.declaration is DeleteTagCliCommand)
+        assert tuple(command.name for command in action.bound) == ('team', 'other')
+        assert 'Remove #team' in action.confirmation
+        assert 'Remove #other' in action.confirmation
+        before = comms.registry.snapshot()
+        with pytest.raises(ValueError, match='Remove #team'):
+            TargetEdit(DeleteTagCliCommand, selected, {}).apply(comms)
+        assert comms.registry.snapshot() == before
+        result = TargetEdit(DeleteTagCliCommand, selected, {}, confirmed=True).apply(comms)
+        assert result.successful
+        assert tuple(outcome.result.tag for outcome in result.outcomes) == ('team', 'other')
+        assert all(outcome.result.removed_tag for outcome in result.outcomes)
+        assert not comms.registry.require('alpha').tags
+        assert not comms.registry.require('beta').tags
+
+    def test_tag_batch_preserves_active_refusal_and_mixed_target_outcomes(self, tmp_path):
+        from agent_comms.channel_management import ArchiveThreadsTagDisposition
+        from agent_comms.cli_commands import CliCommand, DeleteTagCliCommand, TargetEdit
+        from agent_comms.field_codec import FieldCodec
+        from agent_comms.thread_status import RunningThreadStatus
+
+        comms = self.declared(tmp_path)
+        comms.registry.register(comms.registry.require('beta'), RunningThreadStatus())
+        selected = ('#team', '#other', 'alpha', '#all')
+        action = next(action for action in CliCommand.target_catalog(
+            comms, selected, project=str(tmp_path))
+            if action.declaration is DeleteTagCliCommand)
+        assert tuple(command.name for command in action.bound) == ('team', 'other')
+        result = TargetEdit(DeleteTagCliCommand, selected,
+            {'disposition': FieldCodec.encode(ArchiveThreadsTagDisposition)},
+            confirmed=True).apply(comms)
+        assert not result.successful
+        assert tuple(outcome.target for outcome in result.outcomes) == selected
+        assert result.outcomes[0].successful
+        assert not any(outcome.successful for outcome in result.outcomes[1:])
+        assert not comms.registry.status('alpha').visible
+        assert comms.registry.status('beta').active
+        assert comms.registry.require('alpha').tags == frozenset({'team'})
+        assert comms.registry.require('beta').tags == frozenset({'other'})
+
     def test_catalog_projects_mixed_operations_and_original_editor_fields(self, tmp_path):
         from agent_comms.cli_commands import CliCommand
 

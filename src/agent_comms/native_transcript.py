@@ -179,6 +179,12 @@ class NativeTranscript:
                 return None
         return None
 
+    def input_for(self, record: NativeRecord):
+        """The native record and its parent chain own the original input."""
+        if record.entry is None:
+            return None
+        return record.entry if record.entry.input_boundary else self.input_ancestor(record)
+
     def publication_input(self, *, after: int, through: int):
         """Return the final producer and its actual tracked input ancestry.
 
@@ -193,7 +199,7 @@ class NativeTranscript:
             producer = record.publication_producer()
             if producer is None:
                 continue
-            user = self.input_ancestor(record)
+            user = self.input_for(record)
             if user is None:
                 raise RelationViolationError("Native publication has no tracked input ancestry")
             user = user.require_tracked_user()

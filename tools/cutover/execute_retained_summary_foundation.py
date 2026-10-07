@@ -13,7 +13,7 @@ from pathlib import Path
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_cutover import PreserveOwnerRuntime
-from publish_retained_summary import ReviewedRetainedSummaryCohort, publish
+from publish_retained_summary import ReviewedBackendCohort, ReviewedRetainedSummaryCohort, publish
 from runtime_installation import RuntimeInstallation
 
 
@@ -27,7 +27,7 @@ def main():
     args = parser.parse_args()
     if not args.execute:
         parser.error('Parent execution approval is required; --help has no public effects')
-    cohort = FieldCodec.decode(ReviewedRetainedSummaryCohort,
+    cohort = FieldCodec.decode(ReviewedRetainedSummaryCohort | ReviewedBackendCohort,
                                json.loads(args.review_plan.read_text()))
     runtime = FieldCodec.decode(RuntimeInstallation,
                                 json.loads(args.runtime_installation.read_text()))

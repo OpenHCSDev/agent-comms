@@ -68,6 +68,45 @@ class DisplayCheckpoint(AppendCheckpoint):
     def current_for(self, revision: BusFileRevision, semantics: DisplayMetricScope) -> bool:
         return (self.source, self.semantics) == (revision, semantics)
 
+    def rebase(self, opened: OpenedWireSnapshot,
+               semantics: DisplayMetricScope) -> DisplayMetrics:
+        """Reuse each answer only while its own inclusion history agrees."""
+        metrics = semantics.empty_metrics
+        clocks, counts = metrics
+        previous_activity = {scope.channel: scope for scope in self.semantics.activity_scopes}
+        previous_unread = {scope.channel: scope for scope in self.semantics.scopes}
+        rebuild_activity, rebuild_unread, changed_reads = [], [], []
+        for scope in semantics.activity_scopes:
+            previous = previous_activity.get(scope.channel)
+            if previous is not None and scope.same_projection(previous):
+                clocks[scope.channel] = self.activity[scope.channel]
+            else:
+                rebuild_activity.append(scope)
+        for scope in semantics.scopes:
+            previous = previous_unread.get(scope.channel)
+            if (previous is not None and scope.same_projection(previous)
+                    and semantics.viewer_names == self.semantics.viewer_names):
+                counts[scope.channel] = self.counts[scope.channel]
+                if scope.seen_sequences != previous.seen_sequences:
+                    changed_reads.append((previous, scope))
+            else:
+                rebuild_unread.append(scope)
+        rebuilt = DisplayMetricScope(tuple(rebuild_unread), tuple(rebuild_activity),
+                                     semantics.viewer_names)
+        changed_sequences = frozenset(
+            seq for previous, scope in changed_reads
+            for seq in previous.seen_sequences ^ scope.seen_sequences
+        )
+        records = (opened.public_records(before_offset=self.offset)
+                   if rebuild_activity or rebuild_unread else
+                   opened.public_records_for(changed_sequences, before_offset=self.offset))
+        for message, _ in records:
+            rebuilt.observe(message, metrics)
+            if message.sender not in semantics.viewer_names:
+                for previous, scope in changed_reads:
+                    counts[scope.channel] += int(scope.unread(message)) - int(previous.unread(message))
+        return metrics
+
 
 class BusDisplayIndex(BusAppendIndex):
     record_type = DisplayCheckpoint
@@ -86,10 +125,10 @@ class BusDisplayIndex(BusAppendIndex):
             if stream.read(1) != b"\n":
                 return None
         checkpoint = self.checkpoint(stream, source)
-        if checkpoint is None or checkpoint.semantics != semantics:
+        if checkpoint is None:
             metrics, offset = semantics.empty_metrics, 0
         else:
-            metrics, offset = checkpoint.metrics, checkpoint.offset
+            metrics, offset = checkpoint.rebase(opened, semantics), checkpoint.offset
         for message, _ in opened.public_records(offset):
             semantics.observe(message, metrics)
         projected = DisplayCheckpoint(source, source.size,

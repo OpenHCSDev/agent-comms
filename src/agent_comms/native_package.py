@@ -62,11 +62,11 @@ def package_tree_digest(root: Path) -> str:
             info.st_ctime_ns if info.st_mode & 0o222 else 0,
         )
 
-    def visit(path: Path, relative: str, depth: int) -> None:
+    def visit(path: str, relative: str, depth: int) -> None:
         nonlocal count, total
         if count > MAX_ENTRIES or depth > MAX_DEPTH:
             raise NativePackageError("Native package inventory limit exceeded")
-        before = path.lstat()
+        before = os.lstat(path)
         if before.st_uid not in (0, os.getuid()) or before.st_mode & 0o022:
             raise NativePackageError("Native package is not owner-controlled")
         if stat.S_ISDIR(before.st_mode):
@@ -80,7 +80,7 @@ def package_tree_digest(root: Path) -> str:
                         raise NativePackageError("Native package inventory limit exceeded")
                     names.append(entry.name)
             for name in sorted(names):
-                visit(path / name, f"{relative}/{name}", depth + 1)
+                visit(os.path.join(path, name), f"{relative}/{name}", depth + 1)
         elif stat.S_ISREG(before.st_mode):
             if before.st_nlink != 1 and before.st_mode & 0o222:
                 raise NativePackageError("Native package shared resource is writable")
@@ -107,11 +107,11 @@ def package_tree_digest(root: Path) -> str:
             digest.update((json.dumps(record, ensure_ascii=True) + "\n").encode())
         else:
             raise NativePackageError("Native package contains symlinks or special files")
-        if identity(path.lstat()) != identity(before):
+        if identity(os.lstat(path)) != identity(before):
             raise NativePackageError("Native package changed during verification")
 
     try:
-        visit(root, ".", 0)
+        visit(os.fspath(root), ".", 0)
     except OSError as error:
         raise NativePackageError("Native package could not be verified") from error
     return digest.hexdigest()

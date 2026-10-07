@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
     from .wire_log import WireLog
     from .messages import Message
+    from .message_reference import MessageReference
     from .coordination_tables.publications import PublicationIntents
     from .turn_context import ContextManifest
     from .retained_task_facts import ExactTaskFact
@@ -45,6 +46,16 @@ OriginalSource = TypeVar("OriginalSource")
 
 _SEED = hashlib.sha256(b"agent-comms:private-bus-prefix:v1\0").digest()
 _TAIL_BYTES = 4096
+
+
+@dataclass(frozen=True)
+class CapturedWireSource(Generic[OriginalSource]):
+    """One inspection's original bytes and decoded value; no open store or permit."""
+
+    source: PrefixSource
+    pointer: WireSourcePointer[OriginalSource]
+    raw: bytes
+    value: OriginalSource
 
 
 @dataclass(frozen=True)
@@ -125,12 +136,13 @@ class CertifiedSourceRead:
         self.require_open_prefix()
         return self.witness.through_seq
 
-    def public_messages(self) -> Iterator[Message]:
-        """Decode public messages from this already certified complete prefix.
+    def public_message_references(self) -> Iterator[tuple[str, MessageReference]]:
+        """Read original sender/identity from the certified complete prefix.
 
         Certification has validated private envelopes, keys and the entire
         original stream. Public consumers borrow that result rather than
-        reconstructing every recipient's delivery policy a second time.
+        reconstructing message bodies/tasks or delivery policies a second time.
+        Retained public rows remain present even when they have no SQL pointer.
         """
         from .store_files import _iter_jsonl_stream
         from .wire_record import WireRecord
@@ -138,7 +150,7 @@ class CertifiedSourceRead:
         self.require_open_prefix()
         self.stream.seek(0)
         for row, _ in _iter_jsonl_stream(self.stream, boundary=self.witness.offset):
-            yield from WireRecord.certified_public_messages(row)
+            yield from WireRecord.certified_public_references(row)
         self.require_open_prefix()
 
     def capture_sources(self, rows: tuple[WireSourcePointer[OriginalSource], ...]) -> Iterator[OriginalSource]:
@@ -149,11 +161,34 @@ class CertifiedSourceRead:
         current publication/admission permit. Capture must finish in custody;
         decoding can finish after that custody has closed.
         """
+        return (resource.value for resource in self.capture_resources(rows))
+
+    def capture_resources(
+        self, rows: tuple[WireSourcePointer[OriginalSource], ...], *,
+        previous: tuple[CapturedWireSource[OriginalSource], ...] = (),
+    ) -> Iterator[CapturedWireSource[OriginalSource]]:
+        """Revalidate exact originals, then decode only changed selected resources.
+
+        Original bytes, rather than a global observation revision or derived
+        signature, decide reuse. Certification and pointer selection still run
+        on every acquisition. Decoding retains no SQLite or publication lock.
+        """
         self.require_current()
         captured = tuple((row, row.read_bytes(self.stream)) for row in rows)
-        root_id = self.witness.root_id
+        source = self.witness.source_identity
         self.require_current()
-        return (row.decode_bytes(raw, root_id) for row, raw in captured)
+        retained = {item.pointer: item for item in previous if item.source == source}
+
+        def decoded():
+            for row, raw in captured:
+                prior = retained.get(row)
+                if prior is not None and prior.raw == raw:
+                    yield prior
+                else:
+                    yield CapturedWireSource(source, row, raw,
+                                             row.decode_bytes(raw, source.root_id))
+
+        return decoded()
 
     def references(self, references) -> Iterator[CommittedDelivery]:
         """Capture exact seq/id originals through the existing sealed pointers."""
@@ -293,7 +328,7 @@ class CertifiedSourceRead:
             for fact in message.retained_task_facts()
         )
 
-    def indexed_context_manifests(self, incarnation: ThreadIncarnation, snapshot) -> Iterator[ContextManifest]:
+    def indexed_context_resources(self, incarnation: ThreadIncarnation, snapshot, *, previous=()):
         """Capture only original observations of this recorded incarnation.
 
         The index stores byte ranges and original owner identity, never manifest
@@ -308,13 +343,13 @@ class CertifiedSourceRead:
             self.connection, where="thread IN (" + ",".join("?" for _ in parameters) + ")",
             parameters=parameters, order_by=("offset",),
         ))
-        captured = self.capture_sources(rows)
+        captured = self.capture_resources(rows, previous=previous)
 
         def decoded():
-            for manifest in captured:
-                if manifest.thread.resolved(snapshot) != incarnation:
+            for resource in captured:
+                if resource.value.thread.resolved(snapshot) != incarnation:
                     raise RelationViolationError("Context source differs from recorded owner.")
-                yield manifest
+                yield resource
 
         return decoded()
 

@@ -250,17 +250,25 @@ class AssignedTranscriptSource:
         return self.rows(predicate, parameters, ascending=traversal.ascending, limit=limit)
 
     def native_records(self, fragments, routes, reader):
-        """One original SQL read per bounded fragment, closed before wire/render."""
+        """Native ancestry precedes one atomic SQL read per bounded fragment."""
         from .native_runtime_input import NativeRuntimeInput
 
         lookup = stable_thread_lookup(self.recipient.created_at)
         for fragment in fragments:
+            selected = tuple((record, reader.input_for(record)) for record in fragment)
             with NativeRuntimeInput._publication_read(self.root) as db:
+                # Missing coordination remains detached native history. Do not
+                # introduce header failures where no SQL source was selected.
+                session_id = (reader.session_id
+                              if db is not None and any(
+                                  user is not None and user.input_id is not None
+                                  for _, user in selected) else None)
                 capture = partial(
                     NativeRuntimeInput.transcript_projection,
-                    db, reader, owner_lookup=lookup,
+                    db, reader, owner_lookup=lookup, session_id=session_id,
                 )
-                originals = tuple((record, record.project(capture)) for record in fragment)
+                originals = tuple((record, record.project(partial(capture, user=user)))
+                                  for record, user in selected)
             for record, projection in originals:
                 yield record, record.project(
                     lambda record: self.native_events(record, routes, *projection)

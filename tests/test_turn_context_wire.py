@@ -23,6 +23,80 @@ def manifest(owner, generation=1):
     return ContextManifest(owner.incarnation,RecordedContextTurn(TurnId('original-turn'),TurnIdentity(owner.incarnation,generation)),(segment,),'pi.estimateTokens')
 
 
+def test_awareness_inspection_waits_for_original_source_without_input_delay(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError
+    from threading import Event
+    from agent_comms.context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
+
+    comms, _ = _root(tmp_path)
+    comms.messaging.send_initial_cohort('sender', '#team', '@Alice original question')
+    owner = comms.registry.require('Alice')
+    original = comms.bus.awareness_segments(owner)
+    assert len(original) == 1 and isinstance(original[0], AwarenessSegment)
+    before = comms.bus.log.path.read_bytes()
+    entered = Event()
+
+    def read():
+        entered.set()
+        return comms.bus.awareness_segments(owner, blocking=True)
+
+    with ThreadPoolExecutor(max_workers=1) as worker:
+        with comms.bus.log.locked():
+            # Ordinary input still omits optional awareness immediately.
+            omitted = comms.bus.awareness_segments(owner)
+            assert len(omitted) == 1 and isinstance(omitted[0], UnavailableAwarenessSegment)
+            pending = worker.submit(read)
+            assert entered.wait(1)
+            with pytest.raises(TimeoutError):
+                pending.result(timeout=.05)
+        assert pending.result(timeout=2) == original
+    inspection = TurnContext.for_inspection(comms, owner)
+    assert original[0] in inspection.segments
+    assert comms.bus.log.path.read_bytes() == before
+
+
+def test_context_resources_revalidate_selected_bytes_without_redecoding(tmp_path, monkeypatch):
+    from agent_comms.private_bus_checkpoint import ContextManifestSources
+
+    comms, _ = _root(tmp_path)
+    owner = comms.registry.require('Alice')
+    originals = tuple(manifest(owner, generation) for generation in range(1, 21))
+    for original in originals:
+        comms.bus.log.record_context(original)
+    decoded = []
+    original_decode = ContextManifestSources.decode_bytes
+
+    def measured(pointer, raw, root):
+        decoded.append(pointer.offset)
+        return original_decode(pointer, raw, root)
+
+    monkeypatch.setattr(ContextManifestSources, 'decode_bytes', measured)
+    acquired = comms.bus.log.context_manifest_resources('Alice', comms.registry)
+    assert tuple(item.value for item in acquired) == originals
+    assert len(decoded) == 20
+    decoded.clear()
+    # A different owner's context changes the global source, not Alice's originals.
+    comms.bus.log.record_context(manifest(comms.registry.require('Bob')))
+    current = comms.bus.log.context_manifest_resources('Alice', comms.registry, previous=acquired)
+    assert all(new is old for new, old in zip(current, acquired, strict=True))
+    assert decoded == []
+    comms.registry.rename('Alice', 'Renamed-Alice')
+    renamed = comms.bus.log.context_manifest_resources('Renamed-Alice', comms.registry, previous=current)
+    assert renamed == current
+    assert decoded == []
+    later = manifest(comms.registry.require('Renamed-Alice'), 21)
+    comms.bus.log.record_context(later)
+    appended = comms.bus.log.context_manifest_resources('Renamed-Alice', comms.registry, previous=renamed)
+    assert tuple(item.value for item in appended) == (*originals, later)
+    assert len(decoded) == 1
+    assert all(new is old for new, old in zip(appended[:-1], renamed, strict=True))
+    # Prior acquisitions are observations, never permission to ignore changed bytes.
+    with comms.bus.log.path.open('ab') as output:
+        output.write(b'{}\n')
+    with pytest.raises(ValueError):
+        comms.bus.log.context_manifest_resources('Renamed-Alice', comms.registry, previous=appended)
+
+
 @pytest.mark.asyncio
 async def test_installed_context_callbacks_share_original_writer_custody(tmp_path):
     """Both real event owners publish original observations without blocking.

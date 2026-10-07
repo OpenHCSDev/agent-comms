@@ -112,6 +112,15 @@ async def run(stage, package, models, ui):
         try:
             ready = await exchange(service, name, SubscribeRuntimeRequest(thread=name))
             assert 'ready' in ready, ready
+            advertised = next(option for option in ready['ready']['configOptions']
+                              if option['id'] == 'model')
+            assert len(advertised['options']) > 1, advertised
+            assert model in {choice['value'] for choice in advertised['options']}
+            selected = await exchange(service, name, SetConfigOptionRuntimeRequest(
+                thread=name, config_id='model', value=model,
+            ))
+            assert 'result' in selected, selected
+            assert service.registry.require(name).model == model
             option = thinking(ready['ready']['configOptions'])
             assert option['currentValue'] == 'off'
             assert service.registry.require(name).thinking_level is OffThinkingLevel

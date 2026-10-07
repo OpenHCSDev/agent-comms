@@ -10,10 +10,10 @@ from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.threads import Thread
 
 
-def test_original_retained_source_inspection_diff_and_narrow_export(comms, tmp_path, capsys):
+def test_original_retained_source_inspection_diff_and_narrow_export(comms, tmp_path, capsys, monkeypatch):
     """One original-store journey; inspection must neither admit nor export facts."""
     from agent_comms.compaction_journal import CompactionJournal
-    from agent_comms.compaction_records import CompactionOperation, SelectedSummaryAttempt
+    from agent_comms.compaction_records import CompactionOperation, JournalTable, SelectedSummaryAttempt
     from agent_comms.compaction_states import RefusedSummary, UnknownSummary, UnknownOperation
     from agent_comms.goals import Goal
     from agent_comms.input_disposition import InputDispositions
@@ -24,6 +24,7 @@ def test_original_retained_source_inspection_diff_and_narrow_export(comms, tmp_p
     from selected_summary_cases import manual_summary_record
     from test_task_decisions import saved_source
     import hashlib
+    import sqlite3
 
     comms.messaging.initialize_private_initial_protocol()
     saved = tmp_path / "original.jsonl"
@@ -66,6 +67,24 @@ def test_original_retained_source_inspection_diff_and_narrow_export(comms, tmp_p
         SelectedSummaryAttempt("b" * 32, str(saved), second.journal_json(), second,
                                UnknownSummary()).insert(db)
         CompactionOperation("c" * 32, str(saved), intent, UnknownOperation(), None).insert(db)
+    inspection = JournalTable.inspection
+    changed_from = RetainedTaskFacts.changed_from
+
+    def require_released_read():
+        with sqlite3.connect(path, isolation_level=None, timeout=0) as writer:
+            writer.execute("BEGIN EXCLUSIVE")
+            writer.execute("ROLLBACK")
+
+    def inspect_captured(row):
+        require_released_read()
+        return inspection(row)
+
+    def compare_captured(current, previous):
+        require_released_read()
+        return changed_from(current, previous)
+
+    monkeypatch.setattr(JournalTable, "inspection", inspect_captured)
+    monkeypatch.setattr(RetainedTaskFacts, "changed_from", compare_captured)
     protected = (saved, path, inputs.path, comms.registry.store.path, comms.root / "bus.jsonl")
     hashes = {file: hashlib.sha256(file.read_bytes()).hexdigest() for file in protected}
     code, inspected = command("retained-context", owner.name)
