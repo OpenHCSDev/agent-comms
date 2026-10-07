@@ -165,3 +165,32 @@ cleanup has no remaining owned processes/errors, and the original saved source
 owner remains unchanged. This confirms installed/default selection and working
 affected interaction; it does not establish smooth scrolling at all scales.
 Core702 is merged; native83/84 and Toad507 are merged.
+
+### Installed selection and parked sidebar checks
+
+The existing private native App selection journey passed against the installed
+combined client: thread/channel Ctrl toggle and Shift range, preserved right-click
+selection/scroll, original dialog/read/archive execution, mixed command catalog
+and truthful partial-failure notification. Output is retained under
+`/home/ts/.cache/agent-scratch/parent-sidebar-selection-20261006/installed-selection.*.log`.
+The user independently reports Ctrl-click working in the live installation.
+
+The original parked-sidebar checks retain the same ContextExplorer, ContextTree,
+nodes, source state and relationship rows across hidden preparation and A/B/A.
+They pass using installed Toad/Core/Textual with the selected Python3.14, not a
+source overlay. The initial Python3.11 collection refusal and stdin spawn error
+are preserved. The fixed file runner passed both checks; its existing fixture
+cleanup emits a resource-tracker warning, and a fresh private-use scan found no
+remaining matching processes. This is native private-App retention evidence,
+not a timing or large public context-tree performance claim. Logs and fixed runner
+are under `/home/ts/.cache/agent-scratch/installed-sidebar-retention-20261006`.
+
+### Disposable cleanup
+
+Removed duplicated tracked-evidence directories from the completed frame/parking
+wheel source archives (about340MiB); original repository evidence, wheels, proof,
+raw recordings and journals remain. Cleared pip downloads and uv package caches
+through their existing cache owners. The installed default still starts and
+reports its version after cleanup. No source, private/public runtime or original
+history was deleted. Remaining tree cost is assigned through the original
+navigation and command-completion family; no second cache is being introduced.
