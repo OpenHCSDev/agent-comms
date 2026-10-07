@@ -276,6 +276,9 @@ class WireLog:
             self._append_private_unlocked(marker, record.to_wire())
 
     def context_manifests(self, name: str, registry):
+        return tuple(resource.value for resource in self.context_manifest_resources(name, registry))
+
+    def context_manifest_resources(self, name: str, registry, *, previous=()):
         """Capture original source and rename membership before decoding.
 
         The original wire -> bus -> registry order selects the read snapshot;
@@ -285,7 +288,8 @@ class WireLog:
             with self.certified_read() as source:
                 snapshot = registry.snapshot()
                 incarnation = snapshot.require(name).incarnation
-                captured = source.context_manifests(incarnation, snapshot)
+                captured = source.marker.access.context_resources(
+                    source, incarnation, snapshot, previous=previous)
         return tuple(captured)
 
     @contextmanager

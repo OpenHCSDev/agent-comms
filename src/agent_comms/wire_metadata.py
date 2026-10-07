@@ -58,9 +58,12 @@ class WireAccess(DeclaredFamily, affix="Access"):
     @abstractmethod
     def prepare_page_index(self, index: BusPageIndex) -> bool: ...
 
-    @abstractmethod
     def context_manifests(self, source: CertifiedSourceRead, incarnation: ThreadIncarnation,
-                          snapshot: RegistrySnapshot) -> Iterator[ContextManifest]: ...
+                          snapshot: RegistrySnapshot) -> Iterator[ContextManifest]:
+        return (resource.value for resource in self.context_resources(source, incarnation, snapshot))
+
+    @abstractmethod
+    def context_resources(self, source, incarnation, snapshot, *, previous=()): ...
 
 
 @dataclass(frozen=True)
@@ -86,8 +89,8 @@ class WritableAccess(WireAccess):
     def prepare_page_index(self, index):
         return index.sync()
 
-    def context_manifests(self, source, incarnation, snapshot):
-        return source.indexed_context_manifests(incarnation, snapshot)
+    def context_resources(self, source, incarnation, snapshot, *, previous=()):
+        return source.indexed_context_resources(incarnation, snapshot, previous=previous)
 
 
 @dataclass(frozen=True)
@@ -120,23 +123,26 @@ class ArchivedAccess(WireAccess):
     def prepare_page_index(self, index):
         return index.current()
 
-    def context_manifests(self, source, incarnation, snapshot):
+    def context_resources(self, source, incarnation, snapshot, *, previous=()):
         from .wire_log import WireLog
+        from .private_bus_checkpoint import CapturedWireSource, ContextManifestSources
 
         # Later observation indexes are not part of an older archive. Read
         # the original typed observations in the same certified byte cut.
         source.require_current()
         source.stream.seek(0)
-        manifests = tuple(
-            manifest
-            for record in WireLog._snapshot_records(
-                source.marker, source.stream, source.witness.offset,
-            )
-            for manifest in record.context_manifests()
-            if manifest.thread.resolved(snapshot) == incarnation
-        )
+        resources = []
+        offset = 0
+        for record in WireLog._snapshot_records(source.marker, source.stream, source.witness.offset):
+            length = source.stream.tell() - offset
+            for manifest in record.context_manifests():
+                if manifest.thread.resolved(snapshot) == incarnation:
+                    pointer = ContextManifestSources(offset=offset, length=length, thread=manifest.thread)
+                    resources.append(CapturedWireSource(source.witness.source_identity,
+                        pointer, pointer.read_bytes(source.stream), manifest))
+            offset += length
         source.require_current()
-        return iter(manifests)
+        return iter(resources)
 
 
 @dataclass

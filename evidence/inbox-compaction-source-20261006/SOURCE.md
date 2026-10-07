@@ -286,3 +286,55 @@ compaction, provider, prefix mutation or build occurred. The original failed SQL
 statement and blocking writer still require a causal traceback from an actual
 failure; the lost historical evidence cannot be reconstructed. UX/pr159 uncertain
 work remains untouched.
+# Context manifest acquisition — 2026-10-07
+
+The installed context panel reacquires on each global observation. The writer's
+ContextManifestSources index already selects only the requested incarnation and
+its retained aliases. The expensive repeated work was decoding those same
+original observations, not choosing unrelated wire rows.
+
+CertifiedSourceRead now lends CapturedWireSource resources: the original
+PrefixSource, pointer, bytes and decoded value. `WireLog.context_manifest_resources`
+selects the current certified source and current registry membership on every
+call. Passing the previous inspection's resources reuses a decoded value only
+when physical/logical source, typed pointer and exact original bytes agree. New
+observations decode individually. Reused manifests still resolve against the
+new registry snapshot. No global cache, signature, durable field or currentness
+waiver is introduced. Generic capture_sources shares this capture implementation.
+WritableAccess owns indexed acquisition; ArchivedAccess retains the original
+strict WireScan and its distinct archive certificate, without trusting a later
+observation index. Archive scans are not optimized by this change.
+
+Toad handoff: add `manifest_sources: tuple[CapturedWireSource[ContextManifest], ...]`
+to the existing ContextInspection. Its read method should accept the preceding
+inspection (or its resources), call
+`comms.bus.log.context_manifest_resources(owner, comms.registry, previous=...)`,
+and derive manifests from resource.value. HoldingInspection acquisition must
+supply its own retained resources through its existing polymorphic lifetime;
+unacquired states supply an empty tuple. Do not put a second signature in the
+widget. Keep the original registry.require, SessionRevision.observe,
+WorkingMemoryAnnotations.for_context and ImportedSessionMetadata.sources_for_owner
+reads. Those independently own current process/incarnation/name/model/thinking,
+selected SDK file, effective annotation/correction and imported provenance facts.
+NativeContextData.with_current_contributors remains the current preview owner.
+Publication identity and SDK revision retain the existing same_native_source
+decision; manifests retain original recorded request IDs and provenance.
+
+One authored real private-store check: 20 originals decoded on first acquisition,
+zero on repeated acquisition after another owner's append and after rename, one
+on the next selected append. Original resource object identity is retained.
+Tampered wire bytes still refuse even with previous resources supplied. Together
+with the existing rename/predecessor/incarnation check: 2 passed in 1.29 seconds.
+The first invocation stopped in tmp_path setup because the named scratch parent
+did not exist; neither check entered. The corrected invocation created the owned
+scratch parent and used a fresh destination. No runtime or installed application
+was launched. Selected bytes still have to be captured and compared on every
+acquisition; this removes repeated JSON/FieldCodec decoding, not all history IO.
+
+AST source trace: 758 src/tests/tools modules, zero parse/compile omissions,
+66 related declaration/call sites. Both WireAccess implementations migrated;
+public context_manifests consumers keep their existing tuple answer. Runtime
+recorded-source requests and CLI diff still consume those original manifests.
+External dynamic consumers are not resolved by the AST trace. Trace and check
+output: /home/ts/.cache/agent-scratch/mendel-context-resource-reuse-20261007.
+Toad integration and installed panel CPU verification remain Parent's next step.
