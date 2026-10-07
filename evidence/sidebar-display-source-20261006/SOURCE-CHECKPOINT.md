@@ -64,3 +64,34 @@ Reproducer: private_app.py; original results: before.json and after.json.
 Raw App output and owned fixture data: /home/ts/.cache/agent-scratch/hdm01.
 Live 84%-of-one-core response latency remains unqualified; Parent owns compatible
 client installation and the affected live check through existing PR702.
+# Selected conversation notification acquisition — 2026-10-07
+
+`ThreadRowsWork` does not acquire transcript pages or notifications. The selected
+conversation's `HistoryViews.thread_presentation` does: its original read identity
+supplies source currentness, turn publication and owner reattachment. Its recent
+notifications supply pending, handling and error answers. Those reads remain.
+
+`MessageNotification.for_sources` previously acquired every frozen recipient's
+activity and projected every outcome, then discarded other recipients' answers.
+The same original inclusion decision now belongs to `MessageNotification` before
+activity acquisition and notification projection. Sender views still include all
+recipient outcomes. Whole-window and recorded projections keep their full scope.
+Assignment rows still decode strictly and the original duplicate-receipt checks
+still run before selection. No retained cache or alternative status was added.
+
+Core AST: 324 modules parsed, no omissions; complete notification consumer search
+finds the shared window/recorded projector and the recent/individual callers.
+The four existing notification checks passed. The broader presence controls had
+five failures in their existing uninitialized private bus fixture, before this
+projection, and six passes; see the retained `status.log` below. Initial interpreter
+and missing-basetemp setup refusals did not exercise the changed behavior.
+
+Real private source App result:
+`/home/ts/.cache/agent-scratch/observer-recipient-source-20261007/result.json`.
+Eight-recipient full window: eight activity observations. Selected recipient:
+one, with the exact original notification answer. Sender: all eight answers.
+The mounted DM status and notification view followed a real backend turn from
+busy to idle, without provider requests. The App exited 0 and its fixture joined
+cleanup; `check.py`, `app.log`, `status.log` and private data remain in that folder.
+This is component evidence, not installed frame time or an overall CPU gain.
+Registry, receipt-frontier and compaction-journal acquisition remain actual costs.

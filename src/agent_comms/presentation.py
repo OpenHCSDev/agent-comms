@@ -108,7 +108,7 @@ class MessageNotification:
 
     @classmethod
     def delivery_window(cls, root: Path, registry: Registration,
-                        sources: Sequence[CommittedDelivery]):
+                        sources: Sequence[CommittedDelivery], *, owner_lookup: str | None = None):
         """Project the original frozen audience even before handling is recorded."""
         from .agent_activity import AgentActivity
 
@@ -116,10 +116,19 @@ class MessageNotification:
             return {}
         snapshot = registry.snapshot()
         observations = AgentActivity(root, registry).observe_recipients(
-            (recipient for source in sources for recipient in source.audience.recipients),
+            (recipient for source in sources for recipient in source.audience.recipients
+             if cls.includes_recipient(source, recipient, owner_lookup)),
             snapshot=snapshot,
         )
-        return cls.project_delivery_window(root, snapshot, sources, observations)
+        return cls.project_delivery_window(root, snapshot, sources, observations,
+                                           owner_lookup=owner_lookup)
+
+    @staticmethod
+    def includes_recipient(source: CommittedDelivery, recipient: FrozenRecipient,
+                           owner_lookup: str | None) -> bool:
+        """A sender sees all outcomes; a recipient sees only its original outcome."""
+        return (owner_lookup is None or source.audience.sender_lookup == owner_lookup
+                or recipient.recipient_lookup == owner_lookup)
 
     @classmethod
     def recorded_delivery_window(cls, root: Path, namespace: RegistryProvenance,
@@ -136,6 +145,7 @@ class MessageNotification:
     def project_delivery_window(
         cls, root: Path, snapshot: RegistryProvenance,
         sources: Sequence[CommittedDelivery], observations: Mapping[str, RecipientActivity],
+        *, owner_lookup: str | None = None,
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Original assignment and read authorities own both display projections."""
         from .notification_assignment import NotificationAssignment
@@ -155,6 +165,8 @@ class MessageNotification:
         for source, outcomes in NotificationAssignment.for_deliveries(sources, rows):
             key = (source.message.seq, source.message.message_id)
             for outcome in outcomes:
+                if not cls.includes_recipient(source, outcome.recipient, owner_lookup):
+                    continue
                 observation = observations[outcome.recipient.recipient_lookup]
                 notification = observation.after_inbox_read(
                     outcome.project(observation), source, reads, document, snapshot
@@ -193,14 +205,12 @@ class MessageNotification:
         """Project outcomes from the caller's original certified source window."""
         from .bus_publication import stable_thread_lookup
 
-        lookup = stable_thread_lookup(owner.created_at)
-        projected = cls.delivery_window(root, registry, sources)
+        projected = cls.delivery_window(root, registry, sources,
+                                        owner_lookup=stable_thread_lookup(owner.created_at))
         return tuple(
             replace(notification, message=source.message)
             for source in sources
             for notification in projected[source.message.seq, source.message.message_id]
-            if source.audience.sender_lookup == lookup
-            or notification.recipient_identity.recipient_lookup == lookup
         )
 
 
