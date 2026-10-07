@@ -80,15 +80,21 @@ match the selected Git/wheels. The final standalone channel resource correction
 passed its two affected original controls; human reader/publisher bytes match
 the physically exercised build. Publication is retained in
 `.artifacts/sidebar-live-candidate-20261006/client-hotpath-final-wheel/publication.json`.
-The first post-publication saved-history check completed with its original
-source owner unchanged and cleanup reporting no remaining owned processes or
-errors. Native module readback showed that inherited PATH selected the prior
-candidate rather than the newly published default; it cannot establish the
-final default's live behavior. That original recording is preserved at
-`/home/ts/.cache/agent-scratch/channel-client-default-live-20261006`.
-The corrected default-entrypoint check puts the actual default directory first
-and is recorded separately. Neither capture is a smooth-scrolling or frame-time
-improvement claim.
+Both post-publication saved-history checks completed with the original source
+owner unchanged and no remaining owned processes or cleanup errors. Native
+module readback exposed my packaging mistake: copying the environment retained
+the Toad interpreter trampoline. Putting the default directory first did not
+fix it; the second recording disproved my initial PATH explanation. Both
+recordings remain held as `channel-client-default-live-20261006` and
+`channel-client-default-live02-20261006` under agent scratch.
+
+The existing publisher now selects the exact physically exercised
+`runtime-channel-hotpath` build (Core4cd81e96/Toadb1560a21), whose launcher names
+its own interpreter. That recovery publication is retained in
+`.artifacts/sidebar-live-candidate-20261006/client-hotpath-wheel/publication.json`.
+The additional standalone-channel refinement stays in the branch for corrected
+packaging; no PUBLIC prefix was edited in place. Neither capture establishes
+smooth scrolling or improved whole-frame latency.
 
 The actual submit stack exposes a larger synchronous obstruction before the
 send worker starts: `CommsChatView.submit_input` disables its focused editor;
