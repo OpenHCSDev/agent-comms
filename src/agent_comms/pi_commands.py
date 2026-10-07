@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
 from uuid import uuid4
 
 from .turn_phase import ShutdownPhase
@@ -167,9 +167,25 @@ class Prompt(PiCommand):
     context_contributions: tuple[InputContributionCoordinates, ...] = field(
         default=(), metadata={"wire_omit_default": True, "wire_name": "contextContributions"}
     )
-    streaming_behavior: str | None = field(
+    streaming_behavior: Literal[None, "steer", "followUp"] = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "streamingBehavior"}
     )
+
+    @classmethod
+    def matches_recorded_digest(cls, text: str, digest: str | None) -> bool:
+        """Corroborate a plain-text start against its original request envelope.
+
+        The native digest includes queue behavior; a STARTED row stores the exact
+        sent text and input ID, not another copy of the command. Its digest must
+        match one declared prompt request, including that behavior. This does
+        not accept changed text, images or a different request configuration.
+        """
+        from .private_sidecar import native_request_digest
+
+        return any(
+            digest == native_request_digest(text, streaming_behavior=behavior)
+            for behavior in get_args(FieldCodec._types(cls)["streaming_behavior"])
+        )
 
     def to_rpc(self):
         data = super().to_rpc()
