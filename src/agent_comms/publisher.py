@@ -421,7 +421,7 @@ class Publisher:
                 # availability until explicit operator reconciliation exists.
                 expected_sequence = 1
                 duplicate = False
-                for previous in source.public_messages():
+                for previous_sender, previous in source.public_message_references():
                     if previous.seq != expected_sequence:
                         raise HumanAdmissionBlockedError(
                             "Private bus sequence gap has UNKNOWN outcome; "
@@ -429,7 +429,7 @@ class Publisher:
                         )
                     expected_sequence += 1
                     duplicate |= (
-                        previous.sender == sender and previous.message_id == stored.message_id
+                        previous_sender == sender and previous.message_id == stored.message_id
                     )
                 if metadata.last_seq != expected_sequence - 1:
                     raise HumanAdmissionBlockedError(
