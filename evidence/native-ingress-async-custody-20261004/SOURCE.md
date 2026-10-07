@@ -54,3 +54,44 @@ and controller identities/groups absent at joined terminal; Bohr independently
 closed whole540 purpose with 253 all-UID processes/zero borrowers/zero gaps.
 Immutable086 read/execution returned. No timing or public-channel claim.
 Normal merge #638 then #640 then fixture #633; parent owns publication.
+
+## Correlated native preflight, 2026-10-07
+
+Original live failure diagnostic:
+/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/cc5fd116d4b74b50811b4fa8d0533d5c.json.
+It attests NotSent during native preparation, records the original get_state
+command and empty stderr, but does not retain the unexpected event. Its exact
+type cannot be reconstructed. Neither that input nor the manual resend is run
+again by this change.
+
+The concrete source defect is requiring the next channel event to be the state
+reply. Selected immutable Pi rpc-mode.js produces unsolicited extension UI
+notifications/status/error events and binds extensions before serving commands.
+NativeQuery.exchange already correlates multiplexed replies via PendingRequests.
+Both streaming and tracked preflight instead assumed the next event matched.
+
+PiEvent/Response now own the nominal command/id response relation, also consumed
+by require_request. PendingAttestation changes state only for its own matching
+successful response, with the unchanged capability/payload/expected-session
+checks. Its generic observe no longer independently grants attestation from an
+unrelated GetState reply. Streaming and tracked consumers continue ordinary
+event processing until this response. AgentSettled owns the shared distinction
+that prior completion while attestation is pending cannot settle this new turn;
+both event consumers use it. The watchdog keeps the original absolute startup
+deadline ahead of optional stats waiting. No timeout is raised or renewed.
+The current installed initialization pilot uses existing NativeQuery.exchange
+instead of assuming its next receive is the reply. Frozen evidence is unchanged.
+Native custody compaction reattestation/catalog discovery already use exchange
+and need no alternate receiver. No message_bus.py/turn_context.py edit.
+
+Complete source traversal parsed/compiled 759 src/tests/tools modules without
+imports or omissions; dynamic external consumers remain unresolved. Nine
+focused checks passed: pending promotion, unsolicited status/old settlement and
+foreign response followed by exact reply, plus original wrong-ID/EOF/invalid
+data, missing capability and no matching preflight-before-user-start refusals.
+These are existing authored subprocess protocol controls, not native SDK/live
+qualification. The positive fixture initially lacked the required assistant
+content array, reached that later strict decoder and failed; only its fixture
+was corrected and that check rerun. Eight other passed checks were not repeated.
+No public start/stop/restart, SDK/provider operation or failed-input replay.
+Parent must integrate/build/deliver before claiming the live failure is repaired.

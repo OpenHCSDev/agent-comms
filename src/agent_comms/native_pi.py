@@ -481,6 +481,29 @@ class NativePiRpcLaunch:
         return package
 
     @classmethod
+    def catalog(
+        cls, command: str, arguments: tuple[str, ...], *, worktree: Path,
+    ) -> NativePiRpcLaunch:
+        """Metadata-only RPC owns an in-memory session, never a saved selection.
+
+        Validate the configured arguments as managed RPC first. Only this
+        launch owner supplies the native no-persistence choice; callers cannot
+        replace a managed participant's selected source through CLI options.
+        """
+        from .selected_session import SelectedSession
+
+        try:
+            arguments = NativeArguments.parse(arguments).rpc()
+        except ValueError as error:
+            raise NativePiUnavailable(str(error)) from error
+        package = cls.package_for_command(command)
+        cwd = worktree.resolve(strict=True)
+        if not cwd.is_dir():
+            raise NativePiUnavailable("Native Pi worktree is unavailable")
+        return cls._managed(package, (*arguments, "--no-extensions", "--no-skills",
+            "--no-context-files", "--no-session"), cwd, None, SelectedSession(cwd))
+
+    @classmethod
     def managed(
         cls,
         command: str,
