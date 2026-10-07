@@ -141,3 +141,53 @@ worktree writes enumerated, no parse omissions. Dynamic external writers remain
 unresolved; registry/process/source fences remain authoritative. No SDK, live
 attach, restart, provider input, build, publication or failed-input replay.
 Parent carries coherent installed delivery and affected live verification.
+
+### Actual private native/ACP project transition
+
+Migrated the existing test_native_project_observation control from /bin/echo to
+NativeBackendFixture, its original validated Pi launcher, private SDK journal,
+RuntimeServer and LoopbackProvider. The real provider request invokes the
+original set_project operation while the first lease is executing. The original
+wake owner consumes the successful turn's queued continuation under a distinct
+lease in the new project. No fabricated native events or terminal results.
+The committed 4b fetch-origin policy is bound to the fixture's actual localhost
+origin; proxy variables are removed. No guard qualification was repeated.
+
+The first attempt opened its native child but exposed a second stale test API:
+TurnRunner.native_environment no longer exists. Thread already owns that method;
+the sole stale test caller now uses it. The attempt made zero provider calls and
+retired its child; all raw data remains in /home/ts/.cache/agent-scratch/mpj01.
+
+The changed helper ran once in /home/ts/.cache/agent-scratch/mpj02. Both real
+localhost requests and committed assistant replies completed. Assertions reached
+and passed: first ACP prompt ended normally, original scheduled continuation
+joined, project mutation occurred once under the first executing lease, second
+lease used the new directory, two USER entries used the same SDK journal,
+continuation text was original, session identity stayed unchanged, final project
+was current, no active lease remained, and only one thread existed. The helper
+then incorrectly asserted two context rows. NativeContextRecord's declared key
+is (input_id, request_generation), so these two inputs correctly produced three
+context observations. The assertion now checks two distinct input IDs. The
+original retained journal/proof was checked through the existing evidence reader:
+two completed assistant replies, two distinct input IDs and the original project
+continuation. See mpj02/retained-result.json and check.log. Native inputs were not
+repeated just to make the helper green.
+
+The pytest terminal remains FAIL at that helper assertion, not a native failure.
+Later socket stale-generation/process/foreign-name assertions were not reached;
+the native transition result does not claim them. Recorded child retired and is
+absent; canonical owner shutdown joined and released its backends. Previous raw
+failures/UNKNOWN input are untouched. All 759 modules parse/compile, no omissions.
+
+Execution used system pytest with source src/tests ahead of read-only retained
+runtime dependency paths; this qualifies source with real native/ACP behavior,
+not an installed successor wheel. Parent still owns build/publication. No installed
+package mutation, backend restart, public participant/input, paid request or new
+native assembly. The two authored completed native inputs and raw keepers remain
+held under the persistent mpj02 root.
+
+### Installed backend and default delivery
+
+The built integrated2072058 backend was checked through the corrected original native/ACP control using installed modules, fresh private SDK journal and two localhost requests. All assertions passed, including original project continuation and stale generation/process/foreign-name refusal; native child retired. Raw: /home/ts/.cache/agent-scratch/installed-project-turn-20261007/check-prepared-root.{stdout,stderr}.log, private journal retained under /home/ts/.cache/agent-scratch/mpj03. Earlier pytest-plugin refusal and overlong socket-root refusal occurred before input and remain held. The short root first needed its parent prepared before fixture creation; no native operation occurred in that setup refusal.
+
+All954 assets/full69 distribution versions and2857 RECORD rows matched. The original ReviewedCommsBackendCohort publisher changed future backend defaults to .artifacts/project-turn-delivery-20261007/runtime; the current frontend/native route and existing running owners were preserved. This is installed/default-delivered, not proof that existing agents loaded the successor. Original user UNKNOWN input and blocked goal were not replayed or resumed.
