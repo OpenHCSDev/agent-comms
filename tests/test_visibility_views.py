@@ -6,6 +6,42 @@ from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
 
 
+def test_channel_archive_hides_rows_without_retiring_open_members_or_history(tmp_path):
+    from agent_comms.cli_commands import ArchiveChannelCliCommand, RestoreChannelCliCommand
+
+    comms = wire(tmp_path)
+    comms.messaging.initialize_private_initial_protocol()
+    comms.registry.declare(Thread('member', frozenset({'team', 'other'}), str(tmp_path)))
+    comms.registry.declare(Thread('sender', frozenset({'other'}), str(tmp_path)))
+    comms.messaging.send('sender', '#team', 'original history')
+    registry = comms.registry.snapshot()
+    original_wire = comms.bus.log.path.read_bytes()
+    archived = ArchiveChannelCliCommand.execute_target(comms, '#team', {}, confirmed=True)
+    assert archived.name == '#team' and archived.archived
+    assert comms.registry.snapshot() == registry
+    assert comms.bus.log.path.read_bytes() == original_wire
+    assert comms.channels.catalog.read().resolve('#team') == archived
+    assert '#team' in comms.channels.channels()
+    current = comms.views.viewer_snapshot(str(tmp_path))
+    assert '#team' not in {view.channel.name for view in current.visible_channels}
+    assert '#team' in {view.channel.name for view in current.channels}
+    assert {view.thread.name for view in current.threads} == {'member', 'sender'}
+    assert next(view for view in current.channels if view.channel.name == '#team').members == ('member',)
+    assert 'member' in {candidate.name for candidate in current.mention_candidates('#team')}
+    visible = comms.views.viewer_snapshot(str(tmp_path), show_archived=True)
+    selected = next(view for view in visible.visible_channels if view.channel.name == '#team')
+    assert selected.channel.archived and selected.members == ('member',)
+    assert RestoreChannelCliCommand.bindings(comms, '#team')
+    assert not ArchiveChannelCliCommand.bindings(comms, '#team')
+    comms.messaging.send('sender', '#team', 'still routable')
+    assert [message.body for message in comms.bus.inbox('member')] == ['original history', 'still routable']
+    before_restore = comms.registry.snapshot()
+    restored = RestoreChannelCliCommand.execute_target(comms, '#team', {})
+    assert not restored.archived
+    assert '#team' in {view.channel.name for view in comms.views.viewer_snapshot(str(tmp_path)).visible_channels}
+    assert comms.registry.snapshot() == before_restore
+
+
 def test_stopped_and_archived_are_explicit_view_filters(tmp_path):
     comms = wire(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
