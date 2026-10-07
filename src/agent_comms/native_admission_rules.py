@@ -30,13 +30,19 @@ class RegistryIdentityCheck(RuleCheck):
     def worktree_matches(self) -> bool:
         return self.actual.worktree == self.expected.worktree
 
+    def model_matches(self) -> bool:
+        return self.actual.model == self.expected.model
+
+    def thinking_matches(self) -> bool:
+        return self.actual.thinking_level == self.expected.thinking_level
+
 
 class RegistryAdmissionCheck(RegistryIdentityCheck):
     """A send also requires the captured active turn to remain unchanged."""
 
 
 class RegistryPublicationCheck(RegistryAdmissionCheck):
-    """Publish this turn's observations after a declared next-project change.
+    """Publish this admitted source after next-turn project/settings changes.
 
     This grants no input admission. The same lease/process/source must remain;
     the captured executing directory must still belong to this conversation.
@@ -44,6 +50,13 @@ class RegistryPublicationCheck(RegistryAdmissionCheck):
 
     def worktree_matches(self) -> bool:
         return self.actual.contains_worktree(self.expected.worktree)
+
+    def model_matches(self) -> bool:
+        # Source publication selects no model and admits no new input.
+        return True
+
+    def thinking_matches(self) -> bool:
+        return True
 
 
 class GoalRegistryIdentityCheck(RegistryIdentityCheck):
@@ -102,7 +115,7 @@ class RegistryModelRule(ReservationRule):
     explanation = "The captured owner's selected model changed."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
-        return check.actual.model != check.expected.model
+        return not check.model_matches()
 
 
 class RegistryThinkingRule(ReservationRule):
@@ -110,7 +123,7 @@ class RegistryThinkingRule(ReservationRule):
     explanation = "The captured owner's thinking level changed."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
-        return check.actual.thinking_level != check.expected.thinking_level
+        return not check.thinking_matches()
 
 
 class RegistrySessionRule(ReservationRule):

@@ -170,8 +170,6 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
         await emit(session, event, **kwargs)
 
     monkeypatch.setattr(runner.effects, "_emit_event", observe)
-    model = runner.sessions.config.setting_requests.add(ae.ModelChanged, "same")
-    thinking = runner.sessions.config.setting_requests.add(ae.ThinkingChanged, "same")
     value = case()
     await progress.consume(ae.InputStarted(None))
     for event in value.body():
@@ -220,12 +218,7 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
     assert comms.registry.require("waiting").goal.state.active
     assert observed.index(ae.StreamSettled) < observed.index(ae.Done)
     if issubclass(case, SettingsCase):
-        assert await model is None
-        with pytest.raises(RuntimeError, match="level unavailable"):
-            await thinking
-    else:
-        model.cancel()
-        thinking.cancel()
+        assert ae.ModelChanged in observed and ae.ThinkingChanged in observed
 
 
 @pytest.mark.parametrize("after_stream", [False, True])

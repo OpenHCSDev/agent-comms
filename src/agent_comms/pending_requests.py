@@ -4,13 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from .sealed import Sealed
-
-if TYPE_CHECKING:
-    from .agent_events import SettingChangeResult
-
 
 @dataclass
 class PendingRequest:
@@ -36,18 +32,6 @@ class PendingRequests(Sealed):
 
     def discard(self, result_type: type, request_id: str) -> None:
         self._pending.pop((result_type, request_id), None)
-
-    def resolve(self, result: SettingChangeResult) -> None:
-        for owner in type(result).__mro__:
-            pending = self._pending.get((owner, result.id))
-            if pending is not None:
-                future = pending.future
-                if not future.done():
-                    if result.ok:
-                        future.set_result(None)
-                    else:
-                        future.set_exception(RuntimeError(str(result.error)))
-                return
 
     def take(self, result_type: type, request_id: str, value: Any) -> Any:
         """Resolve a transport result and return its originating command, once."""

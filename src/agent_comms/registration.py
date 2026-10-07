@@ -60,9 +60,11 @@ class Registration:
         with _store_lock(self.store.path.parent / "wire", shared=True), self.store.editing() as edit:
             change = edit.document.prepare_native_source(original, session_file)
             self._commit_registration(edit, change)
-            # The document owns the next project. This admitted operation keeps
-            # its executing project until end-turn continuation consumes it.
-            observed = replace(change.installed_thread, worktree=original.thread.worktree)
+            # The document owns the next turn's selection. Publishing an
+            # observed source must not rewrite this admitted turn's settings.
+            observed = replace(change.installed_thread,
+                worktree=original.thread.worktree, model=original.thread.model,
+                thinking_level=original.thread.thinking_level)
             return replace(original, thread=observed)
 
     def selected_native_fork(self, original: RegistryOwner, creation: NativeForkCreation, *,

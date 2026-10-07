@@ -211,10 +211,6 @@ class TurnProgress(events.AgentEventConsumer):
             ), self.thread.pid),
         )
 
-    @handles(events.SettingChangeResult)
-    async def setting_result(self, event: events.SettingChangeResult) -> None:
-        self.sessions.config.setting_requests.resolve(event)
-
     async def before_agent_info(self, event: events.AgentInfo) -> None:
         session_file = event.session_file
         if session_file:

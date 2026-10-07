@@ -96,6 +96,18 @@ class PiCommand(DeclaredFamily):
         await session.stdin.drain()
         return True
 
+    @asynccontextmanager
+    async def pending_response(self, channel, writer):
+        command = replace(self, id=self.id or uuid4().hex)
+        future = channel.track(command)
+        try:
+            writer.write(channel.command_bytes(command))
+            await writer.drain()
+            yield future
+        finally:
+            channel.pending.discard(type(command), command.id)
+            future.cancel()
+
     def to_rpc(self) -> dict[str, Any]:
         data = FieldCodec.encode(self)
         data["type"] = data.pop("kind")
@@ -212,18 +224,6 @@ class NativeQuery(PiCommand):
     @property
     @abstractmethod
     def response_payload(self) -> type[PiResponseData]: ...
-
-    @asynccontextmanager
-    async def pending_response(self, channel, writer):
-        command = replace(self, id=self.id or uuid4().hex)
-        future = channel.track(command)
-        try:
-            writer.write(channel.command_bytes(command))
-            await writer.drain()
-            yield future
-        finally:
-            channel.pending.discard(type(command), command.id)
-            future.cancel()
 
     async def exchange(
         self, channel: PiRpcChannel, writer: asyncio.StreamWriter, *,
