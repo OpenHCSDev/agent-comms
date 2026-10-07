@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from collections.abc import Sequence
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -325,15 +325,25 @@ class Publisher:
         classification = ControlClassification(control)
         if not classification.supports_initial:
             raise RelationViolationError("System-control initial issuer is not available.")
-        with nullcontext(_bus_lock) if _bus_lock is not None else self.log.locked() as bus_lock:
+        with (
+            (nullcontext(_bus_lock) if _bus_lock is not None else self.log.locked()) as bus_lock,
+            ExitStack() as resources,
+        ):
             _require_no_private_owner_rename(self.log.path.parent)
             metadata = self.log._private_marker_unlocked()
             metadata.access.require_append()
-            from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+            from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
-            previous_sequence = verify_private_bus_checkpoint_unlocked(
-                self.log, metadata
-            ).through_seq
+            # Fresh initialization occurs after lock acquisition and has no
+            # acquired source. Existing roots already borrowed this exact cut
+            # from the lock's durability owner; keep using it until append.
+            source = bus_lock.source
+            if source is None:
+                source = resources.enter_context(
+                    opened_private_checkpoint_unlocked(self.log, metadata)
+                )
+            source.require_marker(metadata)
+            previous_sequence = source.committed_sequence()
             if metadata.last_seq >= MAX_WIRE_SEQ:
                 raise RelationViolationError("Private bus sequence is exhausted.")
             source_paths = (
@@ -398,7 +408,7 @@ class Publisher:
                 target=target,
                 sequence=max(metadata.last_seq, previous_sequence) + 1,
                 snapshot=snapshot,
-                original_source=bus_lock.source,
+                original_source=source,
             )
             if _human_origin is not None:
                 # The marker reserves a sequence before the row. A crash after
@@ -409,19 +419,16 @@ class Publisher:
                 # availability until explicit operator reconciliation exists.
                 expected_sequence = 1
                 duplicate = False
-                from .private_bus_checkpoint import opened_private_checkpoint_unlocked
-
-                with opened_private_checkpoint_unlocked(self.log, metadata) as source:
-                    for previous in source.public_messages():
-                        if previous.seq != expected_sequence:
-                            raise HumanAdmissionBlockedError(
-                                "Private bus sequence gap has UNKNOWN outcome; "
-                                "human send blocked, do not retry."
-                            )
-                        expected_sequence += 1
-                        duplicate |= (
-                            previous.sender == sender and previous.message_id == stored.message_id
+                for previous in source.public_messages():
+                    if previous.seq != expected_sequence:
+                        raise HumanAdmissionBlockedError(
+                            "Private bus sequence gap has UNKNOWN outcome; "
+                            "human send blocked, do not retry."
                         )
+                    expected_sequence += 1
+                    duplicate |= (
+                        previous.sender == sender and previous.message_id == stored.message_id
+                    )
                 if metadata.last_seq != expected_sequence - 1:
                     raise HumanAdmissionBlockedError(
                         "Private bus sequence reservation has UNKNOWN outcome; "
