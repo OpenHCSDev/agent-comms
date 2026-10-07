@@ -639,3 +639,11 @@ The close phase includes diagnostic exports and a deliberate settling wait; its
 interval. This proves the affected close/return behavior, not fast physical
 response or burst activity. No message, provider request, source change or extra
 publication occurred.
+
+Parent also reviewed16 consecutive film samples at10Hz over21.25–22.85 video
+seconds (`close-motion.png`). The recorded gesture began at21.76684s and ended
+at21.88085s; the original tab content is present by the21.95s sample. This bounds
+visible return to approximately0.2s after gesture start at100ms sampling granularity
+for this run. Video/sample alignment and terminal rendering limit precision;
+it is neither an exact handler duration nor a universal close latency. Original
+native frames continued through the gesture; no capture/App repeat was performed.
