@@ -156,3 +156,12 @@ and tree changes. All runtime module readbacks select the combined interpreter
 and packages. The original source agent stayed alive and unchanged. This
 useful client successor is published through the existing atomic link owner;
 backend processes and route remain unchanged.
+
+Default-entrypoint confirmation completed at
+`/home/ts/.cache/agent-scratch/channel-send-focus-default-live-20261006`:
+the observed interpreter and modules select the combined client, saved history
+and the existing scroll journey completed, App and terminal exited normally,
+cleanup has no remaining owned processes/errors, and the original saved source
+owner remains unchanged. This confirms installed/default selection and working
+affected interaction; it does not establish smooth scrolling at all scales.
+Core702 is merged; native83/84 and Toad507 are merged.
