@@ -39,6 +39,16 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
         assert comms.owners.start("worker").pid == owner.pid
         assert owner.pid != os.getpid()
         assert owner.process_identity is not None
+        from agent_comms.coordination_errors import PublicationActivationBlocked
+        from agent_comms.owner_cutover import StoppedOwnerInstallation
+
+        unpinned = Comms(tmp_path)
+        before = comms.registry.snapshot()
+        with pytest.raises(PublicationActivationBlocked, match="explicit matching root and package"):
+            unpinned.owners.restart_owners(["worker"], agent_bin="pi", agent_args=[])
+        assert owner.process_alive
+        assert comms.registry.snapshot() == before
+        assert "worker" not in comms.owners.releases.read()
         restarted = comms.owners.restart_owners(
             ["worker"], agent_bin="pi", agent_args=[]
         )
@@ -48,6 +58,26 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
         assert replacement.process_identity != owner.process_identity
         assert replacement.created_at == declared.created_at
         assert replacement.task == declared.task
+
+        class BindInstalledLaunch(StoppedOwnerInstallation):
+            """The target pin belongs to the completed installation."""
+
+            def require_selection(self, snapshot, owners):
+                assert [thread.name for thread in owners] == ["worker"]
+
+            def after_stopped(self, lifecycle):
+                assert not replacement.process_alive
+
+            def bind_target_launch(self, lifecycle):
+                lifecycle.pin_private_nk_launch(tmp_path, root_id, package)
+
+        (installed,) = unpinned.owners.restart_owners(
+            ["worker"], agent_bin="pi", agent_args=[], cutover=BindInstalledLaunch()
+        )
+        assert installed.previous_pid == replacement.pid
+        assert not replacement.process_alive
+        replacement = comms.registry.require("worker")
+        assert replacement.process_alive and replacement.pid == installed.pid
         comms.owners.stop("worker")
         assert not replacement.process_alive
         assert comms.registry.status("worker").stopped

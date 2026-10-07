@@ -226,3 +226,39 @@ Raw output and final owner release are retained at
 `/home/ts/.cache/agent-scratch/mir01/check.log` and `result.json`.
 Parent owns live reload; this private result does not update existing public
 workers or authorize replay of their uncertain inputs.
+
+## Restart launch refusal before retirement — 2026-10-07
+
+Parent's live reload exposed deterministic missing private launch authority only
+after the original process had stopped. PreserveOwnerRuntime installs nothing;
+its target authority must already exist. Installation cutovers have a different
+contract: bind_target_launch supplies their target after conversion/installation.
+
+OwnerLifecycle.require_launch_authority now owns the original private-marker/pin
+refusal and PrivateNkLaunch validation, extracted from _launch_owner_unlocked.
+Actual launch still calls that same check before process reservation. OwnerCutover
+declares pre-retirement launch admission; preserving members require the existing
+authority and installation members retain their existing later target binding.
+AdmittedOwnerBatch asks its operation before registry fencing or any signal.
+An empty selection remains a no-op. No duplicate pin state, format, environment
+decoder, recovery algorithm or concrete-type dispatch was added.
+
+The original real private owner control passed once in 6.87 seconds. A distinct
+unpinned Comms instance refused preserving restart while the original process
+remained alive, the entire registry snapshot stayed equal and no release receipt
+appeared. The original pinned restart then passed. The same control exercised an
+unpinned StoppedOwnerInstallation whose genuine post-stop bind_target_launch pins
+the target; it launched normally, and final original stop retired the replacement.
+No provider/native input/public operation/build/install occurred. This is source
+with real original worker processes, not installed delivery of the correction.
+
+Existing refactor-audit Package parsed all 759 src/tests/tools modules with zero
+omissions; 313 before/after related declaration/attribute/call sites were retained.
+Complete production installation consumers include retained-index, retained-task
+carry, extension activation, recovery publication, retained-summary publication
+and cross-runtime thread retirement. Their distinct post-stop binding/transfer
+contracts remain unchanged. External dynamic members are not proven absent.
+Source compile and diffcheck passed. Raw check and source trace:
+`/home/ts/.cache/agent-scratch/mendel-restart-admission-20261007/check.log`
+and `source-family.json`. Parent owns integration/delivery; no old uncertain input
+or completed public restart was repeated.
