@@ -362,6 +362,34 @@ class ReviewedRetainedSummaryCohort:
 
 
 @dataclass(frozen=True)
+class ReviewedBackendCohort(ReviewedRetainedSummaryCohort, DeclaredFamily, affix='BackendCohort'):
+    """Stopped backend publication preserves the independently published UI."""
+
+    frontend_prefix: Annotated[Path, PathText]
+
+    @property
+    @abstractmethod
+    def commands(self) -> tuple[str, ...]: ...
+
+    def require_publication_originals(self):
+        super().require_publication_originals()
+        self.require_frontend_original()
+
+    def require_frontend_original(self):
+        if (LINKS / 'toad').readlink() != self.frontend_prefix / 'bin/toad':
+            raise RuntimeError('Original frontend default changed; remain stopped')
+
+    def publish(self, directory: int, links_directory: int | None = None):
+        super().publish(directory, links_directory)
+        self.require_frontend_original()
+
+
+@dataclass(frozen=True)
+class ReviewedCommsBackendCohort(ReviewedBackendCohort):
+    commands: ClassVar[tuple[str, ...]] = tuple(command for command in COMMANDS if command != 'toad')
+
+
+@dataclass(frozen=True)
 class ReviewedFrontendCohort(ReviewedRetainedSummaryCohort, DeclaredFamily, affix='FrontendCohort'):
     """Publish reviewed client supply; existing backend owners keep their installation."""
 
@@ -483,7 +511,7 @@ class ReviewedCommsFrontendCohort(ReviewedFrontendCohort):
 
 @dataclass(frozen=True)
 class PublishRetainedSummary(StoppedOwnerInstallation):
-    cohort: ReviewedRetainedSummaryCohort
+    cohort: ReviewedRetainedSummaryCohort | ReviewedBackendCohort
     audience: tuple[OwnerRestartSelection, ...]
     originals: tuple[Thread, ...]
     task_carry: StoppedOwnerInstallation
@@ -644,7 +672,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
                                        self.cohort.native)
 
 
-def publish(cohort: ReviewedRetainedSummaryCohort, task_carry: StoppedOwnerInstallation,
+def publish(cohort: ReviewedRetainedSummaryCohort | ReviewedBackendCohort, task_carry: StoppedOwnerInstallation,
             runtime_installation: RuntimeInstallation, receipt: Path):
     """Parent-only EXECUTION entry, with the reviewed affected journey gates and carry.
 
