@@ -17,7 +17,7 @@ from .native_pi import NativeContextProof
 from .native_runtime_input import NativeRuntimeInput
 from .native_session_reopen import NativeSessionIdentity
 from .pi_payloads import TextContent
-from .private_sidecar import native_request_digest
+from .pi_commands import Prompt
 from .private_path import PrivateFileRole
 from .selected_source import SelectedSource, SessionRevision
 
@@ -87,7 +87,7 @@ def verify_continued_private_session(
                 text = started_row.sent_text
                 if message.content != (
                     TextContent(text),
-                ) or message.input_digest != native_request_digest(text):
+                ) or not Prompt.matches_recorded_digest(text, message.input_digest):
                     raise ValueError("Continued private user differs from recorded native start")
             elif native_id not in recorded and native_id not in retained:
                 raise ValueError("Continued private user has no verified retained context")
