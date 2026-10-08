@@ -23,6 +23,38 @@ def manifest(owner, generation=1):
     return ContextManifest(owner.incarnation,RecordedContextTurn(TurnId('original-turn'),TurnIdentity(owner.incarnation,generation)),(segment,),'pi.estimateTokens')
 
 
+def test_awareness_inspection_waits_for_original_source_without_input_delay(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError
+    from threading import Event
+    from agent_comms.context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
+
+    comms, _ = _root(tmp_path)
+    comms.messaging.send_initial_cohort('sender', '#team', '@Alice original question')
+    owner = comms.registry.require('Alice')
+    original = comms.bus.awareness_segments(owner)
+    assert len(original) == 1 and isinstance(original[0], AwarenessSegment)
+    before = comms.bus.log.path.read_bytes()
+    entered = Event()
+
+    def read():
+        entered.set()
+        return comms.bus.awareness_segments(owner, blocking=True)
+
+    with ThreadPoolExecutor(max_workers=1) as worker:
+        with comms.bus.log.locked():
+            # Ordinary input still omits optional awareness immediately.
+            omitted = comms.bus.awareness_segments(owner)
+            assert len(omitted) == 1 and isinstance(omitted[0], UnavailableAwarenessSegment)
+            pending = worker.submit(read)
+            assert entered.wait(1)
+            with pytest.raises(TimeoutError):
+                pending.result(timeout=.05)
+        assert pending.result(timeout=2) == original
+    inspection = TurnContext.for_inspection(comms, owner)
+    assert original[0] in inspection.segments
+    assert comms.bus.log.path.read_bytes() == before
+
+
 def test_context_resources_revalidate_selected_bytes_without_redecoding(tmp_path, monkeypatch):
     from agent_comms.private_bus_checkpoint import ContextManifestSources
 

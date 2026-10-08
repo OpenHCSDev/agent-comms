@@ -18,6 +18,7 @@ from .field_codec import FieldCodec, TextRepresentation
 from .native_session_reopen import NativeSessionIdentity
 from .native_file_artifact import NativeFileArtifact
 from .pi_vocabulary import PiStopReason, ThinkingLevel, UnreportedStopReason
+from .transcript_events import SentTranscript
 
 
 def wire_field(name: str, default=None):
@@ -686,6 +687,7 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
                 tool_name=self.tool_name,
                 ok=not self.is_error,
                 diff=NativeTool.for_name(self.tool_name).result_diff(result, not self.is_error),
+                sent_message=result.sent_message(not self.is_error),
             )
         ]
         return events
@@ -1012,6 +1014,9 @@ class PiToolResult(PiPayload, DeclaredFamily, affix="ToolResult"):
     def artifacts(self, ok):
         return ()
 
+    def sent_message(self, ok):
+        return None
+
 
 class MissingToolResult(PiToolResult):
     """No native result was emitted; output and edit evidence are absent."""
@@ -1034,6 +1039,9 @@ class ProvidedToolResult(ToolDetailsPayload, PiToolResult):
 
     def artifacts(self, ok):
         return self.details.artifacts() if ok else ()
+
+    def sent_message(self, ok):
+        return self.details.sent_message() if ok else None
 
 
 @dataclass(frozen=True)
@@ -1088,6 +1096,25 @@ class NativeToolDetails(PiPayload, DeclaredFamily, affix="ToolDetails"):
 
     def artifacts(self):
         return ()
+
+    def sent_message(self):
+        return None
+
+
+@dataclass(frozen=True, kw_only=True)
+class PublishedMessageToolDetails(NativeToolDetails):
+    """The send owner supplies its original committed message, not a guessed receipt."""
+
+    strict_fields = True
+    id: str
+    message: SentTranscript
+
+    def __post_init__(self):
+        if self.id != self.message.source.message_id:
+            raise ValueError("Published tool result belongs to another message")
+
+    def sent_message(self):
+        return self.message
 
 
 class NoToolDetails(NativeToolDetails):

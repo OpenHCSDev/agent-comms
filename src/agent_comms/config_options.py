@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from abc import abstractmethod
 from functools import partial
@@ -23,6 +24,7 @@ from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
+from .native_pi import NativePiUnavailable
 from .owner_launch import RestartEnvironment
 from .pi_commands import (
     GetAvailableModels,
@@ -84,7 +86,12 @@ class CatalogConfigOption(ConfigOption):
                 self.auth = self.configuration.auth_revision()
             key = self.cache_key(thread)
             if key not in self.catalogs:
-                self.catalogs[key] = await self.discover(thread)
+                try:
+                    choices = await self.discover(thread)
+                except NativePiUnavailable as error:
+                    logging.getLogger(__name__).warning("%s catalog unavailable: %s", self.title, error)
+                    return []
+                self.catalogs[key] = choices
                 self.generation += 1
             return self.catalogs[key]
 

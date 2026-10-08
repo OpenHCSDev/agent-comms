@@ -37,7 +37,9 @@ async def run(root: Path, package: Path) -> dict:
     admission = NativeStartupAdmission(root)
     started = time.monotonic()
     await admission.acquire()
-    child = await PiSessionChild.start((launch, launch.configuration.auth_revision()), None)
+    child = await PiSessionChild.start(
+        (launch, launch.configuration.auth_revision()), launch.session.attestation(),
+    )
     spawned = time.monotonic()
     request = child.attestation.request
     receipt = {

@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
 from urllib.parse import quote
+
+if TYPE_CHECKING:
+    from .transcript_events import SentTranscript
+
+SENT_MESSAGE_MIME = "application/vnd.agent-comms.sent-message+json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,7 +20,8 @@ class ToolDiff:
     format: Literal["unified", "numbered"] = "unified"
 
 def tool_result_content(
-    tool_call_id: str, output: str, diff: ToolDiff | None = None
+    tool_call_id: str, output: str, diff: ToolDiff | None = None,
+    sent_message: SentTranscript | None = None,
 ) -> list[dict[str, Any]]:
     """Use ACP's embedded text resource for patches with original hunk positions.
 
@@ -24,6 +30,17 @@ def tool_result_content(
     omitted context. text/x-diff preserves the actual tool result for any client.
     """
     content: list[dict[str, Any]] = []
+    if sent_message is not None:
+        import json
+        from .field_codec import FieldCodec
+
+        return [{"type": "content", "content": {
+            "type": "resource", "resource": {
+                "uri": f"agent-comms:///messages/{sent_message.source.seq}/{quote(sent_message.source.message_id, safe='')}",
+                "mimeType": SENT_MESSAGE_MIME,
+                "text": json.dumps(FieldCodec.encode(sent_message)),
+            },
+        }}]
     if diff is not None:
         content.append(
             {

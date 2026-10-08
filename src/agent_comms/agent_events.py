@@ -22,6 +22,7 @@ from .tool_results import ToolDiff
 from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
+    from .transcript_events import SentTranscript
     from .pi_commands import PiCommand
     from .native_turn_context import NativeContextManifestData
     from .comms import Comms
@@ -151,6 +152,7 @@ class ToolEnd(ToolEvent):
     ok: bool
     output: str = ""
     diff: ToolDiff | None = None
+    sent_message: SentTranscript | None = None
 
 
 @dataclass(frozen=True)

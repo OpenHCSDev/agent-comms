@@ -940,7 +940,7 @@ class TurnContext:
         context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views())
         for segment in owner.context_goal_segments():
             context = context.prepend(segment)
-        for segment in comms.bus.awareness_segments(owner):
+        for segment in comms.bus.awareness_segments(owner, blocking=True):
             context = context.append(segment)
         return context
 
