@@ -1284,6 +1284,7 @@ class ContextCliCommand(CliCommand):
         from .native_turn_context import NativeContextData
         from .runtime import RuntimeConnection, socket_path
         from .turn_context import NextContextTurn, TurnContext
+        from acp.exceptions import RequestError
 
         owner = ctx.registry.require(self.thread)
         connection = RuntimeConnection(ctx, owner.name, socket_path(ctx.root, owner.require_process().pid))
@@ -1291,11 +1292,13 @@ class ContextCliCommand(CliCommand):
         async def inspect():
             try:
                 context = FieldCodec.decode(TurnContext, await connection.request("context_core"))
+                if context.thread != owner.incarnation:
+                    raise ValueError("Core context belongs to another owner incarnation")
                 try:
                     payload = await connection.request("context")
                     native = FieldCodec.decode(NativeContextData, payload).require_session_file(
                         owner.require_saved_session())
-                except Exception as error:
+                except (OSError, ValueError, RuntimeError, RequestError) as error:
                     return context, None, str(error)
                 return context, native, None
             finally:
@@ -1318,7 +1321,7 @@ class ContextCliCommand(CliCommand):
         try:
             counts = NativeTokenCounter(launch.native_package).measure(
                 tuple(segment.text() for segment in context.segments))
-        except Exception as error:
+        except (OSError, ValueError, RuntimeError) as error:
             return {**result, "native_error": str(error)}
         native_context = native.for_turn(owner, NextContextTurn())
         return {
