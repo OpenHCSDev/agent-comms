@@ -1283,31 +1283,46 @@ class ContextCliCommand(CliCommand):
         from .field_codec import FieldCodec
         from .native_turn_context import NativeContextData
         from .runtime import RuntimeConnection, socket_path
-        from .turn_context import NextContextTurn
+        from .turn_context import NextContextTurn, TurnContext
 
         owner = ctx.registry.require(self.thread)
-        launch = PrivateNkLaunch.from_environment(
-            ctx.root, ctx.owners.restart_environment(os.environ)
-        )
-        if launch is None:
-            raise ValueError("Context inspection requires this root's configured native package")
-        counter = NativeTokenCounter(launch.native_package)
         connection = RuntimeConnection(ctx, owner.name, socket_path(ctx.root, owner.require_process().pid))
 
-        async def inspect_native():
+        async def inspect():
             try:
-                payload = await connection.request("context")
-                return FieldCodec.decode(NativeContextData, payload).require_session_file(
-                    owner.require_saved_session()
-                )
+                context = FieldCodec.decode(TurnContext, await connection.request("context_core"))
+                try:
+                    payload = await connection.request("context")
+                    native = FieldCodec.decode(NativeContextData, payload).require_session_file(
+                        owner.require_saved_session())
+                except Exception as error:
+                    return context, None, str(error)
+                return context, native, None
             finally:
                 await connection.close()
 
-        native = asyncio.run(inspect_native())
-        context = native.contributor_context(owner, NextContextTurn())
-        counts = counter.measure(tuple(segment.text() for segment in context.segments))
+        context, native, native_error = asyncio.run(inspect())
+        result = {
+            "scope": "current-core-contributors; before future input",
+            "input_supplied": False,
+            "core_context": context,
+            "segments": [dict(kind=type(segment), provenance=segment.provenance,
+                              text=segment.text()) for segment in context.segments],
+        }
+        if native is None:
+            return {**result, "native_error": native_error}
+        launch = PrivateNkLaunch.from_environment(
+            ctx.root, ctx.owners.restart_environment(os.environ))
+        if launch is None:
+            return {**result, "native_error": "Context token inspection requires this root's configured native package"}
+        try:
+            counts = NativeTokenCounter(launch.native_package).measure(
+                tuple(segment.text() for segment in context.segments))
+        except Exception as error:
+            return {**result, "native_error": str(error)}
         native_context = native.for_turn(owner, NextContextTurn())
         return {
+            **result,
             "scope": "next-native-base-and-core-contributors; before future input and provider hooks",
             "input_supplied": False,
             "native_manifest": native_context.segments,

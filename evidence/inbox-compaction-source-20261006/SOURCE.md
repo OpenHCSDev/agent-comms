@@ -714,3 +714,43 @@ with Coordination('/var/tmp/agent-comms-live-20260927-wzjtqhza/coordination.sqli
 
 Expected relation: released_native_unknown, not current, not retryable. This is
 not NotSent or delivery success. Neither 780 nor 778 is replayed.
+
+### Independent current Core context inspection
+
+Current instructions/awareness are owned by TurnContext.for_inspection, not by
+the selected SDK preview. RuntimeRequest now declares two independent members:
+
+- ContextCoreRuntimeRequest / context_core(thread) returns FieldCodec TurnContext
+  from the actual current backend owner, without acquiring a native request.
+- ContextCoreSourceRuntimeRequest / context_core_source(thread, owner:
+  ThreadIncarnation, segment: int, manifest: SegmentManifest, source: Provenance)
+  reacquires current Core context. TurnContext requires the exact incarnation,
+  selected segment.manifest(0) and source membership before reading public text.
+  Changed wording, provenance, position or incarnation refuses. FileProvenance
+  also retains its original byte-digest check. Zero here is an unmeasured
+  comparison projection, not a token estimate or budget declaration.
+
+NativeContextData now contains only original SDK counter, identity and measured
+segments. contributors, with_current_contributors, contributor_context and
+inspection_segments are deleted with all Core consumers. Original context and
+context_source retain selected native session and PreviewProvenance checks.
+Recorded context/source/annotations and imported source owners are unchanged.
+The CLI acquires Core first through its backend socket; native preview or token
+inspection failure returns the Core observation plus the actual error. It does
+not fabricate native context or token estimates. Successful native inspection
+retains its existing measured output. Parent owns the matching Toad consumers.
+
+Complete HEAD/current AST consumer evidence:
+/home/ts/.cache/agent-scratch/mfc01/context-owner-consumers.json.
+324 production, 381 test and 54 tool modules parsed/compiled without omissions;
+removed coupling names have no remaining sites. Nine source checks passed in
+the first batch, including native preview currentness/refusals, recorded source
+membership and cold contributor decoding. The new real private socket check
+initially failed before entry because its existing fixture root argument was
+wrong; after correcting that call it passed in 1.14s. It reads Core and an
+authenticated source with no saved session and leaves persistent native
+backends empty. Logs: mfc01/context-source-check.log and context-socket-check.log.
+These source checks ran with the preexisting parked scalar optimization still
+present in field_codec.py; that file is neither changed by this work nor included
+in this commit. Exact paired installed/UI acceptance remains Parent's next step.
+No native SDK/provider, live input, recovery, restart or public mutation occurred.
