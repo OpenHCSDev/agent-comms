@@ -578,7 +578,7 @@ class ThreadView:
         ordinary = self._display_presentation()
         if self.status.active:
             ordinary = self.activity.readiness.presentation(ordinary, busy=self.activity.state.busy)
-        return replace(self.thread.execution.presentation(self.thread, self.status, ordinary),
+        return replace(self.thread.execution.presentation(self.thread, self.status, ordinary, self.binding),
                        binding=self.binding)
 
     def _display_presentation(self) -> ThreadPresentation:

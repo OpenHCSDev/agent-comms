@@ -452,9 +452,13 @@ def test_invalid_filters_and_reserved_channels(tmp_path):
 
 
 def test_thread_presentation_owns_lifecycle_precedence(tmp_path):
+    comms = setup_wire(tmp_path)
     thread = Thread("worker", frozenset(), str(tmp_path))
     working = Activity("worker", ActivityState.WORKING, "Running tests")
-    view = ThreadView(thread, RunningThreadStatus(), working, None, 0)
+    comms.registry.register(thread, RunningThreadStatus())
+    comms.agents.activity.emit(working)
+    view = ThreadView.capture(thread, comms.registry.snapshot(),
+                              comms.agents.activity_of("worker"), None, {})
     assert view.presentation.busy
     assert view.presentation.summary == "Working · Running tests"
     stopped = replace(view, status=StoppedThreadStatus())
