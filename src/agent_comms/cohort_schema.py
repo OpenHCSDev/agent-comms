@@ -288,6 +288,9 @@ class ClaimBatchMembers(CohortTable, TypedTable):
 
 @dataclass(frozen=True, kw_only=True)
 class CohortDeliveryReceipts(CohortTable, TypedTable):
+    # Delivery selection kind is distinct from this table's nominal identity.
+    family_discriminator = "row"
+
     wire_root_id: str = field(metadata={"sql": Column(primary_key=True)})
     wire_seq: int = field(metadata={"sql": Column(primary_key=True)})
     ordinal: int = field(metadata={"sql": Column(primary_key=True, check="ordinal >= 0")})
