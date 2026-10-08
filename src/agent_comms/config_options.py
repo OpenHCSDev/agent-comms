@@ -18,7 +18,6 @@ from acp.schema import (
 )
 
 from .pi_vocabulary import ThinkingLevel
-from . import backend
 from .comms import Comms
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily

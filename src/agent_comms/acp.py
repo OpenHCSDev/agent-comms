@@ -48,7 +48,6 @@ from agent_comms.coordinator import Coordination
 from agent_comms.native_source_cursor import NativeSourceCursor
 
 from . import agent_events as events
-from . import manual_compaction_bridge
 from .acp_extension import (
     CompactRequest,
     TextRouteUpdate,
@@ -59,7 +58,6 @@ from .bus_publication import stable_thread_lookup
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
 from .compaction_result import CompactionResult
-from .coordinated_runtime import SelectedExecution
 from .coordination_cohort import next_sealed_assignment
 from .field_codec import FieldCodec
 from .cursor_publication import CursorPublication
@@ -73,8 +71,6 @@ from .runtime import (
     RuntimeServer,
     socket_path,
 )
-from .selected_write_authority import AcpSelectedWriteAuthority
-from .selected_write_plan import SelectedWritePlans
 from .session_effects import SessionEffects
 from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from .threads import Thread
@@ -208,6 +204,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         return await AcpRequestConsumer(self, session_id, prompt).run(request)
 
     async def _compact_request(self, session_id: str, instructions: str | None) -> PromptResponse:
+        from . import manual_compaction_bridge
+
         # Idle owner bridge alone owns the lock and the one-POST budget.
         if session_id in self.sessions.proxies:
             result = FieldCodec.decode(
@@ -223,6 +221,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         return result.prompt_response()
 
     async def _selected_write_request(self, session_id: str, request) -> PromptResponse:
+        from .selected_write_plan import SelectedWritePlans
+
         owner = self.sessions.require(session_id)
         root_id = self._private_nk_marker()
         controller = self._runtime.controller.get()
@@ -371,6 +371,10 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         both must already belong to the same private root. A failing or
         uncertain native turn propagates and cannot be replayed by a drain.
         """
+        from .coordinated_runtime import SelectedExecution
+        from .selected_write_authority import AcpSelectedWriteAuthority
+        from .selected_write_plan import SelectedWritePlans
+
         package = self._private_nk_native_package
         if package is None or self._private_nk_wire_root_id != wire_root_id:
             raise PublicationActivationBlocked(

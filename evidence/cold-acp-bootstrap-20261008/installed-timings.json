@@ -1,0 +1,411 @@
+{
+  "rows": [
+    {
+      "t": 0.06955810904037207,
+      "name": "dependencies",
+      "toad": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/cold-acp-bootstrap-20261008/runtime/lib/python3.14/site-packages/toad/__init__.py",
+      "textual": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/cold-acp-bootstrap-20261008/runtime/lib/python3.14/site-packages/textual/__init__.py",
+      "thread": "agent-comms-ux",
+      "pid": 477574
+    },
+    {
+      "t": 0.08762669004499912,
+      "name": "app.open"
+    },
+    {
+      "t": 0.8073697621002793,
+      "name": "shell.ready",
+      "categories": [
+        "other",
+        "inbound",
+        "thinking",
+        "outbound",
+        "agent",
+        "tool",
+        "user"
+      ]
+    },
+    {
+      "t": 1.0821617220062762,
+      "name": "AgentProcess.start.begin"
+    },
+    {
+      "t": 1.145391574013047,
+      "name": "AgentProcess.start.end"
+    },
+    {
+      "t": 1.1454686910146847,
+      "name": "AgentProcess.communicate.begin"
+    },
+    {
+      "t": 1.2099042310146615,
+      "name": "AgentSession.initialize.begin"
+    },
+    {
+      "t": 1.2114534500287846,
+      "name": "rpc.send",
+      "method": "initialize"
+    },
+    {
+      "t": 2.444029135047458,
+      "name": "rpc.receive",
+      "method": null,
+      "id": 1,
+      "bytes": 872
+    },
+    {
+      "t": 2.4444078831002116,
+      "name": "AgentSession.initialize.end"
+    },
+    {
+      "t": 2.4444364280207083,
+      "name": "AgentSession.load.begin"
+    },
+    {
+      "t": 2.4575307311024517,
+      "name": "rpc.send",
+      "method": "session/load"
+    },
+    {
+      "t": 2.527962748077698,
+      "name": "rpc.receive",
+      "method": "session/update",
+      "id": null,
+      "bytes": 3291
+    },
+    {
+      "t": 2.5283394030993804,
+      "name": "SessionNotificationOwner.receive.begin"
+    },
+    {
+      "t": 2.528555713011883,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.02525513607543,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.026368268067017,
+      "name": "SessionNotificationOwner.receive.end"
+    },
+    {
+      "t": 4.02659629099071,
+      "name": "rpc.receive",
+      "method": "session/update",
+      "id": null,
+      "bytes": 42570
+    },
+    {
+      "t": 4.026801380096003,
+      "name": "SessionNotificationOwner.receive.begin"
+    },
+    {
+      "t": 4.027463336009532,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.216323301079683,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.21878838702105,
+      "name": "SessionNotificationOwner.receive.end"
+    },
+    {
+      "t": 4.218867357005365,
+      "name": "rpc.receive",
+      "method": "session/update",
+      "id": null,
+      "bytes": 316
+    },
+    {
+      "t": 4.218998376047239,
+      "name": "SessionNotificationOwner.receive.begin"
+    },
+    {
+      "t": 4.219107984099537,
+      "name": "AgentController.publish_transcript_snapshot.begin"
+    },
+    {
+      "t": 4.228059626999311,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.228318619076163,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.251705780043267,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.252413242007606,
+      "name": "SessionNotificationOwner.receive.end"
+    },
+    {
+      "t": 4.252472565043718,
+      "name": "rpc.receive",
+      "method": "session/update",
+      "id": null,
+      "bytes": 264
+    },
+    {
+      "t": 4.252544491086155,
+      "name": "SessionNotificationOwner.receive.begin"
+    },
+    {
+      "t": 4.253640821087174,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.269083079067059,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.27022053708788,
+      "name": "SessionNotificationOwner.receive.end"
+    },
+    {
+      "t": 4.27053916209843,
+      "name": "rpc.receive",
+      "method": null,
+      "id": 2,
+      "bytes": 43783
+    },
+    {
+      "t": 4.27177993603982,
+      "name": "CommsUpdateConsumer.consume_metadata.begin"
+    },
+    {
+      "t": 4.299946004059166,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.309305301052518,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.310716929030605,
+      "name": "CommsUpdateConsumer.consume_metadata.end"
+    },
+    {
+      "t": 4.311865658033639,
+      "name": "AgentSession.load.end"
+    },
+    {
+      "t": 4.3533745710738,
+      "name": "TranscriptPublication.application_current.begin"
+    },
+    {
+      "t": 4.355324380099773,
+      "name": "TranscriptPublication.application_current.end"
+    },
+    {
+      "t": 4.50779932399746,
+      "name": "CommsUpdateConsumer.consume_metadata.begin"
+    },
+    {
+      "t": 4.507911436026916,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.513909366098233,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.51428017904982,
+      "name": "CommsUpdateConsumer.consume_metadata.end"
+    },
+    {
+      "t": 4.516668651020154,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.563923655077815,
+      "name": "TranscriptPublication.application_current.begin"
+    },
+    {
+      "t": 4.568505809060298,
+      "name": "TranscriptPublication.application_current.end"
+    },
+    {
+      "t": 4.5742132380837575,
+      "name": "AgentController.publish_transcript_snapshot.end"
+    },
+    {
+      "t": 4.605494396062568,
+      "name": "TranscriptPublication.application_current.begin"
+    },
+    {
+      "t": 4.6058595180511475,
+      "name": "TranscriptPublication.application_current.end"
+    },
+    {
+      "t": 4.6059748970437795,
+      "name": "SnapshotPublication.publish_page.begin"
+    },
+    {
+      "t": 4.615748941083439,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.618758521042764,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.620523810037412,
+      "name": "TranscriptHistory.prepare_body.begin"
+    },
+    {
+      "t": 4.621557942009531,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.621716232039034,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.6235164580866694,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.623572655022144,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.623649871093221,
+      "name": "TranscriptHistory.prepare_body.end"
+    },
+    {
+      "t": 4.6799549059942365,
+      "name": "SnapshotPublication.publish_page.end"
+    },
+    {
+      "t": 4.680094962008297,
+      "name": "TranscriptPublication.application_current.begin"
+    },
+    {
+      "t": 4.680975863011554,
+      "name": "TranscriptPublication.application_current.begin"
+    },
+    {
+      "t": 4.681618332047947,
+      "name": "TranscriptPublication.application_current.end"
+    },
+    {
+      "t": 4.683556489064358,
+      "name": "TranscriptPublication.application_current.end"
+    },
+    {
+      "t": 4.684335928061046,
+      "name": "TranscriptPublication.application_current.begin"
+    },
+    {
+      "t": 4.70411895099096,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.704326375038363,
+      "name": "TranscriptPublication.application_current.end"
+    },
+    {
+      "t": 4.7053546560928226,
+      "name": "TranscriptPublication.application_current.begin"
+    },
+    {
+      "t": 4.706759210093878,
+      "name": "TranscriptPublication.application_current.end"
+    },
+    {
+      "t": 4.738340718089603,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.742204709094949,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.762848095037043,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.794762114062905,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.7962589440867305,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.815278358059004,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.834800186101347,
+      "name": "history.visible",
+      "cursor": 147260275,
+      "ready": true,
+      "loading": 0,
+      "bodies": 4
+    },
+    {
+      "t": 4.8726314110681415,
+      "name": "TranscriptPublication.application_current.begin"
+    },
+    {
+      "t": 4.890390624990687,
+      "name": "TranscriptPublication.application_current.end"
+    },
+    {
+      "t": 4.906260985066183,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.931717813014984,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.936881650006399,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.938647601054981,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.966533357044682,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.967047533020377,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.970290014054626,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 5.0278154440457,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 5.112979171099141,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 5.165057176025584,
+      "name": "AgentProcess.communicate.end"
+    },
+    {
+      "t": 5.296605046023615,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 5.317004448035732,
+      "name": "PreparationRuntime._execute.end"
+    }
+  ],
+  "app_error": null,
+  "provider_inputs": 0
+}
