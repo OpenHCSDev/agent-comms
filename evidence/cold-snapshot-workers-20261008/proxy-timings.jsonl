@@ -1,0 +1,25 @@
+{"clock": 962276.500858843, "name": "acp.main.begin", "thread": 139979704248192, "main_thread": 139979704248192}
+{"clock": 962276.591414032, "name": "_subscribe_once.begin", "thread": 139979704248192, "main_thread": 139979704248192}
+{"clock": 962276.618387298, "name": "update.begin", "thread": 139979704248192, "main_thread": 139979704248192, "kinds": ["coordination_changed", "goal_changed", "queue_changed", "cursor_advanced"]}
+{"clock": 962276.620369328, "name": "present_session.begin", "thread": 139979645777600, "main_thread": 139979704248192, "kinds": ["coordination_changed", "goal_changed", "queue_changed", "cursor_advanced"]}
+{"clock": 962276.64449433, "name": "present_session.end", "thread": 139979645777600, "main_thread": 139979704248192, "kinds": ["coordination_changed", "goal_changed", "queue_changed", "cursor_advanced"]}
+{"clock": 962276.645015168, "name": "update.end", "thread": 139979704248192, "main_thread": 139979704248192, "kinds": ["coordination_changed", "goal_changed", "queue_changed", "cursor_advanced"]}
+{"clock": 962276.940090721, "name": "update.begin", "thread": 139979704248192, "main_thread": 139979704248192, "kinds": ["transcript_snapshot"]}
+{"clock": 962276.940233693, "name": "present_session.begin", "thread": 139979637384896, "main_thread": 139979704248192, "kinds": ["transcript_snapshot"]}
+{"clock": 962276.988757516, "name": "present_session.end", "thread": 139979637384896, "main_thread": 139979704248192, "kinds": ["transcript_snapshot"]}
+{"clock": 962276.989604213, "name": "update.end", "thread": 139979704248192, "main_thread": 139979704248192, "kinds": ["transcript_snapshot"]}
+{"clock": 962276.989674396, "name": "update.begin", "thread": 139979704248192, "main_thread": 139979704248192, "kinds": ["turn_changed"]}
+{"clock": 962276.98984002, "name": "present_session.begin", "thread": 139979645777600, "main_thread": 139979704248192, "kinds": ["turn_changed"]}
+{"clock": 962276.993362172, "name": "present_session.end", "thread": 139979645777600, "main_thread": 139979704248192, "kinds": ["turn_changed"]}
+{"clock": 962276.993895565, "name": "update.end", "thread": 139979704248192, "main_thread": 139979704248192, "kinds": ["turn_changed"]}
+{"clock": 962276.993973843, "name": "update.begin", "thread": 139979704248192, "main_thread": 139979704248192, "kinds": ["input_delivery_changed"]}
+{"clock": 962276.994107116, "name": "present_session.begin", "thread": 139979637384896, "main_thread": 139979704248192, "kinds": ["input_delivery_changed"]}
+{"clock": 962276.994632312, "name": "present_session.end", "thread": 139979637384896, "main_thread": 139979704248192, "kinds": ["input_delivery_changed"]}
+{"clock": 962276.994843944, "name": "update.end", "thread": 139979704248192, "main_thread": 139979704248192, "kinds": ["input_delivery_changed"]}
+{"clock": 962276.995370804, "name": "present_session.begin", "thread": 139979645777600, "main_thread": 139979704248192, "kinds": ["coordination_changed", "goal_changed", "queue_changed", "cursor_advanced"]}
+{"clock": 962276.996226417, "name": "present_session.end", "thread": 139979645777600, "main_thread": 139979704248192, "kinds": ["coordination_changed", "goal_changed", "queue_changed", "cursor_advanced"]}
+{"clock": 962276.996355502, "name": "_subscribe_once.end", "thread": 139979704248192, "main_thread": 139979704248192}
+{"clock": 962277.045641371, "name": "update.begin", "thread": 139979704248192, "main_thread": 139979704248192, "kinds": ["cursor_advanced"]}
+{"clock": 962277.045815782, "name": "present_session.begin", "thread": 139979637384896, "main_thread": 139979704248192, "kinds": ["cursor_advanced"]}
+{"clock": 962277.046586174, "name": "present_session.end", "thread": 139979637384896, "main_thread": 139979704248192, "kinds": ["cursor_advanced"]}
+{"clock": 962277.046923313, "name": "update.end", "thread": 139979704248192, "main_thread": 139979704248192, "kinds": ["cursor_advanced"]}

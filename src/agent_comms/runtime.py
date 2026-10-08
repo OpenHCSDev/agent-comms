@@ -444,9 +444,14 @@ class RuntimeProxy(RuntimeConnection):
                         raise ValueError(
                             "Owner subscription ready requires a valid controllerToken."
                         )
-                    self._controller_token = token
                     metadata = cast(dict[str, Any], data["ready"])
-                    return reader, present_session(metadata, self.session_id)
+                    presented = await Coordination.run_worker(
+                        partial(present_session, metadata, self.session_id)
+                    )
+                    if self._closed:
+                        raise ConnectionError("Owner attachment closed during subscription")
+                    self._controller_token = token
+                    return reader, presented
                 await self.update(data)
             raise RuntimeError("Thread owner disconnected during attachment")
         except BaseException:
@@ -454,12 +459,18 @@ class RuntimeProxy(RuntimeConnection):
             raise
 
     async def update(self, data: dict[str, Any]) -> None:
-        if "update" in data and self.agent.sessions.client is not None:
-            await self.agent.sessions.client.session_update(
+        client = self.agent.sessions.client
+        if "update" in data and client is not None:
+            metadata = await Coordination.run_worker(partial(
+                present_session, data["update"].get("_meta") or {}, self.session_id,
+            ))
+            if self._closed or self.agent.sessions.client is not client:
+                return
+            await client.session_update(
                 session_id=self.session_id,
                 update={
                     **data["update"],
-                    "_meta": present_session(data["update"].get("_meta") or {}, self.session_id),
+                    "_meta": metadata,
                 },
             )
         if "permissionRequest" in data:

@@ -1,0 +1,531 @@
+{
+  "rows": [
+    {
+      "t": 0.05504117894452065,
+      "clock": 962274.166582402,
+      "name": "dependencies",
+      "toad": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/cold-snapshot-workers-20261008/runtime/lib/python3.14/site-packages/toad/__init__.py",
+      "textual": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/cold-snapshot-workers-20261008/runtime/lib/python3.14/site-packages/textual/__init__.py",
+      "thread": "agent-comms-ux",
+      "pid": 477574
+    },
+    {
+      "t": 0.07266443502157927,
+      "clock": 962274.184205959,
+      "name": "app.open"
+    },
+    {
+      "t": 0.7283633740153164,
+      "clock": 962274.839904316,
+      "name": "shell.ready",
+      "categories": [
+        "agent",
+        "tool",
+        "thinking",
+        "inbound",
+        "other",
+        "user",
+        "outbound"
+      ]
+    },
+    {
+      "t": 0.9599101539934054,
+      "clock": 962275.071451467,
+      "name": "AgentProcess.start.begin"
+    },
+    {
+      "t": 1.0281837789807469,
+      "clock": 962275.139724751,
+      "name": "AgentProcess.start.end"
+    },
+    {
+      "t": 1.0285184639506042,
+      "clock": 962275.140059386,
+      "name": "AgentProcess.communicate.begin"
+    },
+    {
+      "t": 1.0837600530358031,
+      "clock": 962275.195301076,
+      "name": "AgentSession.initialize.begin"
+    },
+    {
+      "t": 1.085188542958349,
+      "clock": 962275.196729526,
+      "name": "rpc.send",
+      "method": "initialize"
+    },
+    {
+      "t": 2.445816944935359,
+      "clock": 962276.557357908,
+      "name": "rpc.receive",
+      "method": null,
+      "id": 1,
+      "bytes": 872
+    },
+    {
+      "t": 2.446151559939608,
+      "clock": 962276.557692432,
+      "name": "AgentSession.initialize.end"
+    },
+    {
+      "t": 2.44617810996715,
+      "clock": 962276.557718962,
+      "name": "AgentSession.load.begin"
+    },
+    {
+      "t": 2.4618630189215764,
+      "clock": 962276.573404112,
+      "name": "rpc.send",
+      "method": "session/load"
+    },
+    {
+      "t": 2.533702319022268,
+      "clock": 962276.645243401,
+      "name": "rpc.receive",
+      "method": "session/update",
+      "id": null,
+      "bytes": 3297
+    },
+    {
+      "t": 2.5340696559287608,
+      "clock": 962276.645610638,
+      "name": "SessionNotificationOwner.receive.begin"
+    },
+    {
+      "t": 2.534291586955078,
+      "clock": 962276.645832539,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 3.8750521140173078,
+      "clock": 962277.986593096,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 3.875910902977921,
+      "clock": 962277.987451846,
+      "name": "SessionNotificationOwner.receive.end"
+    },
+    {
+      "t": 3.876198317972012,
+      "clock": 962277.987739251,
+      "name": "rpc.receive",
+      "method": "session/update",
+      "id": null,
+      "bytes": 42570
+    },
+    {
+      "t": 3.8764889700105414,
+      "clock": 962277.988029892,
+      "name": "SessionNotificationOwner.receive.begin"
+    },
+    {
+      "t": 3.8776256169658154,
+      "clock": 962277.989166529,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.055173125001602,
+      "clock": 962278.166714117,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.074562762980349,
+      "clock": 962278.186103865,
+      "name": "SessionNotificationOwner.receive.end"
+    },
+    {
+      "t": 4.074660929036327,
+      "clock": 962278.186201861,
+      "name": "rpc.receive",
+      "method": "session/update",
+      "id": null,
+      "bytes": 316
+    },
+    {
+      "t": 4.074795503984205,
+      "clock": 962278.186336457,
+      "name": "SessionNotificationOwner.receive.begin"
+    },
+    {
+      "t": 4.075051649939269,
+      "clock": 962278.186592562,
+      "name": "AgentController.publish_transcript_snapshot.begin"
+    },
+    {
+      "t": 4.0877652110066265,
+      "clock": 962278.199306324,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.08847463701386,
+      "clock": 962278.20001557,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.1124966639326885,
+      "clock": 962278.224037667,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.113087464938872,
+      "clock": 962278.224628397,
+      "name": "SessionNotificationOwner.receive.end"
+    },
+    {
+      "t": 4.113143511000089,
+      "clock": 962278.224684374,
+      "name": "rpc.receive",
+      "method": "session/update",
+      "id": null,
+      "bytes": 264
+    },
+    {
+      "t": 4.113211810938083,
+      "clock": 962278.224752703,
+      "name": "SessionNotificationOwner.receive.begin"
+    },
+    {
+      "t": 4.114344720961526,
+      "clock": 962278.225885633,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.123564001987688,
+      "clock": 962278.235104954,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.128442247980274,
+      "clock": 962278.23998326,
+      "name": "SessionNotificationOwner.receive.end"
+    },
+    {
+      "t": 4.128957835957408,
+      "clock": 962278.240498828,
+      "name": "rpc.receive",
+      "method": null,
+      "id": 2,
+      "bytes": 43783
+    },
+    {
+      "t": 4.130630729952827,
+      "clock": 962278.242171862,
+      "name": "rpc.receive",
+      "method": "session/update",
+      "id": null,
+      "bytes": 512
+    },
+    {
+      "t": 4.130793127929792,
+      "clock": 962278.24233406,
+      "name": "SessionNotificationOwner.receive.begin"
+    },
+    {
+      "t": 4.13136887003202,
+      "clock": 962278.242909812,
+      "name": "CommsUpdateConsumer.consume_metadata.begin"
+    },
+    {
+      "t": 4.131483598030172,
+      "clock": 962278.24302454,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.156792395981029,
+      "clock": 962278.268333499,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.159410763997585,
+      "clock": 962278.270951776,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.160180264036171,
+      "clock": 962278.271721186,
+      "name": "SessionNotificationOwner.receive.end"
+    },
+    {
+      "t": 4.163829606957734,
+      "clock": 962278.27537052,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.165043871034868,
+      "clock": 962278.276584824,
+      "name": "CommsUpdateConsumer.consume_metadata.end"
+    },
+    {
+      "t": 4.166239790036343,
+      "clock": 962278.277780703,
+      "name": "AgentSession.load.end"
+    },
+    {
+      "t": 4.2178470339858904,
+      "clock": 962278.329388006,
+      "name": "TranscriptPublication.application_current.begin"
+    },
+    {
+      "t": 4.220771592925303,
+      "clock": 962278.332312575,
+      "name": "TranscriptPublication.application_current.end"
+    },
+    {
+      "t": 4.386217901948839,
+      "clock": 962278.497758794,
+      "name": "CommsUpdateConsumer.consume_metadata.begin"
+    },
+    {
+      "t": 4.386380519950762,
+      "clock": 962278.497921443,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.399660125025548,
+      "clock": 962278.511201158,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.406507096020505,
+      "clock": 962278.518048028,
+      "name": "CommsUpdateConsumer.consume_metadata.end"
+    },
+    {
+      "t": 4.433185252011754,
+      "clock": 962278.544726285,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.476886085001752,
+      "clock": 962278.588427218,
+      "name": "TranscriptPublication.application_current.begin"
+    },
+    {
+      "t": 4.4839791029226035,
+      "clock": 962278.595520416,
+      "name": "TranscriptPublication.application_current.end"
+    },
+    {
+      "t": 4.499503145925701,
+      "clock": 962278.611044149,
+      "name": "AgentController.publish_transcript_snapshot.end"
+    },
+    {
+      "t": 4.528192367986776,
+      "clock": 962278.63973332,
+      "name": "TranscriptPublication.application_current.begin"
+    },
+    {
+      "t": 4.528716471977532,
+      "clock": 962278.640257355,
+      "name": "TranscriptPublication.application_current.end"
+    },
+    {
+      "t": 4.5287936489330605,
+      "clock": 962278.640334551,
+      "name": "SnapshotPublication.publish_page.begin"
+    },
+    {
+      "t": 4.53916564793326,
+      "clock": 962278.65070661,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.541840633028187,
+      "clock": 962278.653381645,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.542849406949244,
+      "clock": 962278.654390399,
+      "name": "TranscriptHistory.prepare_body.begin"
+    },
+    {
+      "t": 4.543875103001483,
+      "clock": 962278.655416055,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.544035947998054,
+      "clock": 962278.65557683,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.5456146330107,
+      "clock": 962278.657155696,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.545655780937523,
+      "clock": 962278.657196623,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.545714852982201,
+      "clock": 962278.657255705,
+      "name": "TranscriptHistory.prepare_body.end"
+    },
+    {
+      "t": 4.583340178942308,
+      "clock": 962278.694881132,
+      "name": "SnapshotPublication.publish_page.end"
+    },
+    {
+      "t": 4.583442252944224,
+      "clock": 962278.694983115,
+      "name": "TranscriptPublication.application_current.begin"
+    },
+    {
+      "t": 4.584008125937544,
+      "clock": 962278.695548989,
+      "name": "TranscriptPublication.application_current.begin"
+    },
+    {
+      "t": 4.5844214810058475,
+      "clock": 962278.695962353,
+      "name": "TranscriptPublication.application_current.end"
+    },
+    {
+      "t": 4.584727911977097,
+      "clock": 962278.696268764,
+      "name": "TranscriptPublication.application_current.end"
+    },
+    {
+      "t": 4.585068088024855,
+      "clock": 962278.69660898,
+      "name": "TranscriptPublication.application_current.begin"
+    },
+    {
+      "t": 4.604970037005842,
+      "clock": 962278.71651099,
+      "name": "TranscriptPublication.application_current.end"
+    },
+    {
+      "t": 4.606131259934045,
+      "clock": 962278.717672133,
+      "name": "TranscriptPublication.application_current.begin"
+    },
+    {
+      "t": 4.607272044988349,
+      "clock": 962278.718812927,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.60786022094544,
+      "clock": 962278.719401093,
+      "name": "TranscriptPublication.application_current.end"
+    },
+    {
+      "t": 4.643609837978147,
+      "clock": 962278.75515079,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.6479183830088004,
+      "clock": 962278.759459265,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.687041049008258,
+      "clock": 962278.798581992,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.6989989270223305,
+      "clock": 962278.810539859,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.700725091970526,
+      "clock": 962278.812266054,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.71470762102399,
+      "clock": 962278.826248583,
+      "name": "history.visible",
+      "cursor": 147260275,
+      "ready": true,
+      "loading": 0,
+      "bodies": 4
+    },
+    {
+      "t": 4.724999276921153,
+      "clock": 962278.83654022,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.7442924520000815,
+      "clock": 962278.855833334,
+      "name": "TranscriptPublication.application_current.begin"
+    },
+    {
+      "t": 4.744756522006355,
+      "clock": 962278.856297425,
+      "name": "TranscriptPublication.application_current.end"
+    },
+    {
+      "t": 4.777844590018503,
+      "clock": 962278.889385542,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.800581609015353,
+      "clock": 962278.912122571,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.803427989012562,
+      "clock": 962278.914968951,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.803880086983554,
+      "clock": 962278.915420989,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.825160942971706,
+      "clock": 962278.936701995,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.825213321950287,
+      "clock": 962278.936754224,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.913935753982514,
+      "clock": 962279.025476706,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 4.939626637031324,
+      "clock": 962279.051167629,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 4.970119821024127,
+      "clock": 962279.081660814,
+      "name": "AgentProcess.communicate.end"
+    },
+    {
+      "t": 5.001618242939003,
+      "clock": 962279.113159185,
+      "name": "PreparationRuntime._execute.begin"
+    },
+    {
+      "t": 5.213452792959288,
+      "clock": 962279.324993766,
+      "name": "PreparationRuntime._execute.end"
+    },
+    {
+      "t": 5.239995762938634,
+      "clock": 962279.351536725,
+      "name": "PreparationRuntime._execute.end"
+    }
+  ],
+  "app_error": null,
+  "provider_inputs": 0
+}

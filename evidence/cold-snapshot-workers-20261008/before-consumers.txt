@@ -1,0 +1,17 @@
+Parsed 862; omissions []
+src/agent_comms/runtime.py:449 present_session
+src/agent_comms/runtime.py:462 present_session
+src/agent_comms/transcript_updates.py:51 TranscriptSnapshotUpdate
+src/agent_comms/session_lifecycle.py:75 TranscriptReplay
+/home/ts/wt/toad-sidebar-context-pointer-20261006/src/toad/widgets/conversation.py:2242 TranscriptSnapshotUpdate
+/home/ts/wt/toad-sidebar-context-pointer-20261006/src/toad/widgets/conversation.py:2243 TranscriptSnapshotUpdate
+/home/ts/wt/toad-sidebar-context-pointer-20261006/src/toad/acp/agent_controller.py:108 ValidateSessionUpdateTask
+/home/ts/wt/toad-sidebar-context-pointer-20261006/src/toad/acp/transcript_reader.py:75 TranscriptSnapshotUpdate
+/home/ts/wt/toad-sidebar-context-pointer-20261006/src/toad/acp/transcript_reader.py:75 TranscriptSnapshotUpdate
+/home/ts/wt/toad-sidebar-context-pointer-20261006/src/toad/acp/transcript_reader.py:89 TranscriptSnapshotUpdate
+/home/ts/wt/toad-sidebar-context-pointer-20261006/src/toad/acp/transcript_reader.py:119 TranscriptSnapshotUpdate
+/home/ts/wt/toad-sidebar-context-pointer-20261006/src/toad/acp/transcript_reader.py:80 PublishedNativeTranscriptReadWork
+/home/ts/wt/toad-sidebar-context-pointer-20261006/src/toad/acp/session_updates.py:140 ValidateSessionUpdateTask
+/home/ts/wt/toad-sidebar-context-pointer-20261006/src/toad/acp/comms_updates.py:160 TranscriptSnapshotUpdate
+/home/ts/wt/toad-sidebar-context-pointer-20261006/src/toad/acp/comms_updates.py:161 TranscriptSnapshotUpdate
+/home/ts/wt/toad-sidebar-context-pointer-20261006/src/toad/acp/comms_updates.py:55 DecodeCommsMetadataTask
