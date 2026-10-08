@@ -307,7 +307,8 @@ class TestSelectedTargetActions:
             if action.declaration is DeleteTagCliCommand)
         assert tuple(command.name for command in action.bound) == ('team', 'other')
         assert 'Remove #team' in action.confirmation
-        assert 'Remove #other' in action.confirmation
+        assert '#other' in action.confirmation
+        assert action.confirmation.count('Threads, saved views and history remain.') == 1
         before = comms.registry.snapshot()
         with pytest.raises(ValueError, match='Remove #team'):
             TargetEdit(DeleteTagCliCommand, selected, {}).apply(comms)
@@ -361,9 +362,9 @@ class TestSelectedTargetActions:
             catalog["archive"].edited({}).with_confirmation(False)
         reviewed = catalog["archive"].edited({}).with_confirmation(True)
         assert reviewed.targets == ("alpha", "beta", "#team")
-        assert set(catalog["read-target"].encode()["parameters"]["properties"]) == {"worktree"}
-        assert all(item.editor_default == str(tmp_path)
-                   for item in catalog["read-target"].editable_fields)
+        assert not catalog["read-target"].encode()["parameters"]["properties"]
+        assert all(command.worktree == str(tmp_path)
+                   for command in catalog["read-target"].bound)
 
     def test_mixed_archive_reports_partial_results_in_selection_order(self, cli, tmp_path):
         from agent_comms.thread_status import RunningThreadStatus
@@ -508,7 +509,7 @@ class TestSelectedTargetActions:
         # The canonical tag change also publishes its membership notification.
         assert before.channel_unread['#team'] == 2
         result = TargetEdit(ReadTargetCliCommand, ('alpha', '#team'),
-                            {'worktree': str(tmp_path)}).apply(comms)
+                            {}, project=str(tmp_path)).apply(comms)
         assert result.successful and tuple(item.result.read for item in result.outcomes) == ('alpha', '#team')
         after = comms.views.viewer_snapshot(str(tmp_path))
         assert after.thread_unread['alpha'] == after.unread.get('alpha', 0) == 0

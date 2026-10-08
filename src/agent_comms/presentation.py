@@ -433,6 +433,8 @@ class ChannelView:
     last_activity: float = 0
     last_user_input: float = 0
     pinned_members: frozenset[str] = frozenset()
+    active_agents: int = 0
+    registered_agents: int = 0
 
     @classmethod
     def roster(
@@ -461,6 +463,8 @@ class ChannelView:
             if channel.archived and not show_archived:
                 continue
             pinned_members = pins.get(channel.name, frozenset())
+            registered = tuple(name for name, thread in snapshot.threads.items()
+                               if thread.role.executable and channel.matches(thread.tags))
             members = tuple(
                 sorted(
                     (name for name, thread in people.items() if channel.matches(thread.tags)),
@@ -489,6 +493,8 @@ class ChannelView:
                     ),
                     history.last_user_input,
                     pinned_members & frozenset(members),
+                    sum(snapshot.statuses[name].active for name in registered),
+                    len(registered),
                 )
             )
         return tuple(sorted(views, key=order.key))
