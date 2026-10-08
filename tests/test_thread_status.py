@@ -2,6 +2,8 @@
 
 import json
 import os
+import subprocess
+import sys
 from dataclasses import replace
 
 import pytest
@@ -22,6 +24,32 @@ from agent_comms.thread_status import (
     ThreadStatus,
 )
 from agent_comms.threads import Thread
+
+
+def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_path):
+    comms = wire(tmp_path)
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        thread = Thread("owner", frozenset(), str(tmp_path),
+                        process_identity=ProcessIdentity.capture(child.pid))
+        comms.registry.register(thread, RunningThreadStatus())
+        snapshot = comms.registry.snapshot()
+        view = ThreadView.capture(thread, snapshot, comms.agents.activity_of("owner"), None, {})
+        displayed = view.presentation
+        # Cross the same original codec boundary used by worker-prepared views.
+        transferred = FieldCodec.decode(ThreadView, FieldCodec.encode(view))
+        child.terminate()
+        child.wait(timeout=5)
+        assert not thread.process_alive
+        assert view.presentation == displayed
+        assert transferred.presentation == displayed
+        fresh = ThreadView.capture(thread, snapshot, comms.agents.activity_of("owner"), None, {})
+        assert fresh.presentation.summary == "Owner exited"
+        assert not fresh.presentation.busy
+    finally:
+        if child.poll() is None:
+            child.terminate()
+        child.wait(timeout=5)
 
 
 @pytest.mark.parametrize("status", [member() for member in ThreadStatus.members_with(ThreadStatus)])
@@ -49,7 +77,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
     assert comms.views.list_threads()[0]["status"] == status.declared_name
     activity = Activity("owner", ActivityState.WORKING, "stale or current activity")
     comms.agents.activity.emit(activity)
-    view = ThreadView(thread, reopened.status("owner"), comms.agents.activity_of('owner'), None, 0)
+    view = ThreadView.capture(thread, reopened.snapshot(), comms.agents.activity_of('owner'), None, {})
     assert view.to_wire()["status"] == status.declared_name
     assert view.presentation.busy == status.active
     visible = comms.views.thread_views()

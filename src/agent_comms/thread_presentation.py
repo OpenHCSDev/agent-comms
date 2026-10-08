@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
@@ -28,6 +28,10 @@ class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
 
         return UnavailableRecipientActivity()
 
+    def native_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        """Display this acquired binding, without observing another process cut."""
+        return replace(ordinary, marker="○", summary="Owner exited", busy=False)
+
 
 @dataclass(frozen=True, slots=True)
 class UnavailableThreadOwnerBinding(ThreadOwnerBinding):
@@ -38,6 +42,9 @@ class UnavailableThreadOwnerBinding(ThreadOwnerBinding):
 class LiveThreadOwnerBinding(ThreadOwnerBinding):
     owner: OwnerIdentity
     process: ProcessIdentity
+
+    def native_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        return ordinary
 
     def recipient_activity(self, agents, snapshot, thread):
         from .agent_activity import LiveRecipientActivity

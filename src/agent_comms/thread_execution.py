@@ -12,7 +12,7 @@ from .errors import RelationViolationError
 if TYPE_CHECKING:
     from .threads import Thread
     from .registry_document import RegistrySnapshot
-    from .thread_presentation import ThreadPresentation
+    from .thread_presentation import ThreadPresentation, ThreadOwnerBinding
 
 
 class ConversationPreparation(ABC):
@@ -49,7 +49,8 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return UnavailableThreadOwnerBinding()
 
     @classmethod
-    def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation) -> ThreadPresentation:
+    def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
+                     binding: ThreadOwnerBinding) -> ThreadPresentation:
         return ordinary
 
     @classmethod
@@ -90,9 +91,10 @@ class NativeThreadExecution(ThreadExecution):
         return LiveThreadOwnerBinding(snapshot.owner_identity(thread.name), process)
 
     @classmethod
-    def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation) -> ThreadPresentation:
-        if status.active and thread.has_process and not thread.process_alive:
-            return replace(ordinary, marker="○", summary="Owner exited", busy=False)
+    def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
+                     binding: ThreadOwnerBinding) -> ThreadPresentation:
+        if status.active and thread.has_process:
+            return binding.native_presentation(ordinary)
         return ordinary
 
     @classmethod
@@ -103,11 +105,13 @@ class NativeThreadExecution(ThreadExecution):
 
 class ExternalThreadExecution(ThreadExecution):
     @classmethod
-    def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation) -> ThreadPresentation:
+    def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
+                     binding: ThreadOwnerBinding) -> ThreadPresentation:
         if not status.active:
             return ordinary
-        return replace(ordinary, marker="@" if thread.process_alive else "○",
-                       summary="CLI participant" if thread.process_alive else "CLI offline",
+        alive = thread.process_alive
+        return replace(ordinary, marker="@" if alive else "○",
+                       summary="CLI participant" if alive else "CLI offline",
                        busy=False)
 
     @classmethod
