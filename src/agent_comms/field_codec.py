@@ -199,6 +199,12 @@ class FieldCodec(Sealed):
 
     @staticmethod
     def _representation(annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
+        if annotation is None:
+            return None, None
+        if isinstance(annotation, type):
+            # A class has no Annotated metadata. Its live capability still
+            # determines representation, including inherited/virtual members.
+            return annotation, annotation if issubclass(annotation, WireValue) else None
         if get_origin(annotation) is Annotated:
             target, *metadata = get_args(annotation)
         else:
@@ -217,6 +223,8 @@ class FieldCodec(Sealed):
 
     @classmethod
     def _value_representation(cls, value: object, annotation: object):
+        if annotation is None:
+            return cls._representation(type(value))[1]
         _, representation = cls._representation(annotation)
         if representation is None:
             _, representation = cls._representation(type(value))
@@ -265,6 +273,13 @@ class FieldCodec(Sealed):
         representation = cls._value_representation(value, annotation)
         if representation is not None and value is not None:
             return representation.encode(value)
+        # Exact JSON scalars cannot also be records, enums or family classes.
+        # Representation selection above retains custom scalar declarations.
+        kind = type(value)
+        if value is None or kind is str or kind is int or kind is bool:
+            return value
+        if kind is float and math.isfinite(value):
+            return value
         if is_dataclass(value) and not isinstance(value, type):
             hints = cls._types(type(value))
             result = (
@@ -298,10 +313,6 @@ class FieldCodec(Sealed):
             return value.declared_name
         if isinstance(value, Enum):
             return cls.encode(value.value)
-        if value is None or type(value) in (str, int, bool):
-            return value
-        if type(value) is float and math.isfinite(value):
-            return value
         if isinstance(value, frozenset):
             return [cls.encode(item) for item in sorted(value)]
         if isinstance(value, (list, tuple)):
