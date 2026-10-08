@@ -21,7 +21,8 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .goal_actions import GoalAction
 from .thread_presentation import LiveThreadOwnerBinding
-from .turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn
+from .turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn, SegmentManifest, TurnContext
+from .thread_identity import ThreadIncarnation
 from .working_memory_labels import ClassifierVersion, ModelLabel
 from .working_memory_questions import SpanAnswer
 
@@ -347,9 +348,7 @@ class ContextRuntimeRequest(ResultRuntimeRequest):
         agent = ctx.server.agent
         owner = await Coordination.run_worker(partial(agent._comms.registry.require, ctx.name))
         context = await agent.turns.inspect_context(ctx.session_id, owner)
-        return await Coordination.run_worker(partial(
-            context.with_current_contributors, agent._comms, owner,
-        ))
+        return context.require_session_file(owner.require_saved_session())
 
     async def result(self, ctx):
         return FieldCodec.encode(await self.inspect(ctx))
@@ -368,6 +367,36 @@ class ContextSourceRuntimeRequest(ContextRuntimeRequest):
             self.observation, self.segment, self.source,
         ))
         return FieldCodec.encode(text)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContextCoreRuntimeRequest(ResultRuntimeRequest):
+    def read_context(self, ctx):
+        comms = ctx.server.agent._comms
+        owner = self.require_owner(comms.registry.snapshot())
+        return TurnContext.for_inspection(comms, owner)
+
+    async def inspect(self, ctx):
+        return await Coordination.run_worker(partial(self.read_context, ctx))
+
+    async def result(self, ctx):
+        return FieldCodec.encode(await self.inspect(ctx))
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContextCoreSourceRuntimeRequest(ContextCoreRuntimeRequest):
+    owner: ThreadIncarnation
+    segment: int
+    manifest: SegmentManifest
+    source: Provenance
+
+    def read_source(self, ctx):
+        context = self.read_context(ctx)
+        return context.public_source_text(ctx.server.agent._comms, self.owner,
+                                        self.segment, self.manifest, self.source)
+
+    async def result(self, ctx):
+        return FieldCodec.encode(await Coordination.run_worker(partial(self.read_source, ctx)))
 
 
 @dataclass(frozen=True, kw_only=True)

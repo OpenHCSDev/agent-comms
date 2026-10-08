@@ -950,6 +950,19 @@ class TurnContext:
                 return source
         raise ValueError("Source is outside the selected context preview")
 
+    def public_source_text(self, comms, owner: ThreadIncarnation, segment: int,
+                           manifest: SegmentManifest, source: Provenance) -> ContextSourceText:
+        """Read only a source selected from this current Core observation."""
+        if owner != self.thread:
+            raise ValueError("Current Core context belongs to another owner incarnation")
+        if not 0 <= segment < len(self.segments):
+            raise ValueError("Source has no selected Core context segment")
+        selected = self.segments[segment]
+        if selected.manifest(0) != manifest:
+            raise ValueError("Current Core context segment changed since selection")
+        original = selected.require_source(source)
+        return ContextSourceText(original.public_description(), original.public_text(comms))
+
     @classmethod
     def for_owner(
         cls,
