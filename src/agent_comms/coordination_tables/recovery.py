@@ -82,6 +82,9 @@ class ConnectivityFacet(CoordinatorTable, TypedTable, declared_name="connectivit
 
 @dataclass(frozen=True, slots=True)
 class RecoveryAudit(CoordinatorTable, TypedTable):
+    # Recovery condition is a stored fact; row identity is the table family tag.
+    family_discriminator = "row"
+
     execution_id: str = dataclass_field(metadata={"snapshot_exclude": True})
     kind: type[RecoveryCondition] = dataclass_field(
         metadata={"sql": Column(check="kind IN ({recovery_names})")}
