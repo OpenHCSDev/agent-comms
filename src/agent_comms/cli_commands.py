@@ -185,8 +185,11 @@ class TargetAction:
 
     @property
     def confirmation(self) -> str:
-        return '\n'.join(dict.fromkeys(warning for command in self.bound
-                                      if (warning := command.confirmation())))
+        groups: dict[type[CliCommand], list[CliCommand]] = {}
+        for command in self.bound:
+            groups.setdefault(type(command), []).append(command)
+        return '\n'.join(filter(None, (commands[0].selection_confirmation(tuple(commands))
+                                       for commands in groups.values())))
 
     def edited(self, arguments: dict[str, str]) -> TargetAction:
         return replace(self, bound=tuple(command.edited(type(command).editor_arguments(arguments))
@@ -449,6 +452,10 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
     def confirmation(self) -> str:
         return ''
 
+    def selection_confirmation(self, commands: tuple[CliCommand, ...]) -> str:
+        return '\n'.join(dict.fromkeys(warning for command in commands
+                                      if (warning := command.confirmation())))
+
     def with_confirmation(self, confirmed: bool) -> Self:
         if self.confirmation() and not confirmed:
             raise ValueError(self.confirmation())
@@ -470,10 +477,15 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                        *, confirmed: bool = False,
                        channel: str | dict[str, tuple[str, ...]] | None = None) -> object:
         selected = cls.selected_targets(target)
+        from .channel_targets import is_channel_target
+        snapshot = comms.registry.snapshot()
+        catalog = (comms.channels.catalog.read()
+                   if channel or any(is_channel_target(name) for name in selected) else None)
         if isinstance(target, str) or (len(selected) == 1 and not cls.multiple_targets):
             name = selected[0]
             bindings = tuple(command for context in cls.selection_channels(channel, name)
-                             for command in cls.bindings(comms, name, context))
+                             for command in cls.bindings(comms, name, context,
+                                                         snapshot=snapshot, catalog=catalog))
             if len(bindings) == 1:
                 return bindings[0].edited(arguments).with_confirmation(confirmed).apply(comms)
             if not bindings:
@@ -489,7 +501,8 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             for context in cls.selection_channels(channel, name):
                 try:
                     bindings = tuple(command for member in declarations
-                                     for command in member.bindings(comms, name, context))
+                                     for command in member.bindings(comms, name, context,
+                                                                   snapshot=snapshot, catalog=catalog))
                     if not bindings:
                         scope = f' in {context}' if context is not None else ''
                         raise ValueError(f'This action is no longer available for {name}{scope}')
@@ -1463,6 +1476,13 @@ class DeleteTagCliCommand(ExactTagCliCommand, declared_name='delete-tag'):
 
     def confirmation(self):
         return self.disposition.confirmation(self.name)
+
+    def selection_confirmation(self, commands):
+        groups: dict[TagDisposition, list[str]] = {}
+        for command in commands:
+            groups.setdefault(command.disposition, []).append(command.name)
+        return '\n'.join(disposition.confirmation(tuple(names))
+                         for disposition, names in groups.items())
 
     def with_confirmation(self, confirmed: bool) -> Self:
         super().with_confirmation(confirmed)
