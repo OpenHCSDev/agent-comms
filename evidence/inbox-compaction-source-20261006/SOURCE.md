@@ -781,3 +781,31 @@ recovery-snapshot-encoding-check.log. No live recovery was repeated. Checks use
 the preexisting parked field_codec scalar change, which remains excluded; its
 conflicting-field declaration check is unchanged. Parent owns integration and
 any read-only original-result encoding after delivery.
+# Bound Restart configuration — 2026-10-07
+
+Joined current main normally before this correction. Main already puts editor
+field projection on CliCommand and gives RestartCliCommand an empty projection;
+TargetAction delegates to that declaration. The remaining execution hole was
+CliCommand.edited accepting any non-target-bound CLI field. It now accepts only
+the fields the concrete command offers. TargetAction.edited, TargetEdit and
+single/batch execute_target all use this owner; no UI command-name decision was
+added. Explicit CLI parsing still uses the complete command declaration.
+
+Restart binds only the selected name. Empty target edits leave agent_bin and
+agent_args unset, so original OwnerRestartRequest/RetainedOwnerLaunch custody
+still supplies the captured launch. No lifecycle, saved-resource, native or
+codec change was made. Parked field_codec.py edits remain excluded.
+
+Existing refactor-audit Package.load parsed all 324 source, 381 test and 54 tool
+modules with zero omissions; declaration/call searches found the editor family
+in cli_commands.py and its existing CLI/channel controls. Dynamic external
+callers are not ruled out; they receive the same declaration-owned refusal.
+
+Three focused checks passed in 0.34s: actual private-store Restart catalog and
+edit refusal with authentic observed process identity, retained restart handoff
+codec preserving complete original launch configuration, and mixed catalog
+editor/confirmation behavior. Explicit CLI override parsing is checked in the
+catalog control. No worker restart/native request occurred. An initial command
+named a nonexistent third test and stopped before test entry; both logs remain.
+Raw: /home/ts/.cache/agent-scratch/mfc01/restart-editor/check02.stdout.log and
+check02.stderr.log. Installed UI delivery remains Parent's next action.
