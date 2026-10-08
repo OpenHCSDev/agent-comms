@@ -823,3 +823,32 @@ working directory). That behavior predates this guard and is not changed here.
 Raw: /home/ts/.cache/agent-scratch/mfc01/restart-editor/default-semantics.stdout.log
 and default-semantics.stderr.log. The earlier three affected checks passed;
 they were not repeated. No real restart was needed or performed.
+
+## Bulk channel tag mutation — 2026-10-07
+
+ChannelManagement._change_tag_unlocked formerly read each member's status and
+registered each member separately. Every registration acquired the guarded
+registry, encoded its complete document and durably rewrote it. The same tag
+operation now delegates to Registration.change_tag in one original RegistryEdit.
+RegistryDocument checks every original incarnation, takes current records and
+statuses, then uses prepare_registration/RegistrationChange.apply for each tag
+change. Existing channel-scope advancement remains canonical. Only tags change;
+there is no launch, goal-history or publication-identity transition to acquire.
+One commit publishes the cohort; catalog change remains the original subsequent
+owner operation. Exceptions before that commit publish no partial registry edit.
+Different selected channels retain their existing fresh rebind/partial results.
+
+All existing tag rename/removal/disposition consumers share _change_tag_unlocked;
+no repeated per-member registration remains there. Existing Package.load AST
+trace parsed 324 source,381 test,54 tool modules without omissions. External
+dynamic callers are not ruled out. Parent owns selection confirmation, warning
+text and command-planning changes; this patch touches only the tag mutation
+method in channel_management.py, plus registry owners and its focused control.
+
+Three actual private-store checks passed in 0.73s. A profiled 40-member removal
+performed exactly one RegistryStore.save_unlocked, preserved current fields and
+statuses, and subsequent mutation through stale acquired Thread values retained
+newer metadata. Existing exclusive deletion/history preservation and active-owner
+refusal checks passed. Logs: /home/ts/.cache/agent-scratch/mfc01/bulk-tags/check.stdout.log
+and check.stderr.log. No live mutation, provider, worker or installed UI operation.
+Parked field_codec.py remains excluded. Installed UI latency is not yet measured.
