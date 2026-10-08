@@ -51,3 +51,19 @@ unrelated functions. Cumulative timings cannot establish main-thread blocking;
 the source duplication and real private path are the evidence for this change.
 Parent owns the matched installed/UI check. Codec work and remaining poll/layout
 cost are not claimed fixed. Parked field_codec.py edits are excluded.
+
+## Integration and affected application
+
+Integrated into the existing delivery branch at de2ba0062. The private active
+channel workload used this Core source with the current installed Toad/native
+pair: 16 recipients, 20 incoming messages and 160 real native wheel packets.
+It completed with ordered delivery and no provider inputs, but responsiveness
+still failed: wheel median 229.5ms, p95 434.5ms, maximum 451.5ms; largest active
+event-loop gap 89.6ms. This single run does not establish an improvement or a
+regression caused by this change. Source process-observation correctness and
+end-to-end scrolling performance remain distinct results.
+
+Raw result: /home/ts/.cache/agent-scratch/sidebar-drag-hotpath-20261007/dm-owner-presentation-wheel-20261008/result.json.
+This check used Core source, not a new installed Core wheel. Existing live
+backend defaults remain unchanged. Message-row layout/publication remains
+unresolved; deleting duplicate process observations is not a latency pass.
