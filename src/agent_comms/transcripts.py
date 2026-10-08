@@ -21,8 +21,6 @@ from .message_bus import MessageBus
 from .messages import Message
 from .message_reference import MessageReference
 from .messaging import Messaging
-from .native_entries import TranscriptProjection
-from .native_transcript import NativeTranscript
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .registration import Registration
@@ -372,6 +370,8 @@ class Transcripts:
 
         if not 1 <= source_limit <= MessageNotification.window_limit:
             raise ValueError("Transcript source capture requires a bounded window")
+        from .native_transcript import NativeTranscript
+
         registry, thread, session_file, _, root, log, routes, constructor = self._page_source(
             name, through, historical_source,
         )
@@ -477,6 +477,8 @@ class Transcripts:
         historical_source: str | None = None,
     ) -> TranscriptPage:
         """Read one adjacent page with exclusive, file-bound byte cursors."""
+        from .native_transcript import NativeTranscript
+
         self.page_reads += 1
         if before is not None and after is not None:
             raise ValueError("Choose one transcript paging direction.")

@@ -40,7 +40,6 @@ from .errors import RelationViolationError
 from .config_options import ConfigOptions
 from .native_arguments import NativeArguments
 from .native_input_owner import RegistryOwner
-from .native_session_prepare import NativeSessionPreparation
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
 from .thread_identity import ThreadIncarnation
@@ -247,6 +246,8 @@ class SessionLifecycle:
             await persistent.close_owned(creation, binding, arguments, worktree)
 
     async def _restore_native_fork(self, session_id, original, selected, creation, binding, arguments, worktree) -> None:
+        from .native_session_prepare import NativeSessionPreparation
+
         async with self._attachment_lock:
             async with self.effects.turns.idle_backend(session_id) as persistent:
                 if persistent is None:

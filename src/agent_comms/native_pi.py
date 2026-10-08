@@ -20,18 +20,18 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from . import pi_events as pi
 from .native_arguments import NativeArguments
 from .native_package import OWNER_INSTRUCTIONS
 from .owner_launch import RestartEnvironment
 from .field_codec import FieldCodec
 from .native_input_record import NativeInputCommit, NativeInputIdText
-from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole
-from .selected_tool_broker import NativeToolMode
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 
 if TYPE_CHECKING:
+    from . import pi_events as pi
+    from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry
+    from .selected_tool_broker import NativeToolMode
     from .fresh_private_session import FreshPrivateSession
     from .selected_session import SelectedSession
 
@@ -316,7 +316,7 @@ class NativeContextProof(NativeContextRecord):
         """Corroborate live recorded events; parsed bytes alone grant no authority."""
         NativeInputIdText.decode(input_id)
         session_file = Path(session_file).absolute()
-        from .native_entries import NativeInputEvidenceRead
+        from .native_entries import NativeEntry, NativeInputEvidenceRead
 
         with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
             header, entries = evidence.observe()
@@ -339,6 +339,8 @@ class NativeContextProof(NativeContextRecord):
         This proves historical context inclusion. It never creates an input
         disposition, an owner enrollment, or permission to replay an input.
         """
+        from .native_entries import NativeEntry
+
         tracked = NativeEntry.tracked_users(entries)
         result = {}
         with NativeContextJournal.open_evidence(session_file) as db:
@@ -608,8 +610,11 @@ class NativePiRpcLaunch:
                     raise ValueError("Provider/model must be single non-option tokens")
         except (TypeError, ValueError) as error:
             raise NativePiUnavailable("Native Pi requires an explicit provider and model") from error
-        if selected_tool_mode is not None and not isinstance(selected_tool_mode, NativeToolMode):
-            raise NativePiUnavailable("Selected tool requires a trusted nominal mode")
+        if selected_tool_mode is not None:
+            from .selected_tool_broker import NativeToolMode
+
+            if not isinstance(selected_tool_mode, NativeToolMode):
+                raise NativePiUnavailable("Selected tool requires a trusted nominal mode")
         session.require_launch_tools(selected_tool_mode)
         worktree = Path(worktree).absolute()
         session_dir = Path(session_dir).absolute()
@@ -870,7 +875,7 @@ def read_tracked_input_digest(
     """Corroborating digest only; this cannot authorize recovery or input replay."""
     NativeInputIdText.decode(input_id)
     session_file = Path(session_file).absolute()
-    from .native_entries import NativeInputEvidenceRead
+    from .native_entries import NativeEntry, NativeInputEvidenceRead
 
     with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
         _header, entries = evidence.observe()
@@ -888,6 +893,8 @@ def _verify_context(
     context_event: pi.ContextCommitted,
     *, evidence: NativeEvidenceRead | None = None,
 ) -> NativeContextProof:
+    from .native_entries import NativeEvidenceRead
+
     try:
         emitted = NativeContextRecord.from_events(input_id, session_id, input_event, context_event).at(session_file)
     except (TypeError, ValueError) as error:

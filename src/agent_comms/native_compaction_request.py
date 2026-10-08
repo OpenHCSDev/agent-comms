@@ -11,7 +11,6 @@ import os
 from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any
 
-from .compaction_records import CompactionOperation
 from .compaction_identity import NativeCommitIdentity
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
@@ -20,6 +19,7 @@ from .pi_summary_payloads import SummaryFiles, SummaryUsage
 from .text_digest import TextDigest
 
 if TYPE_CHECKING:
+    from .compaction_records import CompactionOperation
     from .compaction_identity import SelectedCommitReference
     from .compaction_source import CompactionSource
     from .owner_compaction_gate import OwnerCompactionAttestation

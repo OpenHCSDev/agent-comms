@@ -66,3 +66,32 @@ Corrected interpreter command retained the virtualenv path. Private copied
 settings/state were removed after original App teardown; borrowed artifacts and
 public original session/owner remain intact. Diagnostic control and wheel runtime
 remain under .artifacts/cold-acp-bootstrap-20261008 for integration.
+
+## Remaining execution imports
+
+TurnRunner no longer acquires NativeSessionPreparation.open as an import-time
+default. Its existing saved-session operation resolves that same owner when the
+default is used; an explicitly supplied opener still reaches the original
+callback. Native backend execution, Pi command discovery, journal evidence and
+fork implementations are imported by the operations that actually use them.
+The transport imports PiEvent at its existing decoding boundary. Runtime field
+types, declarations, command codecs, nominal checks and native lifetimes remain
+with their original owners; this adds no loader, alternate registry or cache.
+
+The complete current Core source/test/tool census parsed 759 modules without
+omissions. All 12 changed modules compile; the 47 classes in those files retain
+the exact bases, decorators and annotated fields from the preceding checkpoint.
+Method-only deferred annotations are not a claim that arbitrary external runtime
+annotation introspection has been qualified.
+
+One affected batch passed 52 checks in 8.29 seconds: native payload/compaction
+boundaries, out-of-order request correlation and actual pinned native owner
+shutdown during its single localhost turn. The two earlier runner refusals were
+missing pytest before test entry; no native attempt occurred in either. The
+accepted batch used a cached separate runner and the reviewed dependencies.
+
+Standalone ACP import was 1.098 seconds and no longer imported the native backend.
+Native entry declarations are still required on the current import graph. This
+single measurement establishes neither a repeatable speed gain nor total saved
+thread opening performance. The matching installed application remains the next
+qualification; the running public owner has not been restarted or replaced.

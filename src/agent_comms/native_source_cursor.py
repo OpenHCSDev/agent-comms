@@ -8,6 +8,7 @@ under wire→bus→registry→SQL locks. Reads recheck both owner and SQL after 
 from __future__ import annotations
 
 import sqlite3
+from typing import TYPE_CHECKING
 from functools import partial
 
 from .bus_publication import stable_thread_lookup
@@ -17,7 +18,6 @@ from .coordination_response import _response_boundary
 from .coordinator import Coordination
 from .cursor_owner import CursorOwner
 from .historical_native_inputs import HistoricalNativeInput
-from .native_entries import NativeEvidenceScope
 from .message_bus import MessageBus
 from .native_input_owner import RegistryOwner
 from .native_runtime_input import CurrentNativeCursor
@@ -25,6 +25,9 @@ from .proven_source_coverage import ProvenSourceCoverage, SourceCoverage
 from .threads import Thread
 from .field_codec import FieldCodec
 from .store_files import StoreLockContention
+
+if TYPE_CHECKING:
+    from .native_entries import NativeEvidenceScope
 
 
 class NativeSourceCursor:
@@ -94,6 +97,8 @@ class NativeSourceCursor:
         owner_generation: int,
         committed_input_id: str | None,
     ) -> CurrentNativeCursor | None:
+        from .native_entries import NativeEvidenceScope
+
         committed_input_id = FieldCodec.decode(str | None, committed_input_id)
         identity = CursorOwner(
             wire_root_id=self.wire_root_id,
@@ -223,6 +228,8 @@ class NativeSourceCursor:
         sources = self._coverage(identity.lookup)
         witness = None
         if cursor is not None:
+            from .native_entries import NativeEvidenceScope
+
             with NativeEvidenceScope() as source_reads:
                 coverage = self._require_source(identity, cursor, sources, source_reads)
                 witness = coverage.source_witness

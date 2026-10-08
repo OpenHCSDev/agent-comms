@@ -19,8 +19,6 @@ from .pi_vocabulary import ThinkingLevel
 from .queued_input import InitialInput, InputHandoffRefused
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
-from . import backend
-from . import pi_events as pi
 from .acp_failure import ACPFailure
 from .channel_targets import BuiltinChannel
 from .comms import Comms
@@ -31,12 +29,10 @@ from .goal_actions import (
     PausedGoalAction,
 )
 from .goal_scheduler import GoalScheduler
-from .input_drain import InputDrain
 from .messages import Message
 from .mro_dispatch import MroDispatch, handles
 from .native_arguments import NativeArguments
 from .native_input_owner import RegistryOwner
-from .native_session_prepare import NativeSessionPreparation
 from .routing import TurnRouting
 from .runtime import (
     ACP_PERMISSION_TIMEOUT_SECONDS,
@@ -44,7 +40,6 @@ from .runtime import (
     SocketClient,
 )
 from .pi_payloads import StateData
-from .session_lifecycle import SessionLifecycle
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
@@ -52,7 +47,11 @@ from .turn_lease import TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
 
 if TYPE_CHECKING:
+    from . import backend
+    from . import pi_events as pi
     from .coordinated_runtime import SelectedExecution
+    from .input_drain import InputDrain
+    from .session_lifecycle import SessionLifecycle
 
 
 AGENT_PREFIX = "!agent "
@@ -176,9 +175,15 @@ class TurnRunner:
         return self.agent_args.with_model(thread.model).with_thinking(ThinkingLevel.optional_name(thread.thinking_level)).argv
 
     async def prepare_selected_session(self, session_id: str, thread: Thread, *,
-                                       open_native=NativeSessionPreparation.open) -> StateData:
+                                       open_native=None) -> StateData:
+        from . import backend
+
         if thread.session_file is None:
             raise ValueError("Native preparation requires a saved session")
+        if open_native is None:
+            from .native_session_prepare import NativeSessionPreparation
+
+            open_native = NativeSessionPreparation.open
         environment = await Coordination.run_worker(lambda: thread.native_environment(
             self.comms.root, self.comms.registry.snapshot(), thread.worktree,
         ))
@@ -214,6 +219,8 @@ class TurnRunner:
         return context.recorded_public_text(manifest)
 
     async def inspect_native_request(self, session_id, thread, request):
+        from . import backend
+
         persistent=self.persistent_backends.setdefault(session_id,backend.PersistentPiSession())
         context = await persistent.custody.inspect(
             persistent, partial(self.prepare_selected_session, session_id, thread), request,
@@ -373,6 +380,8 @@ class TurnRunner:
         No ACP response updates package configuration, launch trust or call grants.
         The backend revalidates this result before replying to the same Pi child.
         """
+        from . import pi_events as pi
+
         if controller is None or not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
             return pi.CancelledUiChoice()
         permission = request.permission(turn_id)
@@ -487,6 +496,8 @@ class TurnRunner:
         busy = await Coordination.run_worker(partial(self.session_busy, session_id))
         if not busy:
             return None
+        from . import backend
+
         turn = backend.TurnSession.active.get(self.turn_tasks.get(session_id))
         if (turn is None or not turn.native.attestation.observed
                 or not turn.native.attestation.trustworthy):
@@ -514,6 +525,8 @@ class TurnRunner:
             if await Coordination.run_worker(partial(self.session_busy, session_id)):
                 yield None
                 return
+            from . import backend
+
             persistent = self.persistent_backends.setdefault(session_id, backend.PersistentPiSession())
             async with persistent.lock:
                 yield persistent
@@ -597,9 +610,12 @@ class TurnRunner:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-        await asyncio.gather(
-            *(backend.terminate_task_process(task) for task in tasks), return_exceptions=True
-        )
+        if tasks:
+            from . import backend
+
+            await asyncio.gather(
+                *(backend.terminate_task_process(task) for task in tasks), return_exceptions=True
+            )
         for persistent in self.persistent_backends.values():
             await persistent.close_idle()
         self.persistent_backends.clear()
