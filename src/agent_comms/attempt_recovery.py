@@ -123,10 +123,11 @@ class VerifiedOwnerLoss:
     def require_native_exit(self) -> None:
         """Inspect the original launch resources while owner exclusion is held.
 
-        Recorded admission supplies the selected journal. Before admission the
-        exact stopped declaration supplies any saved selection instead. Both
-        forms retain the original allocated directory check; missing admission
-        never establishes that a native child did not launch.
+        A recorded selected journal supplements the original allocated directory
+        check. Original directory-bound admissions recorded identity only with
+        the later context receipt. Before admission the exact stopped declaration
+        supplies any saved selection instead. Missing admission never establishes
+        that a native child did not launch.
         """
         if not self.owns(self._store, self.attempt):
             raise RecoveryBlocked("native exit observation requires acquired owner loss")
