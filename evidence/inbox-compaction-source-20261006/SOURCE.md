@@ -674,3 +674,43 @@ env -u PYTHONPATH PYTHONDONTWRITEBYTECODE=1 \
 
 Prepared and source-compiled only. Parent owns its actual invocation alongside
 the new installed Core acceptance. Pending inputs remain unmodified.
+
+### Recovery before native admission
+
+Input 780 has an engaged execution and reservation without recorded send epoch
+or session identity. Missing admission does not prove no child or no send.
+NativeAdmissionEpoch now supplies original launch selections: recorded admission
+uses its journal; unrecorded admission requires the exact current stopped release
+and uses its saved-session selection, if any. VerifiedOwnerLoss borrows that
+actual receipt and owns the shared exit check for both recovery consumers.
+Both --session and allocated --session-dir forms must be absent. No durable
+format changed. Live-owner/native, publication and current-attempt refusals
+remain; terminalization stays UNKNOWN and replay unsafe. Failed-native recovery
+still requires its admitted journal and genuine failed-terminal evidence.
+
+Before/after consumers: /home/ts/.cache/agent-scratch/mfc01/recovery-owner-before.json
+and recovery-owner-after.json. All 324 production, 381 test and 54 tool modules
+parsed/compiled without omissions; old scanner sites are gone. Existing private
+recovery checks failed during fixture setup before creating a reservation:
+swallowed NativePiUnavailable followed by missing row. Ten setup errors are
+preserved in mfc01/recovery-check.log; no recovery assertions entered. No live
+operation occurred. Unrelated dirty field_codec work is excluded.
+
+Parent operator call, using corrected installed Core without source overlay,
+ONLY after original normal stop produces the exact current dead-owner release,
+BEFORE replacement restart. A refusal stops the operation, not automatic retry.
+
+```python
+from agent_comms.coordinator import Coordination
+from agent_comms.attempt_recovery import RecoveryMonitorCapability
+
+with Coordination('/var/tmp/agent-comms-live-20260927-wzjtqhza/coordination.sqlite3') as store:
+    result = RecoveryMonitorCapability.abandon_released_native_attempt(
+        store,
+        'wirev19c4215bec1f0a8c69c773d5e43ee172d1f4691bcda6338dc82f7d1a1745c8466',
+    ).value
+    print(result.execution.reason_code, result.is_current, result.can_retry)
+```
+
+Expected relation: released_native_unknown, not current, not retryable. This is
+not NotSent or delivery success. Neither 780 nor 778 is replayed.
