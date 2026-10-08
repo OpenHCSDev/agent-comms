@@ -29,8 +29,6 @@ from .errors import RelationViolationError
 from .importing import ImportFormat, ImportLimits, ImportReceipt
 from .input_disposition import InputDispositions
 from .message_bus import MessageBus
-from .native_fork import fork_native_session
-from .native_transcript import NativeTranscript
 from .owner_lifecycle import OwnerLifecycle
 from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
@@ -47,6 +45,8 @@ def _session_model(session_file: Path) -> tuple[str, str] | None:
     parent's final ``model_change`` entry. Returns ``(provider, model_id)`` or
     ``None`` when the session carries no model record.
     """
+    from .native_transcript import NativeTranscript
+
     for entry in NativeTranscript(session_file).tail():
         if entry.model_choice is not None:
             return entry.model_choice
@@ -542,6 +542,7 @@ class ThreadManagement:
             )
 
         from .compaction_journal import CompactionJournal
+        from .native_fork import fork_native_session
 
         session = fork_native_session(parent.session_file, parent.worktree, pi_bin,
             private_inputs=CompactionJournal(self.root / "compaction-commits.sqlite3").private_inputs)

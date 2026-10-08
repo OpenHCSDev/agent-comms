@@ -57,7 +57,6 @@ from .agent_event_updates import AcpEventConsumer
 from .bus_publication import stable_thread_lookup
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
-from .compaction_result import CompactionResult
 from .coordination_cohort import next_sealed_assignment
 from .field_codec import FieldCodec
 from .cursor_publication import CursorPublication
@@ -205,6 +204,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     async def _compact_request(self, session_id: str, instructions: str | None) -> PromptResponse:
         from . import manual_compaction_bridge
+        from .compaction_result import CompactionResult
 
         # Idle owner bridge alone owns the lock and the one-POST budget.
         if session_id in self.sessions.proxies:

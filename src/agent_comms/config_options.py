@@ -25,18 +25,12 @@ from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .native_pi import NativePiUnavailable
 from .owner_launch import RestartEnvironment
-from .pi_commands import (
-    GetAvailableModels,
-    GetAvailableThinkingLevels,
-    SetModel,
-    SetThinkingLevel,
-    SettingCommand,
-)
 from .runtime import RuntimeServer
 from .session_effects import SessionEffects
 from .threads import Thread
 
 if TYPE_CHECKING:
+    from .pi_commands import SettingCommand
     from .session_lifecycle import SessionLifecycle
 
 
@@ -146,6 +140,8 @@ class ModelConfigOption(CatalogConfigOption):
             if value.strip()
         ]
         if not values:
+            from .pi_commands import GetAvailableModels
+
             data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
             values = [model.display_name for model in data.models if model.provider and model.id]
         return [
@@ -155,6 +151,8 @@ class ModelConfigOption(CatalogConfigOption):
     async def apply(
         self, owner: ConfigOptions, session_id: str, thread: Thread, value: str
     ) -> None:
+        from .pi_commands import SetModel
+
         provider, model = value.split("/", 1)
         await owner.set_active_backend_option(
             session_id, SetModel(provider=provider, model_id=model), "Model change timed out"
@@ -174,6 +172,8 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         if os.environ.get("AGENT_COMMS_AGENT_MODELS"):
             levels = [member.declared_name for member in ThinkingLevel.members_with(ThinkingLevel) if member.ordinary_choice]
         else:
+            from .pi_commands import GetAvailableThinkingLevels
+
             data = await GetAvailableThinkingLevels().discover(
                 self.agent_bin, self.agent_args.with_model(thread.model).argv
             )
@@ -183,6 +183,8 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
     async def apply(
         self, owner: ConfigOptions, session_id: str, thread: Thread, value: str
     ) -> None:
+        from .pi_commands import SetThinkingLevel
+
         await owner.set_active_backend_option(
             session_id, SetThinkingLevel(level=value), "Thinking level change timed out"
         )

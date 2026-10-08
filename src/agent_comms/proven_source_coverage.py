@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Annotated
+from typing import Annotated, TYPE_CHECKING
 
 from .bus_source_page import CoveragePage
 from .bus_publication import StableLookupText
@@ -26,13 +26,15 @@ from .cohort_schema import ClaimBatchReceipts, assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import AcceptedCohort, _receipt_matches
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
-from .native_entries import NativeEvidenceScope
 from .message_bus import MessageBus
 from .private_bus_checkpoint import (
     PrefixWitness,
     verify_private_bus_checkpoint_unlocked,
 )
 from .wake import NoWakeDecision, WakeDecision
+
+if TYPE_CHECKING:
+    from .native_entries import NativeEvidenceScope
 from .store_files import StoreLockContention
 
 _MAX_SCAN_SECONDS = 0.25
@@ -115,6 +117,8 @@ class SourceCoverage:
         exhausted page uses certified latest initial, not global bus high-water.
         Filesystem fsync/locks are not a hard wall-clock deadline.
         """
+        from .native_entries import NativeEvidenceScope
+
         with NativeEvidenceScope.borrow(source_reads) as source_reads:
             request = CoveragePage.capture(lookup=self.recipient_lookup, limit=limit,
                                            after_seq=after_seq, partial=partial)
@@ -223,6 +227,8 @@ class SourceCoverage:
     def prefix(self, *, through_seq: int | None = None,
                source_reads: NativeEvidenceScope | None = None) -> ProvenSourceCoverage:
         """Rescan the whole activation prefix; no persisted high-water is trusted."""
+        from .native_entries import NativeEvidenceScope
+
         with NativeEvidenceScope.borrow(source_reads) as source_reads:
             with self.bus.log.locked(blocking=False, contention=self.contention):
                 marker = self.bus.log._private_marker_unlocked()

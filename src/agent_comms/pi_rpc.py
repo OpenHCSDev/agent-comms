@@ -5,13 +5,15 @@ from .jsonl_stream import JsonlStreamReader
 
 import asyncio
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from .pending_requests import PendingRequests
-from .pi_commands import PiCommand
-from .pi_events import PiEvent, Response
 from .sealed import Sealed
+
+if TYPE_CHECKING:
+    from .pi_commands import PiCommand
+    from .pi_events import PiEvent, Response
 
 
 def unique_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -39,6 +41,8 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
 
     @staticmethod
     def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+        from .pi_events import PiEvent
+
         if max_bytes is not None and len(raw) > max_bytes:
             raise ValueError("Native RPC record exceeds transport limit")
         if strict and (not raw or not raw.endswith(b"\n")):
