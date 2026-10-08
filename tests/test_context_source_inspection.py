@@ -9,7 +9,8 @@ import pytest
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
-from agent_comms.runtime_requests import RuntimeRequest, ContextRecordedSegmentRuntimeRequest
+from agent_comms.runtime_requests import (RuntimeRequest, ContextRecordedSegmentRuntimeRequest,
+    ContextCoreRuntimeRequest, ContextCoreSourceRuntimeRequest)
 from agent_comms.thread_identity import ThreadIncarnation, TurnId, TurnIdentity
 from agent_comms.turn_context import (
     ContextManifest, ContextSourceText, FileProvenance, JournalProvenance,
@@ -48,7 +49,7 @@ def test_current_native89_shape_and_authenticated_file_read(tmp_path):
         "counter": "pi.estimateTokens", "identity": FieldCodec.encode(native),
         "segments": FieldCodec.encode((segment,)),
     })
-    assert data.inspection_segments == (segment,)
+    assert data.segments == (segment,)
     assert data.observation() == original
     result = data.public_source_text(None, original, 0, source)
     assert FieldCodec.decode(ContextSourceText, FieldCodec.encode(result)) == result
@@ -62,20 +63,59 @@ def test_current_native89_shape_and_authenticated_file_read(tmp_path):
         data.public_source_text(None, original, 0, source)
 
 
-def test_borrowed_preview_refreshes_only_existing_core_contributors(tmp_path):
+def test_current_core_context_is_independent_and_source_selection_is_current(tmp_path):
     comms, _ = _root(tmp_path)
-    owner = replace(comms.registry.require("Alice"), session_file=str(tmp_path / "session.jsonl"))
-    native = identity(tmp_path)
-    segment = system((PreviewProvenance(native, "a" * 64),))
-    borrowed = NativeContextData("pi.estimateTokens", native, (segment,))
-    refreshed = borrowed.with_current_contributors(comms, owner)
-    assert refreshed.segments is borrowed.segments
-    assert refreshed.identity is borrowed.identity
-    assert refreshed.observation() == borrowed.observation()
-    assert refreshed.contributors == TurnContext.for_inspection(comms, owner).segments
-    assert refreshed.inspection_segments == (segment, *refreshed.contributors)
-    with pytest.raises(ValueError, match="different selected"):
-        borrowed.with_current_contributors(comms, replace(owner, session_file=str(tmp_path / "foreign")))
+    owner = comms.registry.require("Alice")
+    context = TurnContext.for_inspection(comms, owner)
+    assert FieldCodec.decode(TurnContext, FieldCodec.encode(context)) == context
+    request = ContextCoreRuntimeRequest(thread=owner.name)
+    assert RuntimeRequest.from_wire(request.to_wire()) == request
+    position, segment = next((i, s) for i, s in enumerate(context.segments)
+                             if any(isinstance(p, FileProvenance) for p in s.provenance))
+    source = next(p for p in segment.provenance if isinstance(p, FileProvenance))
+    selected = ContextCoreSourceRuntimeRequest(thread=owner.name, owner=owner.incarnation,
+        segment=position, manifest=segment.manifest(0), source=source)
+    assert RuntimeRequest.from_wire(selected.to_wire()) == selected
+    text = context.public_source_text(comms, selected.owner, selected.segment,
+                                      selected.manifest, selected.source)
+    assert text.text == source.public_text(comms)
+    with pytest.raises(ValueError, match="incarnation"):
+        context.public_source_text(comms, replace(owner.incarnation, created_at=owner.created_at + 1),
+            position, selected.manifest, source)
+    with pytest.raises(ValueError, match="changed"):
+        context.public_source_text(comms, owner.incarnation, position,
+                                  replace(selected.manifest, sha256="b" * 64), source)
+    with pytest.raises(ValueError, match="outside"):
+        context.public_source_text(comms, owner.incarnation, position, selected.manifest,
+                                  replace(source, path="/foreign"))
+
+
+@pytest.mark.asyncio
+async def test_core_context_socket_reads_without_native_session_or_preview(tmp_path):
+    from delivery_owner_fixture import canonical_delivery_owner
+    from agent_comms.runtime import RuntimeConnection, socket_path
+
+    async with canonical_delivery_owner(tmp_path) as (comms, agent, _, _):
+        owner = comms.registry.require("alpha")
+        assert owner.session_file is None
+        connection = RuntimeConnection(comms, owner.name,
+                                       socket_path(comms.root, owner.require_process().pid))
+        try:
+            context = FieldCodec.decode(TurnContext, await connection.request("context_core"))
+            assert context.thread == owner.incarnation
+            assert context.segments == TurnContext.for_inspection(comms, owner).segments
+            position, segment = next((i, s) for i, s in enumerate(context.segments)
+                                     if any(isinstance(p, FileProvenance) for p in s.provenance))
+            source = next(p for p in segment.provenance if isinstance(p, FileProvenance))
+            parameters = dict(owner=owner.incarnation, segment=position,
+                              manifest=segment.manifest(0), source=source)
+            text = FieldCodec.decode(ContextSourceText,
+                await connection.request("context_core_source", **parameters))
+            assert text.text == source.public_text(comms)
+            assert agent.turns.persistent_backends == {}
+            assert owner.session_file is None
+        finally:
+            await connection.close()
 
 
 def test_captured_sdk_value_is_original_and_public_only(tmp_path):
@@ -253,17 +293,16 @@ def test_cold_client_acquires_current_and_recorded_contributor_declarations():
     original = "Original unavailable awareness instruction"
     contributor = UnavailableAwarenessSegment(
         provenance=(source,), instruction=InstructionFile(original, source))
-    payload = FieldCodec.encode(NativeContextData(
-        "pi.estimateTokens", NativeSessionIdentity("original-native", "/original/saved.jsonl"),
-        (), (contributor,)))
+    from agent_comms.turn_context import NextContextTurn
+    payload = FieldCodec.encode(TurnContext(ThreadIncarnation("original-owner", 17002.0),
+                                         NextContextTurn(), (contributor,)))
     result = subprocess.run([sys.executable, "-c", '''
 import hashlib, json, sys
 from agent_comms.field_codec import FieldCodec
-from agent_comms.native_turn_context import NativeContextData
-from agent_comms.turn_context import ContextSegment, SegmentManifest
+from agent_comms.turn_context import ContextSegment, SegmentManifest, TurnContext
 assert "agent_comms.context_segments.awareness" not in sys.modules
-preview = FieldCodec.decode(NativeContextData, json.load(sys.stdin))
-contributor = preview.contributors[0]
+preview = FieldCodec.decode(TurnContext, json.load(sys.stdin))
+contributor = preview.segments[0]
 assert contributor.public_text() == "Original unavailable awareness instruction"
 schema = FieldCodec.value_schema(type[ContextSegment])
 # Original stored spellings span every previously producer-local module.
