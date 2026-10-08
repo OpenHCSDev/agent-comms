@@ -808,4 +808,18 @@ editor/confirmation behavior. Explicit CLI override parsing is checked in the
 catalog control. No worker restart/native request occurred. An initial command
 named a nonexistent third test and stopped before test entry; both logs remain.
 Raw: /home/ts/.cache/agent-scratch/mfc01/restart-editor/check02.stdout.log and
-check02.stderr.log. Installed UI delivery remains Parent's next action.
+check02.stderr.log.
+
+Parent then checked the current installed saved-tool runtime: Restart encodes
+empty parameter properties and no confirmation. The screenshot was an older
+open frontend. The form removal is already installed in b798; b629 is only a
+bound-edit execution constraint, not the primary UI removal fix.
+
+Compared accepted edited payloads with the preceding implementation: Restart
+with empty arguments is unchanged and retains unset launch overrides; supplied
+read worktree and tag edits are unchanged. Omitted editable values still reset
+to declaration defaults (ReadTarget's nondefault worktree becomes the current
+working directory). That behavior predates this guard and is not changed here.
+Raw: /home/ts/.cache/agent-scratch/mfc01/restart-editor/default-semantics.stdout.log
+and default-semantics.stderr.log. The earlier three affected checks passed;
+they were not repeated. No real restart was needed or performed.
