@@ -64,6 +64,8 @@ class UnrecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
             raise StaleFence("native input admission was already bound")
 
     def require_release(self, receipt, snapshot, current) -> None:
+        current.require_local_process(receipt.thread.require_process())
+        current.require_idle()
         if not receipt.current(snapshot, current, receipt.before):
             raise RelationViolationError("Unrecorded native send has no exact stopped release")
 
@@ -93,6 +95,17 @@ class RecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
         fence = AdmissionIdentity(receipt.thread.incarnation, receipt.before)
         if not fence.includes(sent):
             raise RelationViolationError("Native release predates the sending admission")
+        if snapshot.admission_generations[current.name] == receipt.after:
+            if not receipt.current(snapshot, current, receipt.before):
+                raise RelationViolationError("Native release differs from its stopped declaration")
 
     def recovery_session_files(self, row, receipt) -> tuple[Path, ...]:
+        # The original send contract admitted only journals inside this
+        # recipient's native-sessions directory, and recorded selected identity
+        # later, with the context receipt. That directory remains checked by
+        # VerifiedOwnerLoss. New admissions atomically record the selected file;
+        # keep its additional subprocess check whenever it exists. Neither
+        # representation permits borrowing the replacement owner's selection.
+        if row.session_id is None:
+            return ()
         return (row.require_session_identity().path,)
