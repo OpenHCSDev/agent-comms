@@ -299,8 +299,6 @@ class ChannelManagement:
 
     def _change_tag_unlocked(self, name: str, replacement: str | None,
                              cohort: tuple[Thread, ...]) -> None:
-        for thread in cohort:
-            tags = (thread.tags - {name}) | ({replacement} if replacement else set())
-            self.registry.register(replace(thread, tags=tags), self.registry.status(thread.name))
+        self.registry.change_tag(cohort, name, replacement)
         with self.catalog.editing() as document:
             document.change_tag(name, replacement)

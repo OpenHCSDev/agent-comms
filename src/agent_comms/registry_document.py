@@ -286,6 +286,16 @@ class RegistryDocument(RegistryPresence):
             self.status(original.name).require_stopped()
             self.archive(original.name)
 
+    def change_tag(self, originals: Sequence[Thread], tag: str, replacement: str | None) -> None:
+        """Change one cohort's tags on current records, retaining owner state."""
+        self.require_originals(originals)
+        for original in originals:
+            current = self.require(original.name)
+            tags = (current.tags - {tag}) | ({replacement} if replacement else set())
+            change = self.prepare_registration(
+                replace(current, tags=tags), self.status(current.name), new_owner=False)
+            change.apply(self)
+
     def delete_originals(self, originals: Sequence[Thread]) -> None:
         self.require_originals(originals)
         for original in originals:

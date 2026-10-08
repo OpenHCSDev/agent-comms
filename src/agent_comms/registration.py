@@ -226,6 +226,11 @@ class Registration:
             edit.document.delete_originals(originals)
             edit.commit()
 
+    def change_tag(self, originals: Sequence[Thread], tag: str, replacement: str | None) -> None:
+        with self.store.editing() as edit:
+            edit.document.change_tag(originals, tag, replacement)
+            edit.commit()
+
     def remove(self, name: str) -> tuple[str, ...]:
         with (
             publication_identity_fence(self.store.path.parent, nonblocking=True),
