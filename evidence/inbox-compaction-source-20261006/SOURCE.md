@@ -754,3 +754,30 @@ These source checks ran with the preexisting parked scalar optimization still
 present in field_codec.py; that file is neither changed by this work nor included
 in this commit. Exact paired installed/UI acceptance remains Parent's next step.
 No native SDK/provider, live input, recovery, restart or public mutation occurred.
+
+### Settled recovery metadata table discriminator
+
+RecoveryAudit.kind is the original recovery-condition column. The inherited
+TypedTable family tag also defaulted to kind, so FieldCodec correctly refused
+encoding the table within RecoverySnapshot after the successful live recovery.
+The complete declared table family has three kind-bearing rows: RecoveryAudit,
+CohortDeliveryReceipts and GoalHistoryEntry. GoalHistoryEntry already declares
+row as its nominal discriminator. Both missing declarations now do likewise;
+ProjectedRecovery is only TypedRow and has no family tag collision. All original
+kind columns, condition/delivery values, names, constraints, SQL and write/read
+algorithms remain unchanged. Other table tags are unchanged. No codec, mapper,
+legacy reader, recovery replay or live database mutation is introduced.
+
+AST declarations/consumers: mfc01/recovery-table-kind-consumers.json (zero parse
+omissions). Actual private SQLite receipt rows roundtrip with distinct row/kind;
+a privately settled snapshot, with its authored audit row read through the
+original RecoveryReader, also roundtrips and remains noncurrent/nonretryable.
+Both affected checks passed. Initial check selection hit a stale execution
+fixture and absent cohort receipts; the first new snapshot check correctly
+exposed that ordinary settlement does not itself create recovery audit rows.
+Those failed checks remain in recovery-row-check.log and
+recovery-row-current-check.log; the final snapshot pass is in
+recovery-snapshot-encoding-check.log. No live recovery was repeated. Checks use
+the preexisting parked field_codec scalar change, which remains excluded; its
+conflicting-field declaration check is unchanged. Parent owns integration and
+any read-only original-result encoding after delivery.

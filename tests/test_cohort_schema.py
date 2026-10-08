@@ -235,6 +235,9 @@ def test_seal_rejects_observer_with_preexisting_legacy_singleton_claim(tmp_path:
 
 
 def test_selected_and_observer_receipts_are_distinct_immutable_rows(tmp_path: Path) -> None:
+    from agent_comms.cohort_schema import CohortDeliveryReceipts
+    from agent_comms.field_codec import FieldCodec
+
     with Coordination(str(tmp_path / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         with store.session.transaction() as db:
@@ -262,6 +265,11 @@ def test_selected_and_observer_receipts_are_distinct_immutable_rows(tmp_path: Pa
             )
         ] == [(0, "a", "selected", "claim-a"), (1, "b", "unmentioned_observer", None)]
         assert db.execute("SELECT COUNT(*) FROM claim_batch_members").fetchone()[0] == 1
+        for row in CohortDeliveryReceipts.select(db, order_by=("ordinal",)):
+            encoded = FieldCodec.encode(row)
+            assert encoded["row"] == CohortDeliveryReceipts.declared_name
+            assert encoded["kind"] == row.kind
+            assert FieldCodec.decode(CohortDeliveryReceipts, encoded) == row
         for statement in (
             "UPDATE claim_batch_receipts SET accepted_at_ms=101",
             "DELETE FROM claim_batch_receipts",

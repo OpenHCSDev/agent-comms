@@ -504,6 +504,33 @@ def test_token_digest_is_global_and_only_digest_persists(db_path: Path) -> None:
         )
 
 
+def test_settled_snapshot_encodes_recovery_kind_separately_from_table(db_path: Path) -> None:
+    from agent_comms.coordination_snapshot import RecoverySnapshot
+    from agent_comms.coordination_tables.recovery import RecoveryAudit
+
+    with store(db_path) as db:
+        db.participants.register("owner", "Owner", "thread", committed=True)
+        db.executions.create("exec", ExecutionOrigin.ACP, "owner", "thread", 1)
+        db.executions.mark_pending("exec", expected_revision=1)
+        _, fence = started(db)
+        fence = final_evidence(db, fence)
+        settled = db.attempts.settle_nonpublication(
+            fence, expected_pointer_revision=1, outcome=AttemptFailedAttempt(),
+            reason_code="failed")
+        # Populate the original audit table for serialization, not owner-loss proof.
+        with db.session.transaction() as connection:
+            RecoveryAudit(execution_id="exec", kind=FailedRecovery, reason_code="failed",
+                sanitized_detail=None, attempt=1, elapsed_ms=0, observed_at_ms=1_000).insert(connection)
+        observed = db.snapshots.get("exec")
+        assert observed.execution == settled.value.execution
+        encoded = FieldCodec.encode(observed)
+        assert encoded["last_recovery"]["row"] == RecoveryAudit.declared_name
+        assert encoded["last_recovery"]["kind"] == FailedRecovery.declared_name
+        assert FieldCodec.decode(RecoverySnapshot, encoded) == observed
+        assert FieldCodec.decode(RecoveryAudit, encoded["last_recovery"]) == observed.last_recovery
+        assert not observed.is_current and not observed.can_retry
+
+
 def test_nonpublication_silent_atomic_settlement(db_path: Path) -> None:
     with ready(db_path) as db:
         _, fence = started(db)
