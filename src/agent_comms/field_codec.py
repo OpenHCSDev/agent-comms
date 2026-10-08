@@ -480,15 +480,21 @@ class FieldCodec(Sealed):
                 return data
             raise ValueError(f"Value does not match {target}")
         if origin in (Union, types.UnionType):
-            errors = []
-            for alternative in args:
-                try:
-                    return cls.decode(alternative, data)
-                except (TypeError, ValueError) as error:
-                    errors.append(error)
-            # Keep declaration-owned failure detail through an optional/union
-            # boundary (e.g. a native UNKNOWN reason that fails validation).
-            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+            first_error = None
+            try:
+                for alternative in args:
+                    try:
+                        return cls.decode(alternative, data)
+                    except (TypeError, ValueError) as error:
+                        if first_error is None:
+                            first_error = error
+                # Keep the original declaration-owned reason on total failure.
+                raise ValueError(f"Value does not match {target}: {first_error}") from first_error
+            finally:
+                # A swallowed traceback points back to this frame. End that
+                # loan even on success, rather than leaving a cyclic payload
+                # graph for a later UI-thread garbage collection.
+                first_error = None
         if origin is frozenset:
             if not isinstance(data, list):
                 raise ValueError("Expected a JSON array.")
