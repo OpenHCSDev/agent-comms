@@ -95,3 +95,19 @@ Native entry declarations are still required on the current import graph. This
 single measurement establishes neither a repeatable speed gain nor total saved
 thread opening performance. The matching installed application remains the next
 qualification; the running public owner has not been restarted or replaced.
+
+The matching installed candidate then completed one original agent-comms-ux
+attachment with published Toad386b596f/native0fbb915d and this Core wheel. The
+original frontier147260275 supplied four visible bodies, no loading placeholders,
+empty stderr and no application error. No prompt, provider input, fork or owner
+restart was performed; the typed draft was restored before teardown. The original
+69-package/954-asset/2857-RECORD and native package proofs passed.
+
+App-open to visible history was 3.836 seconds, versus 3.572 seconds in the retained
+published-pair run. The candidate also typed a draft during attachment, which the
+earlier control did not do, so this is not an isolated performance comparison.
+Its initialize call took1.599 seconds and load0.677 seconds; maximum measured loop
+delay was179ms. There is no demonstrated total opening or frame-pacing gain. The
+candidate remains unpublished. Timing/raw logs are retained in the owned
+cold-acp-owner-delivery artifact and the actual attachment scratch directory;
+copied private config/state was removed after original teardown.
