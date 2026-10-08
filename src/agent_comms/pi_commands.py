@@ -311,15 +311,9 @@ class CatalogQuery(NativeQuery):
 
         try:
             launch = await asyncio.to_thread(
-                NativePiRpcLaunch.managed,
+                NativePiRpcLaunch.catalog,
                 agent_bin,
-                (
-                    *arguments,
-                    "--no-extensions",
-                    "--no-skills",
-                    "--no-context-files",
-                    "--no-session",
-                ),
+                tuple(arguments),
                 worktree=Path.cwd(),
             )
             async with BoundedRun.session(
@@ -330,12 +324,12 @@ class CatalogQuery(NativeQuery):
                     response = await self.exchange(PiRpcChannel(child.stdout), child.stdin)
                     if response.success is True:
                         return response.data.require_payload()
+                    raise NativePiUnavailable(response.error or "Native catalog query was refused")
                 finally:
                     stderr.cancel()
                     await asyncio.gather(stderr, return_exceptions=True)
-        except (TimeoutError, EOFError, ValueError, OSError, NativePiUnavailable):
-            pass
-        return self.response_payload()
+        except (TimeoutError, EOFError, ValueError, OSError) as error:
+            raise NativePiUnavailable(f"Native catalog discovery failed: {error}") from error
 
 
 @dataclass(frozen=True, kw_only=True)

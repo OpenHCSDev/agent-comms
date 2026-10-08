@@ -114,7 +114,7 @@ class AcpEventConsumer(MroDispatch):
             status="completed" if event.ok else "failed",
             content=[
                 ContentToolCallContent.model_validate(item)
-                for item in tool_result_content(event.id, event.output or "", event.diff)
+                for item in tool_result_content(event.id, event.output or "", event.diff, event.sent_message)
             ],
         )
         await client.session_update(session_id=session_id, update=end_update)

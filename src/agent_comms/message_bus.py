@@ -304,11 +304,13 @@ class MessageBus:
         scope = ChannelDisplayScope(target, self._channels.read().history_targets(target))
         return [message for message in self.log.full_history() if scope.includes(message)]
 
-    def awareness_segments(self, owner: Thread):
+    def awareness_segments(self, owner: Thread, *, blocking: bool = False):
         """Bounded pointers to addressed sources, independent of UI read state.
 
         Current canonical checkpoint rows own the pointers. Repeated reminders
         are intentional: neither displaying nor composing them proves model read.
+        Input preparation may omit this optional supplement on contention;
+        inspection waits in its existing resource worker for the actual read.
         """
         from .bus_publication import stable_thread_lookup
         from .errors import RelationViolationError
@@ -316,7 +318,7 @@ class MessageBus:
         from .context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
 
         try:
-            with self.log.locked(blocking=False):
+            with self.log.locked(blocking=blocking):
                 marker = self.log._private_marker_unlocked()
                 rows = addressed_source_pointers_unlocked(
                     self.log, marker, stable_thread_lookup(owner.created_at)

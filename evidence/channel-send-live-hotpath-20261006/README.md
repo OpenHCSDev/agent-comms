@@ -808,3 +808,74 @@ Attempt to verify disposal of only the unlaunched223MiB runtime stopped on a
 permission-denied proc environment before deletion. Existing cleanup owner was
 given the exact dependency and actual current/pending runtimes for privileged
 borrower check; no cleanup success is claimed yet. No worktree was added.
+
+
+## Future backend defaults and pointer close delivered — October 7
+
+The existing publisher now distinguishes changing future command defaults from
+replacing running owners. Frontend and backend declarations share their actual
+link acquisition/publication/recovery implementation; replacing agents remains
+with the original stopped-owner installation. Private typed-scope and real-link
+recovery checks passed, including preserving an independently changed foreign
+binding. Core PR705 and Toad PR516 are merged.
+
+Future backend commands now select `runtime-session-focus` (Core4745); the Toad
+command selects `runtime-tab-close-focus` (Toadbf9a/nativea2ac). Existing agents
+and the active native route were preserved. Mouse tab-close uses the original
+native FOCUS_ON_CLICK=False declaration, retaining editor focus; keyboard close
+still works. The existing real App control and installed mixed-selection/archive
+control passed. All69 complete RECORDs /2787 hashed entries are verified.
+
+The final actual-default saved-thread App completed and all six native
+open/close/reopen/editor/history checks passed. Original owner and selected
+runtime were unchanged; processes joined and owned cleanup was empty:
+`/home/ts/.cache/agent-scratch/tab-close-focus-default-live-20261007/receipt.json`.
+Connection plus visible saved history took2.84s on first peer open and2.28s on
+reopen in this single run. This is not a latency improvement claim; ACP startup
+remains active work. The candidate recorder import refusals and the concurrently
+observed authorized backend-link change remain in their original raw receipts;
+the existing native review was rerun offline without an App replay. The own
+completed4.26MB Git-archive build source was removed after a clear privileged
+process census; installed prefixes, wheels, evidence and journals remain held.
+
+## Context reader, native measurement and cold ACP defaults — October 7
+
+Core706 and Toad517 are merged; native92 was already merged. The built
+`runtime-context-scroll-acp` contains the exact reviewed source checkpoints.
+Context-tree rebind retains the native cursor without scrolling an already
+selected node back into view, and schedules detail preparation once. The Core
+change keeps the complete native tree and trust checks, using filesystem path
+strings inside the traversal instead of constructing a Path at each node.
+Native92 retains the original stored-extent measurement owner and invalidation.
+
+The first combined physical recording stopped before its journey. Blocking
+py-spy sampling reported progressively increasing lag, reaching21.7s. Its long
+stack spans cannot establish a product cause. The unprofiled comparison attached
+the same frame observer and completed left/right sidebar interaction, transcript
+wheel/reversal/End, context scrolling and saved agent return. All11 original
+history/editor checks passed, the App exited0, the public source owner was
+unchanged, and original cleanup had no remaining processes or errors. The final
+review import-path mistake is preserved; the existing review decoded retained
+captures offline, without repeating the App:
+`/home/ts/.cache/agent-scratch/context-scroll-acp-unprofiled-live-20261007/completed-journey-review.json`.
+This is affected behavior evidence, not a terminal smoothness or latency win.
+
+The same publication owner advanced frontend and future backend command defaults
+to the reviewed prefix, preserving the actual native route and running owners.
+Publication results are in
+`.artifacts/sidebar-live-candidate-20261006/context-scroll-acp-wheel/{frontend,backend}-publication.json`.
+All69 distributions and2787 hashed RECORD entries were verified after publication.
+The unchanged Diff dependency's installer cache metadata was retained from the
+previous installation; the new installer metadata and RECORD remain preserved
+alongside its explicit resource-retention record. The actual-default agent-tab
+open/close/reopen observation completed0; all six native close/editor/history
+checks passed, original source and runtime were unchanged, and cleanup was clear:
+`/home/ts/.cache/agent-scratch/context-scroll-acp-default-live-20261007/receipt.json`.
+Visible saved history readiness took2.44s on first peer open and2.51s on reopen.
+The original method observer measured tab switching374/349ms, ACP initialization
+1.74/1.95s and saved session load279/243ms. These are individual observed runs,
+not a reliable latency improvement over the previous2.84/2.28s observations.
+Cold initialization and native view admission remain unfinished performance
+work. Remaining eager SDK imports were
+traced to real protocol model consumers; no lazy alias or speculative cache was
+added to conceal that initialization cost.

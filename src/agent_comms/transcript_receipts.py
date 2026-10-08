@@ -336,12 +336,7 @@ class AssignedTranscriptSource:
         message = original.message
         if original.audience.sender_lookup == stable_thread_lookup(self.recipient.created_at):
             return (
-                SentTranscript(
-                    message.body,
-                    timestamp=message.timestamp,
-                    source=message.reference,
-                    routing=TurnRouting(reply=MessageRoute(message.sender, (message.target,))),
-                ),
+                SentTranscript.from_message(message),
             )
         return (
             IncomingTranscript(
