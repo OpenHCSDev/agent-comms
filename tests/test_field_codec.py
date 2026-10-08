@@ -171,6 +171,24 @@ def test_tuple_shape_and_strict_bool():
         FieldCodec.decode(bool, 1)
 
 
+def test_union_success_releases_rejected_payload_and_failure_keeps_first_cause():
+    from weakref import ref
+
+    class Payload(list):
+        pass
+
+    payload = Payload([1])
+    original = ref(payload)
+    assert FieldCodec.decode(tuple[str, ...] | list[int], payload) == [1]
+    del payload
+    assert original() is None
+
+    with pytest.raises(ValueError) as failure:
+        FieldCodec.decode(str | int, None)
+    assert isinstance(failure.value.__cause__, ValueError)
+    assert str(failure.value.__cause__) == "Expected <class 'str'>, received NoneType"
+
+
 def test_scalar_dispatch_keeps_representation_and_exact_type_contracts():
     import math
     from typing import Any, Literal

@@ -185,8 +185,11 @@ class TargetAction:
 
     @property
     def confirmation(self) -> str:
-        return '\n'.join(dict.fromkeys(warning for command in self.bound
-                                      if (warning := command.confirmation())))
+        groups: dict[type[CliCommand], list[CliCommand]] = {}
+        for command in self.bound:
+            groups.setdefault(type(command), []).append(command)
+        return '\n'.join(filter(None, (commands[0].selection_confirmation(tuple(commands))
+                                       for commands in groups.values())))
 
     def edited(self, arguments: dict[str, str]) -> TargetAction:
         return replace(self, bound=tuple(command.edited(type(command).editor_arguments(arguments))
@@ -253,11 +256,12 @@ class TargetEdit(Command):
     arguments: dict[str, str]
     confirmed: bool = False
     channel: str | dict[str, tuple[str, ...]] | None = None
+    project: str | None = None
 
     def apply(self, ctx: Comms) -> object:
         arguments = self.declaration.editor_arguments(self.arguments)
         return self.declaration.execute_target(ctx, self.target, arguments,
-                                              confirmed=self.confirmed, channel=self.channel)
+                                              confirmed=self.confirmed, channel=self.channel, project=self.project)
 
 
 @dataclass(frozen=True)
@@ -449,6 +453,10 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
     def confirmation(self) -> str:
         return ''
 
+    def selection_confirmation(self, commands: tuple[CliCommand, ...]) -> str:
+        return '\n'.join(dict.fromkeys(warning for command in commands
+                                      if (warning := command.confirmation())))
+
     def with_confirmation(self, confirmed: bool) -> Self:
         if self.confirmation() and not confirmed:
             raise ValueError(self.confirmation())
@@ -468,14 +476,21 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
     @classmethod
     def execute_target(cls, comms: Comms, target: str | tuple[str, ...], arguments: dict[str, object],
                        *, confirmed: bool = False,
-                       channel: str | dict[str, tuple[str, ...]] | None = None) -> object:
+                       channel: str | dict[str, tuple[str, ...]] | None = None,
+                       project: str | None = None) -> object:
+        project = os.getcwd() if project is None else project
         selected = cls.selected_targets(target)
+        from .channel_targets import is_channel_target
+        snapshot = comms.registry.snapshot()
+        catalog = (comms.channels.catalog.read()
+                   if channel or any(is_channel_target(name) for name in selected) else None)
         if isinstance(target, str) or (len(selected) == 1 and not cls.multiple_targets):
             name = selected[0]
             bindings = tuple(command for context in cls.selection_channels(channel, name)
-                             for command in cls.bindings(comms, name, context))
+                             for command in cls.bindings(comms, name, context,
+                                                         snapshot=snapshot, catalog=catalog))
             if len(bindings) == 1:
-                return bindings[0].edited(arguments).with_confirmation(confirmed).apply(comms)
+                return bindings[0].for_editor(comms, name, project).edited(arguments).with_confirmation(confirmed).apply(comms)
             if not bindings:
                 raise ValueError('This action is no longer available for the target')
         if not cls.multiple_targets:
@@ -489,7 +504,8 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             for context in cls.selection_channels(channel, name):
                 try:
                     bindings = tuple(command for member in declarations
-                                     for command in member.bindings(comms, name, context))
+                                     for command in member.bindings(comms, name, context,
+                                                                   snapshot=snapshot, catalog=catalog))
                     if not bindings:
                         scope = f' in {context}' if context is not None else ''
                         raise ValueError(f'This action is no longer available for {name}{scope}')
@@ -501,8 +517,8 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                     if not any(command == previous for _, _, _, previous in planned):
                         planned.append((len(planned) + len(outcomes), name, context, command))
         # Parameters and every existing warning are admitted before any write.
-        edited = tuple(command.edited(arguments).with_confirmation(confirmed)
-                       for _, _, _, command in planned)
+        edited = tuple(command.for_editor(comms, name, project).edited(arguments).with_confirmation(confirmed)
+                       for _, name, _, command in planned)
         for (position, name, context, original), command in zip(planned, edited, strict=True):
             try:
                 if original not in type(original).bindings(comms, name, context):
@@ -1464,6 +1480,13 @@ class DeleteTagCliCommand(ExactTagCliCommand, declared_name='delete-tag'):
     def confirmation(self):
         return self.disposition.confirmation(self.name)
 
+    def selection_confirmation(self, commands):
+        groups: dict[TagDisposition, list[str]] = {}
+        for command in commands:
+            groups.setdefault(command.disposition, []).append(command.name)
+        return '\n'.join(disposition.confirmation(tuple(names))
+                         for disposition, names in groups.items())
+
     def with_confirmation(self, confirmed: bool) -> Self:
         super().with_confirmation(confirmed)
         return replace(self, confirmed=confirmed)
@@ -1573,7 +1596,7 @@ class ReadTargetCliCommand(CliCommand, declared_name='read-target'):
     help = 'Mark view read'
     multiple_targets = True
     target: str = option('--target', target_bound=True)
-    worktree: str = option('--worktree', default_factory=os.getcwd)
+    worktree: str = option('--worktree', default_factory=os.getcwd, target_bound=True)
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
