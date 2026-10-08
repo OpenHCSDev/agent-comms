@@ -111,8 +111,6 @@ class OwnerReleaseReceipt:
             raise RelationViolationError("Released native owner incarnation changed")
         source.require_recorded_owner(current)
         process = self.thread.require_process()
-        current.require_local_process(process)
-        current.require_idle()
         if process.alive():
             raise RelationViolationError("Released native owner process is still alive")
         actual = snapshot.admission_identity(current.name)
