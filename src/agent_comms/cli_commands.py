@@ -256,11 +256,12 @@ class TargetEdit(Command):
     arguments: dict[str, str]
     confirmed: bool = False
     channel: str | dict[str, tuple[str, ...]] | None = None
+    project: str | None = None
 
     def apply(self, ctx: Comms) -> object:
         arguments = self.declaration.editor_arguments(self.arguments)
         return self.declaration.execute_target(ctx, self.target, arguments,
-                                              confirmed=self.confirmed, channel=self.channel)
+                                              confirmed=self.confirmed, channel=self.channel, project=self.project)
 
 
 @dataclass(frozen=True)
@@ -475,7 +476,9 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
     @classmethod
     def execute_target(cls, comms: Comms, target: str | tuple[str, ...], arguments: dict[str, object],
                        *, confirmed: bool = False,
-                       channel: str | dict[str, tuple[str, ...]] | None = None) -> object:
+                       channel: str | dict[str, tuple[str, ...]] | None = None,
+                       project: str | None = None) -> object:
+        project = os.getcwd() if project is None else project
         selected = cls.selected_targets(target)
         from .channel_targets import is_channel_target
         snapshot = comms.registry.snapshot()
@@ -487,7 +490,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                              for command in cls.bindings(comms, name, context,
                                                          snapshot=snapshot, catalog=catalog))
             if len(bindings) == 1:
-                return bindings[0].edited(arguments).with_confirmation(confirmed).apply(comms)
+                return bindings[0].for_editor(comms, name, project).edited(arguments).with_confirmation(confirmed).apply(comms)
             if not bindings:
                 raise ValueError('This action is no longer available for the target')
         if not cls.multiple_targets:
@@ -514,8 +517,8 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                     if not any(command == previous for _, _, _, previous in planned):
                         planned.append((len(planned) + len(outcomes), name, context, command))
         # Parameters and every existing warning are admitted before any write.
-        edited = tuple(command.edited(arguments).with_confirmation(confirmed)
-                       for _, _, _, command in planned)
+        edited = tuple(command.for_editor(comms, name, project).edited(arguments).with_confirmation(confirmed)
+                       for _, name, _, command in planned)
         for (position, name, context, original), command in zip(planned, edited, strict=True):
             try:
                 if original not in type(original).bindings(comms, name, context):
@@ -1593,7 +1596,7 @@ class ReadTargetCliCommand(CliCommand, declared_name='read-target'):
     help = 'Mark view read'
     multiple_targets = True
     target: str = option('--target', target_bound=True)
-    worktree: str = option('--worktree', default_factory=os.getcwd)
+    worktree: str = option('--worktree', default_factory=os.getcwd, target_bound=True)
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
