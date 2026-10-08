@@ -34,7 +34,6 @@ from .bus_publication import stable_thread_lookup
 from .child_process import ProcessIdentity
 from .cohort_schema import CohortDeliveryReceipts
 from .comms import Comms
-from .coordinated_runtime import SelectedExecution
 from .coordination_cohort import accept_delivery_cohort, sealed_cohort_sequences
 from .envelope_claim_transitions import ExistingFileClaim
 from .errors import RelationViolationError
@@ -141,6 +140,8 @@ async def run_foreground_once(
     separate verified all-old-writers-stop protocol. A failed or uncertain
     model attempt propagates immediately and is never invoked a second time.
     """
+    from .coordinated_runtime import SelectedExecution
+
     root = Path(root).absolute()
     worktree = Path(worktree).absolute()
     if (

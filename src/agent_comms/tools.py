@@ -11,7 +11,6 @@ from .pi_vocabulary import ThinkingLevel
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
 from .channel_targets import is_channel_target
 from .channels import SavedView, ViewKind, ViewMatch, ViewPredicate
-from .cli_commands import (ArchiveCliCommand, RenameSelfCliCommand, StopCliCommand, ThreadsCliCommand, StartCliCommand, ForkCliCommand, DeleteViewCliCommand, PinChannelCliCommand, ChannelActivityCliCommand, PinThreadCliCommand)
 from .command import Command
 from .comms import Comms
 from .declared_family import DeclaredFamily
@@ -33,10 +32,6 @@ from .task_sources import (
 )
 from .thread_identity import TurnId
 from .relationships import RelationshipEdit
-from .restart_queue import cancel as cancel_restart
-from .restart_queue import enqueue as enqueue_restart
-from .restart_queue import status as restart_status
-from .thread_management import ForkSpec
 from .thread_status import ThreadStatus
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,
@@ -223,6 +218,8 @@ class CommsPinChannelTool(ToolRequest):
     pinned: bool = tool_field("True to pin; false to unpin")
 
     def apply(self, comms: Comms) -> JsonObject:
+        from .cli_commands import PinChannelCliCommand
+
         return PinChannelCliCommand(name=self.name, pinned=self.pinned).apply(comms)
 
 
@@ -239,6 +236,8 @@ class CommsPinThreadTool(ToolRequest):
     pinned: bool = tool_field("True to pin; false to unpin")
 
     def apply(self, comms: Comms) -> JsonObject:
+        from .cli_commands import PinThreadCliCommand
+
         channel = self.channel
         PinThreadCliCommand(channel=channel, name=self.name, pinned=self.pinned).apply(comms)
         canonical = channel if channel.startswith("#") else f"#{channel}"
@@ -397,6 +396,8 @@ class CommsDeleteViewTool(ToolRequest):
     name: str = tool_field("Saved view name")
 
     def apply(self, comms: Comms) -> JsonObject:
+        from .cli_commands import DeleteViewCliCommand
+
         DeleteViewCliCommand(name=self.name).apply(comms)
         return CommsChannelsTool().apply(comms)
 
@@ -581,6 +582,8 @@ class CommsThreadsTool(ToolRequest):
     active_only: bool = tool_field("Exclude stopped threads", default=False)
 
     def apply(self, comms: Comms) -> JsonObject:
+        from .cli_commands import ThreadsCliCommand
+
         return ThreadsCliCommand(active_only=self.active_only).apply(comms)
 
 
@@ -639,6 +642,8 @@ class CommsRenameSelfTool(ToolRequest):
     new_name: str = tool_field("Your new thread name")
 
     def apply(self, comms: Comms) -> JsonObject:
+        from .cli_commands import RenameSelfCliCommand
+
         return RenameSelfCliCommand(new_name=self.new_name).apply(comms)
 
 
@@ -814,6 +819,8 @@ class CommsForkTool(NativeOwnerCommand, ToolRequest):
     prompt: str | None = tool_field("Initial prompt override", default=None)
 
     def apply(self, comms: Comms) -> JsonObject:
+        from .cli_commands import ForkCliCommand
+
         return ForkCliCommand(name=self.name, parent=self.parent, task=self.task,
                               tags=_tag_set(self.tags) if self.tags is not None else None,
                               prompt=self.prompt).apply(comms)
@@ -837,6 +844,8 @@ class CommsStopTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
     name: str = tool_field("Thread name", binding=SubjectBinding)
 
     def apply(self, comms: Comms) -> JsonObject:
+        from .cli_commands import StopCliCommand
+
         return StopCliCommand(name=self.name).apply(comms)
 
 
@@ -858,6 +867,8 @@ class CommsStartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
         return status.allows_owner_start(owner_pid=owner_pid)
 
     def apply(self, comms: Comms) -> JsonObject:
+        from .cli_commands import StartCliCommand
+
         return StartCliCommand(name=self.name).apply(comms)
 
 
@@ -875,6 +886,8 @@ class CommsQueueRestartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolReque
     name: str = tool_field("Live agent thread", binding=SubjectBinding)
 
     def apply(self, comms: Comms) -> JsonObject:
+        from .restart_queue import enqueue as enqueue_restart
+
         return {"restart": FieldCodec.encode(enqueue_restart(comms, self.name))}
 
 
@@ -885,6 +898,8 @@ class CommsRestartQueueTool(ToolRequest):
     name: str = tool_field("Agent thread")
 
     def apply(self, comms: Comms) -> JsonObject:
+        from .restart_queue import status as restart_status
+
         return {
             "restarts": [FieldCodec.encode(record) for record in restart_status(comms, self.name)]
         }
@@ -897,6 +912,8 @@ class CommsCancelRestartTool(ToolRequest):
     name: str = tool_field("Agent thread")
 
     def apply(self, comms: Comms) -> JsonObject:
+        from .restart_queue import cancel as cancel_restart
+
         return {
             "cancelled": [FieldCodec.encode(record) for record in cancel_restart(comms, self.name)]
         }
@@ -916,6 +933,8 @@ class CommsArchiveTool(OwnerLifecycleControl, ToolRequest):
         return status.stopped
 
     def apply(self, comms: Comms) -> JsonObject:
+        from .cli_commands import ArchiveCliCommand
+
         return ArchiveCliCommand(name=self.name).apply(comms)
 
 
