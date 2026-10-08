@@ -307,7 +307,8 @@ class TestSelectedTargetActions:
             if action.declaration is DeleteTagCliCommand)
         assert tuple(command.name for command in action.bound) == ('team', 'other')
         assert 'Remove #team' in action.confirmation
-        assert 'Remove #other' in action.confirmation
+        assert '#other' in action.confirmation
+        assert action.confirmation.count('Threads, saved views and history remain.') == 1
         before = comms.registry.snapshot()
         with pytest.raises(ValueError, match='Remove #team'):
             TargetEdit(DeleteTagCliCommand, selected, {}).apply(comms)

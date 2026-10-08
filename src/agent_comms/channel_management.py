@@ -41,7 +41,11 @@ class TagDisposition(DeclaredFamily, affix="TagDisposition"):
     requires_confirmation: ClassVar[bool] = True
 
     @abstractmethod
-    def confirmation(self, tag: str) -> str: ...
+    def confirmation(self, tag: str | tuple[str, ...]) -> str: ...
+
+    @staticmethod
+    def tag_names(tag: str | tuple[str, ...]) -> str:
+        return ', '.join(f'#{name}' for name in ((tag,) if isinstance(tag, str) else tag))
 
     @abstractmethod
     def apply(self, channels: ChannelManagement, tag: str, cohort: tuple[Thread, ...]) -> TagChangeResult: ...
@@ -51,8 +55,8 @@ class KeepThreadsTagDisposition(TagDisposition):
     label = "Remove tag; keep threads"
     requires_confirmation = False
 
-    def confirmation(self, tag: str) -> str:
-        return f"Remove #{tag} from its threads? Threads, saved views and history remain."
+    def confirmation(self, tag: str | tuple[str, ...]) -> str:
+        return f"Remove {self.tag_names(tag)} from their threads? Threads, saved views and history remain."
 
     def apply(self, channels, tag, cohort):
         channels._change_tag_unlocked(tag, None, cohort)
@@ -62,8 +66,8 @@ class KeepThreadsTagDisposition(TagDisposition):
 class ArchiveThreadsTagDisposition(TagDisposition):
     label = "Archive tagged threads; keep tag"
 
-    def confirmation(self, tag: str) -> str:
-        return f"Archive all stopped threads tagged #{tag}? Tags and history remain; active owners are refused."
+    def confirmation(self, tag: str | tuple[str, ...]) -> str:
+        return f"Archive all stopped threads tagged with {self.tag_names(tag)}? Tags and history remain; active owners are refused."
 
     def apply(self, channels, tag, cohort):
         channels.threads._archive_unlocked(cohort)
@@ -73,8 +77,8 @@ class ArchiveThreadsTagDisposition(TagDisposition):
 class DeleteThreadsTagDisposition(TagDisposition):
     label = "Delete tagged threads and remove tag"
 
-    def confirmation(self, tag: str) -> str:
-        return f"Delete ALL inactive threads tagged #{tag} and close all their views? Active owners are refused; retained history and uncertain inputs are preserved."
+    def confirmation(self, tag: str | tuple[str, ...]) -> str:
+        return f"Delete ALL inactive threads tagged with {self.tag_names(tag)} and close all their views? Active owners are refused; retained history and uncertain inputs are preserved."
 
     def deletion_cohort(self, channels, tag, cohort) -> tuple[Thread, ...]:
         return cohort
@@ -90,9 +94,9 @@ class DeleteThreadsTagDisposition(TagDisposition):
 class DeleteExclusiveInactiveThreadsTagDisposition(DeleteThreadsTagDisposition):
     label = "Delete inactive single-tag threads; remove tag from others"
 
-    def confirmation(self, tag: str) -> str:
-        return (f"Delete only inactive threads whose sole tag is #{tag}, and remove #{tag} "
-                "from the remaining threads? Active owners, multitag threads, their other "
+    def confirmation(self, tag: str | tuple[str, ...]) -> str:
+        return (f"For {self.tag_names(tag)}, delete only inactive threads with that sole tag, "
+                "and remove each selected tag from the remaining threads? Active owners, multitag threads, their other "
                 "tags, retained history and uncertain inputs remain.")
 
     def deletion_cohort(self, channels, tag, cohort):
@@ -299,8 +303,6 @@ class ChannelManagement:
 
     def _change_tag_unlocked(self, name: str, replacement: str | None,
                              cohort: tuple[Thread, ...]) -> None:
-        for thread in cohort:
-            tags = (thread.tags - {name}) | ({replacement} if replacement else set())
-            self.registry.register(replace(thread, tags=tags), self.registry.status(thread.name))
+        self.registry.change_tag(cohort, name, replacement)
         with self.catalog.editing() as document:
             document.change_tag(name, replacement)
