@@ -227,6 +227,7 @@ def test_record_dispatch_precedes_dynamic_scalar_equality():
 
     # Arbitrary annotation equality must not run before record construction.
     assert FieldCodec.decode(DynamicRecord, {"text": "original"}) == DynamicRecord("original")
+    assert FieldCodec.encode(DynamicRecord("original")) == {"text": "original"}
 
 
 def test_reserved_family_tag_cannot_be_shadowed_by_a_field():
