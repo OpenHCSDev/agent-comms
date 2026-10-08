@@ -459,6 +459,9 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                     for declared in fields(self) if declared.metadata['target_bound']}
         if captured.keys() & arguments.keys():
             raise ValueError('Target-bound parameters cannot be overridden')
+        editable = {item.name for item in self.editable_fields}
+        if arguments.keys() - editable:
+            raise ValueError('Parameters not offered by this target command cannot be overridden')
         return type(self).from_payload({'kind': FieldCodec.encode(type(self)),
                                        **FieldCodec.encode(captured), **arguments})
 

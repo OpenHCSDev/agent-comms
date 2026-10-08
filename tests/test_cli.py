@@ -272,10 +272,20 @@ class TestSelectedTargetActions:
         assert action.editable_fields == ()
         assert action.encode()['parameters']['properties'] == {}
         assert action.edited({}).bound == action.bound
+        for arguments in ({'agent_bin': '/other/native'}, {'agent_args': '--other'}):
+            with pytest.raises(ValueError, match='cannot be overridden'):
+                action.edited(arguments)
+            with pytest.raises(ValueError, match='cannot be overridden'):
+                RestartCliCommand.execute_target(comms, 'alpha', arguments)
         explicit = RestartCliCommand(name='alpha', agent_bin='/operator/native',
-                                     agent_args=['--no-extensions'])
+                                      agent_args=['--no-extensions'])
         assert explicit.agent_bin == '/operator/native'
         assert explicit.agent_args == ['--no-extensions']
+        from agent_comms.cli import build_parser
+        parsed = CliCommand.from_namespace(build_parser().parse_args([
+            'restart', '--name', 'alpha', '--agent-bin', '/operator/native',
+            '--agent-args=--no-extensions']))
+        assert parsed == explicit
         with pytest.raises(ValueError, match='cannot be overridden'):
             action.bound[0].edited({'all': True})
         assert StopCliCommand.help == 'Stop process'
