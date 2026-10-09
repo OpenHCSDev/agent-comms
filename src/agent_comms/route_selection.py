@@ -17,6 +17,10 @@ from typing import TypeVar
 
 from .active_route import CommsRoute, guard_default_route_write, resolve_comms_route
 
+
+class RouteChanged(ValueError):
+    """The selected Comms route was replaced; reopen against the current one."""
+
 T = TypeVar("T")
 
 
@@ -74,7 +78,7 @@ class RouteSelection:
         route = resolve_comms_route()
         selection = cls(route, route.observe_root(), implicit_root())
         if source is not None and Path(source).expanduser().resolve() != selection.root:
-            raise ValueError("Comms route changed; reopen this view")
+            raise RouteChanged("Comms route changed; reopen this view")
         return selection
 
     @classmethod
@@ -84,7 +88,7 @@ class RouteSelection:
         implicit = "AGENT_COMMS_ROOT" not in env
         route = resolve_comms_route() if implicit else resolve_comms_route(root)
         if route.observe_root() != root:
-            raise ValueError("ACP route changed while selecting its child")
+            raise RouteChanged("ACP route changed while selecting its child")
         return cls(route, root, implicit)
 
 
@@ -97,7 +101,7 @@ def selected_write(root: str | Path, *, implicit: bool) -> Iterator[None]:
     scope = guard_default_route_write(Path(root)) if implicit else nullcontext()
     with scope:
         if implicit and not root_is_current(root):
-            raise ValueError("default Comms route changed before write")
+            raise RouteChanged("default Comms route changed before write")
         yield
 
 

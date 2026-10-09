@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from contextlib import ExitStack
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from .thread_identity import ThreadIncarnation
 
 from .catalog_store import ChannelCatalog
 from .goal_waits import GoalWaits
@@ -53,6 +55,14 @@ from .transcripts import TranscriptCursor, Transcripts
 from .coordination_errors import StaleRevision
 
 _LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RetiredViews:
+    """Views whose source no longer exists, as Core decided from one registry read."""
+
+    threads: frozenset[ThreadIncarnation]
+    channels: frozenset[str]
 
 
 class HistoryViews:
@@ -295,6 +305,19 @@ class HistoryViews:
             GoalWaits(self.root / GoalWaits.filename),
             show_stopped=show_stopped,
             show_archived=show_archived,
+        )
+
+    def retired_views(self, threads: Iterable[ThreadIncarnation], channels: Iterable[str]) -> RetiredViews:
+        """Which of these thread incarnations and channel views no longer exist.
+
+        A thread is retired when it was deleted or replaced by a newer
+        incarnation; a channel when it is gone from the catalog or archived.
+        """
+        snapshot = self.registry.snapshot()
+        views = self.channels.catalog.read().views(snapshot.threads)
+        return RetiredViews(
+            frozenset(thread for thread in threads if not thread.current(snapshot)),
+            frozenset(channel for channel in channels if channel not in views or views[channel].archived),
         )
 
     def thread_presentation(self, name: str) -> ThreadPresentation | None:
