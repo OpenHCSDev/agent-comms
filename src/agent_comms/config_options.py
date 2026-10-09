@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import os
 from abc import abstractmethod
 from functools import partial
@@ -86,11 +85,9 @@ class CatalogConfigOption(ConfigOption):
                 self.auth = self.configuration.auth_revision()
             key = self.cache_key(thread)
             if key not in self.catalogs:
-                try:
-                    choices = await self.discover(thread)
-                except NativePiUnavailable as error:
-                    logging.getLogger(__name__).warning("%s catalog unavailable: %s", self.title, error)
-                    return []
+                choices = await self.discover(thread)
+                if not choices:
+                    raise NativePiUnavailable(f"{self.title} catalog has no available choices")
                 self.catalogs[key] = choices
                 self.generation += 1
             return self.catalogs[key]
@@ -99,10 +96,14 @@ class CatalogConfigOption(ConfigOption):
         choices = await self.choices(thread)
         configured = self.current_value(thread)
         selected = configured if configured is not None else ""
-        if selected not in {choice.value for choice in choices}:
+        if configured is None:
             choices = [SessionConfigSelectOption(
-                value=selected, name=configured if configured is not None else "Not configured"
+                value=selected, name="Not configured"
             ), *choices]
+        elif selected not in {choice.value for choice in choices}:
+            raise NativePiUnavailable(
+                f"Configured {self.title.lower()} {selected!r} is absent from its native catalog"
+            )
         return SessionConfigOptionSelect(
             id=FieldCodec.encode(type(self)),
             name=self.title,
@@ -178,7 +179,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
             data = await GetAvailableThinkingLevels().discover(
                 self.agent_bin, self.agent_args.with_model(thread.model).argv
             )
-            levels = [member.declared_name for member in data.levels] or ["off"]
+            levels = [member.declared_name for member in data.levels]
         return [SessionConfigSelectOption(value=level, name=level.title()) for level in levels]
 
     async def apply(
