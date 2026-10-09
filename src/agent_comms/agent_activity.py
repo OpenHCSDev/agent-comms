@@ -134,6 +134,8 @@ class AgentActivity:
 
     def set_activity(self, thread: str, state: ActivityState, detail: str = "") -> None:
         """Declare a thread's current activity (thinking/working/idle)."""
+        if state.retires_thread:
+            raise RelationViolationError("Only permanent thread deletion retires its activity.")
         with _store_lock(self._wire_lock_path, shared=True):
             canonical = self.registry.require(thread).name
             self._emit_activity(Activity(thread=canonical, state=state, detail=detail))
