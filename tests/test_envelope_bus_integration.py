@@ -161,14 +161,6 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
         "releases": [],
         "generation": sent.claim_transition.generation,
     }
-    from agent_comms.field_codec import FieldCodec
-    from agent_comms.routing import TurnRouting
-
-    routing = TurnRouting((sent,), None)
-    assert FieldCodec.encode(routing)["requests"] == [sent.to_wire()]
-    comms.transcripts.routes.record("session", ("entry",), routing)
-    with Comms(comms.root).transcripts.routes.for_session("session") as routes:
-        assert routes.get("entry") == routing
     assert comms.views.full_history() == [sent]
     projection = comms.bus.log.claim_projection()
     assert projection.get(str(worktree / "a.py")).owner == "alice"

@@ -1,12 +1,15 @@
 """Transcript routing lookups stay bounded as saved history grows."""
 
 import json
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
+from agent_comms.transcript_routes import TranscriptRoute
 
 
 def _session(path: Path, count: int) -> None:
@@ -30,9 +33,11 @@ def test_tail_page_decodes_only_its_routing_entries(tmp_path, monkeypatch) -> No
     comms = wire(tmp_path / "wire")
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
     routing = TurnRouting(reply=MessageRoute("worker", ("#team",)))
-    comms.transcripts.routes.record(
-        str(session), tuple(f"entry-{index}" for index in range(10_000)), routing
-    )
+    owner = comms.transcripts.routes
+    owner._ensure_database(create=True)
+    with closing(sqlite3.connect(owner.database_path)) as connection, connection:
+        for index in range(10_000):
+            TranscriptRoute(str(session), f"entry-{index}", routing).insert(connection)
 
     decoded = 0
     real_decode = FieldCodec.decode
@@ -62,8 +67,11 @@ def test_current_annotations_reopen_and_replace_only_addressed_entry(tmp_path):
     assert not path.exists()
     first = TurnRouting(reply=MessageRoute("worker", ("#first",)))
     replacement = TurnRouting(reply=MessageRoute("worker", ("#replacement",)))
-    owner.record("session", ("a", "b"), first)
-    TranscriptRoutes(path).record("session", ("a",), replacement)
+    owner._ensure_database(create=True)
+    with closing(sqlite3.connect(owner.database_path)) as connection, connection:
+        for identity in ("a", "b"):
+            TranscriptRoute("session", identity, first).insert(connection)
+        TranscriptRoute("session", "a", replacement).upsert(connection)
     with TranscriptRoutes(path).for_session("session") as routes:
         assert routes.get("a") == replacement
         assert routes.get("b") == first
