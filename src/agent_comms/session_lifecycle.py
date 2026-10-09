@@ -164,7 +164,6 @@ class SessionLifecycle:
             self.thread_name_for(cwd),
             tags=frozenset({"acp"}),
             worktree=cwd,
-            start_at_latest=True,
             model=self.agent_args.model,
             thinking_level=self.agent_args.thinking,
             auto_title_pending=True,

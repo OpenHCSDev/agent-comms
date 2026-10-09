@@ -172,13 +172,12 @@ class TestThreadOps:
         assert events[0].declared_name == "notice"
         assert "Important decisions" in events[0].text
 
-    def test_claim_thread_can_baseline_inbox_atomically(self, wired):
+    def test_claimed_thread_inbox_starts_at_its_creation(self, wired):
         wired.messaging.send("PR111", "#all", "before claim")
         claimed = wired.threads.claim_thread(
             "viewer",
             tags=frozenset({"acp"}),
             worktree="/tmp/project",
-            start_at_latest=True,
         )
         assert wired.bus.inbox(claimed.name) == []
         wired.messaging.send("PR111", "#all", "after claim")
