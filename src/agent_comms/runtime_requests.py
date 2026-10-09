@@ -144,7 +144,7 @@ class SubscribeRuntimeRequest(RuntimeRequest):
         )
         await agent.turns.replay_turn_state(ctx.session_id, client=ctx.client)
         await agent.inputs.replay_unknown_inputs(ctx.session_id, client=ctx.client)
-        config_options = await agent.sessions.config.options(ctx.name)
+        config_options = await agent.sessions.config.session_options(ctx.session_id, ctx.name)
         metadata = await agent.sessions.metadata(ctx.name)
         await ctx.send(
             {

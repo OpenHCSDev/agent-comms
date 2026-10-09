@@ -1864,7 +1864,7 @@ class TestLiveConfigSync:
             async def session_update(self, session_id=None, update=None, **kw):
                 sent.append(update)
 
-        async def options(_name: str):
+        async def options(_thread: Thread):
             return []
 
         monkeypatch.setattr(agent.sessions.config, "options", options)

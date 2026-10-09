@@ -219,8 +219,8 @@ class ConfigOptions:
     def catalog_generation(self) -> int:
         return sum(option.generation for option in self.catalogs.values())
 
-    async def options(self, thread_name: str) -> list[Any]:
-        thread = await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
+    async def options(self, thread: Thread) -> list[Any]:
+        """Describe the same captured owner used for the publication signature."""
         return [
             await self.catalog_for(member).describe(thread)
             for member in ConfigOption.members_with(CatalogConfigOption)
@@ -233,9 +233,9 @@ class ConfigOptions:
         )
 
     async def session_options(self, session_id: str, thread_name: str) -> list[Any]:
-        options = await self.options(thread_name)
-        self.session_catalog_generation[session_id] = self.catalog_generation
         thread = await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
+        options = await self.options(thread)
+        self.session_catalog_generation[session_id] = self.catalog_generation
         self.session_config_signature[session_id] = self.signature(thread)
         return options
 
@@ -249,7 +249,8 @@ class ConfigOptions:
             return
         async with self.catalog_publish_lock:
             for sid, name in tuple(self.sessions.bindings.items()):
-                options = await self.options(name)
+                thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+                options = await self.options(thread)
                 if self.session_catalog_generation.get(sid) == self.catalog_generation:
                     continue
                 await self.publish(sid, options)
@@ -283,7 +284,8 @@ class ConfigOptions:
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         await self.catalog_for(member).change(self, session_id, thread, value)
         await self.effects.turns.close_idle_backend(session_id)
-        options = await self.options(name)
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        options = await self.options(thread)
         await self.publish(session_id, options)
         return SetSessionConfigOptionResponse(config_options=options)
 
@@ -320,7 +322,8 @@ class ConfigOptions:
         signature = self.signature(thread)
         if self.session_config_signature.get(session_id) == signature:
             return
-        self.session_config_signature[session_id] = signature
         if self.sessions.client is None and not self.sessions.runtime_enabled:
+            self.session_config_signature[session_id] = signature
             return
-        await self.publish(session_id, await self.options(thread_name))
+        await self.publish(session_id, await self.options(thread))
+        self.session_config_signature[session_id] = signature
