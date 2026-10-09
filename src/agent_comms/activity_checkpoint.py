@@ -39,10 +39,7 @@ class ActivityCheckpoint:
             or (self.source[1] == revision[1] and self.source[2:] != revision[2:])
         ):
             return False
-        try:
-            return self.tail == self.tail_digest(log, self.offset)
-        except OSError:
-            return False
+        return self.tail == self.tail_digest(log, self.offset)
 
     @classmethod
     def capture(

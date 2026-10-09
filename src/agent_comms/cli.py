@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from collections.abc import Sequence
 from contextlib import ExitStack
@@ -27,7 +26,13 @@ def _emit(payload: object) -> None:
     sys.stdout.write("\n")
 
 
-def _fail(message: str) -> int:
+def _fail(error: BaseException) -> int:
+    """Report the failure with every cause, so a translated error never hides its origin."""
+    message = str(error)
+    cause = error.__cause__ or (None if error.__suppress_context__ else error.__context__)
+    while cause is not None:
+        message += f"; caused by {type(cause).__name__}: {cause}"
+        cause = cause.__cause__ or (None if cause.__suppress_context__ else cause.__context__)
     json.dump({"error": message}, sys.stdout, indent=2)
     sys.stdout.write("\n")
     return 1
@@ -63,9 +68,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         # This JSON adapter is one-shot. It cannot silently discard acquired
         # custody as though the error had preceded retirement.
         exc.abandon()
-        return _fail(f'{exc}; original failure: {exc.__cause__}')
+        return _fail(exc)
     except Exception as exc:
-        return _fail(str(exc))
+        return _fail(exc)
     finally:
         route_guard.close()
     return 0

@@ -569,7 +569,7 @@ def _chain(previous: bytes, raw: bytes) -> bytes:
 
 
 def _directory_sync(path: Path) -> None:
-    fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
     try:
         os.fsync(fd)
     finally:
@@ -642,7 +642,7 @@ def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -
                 raise RelationViolationError("Private bus is missing its reserved publication.")
             fd = os.open(
                 bus.path,
-                os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
+                os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NOFOLLOW,
                 0o600,
             )
             try:
@@ -879,7 +879,7 @@ def opened_claim_source_unlocked(bus: WireLog, private_marker: WireMetadata):
         try:
             # This original fsynced marker and opened source remain under the
             # canonical flock. Its resource is never valid across releases.
-            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            flags = os.O_RDONLY | os.O_NOFOLLOW
             try:
                 descriptor = os.open(bus.path, flags)
             except FileNotFoundError:
@@ -898,7 +898,7 @@ def opened_claim_source_unlocked(bus: WireLog, private_marker: WireMetadata):
                     private_marker = bus._private_marker_unlocked()
                     private_marker.seal
                     directory_fd = os.open(
-                        bus.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                        bus.path.parent, os.O_RDONLY | os.O_DIRECTORY
                     )
                     try:
                         os.fsync(directory_fd)
@@ -913,7 +913,7 @@ def opened_claim_source_unlocked(bus: WireLog, private_marker: WireMetadata):
                         scan.read(line)
             if source is None:
                 directory_fd = os.open(
-                    bus.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                    bus.path.parent, os.O_RDONLY | os.O_DIRECTORY
                 )
                 try:
                     os.fsync(directory_fd)

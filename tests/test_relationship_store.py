@@ -6,7 +6,6 @@ import stat
 
 import pytest
 
-from agent_comms import locked_store
 from agent_comms.relationships import RelationshipEdit
 from agent_comms.comms import Comms
 from agent_comms.display_order import ThreadSort
@@ -116,7 +115,7 @@ def test_adopter_failure_restores_old_bytes_and_mode(tmp_path, monkeypatch, stag
 
     path.chmod(0o640)
     before = path.read_bytes()
-    real_sync, real_replace = os.fsync, locked_store._replace_snapshot
+    real_sync, real_replace = os.fsync, os.replace
     failed = False
 
     def sync(fd):
@@ -135,7 +134,7 @@ def test_adopter_failure_restores_old_bytes_and_mode(tmp_path, monkeypatch, stag
         return real_replace(source, target)
 
     monkeypatch.setattr(os, "fsync", sync)
-    monkeypatch.setattr(locked_store, "_replace_snapshot", publish)
+    monkeypatch.setattr(os, "replace", publish)
     with pytest.raises(OSError, match="injected"):
         mutate()
     assert path.read_bytes() == before

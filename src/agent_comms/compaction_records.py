@@ -291,10 +291,7 @@ class SelectedSummaryAttempt(
         summary alone, a bound UNKNOWN input, or an unrelated started input
         cannot retire the reservation. Historical rows and IDs stay intact.
         """
-        try:
-            return self.request.original_has_started(inputs)
-        except (KeyError, TypeError, ValueError):
-            return False
+        return self.request.original_has_started(inputs)
 
 
 @dataclass(frozen=True)

@@ -175,22 +175,22 @@ class BusPageIndex:
 
     def current(self) -> bool:
         """Read-only warm-cache check; never rebuild the bus on a wake."""
-        try:
-            with self.bus_path.open("rb") as stream:
-                stat = os.fstat(stream.fileno())
-                size = stat.st_size
-                if size:
-                    stream.seek(size - 1)
-                    if stream.read(1) != b"\n":
-                        return False
+        with self.bus_path.open("rb") as stream:
+            stat = os.fstat(stream.fileno())
+            size = stat.st_size
+            if size:
+                stream.seek(size - 1)
+                if stream.read(1) != b"\n":
+                    return False
+            try:
                 saved = BusPageSource.one(self.connection, singleton=1)
-                return saved is not None and saved == BusPageSource(
-                    (stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns),
-                    size,
-                    self._tail(stream, size),
-                )
-        except (OSError, ValueError, TypeError, sqlite3.DatabaseError):
-            return False
+            except (ValueError, TypeError):
+                return False  # Damaged derived evidence: the caller reads the source.
+            return saved is not None and saved == BusPageSource(
+                (stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns),
+                size,
+                self._tail(stream, size),
+            )
 
     def offsets(
         self,

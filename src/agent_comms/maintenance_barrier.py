@@ -120,7 +120,7 @@ class MaintenanceBarrier:
     @staticmethod
     def _read(path: Path, declaration):
         try:
-            descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
         except FileNotFoundError:
             return None
         except OSError as error:

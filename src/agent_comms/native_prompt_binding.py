@@ -27,7 +27,7 @@ from .native_admission_rules import NativeIdentityCheck
 from .native_input_owner import ParticipantOwner
 from .native_input_record import NativeInputRecord, NativeInputIdText, NativeInputExecution
 from .field_codec import FieldCodec
-from .native_pi import NativePiUnavailable, read_tracked_input_digest
+from .native_pi import read_tracked_input_digest
 from .native_entries import NativeEvidenceRead
 from .native_runtime_input import NativeRuntimeInput
 from .private_sidecar import create_sidecar_file, native_request_digest, sidecar_connection
@@ -238,10 +238,8 @@ def expected_prompt_matches_journal(
 ) -> bool:
     """Join the durable journal digest to the prelaunch binding digest.
 
-    A mismatch, absence, or malformed journal is NOT equality: fail closed.
+    A mismatch or an uncommitted input is NOT equality. An unreadable or
+    malformed journal is a defect, not inequality, and raises.
     """
-    try:
-        observed = read_tracked_input_digest(session_file, binding.input_id, evidence=evidence)
-    except (OSError, ValueError, NativePiUnavailable):
-        return False
+    observed = read_tracked_input_digest(session_file, binding.input_id, evidence=evidence)
     return observed == binding.expected_prompt_digest

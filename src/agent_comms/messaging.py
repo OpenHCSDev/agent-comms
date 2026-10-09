@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -25,7 +24,6 @@ from .task_sources import HumanConstraintPin, NativeInputConstraintPin, TaskScop
 from .task_sources import TaskChange, OriginalTaskChange
 from .message_reference import MessageReference
 
-_LOG = logging.getLogger(__name__)
 
 
 class Messaging:
@@ -87,14 +85,9 @@ class Messaging:
             else:
                 committed = self.bus.publisher.publish_ordinary(message)
         # Pure memory notification and daemon scheduling occur only AFTER the
-        # canonical wire/bus publication locks are released. Projection errors
-        # can never turn a committed original into an apparent failed send.
-        try:
-            schedule_candidate_catchup(self.bus, committed.seq)
-        except Exception as error:
-            _LOG.warning(
-                "Candidate notification omitted after committed send (%s)", error.__class__.__name__
-            )
+        # canonical wire/bus publication locks are released. The scheduler owns
+        # its own worker-unavailable state; anything it raises is a defect.
+        schedule_candidate_catchup(self.bus, committed.seq)
         return committed
 
     def initialize_private_initial_protocol(self) -> str:
@@ -118,13 +111,7 @@ class Messaging:
             committed = self.bus.publisher.publish_initial_cohort(
                 Message(sender=sender, target=target, body=body, type=type, notice=notice)
             )
-        try:
-            schedule_candidate_catchup(self.bus, committed.seq)
-        except Exception as error:
-            _LOG.warning(
-                "Candidate notification omitted after committed initial (%s)",
-                error.__class__.__name__,
-            )
+        schedule_candidate_catchup(self.bus, committed.seq)
         return committed
 
     def _user_identity_under_wire_lock(self, worktree: str) -> Thread:
@@ -207,15 +194,9 @@ class Messaging:
         )
 
     def _notify_user_commit(self, committed):
-        # Never turn a committed row into an apparent failed send because a
-        # best-effort notification failed. No notification runs on UNKNOWN.
-        try:
-            schedule_candidate_catchup(self.bus, committed.seq)
-        except Exception as error:
-            _LOG.warning(
-                "Candidate notification omitted after committed human send (%s)",
-                error.__class__.__name__,
-            )
+        # No notification runs on UNKNOWN; the scheduler owns its own
+        # worker-unavailable state, so anything it raises is a defect.
+        schedule_candidate_catchup(self.bus, committed.seq)
         return committed
 
     def acknowledge(self, name: str, target: str | None = None) -> int:

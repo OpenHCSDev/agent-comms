@@ -1265,10 +1265,9 @@ class CompactionStatusCliCommand(CliCommand, declared_name="compaction-status"):
         from .compaction_records import SelectedSummaryAttempt
 
         owner = ctx.registry.require(self.thread)
-        try:
-            session_file = owner.require_saved_session()
-        except ValueError:
+        if owner.session_file is None:
             return dict(thread=owner.name, attempts=[])
+        session_file = owner.session_file
         attempts = CompactionJournal.observe_readonly(
             ctx.root / "compaction-commits.sqlite3",
             partial(SelectedSummaryAttempt.for_session, canonical=session_file),

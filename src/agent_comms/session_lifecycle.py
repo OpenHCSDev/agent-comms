@@ -422,12 +422,21 @@ class SessionLifecycle:
             self.comms.owners.stop(thread.name)
 
     async def release_owned(self) -> None:
+        """Release every owned thread, then report each release that failed.
+
+        One failed stop must not keep the others registered as running, and it
+        must not disappear either: the failures surface together after the
+        runtime has closed.
+        """
+        failures: list[Exception] = []
         for name in set(self.bindings.values()):
             try:
                 await Coordination.run_worker(partial(self.release_registered_owner, name))
             except Exception as error:
-                self.effects._debug_log(f"shutdown error: {error!r}")
+                failures.append(error)
         await self.runtime.close()
+        if failures:
+            raise ExceptionGroup("Owned threads were not released at shutdown", failures)
 
 
 class AttachedSessionLifecycle(SessionLifecycle):

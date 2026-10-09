@@ -48,7 +48,7 @@ class Conversation:
         data = dict(raw)
         data["participants"] = [
             FieldCodec.encode(ThreadIncarnation(*FieldCodec.decode(tuple[str, float], item)))
-            for item in data.get("participants", [])
+            for item in data["participants"]
         ]
         return FieldCodec.decode(cls, data)
 

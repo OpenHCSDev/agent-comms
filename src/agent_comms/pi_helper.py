@@ -9,13 +9,33 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
-from .child_process import BoundedRun
+from .child_process import BoundedRun, ChildResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 
 
 class PiHelperError(ValueError):
     """A helper produced no complete, bounded observation."""
+
+
+class PiHelperFailed(PiHelperError):
+    """The helper ended without success; carries its actual outcome and stderr."""
+
+    stderr_shown: ClassVar[int] = 4096
+
+    def __init__(self, helper: str, result: ChildResult, consequence: str = ""):
+        self.helper = helper
+        self.result = result
+        stderr = result.stderr[-self.stderr_shown:].decode("utf-8", "backslashreplace").strip()
+        super().__init__(
+            f"{helper} ended {result.outcome}"
+            + (f"; stderr: {stderr}" if stderr else "; no stderr")
+            + (f"; {consequence}" if consequence else "")
+        )
+
+
+class PiHelperOutputExceeded(PiHelperError):
+    """The helper succeeded but wrote more than its output bound."""
 
 
 @dataclass(frozen=True)
@@ -36,6 +56,17 @@ class PiHelper(DeclaredFamily, affix="Helper"):
     request: ClassVar[type]
     result: ClassVar[type]
     timeout_seconds: ClassVar[float] = 10
+    output_bound: ClassVar[int] = 4096
+
+    @classmethod
+    def timeout_for(cls, request) -> float:
+        """The helper's bound for this request; the declaration owns it."""
+        return cls.timeout_seconds
+
+    @classmethod
+    def failure(cls, request, result: ChildResult) -> PiHelperFailed:
+        """The error for an unsuccessful outcome; helpers add what it leaves behind."""
+        return PiHelperFailed(cls.declared_name, result)
 
     @classmethod
     async def run(cls, request, *, cwd: Path, env: dict[str, str] | None = None):
@@ -60,12 +91,16 @@ class PiHelper(DeclaredFamily, affix="Helper"):
         outcome = await BoundedRun.run(
             (*command, "--input-type=module", "--eval", cls.script.read_text()),
             input=payload.encode(),
-            timeout=cls.timeout_seconds,
+            timeout=cls.timeout_for(request),
             cwd=cwd,
             env=environment,
         )
-        if not outcome.outcome.successful or len(outcome.stdout) > 4096:
-            raise PiHelperError(f"{cls.declared_name} failed or exceeded its output bound")
+        if not outcome.outcome.successful:
+            raise cls.failure(request, outcome)
+        if len(outcome.stdout) > cls.output_bound:
+            raise PiHelperOutputExceeded(
+                f"{cls.declared_name} wrote {len(outcome.stdout)} bytes; bound is {cls.output_bound}"
+            )
         try:
             return FieldCodec.decode(cls.result, json.loads(outcome.stdout))
         except (TypeError, ValueError, UnicodeError) as error:

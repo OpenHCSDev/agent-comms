@@ -337,7 +337,7 @@ class FreshPrivateSession:
             check_type(self, info, 1).require_valid(
                 "Fresh-session saved inode changed"
             )
-            descriptor = os.open(self.path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            descriptor = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
             try:
                 opened = os.fstat(descriptor)
                 FreshFileCheck(self, opened, self.bootstrap_size).require_valid(
@@ -397,7 +397,7 @@ class FreshPrivateSession:
             tail_size = info.st_size - self.bootstrap_size
             if not 0 < tail_size <= _MAX_STARTUP_APPEND:
                 raise NativePiUnavailable("Selected startup has no exact metadata tail")
-            descriptor = os.open(self.path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            descriptor = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
             try:
                 opened = os.fstat(descriptor)
                 observed = FreshFileCheck(self, info, self.bootstrap_size)
@@ -506,7 +506,7 @@ def create_fresh_private_session(
     try:
         descriptor = os.open(
             path,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
             0o600,
         )
         try:

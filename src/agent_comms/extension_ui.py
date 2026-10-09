@@ -38,7 +38,9 @@ class ExtensionUiSession:
         if key in self.seen or len(self.seen) >= 64:
             return CancelledUiChoice()
         self.seen.add(key)
-        with suppress(Exception):
+        # The controller maps unanswered, disconnected and refused replies to
+        # CancelledUiChoice itself; only this outer deadline is a denial here.
+        with suppress(TimeoutError):
             return await asyncio.wait_for(self.controller(request), timeout=15)
         return CancelledUiChoice()
 

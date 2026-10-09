@@ -483,7 +483,11 @@ class OwnerToolSocket(ABC, Generic[Call]):
                     raise SelectedToolDenied("Selected tool peer is not the launched Pi child")
                 raw = await asyncio.wait_for(reader.readline(), timeout=10)
                 response = await self.handle_request(raw)
-            except Exception as error:
+            except (ValueError, TimeoutError) as error:
+                # SelectedToolDenied (a ValueError) is every typed denial and
+                # UNKNOWN outcome; ValueError also covers the untrusted child's
+                # undecodable request. Any other failure is a defect: it
+                # propagates and the child sees a closed socket, never a reply.
                 response = self.failure_response(error)
             writer.write((json.dumps(response) + "\n").encode("ascii"))
             await writer.drain()

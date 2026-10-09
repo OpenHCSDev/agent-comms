@@ -139,15 +139,14 @@ class ThreadManagement:
             if self.registry.name_reserved(name):
                 raise ValueError(f"Thread name {name!r} is already reserved.")
             session_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            if os.name == "posix":
-                # Session output must remain in an owner-controlled directory.
-                info = session_path.parent.lstat()
-                if (
-                    not stat.S_ISDIR(info.st_mode)
-                    or info.st_uid != os.geteuid()
-                    or stat.S_IMODE(info.st_mode) != 0o700
-                ):
-                    raise ValueError("Imported session directory is not owner-controlled.")
+            # Session output must remain in an owner-controlled directory.
+            info = session_path.parent.lstat()
+            if (
+                not stat.S_ISDIR(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o700
+            ):
+                raise ValueError("Imported session directory is not owner-controlled.")
             _atomic_write_text(session_path, snapshot.pi_session(project))
             try:
                 self.registry._declare_unlocked(thread, StoppedThreadStatus())
@@ -381,6 +380,9 @@ class ThreadManagement:
                         # a NEW generation for that owner instead of leaving
                         # a committed coordinator pointing at the new name.
                         # Neither generation may inherit an old native input.
+                        uncertain = RelationViolationError(
+                            "Private owner rename is uncertain; inspect both authorities."
+                        )
                         try:
                             actual = self.registry.require(before.name).name
                             if actual == before.name:
@@ -389,11 +391,13 @@ class ThreadManagement:
                                     before.name,
                                     expected_generation=person.participant_generation + 1,
                                 )
-                        except BaseException:
-                            pass  # ambiguous dual-store failure needs manual inspection
-                        raise RelationViolationError(
-                            "Private owner rename is uncertain; inspect both authorities."
-                        ) from error
+                        except BaseException as compensation:
+                            # Ambiguous dual-store failure: the inspection
+                            # needs both failures, not only the first.
+                            uncertain.add_note(
+                                f"Compensating generation advance failed: {compensation!r}"
+                            )
+                        raise uncertain from error
         thread = self.registry.require(current)
         if thread.auto_title_pending or title is not None:
             self.registry.register(
@@ -418,7 +422,7 @@ class ThreadManagement:
                 intent, json.dumps(completed_intent, sort_keys=True), fsync_parent=True
             )
             intent.unlink()
-            directory_fd = os.open(self.root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            directory_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
             try:
                 os.fsync(directory_fd)
             finally:

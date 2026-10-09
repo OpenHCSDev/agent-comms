@@ -41,7 +41,7 @@ def _unlock(fd: int) -> None:
 
 def _open_lock(path: Path) -> int:
     """Prepare one advisory-lock descriptor on POSIX and Windows."""
-    fd = os.open(path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
         if os.name == "nt" and os.fstat(fd).st_size == 0:
             os.write(fd, b"\0")

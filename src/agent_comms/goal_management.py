@@ -183,12 +183,9 @@ class Goals:
             closed = GoalWaits.closed_wait_group(canonical, wait.targets, rows, snapshot)
             if not closed:
                 return ()
-            try:
-                reply = wait.has_reply(self.bus.log)
-            except (OSError, ValueError, sqlite3.DatabaseError):
-                # An unavailable read cannot prove that no reply was delivered.
-                return ()
-            if reply:
+            # An unreadable bus raises to the drain loop, which records it as
+            # the owner's visible drain diagnostic; it never proves silence.
+            if wait.has_reply(self.bus.log):
                 return ()
             names = ", ".join(f"@{member}" for member in closed)
             note = (

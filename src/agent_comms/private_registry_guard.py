@@ -36,7 +36,7 @@ def _reject(detail: str) -> None:
 def registry_digest(path: Path) -> bytes:
     """Hash the exact owned registry bytes, distinguishing absence from empty."""
     try:
-        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     except FileNotFoundError:
         return _EMPTY
     except OSError as error:
@@ -133,7 +133,7 @@ class PrivateRegistryGuard:
         self._trusted_root()
         try:
             flags = os.O_RDWR if writable else os.O_RDONLY
-            fd = os.open(self.path, flags | getattr(os, "O_NOFOLLOW", 0))
+            fd = os.open(self.path, flags | os.O_NOFOLLOW)
         except OSError as error:
             _reject(f"file is missing or redirected: {error.__class__.__name__}")
         info = os.fstat(fd)
@@ -221,19 +221,19 @@ class PrivateRegistryGuard:
             _reject("already exists before initialization")
         digest = registry_digest(self.registry_path)
         if digest != _EMPTY:
-            registry_fd = os.open(self.registry_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            registry_fd = os.open(self.registry_path, os.O_RDONLY | os.O_NOFOLLOW)
             try:
                 os.fsync(registry_fd)
             finally:
                 os.close(registry_fd)
         directory_fd = os.open(
-            self.registry_path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+            self.registry_path.parent, os.O_RDONLY | os.O_DIRECTORY
         )
         try:
             os.fsync(directory_fd)  # baseline registry name and existing root
             fd = os.open(
                 self.path,
-                os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                 0o600,
             )
             try:

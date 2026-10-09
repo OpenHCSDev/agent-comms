@@ -72,7 +72,11 @@ def _drain_candidate(root: Path) -> None:
             elif not result.more_source_bytes:
                 return
         _LOG.warning("Candidate maintenance stopped at its bounded batch budget")
-    except Exception as error:
-        _LOG.warning("Candidate maintenance unavailable (%s)", type(error).__name__)
-    with _guard:
-        _pending.pop(root, None)
+    except Exception:
+        # The worker thread has no caller: record the defect with its traceback
+        # and let the thread fail through threading.excepthook.
+        _LOG.exception("Candidate maintenance failed")
+        raise
+    finally:
+        with _guard:
+            _pending.pop(root, None)

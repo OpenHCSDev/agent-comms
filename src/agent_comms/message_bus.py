@@ -323,7 +323,9 @@ class MessageBus:
                 rows = addressed_source_pointers_unlocked(
                     self.log, marker, stable_thread_lookup(owner.created_at)
                 )
-        except (OSError, ValueError, sqlite3.Error, RelationViolationError):
+        except (BlockingIOError, RelationViolationError):
+            # Contention or a checkpoint/source change during the read; any
+            # other failure is a defect in the authoritative bus and raises.
             return (UnavailableAwarenessSegment.capture(),)
         if not rows:
             return ()

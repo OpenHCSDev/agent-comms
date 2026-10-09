@@ -120,15 +120,21 @@ class OptionalAwarenessProjection:
         if not finished.done():
             finished.set_result(result)
 
+    @staticmethod
+    def _fail(finished: asyncio.Future[OptionalAwarenessResult], error: Exception):
+        if not finished.done():
+            finished.set_exception(error)
+
     def _finish_read(self, initial, assignment, owner, loop, finished) -> None:
+        """Deliver the read's result or its defect to the awaiting turn."""
         try:
-            result = self(initial, assignment, owner)
+            outcome = (self._deliver, finished, self(initial, assignment, owner))
         except Exception as error:
-            result = OmittedAwareness(type(error).__name__)
+            outcome = (self._fail, finished, error)
         finally:
             self._build_slot.release()
         with suppress(RuntimeError):  # The caller's loop may have closed after timeout.
-            loop.call_soon_threadsafe(self._deliver, finished, result)
+            loop.call_soon_threadsafe(*outcome)
 
     async def segments(
         self,
@@ -142,23 +148,22 @@ class OptionalAwarenessProjection:
         loop = asyncio.get_running_loop()
         finished: asyncio.Future[OptionalAwarenessResult] = loop.create_future()
         try:
-            try:
-                threading.Thread(
-                    target=self._finish_read,
-                    args=(initial, assignment, owner, loop, finished),
-                    name="agent-comms-optional-awareness",
-                    daemon=True,
-                ).start()
-            except RuntimeError:
-                self._build_slot.release()
-                raise
+            threading.Thread(
+                target=self._finish_read,
+                args=(initial, assignment, owner, loop, finished),
+                name="agent-comms-optional-awareness",
+                daemon=True,
+            ).start()
+        except RuntimeError:
+            self._build_slot.release()
+            return OmittedAwareness("builder unavailable").segments(self.max_text_bytes)
+        try:
             result = await asyncio.wait_for(finished, max(0.0, deadline - time.monotonic()))
-            segments = result.segments(self.max_text_bytes)
-            if time.monotonic() > deadline:
-                raise TimeoutError("optional awareness exceeded the build deadline")
-            return segments
-        except Exception as error:
-            return OmittedAwareness(type(error).__name__).segments(self.max_text_bytes)
+        except TimeoutError:
+            return OmittedAwareness("TimeoutError").segments(self.max_text_bytes)
+        if time.monotonic() > deadline:
+            return OmittedAwareness("TimeoutError").segments(self.max_text_bytes)
+        return result.segments(self.max_text_bytes)
 
     def __post_init__(self) -> None:
         # These are typed internal snapshots. External rows are decoded by
@@ -187,12 +192,10 @@ class OptionalAwarenessProjection:
             CoordinationError,
             ProjectionUnavailableError,
             RelationViolationError,
-            sqlite3.Error,
-            OSError,
-            TypeError,
-            ValueError,
-            KeyError,
+            BlockingIOError,
         ) as error:
+            # Busy, stale, changed-owner and pending-rename are this read's
+            # named unavailable states. Anything else is a defect and raises.
             return OmittedAwareness(type(error).__name__)
 
     def _build(

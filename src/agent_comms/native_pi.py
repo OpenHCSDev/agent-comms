@@ -818,7 +818,7 @@ def _private_session_dir(directory: Path) -> None:
 
 
 def _fsync_directory(path: Path) -> None:
-    flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     descriptor = os.open(path, flags)
     try:
         os.fsync(descriptor)
@@ -871,8 +871,12 @@ def _session_location(directory: Path, candidate: str) -> Path:
 
 def read_tracked_input_digest(
     session_file: Path, input_id: str, *, evidence: NativeEvidenceRead | None = None
-) -> str:
-    """Corroborating digest only; this cannot authorize recovery or input replay."""
+) -> str | None:
+    """Corroborating digest only; this cannot authorize recovery or input replay.
+
+    ``None`` means the journal holds no durable commit of this input. An
+    unreadable or malformed journal is not absence and raises.
+    """
     NativeInputIdText.decode(input_id)
     session_file = Path(session_file).absolute()
     from .native_entries import NativeEntry, NativeInputEvidenceRead
@@ -881,7 +885,7 @@ def read_tracked_input_digest(
         _header, entries = evidence.observe()
         users = NativeEntry.tracked_users(entries)
         if input_id not in users:
-            raise NativePiUnavailable("The specified input was never durably committed")
+            return None
         return users[input_id].message.input_digest
 
 

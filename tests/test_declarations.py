@@ -20,58 +20,6 @@ from agent_comms.thread_status import DeletingThreadStatus, RunningThreadStatus,
 from agent_comms.threads import Thread, current_thread
 
 
-def test_windows_snapshot_replace_retries_transient_sharing_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from agent_comms import store_files
-
-    source = tmp_path / "pending"
-    target = tmp_path / "snapshot"
-    source.write_text("new")
-    target.write_text("old")
-    real_replace = os.replace
-    calls = 0
-
-    def contested_replace(src: Path, dst: Path) -> None:
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            error = PermissionError(13, "sharing violation")
-            error.winerror = 5
-            raise error
-        real_replace(src, dst)
-
-    monkeypatch.setattr(store_files.os, "replace", contested_replace)
-    store_files._replace_snapshot(source, target, windows=True)
-    assert calls == 2
-    assert target.read_text() == "new"
-
-
-def test_windows_snapshot_replace_does_not_retry_real_refusal(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from agent_comms import store_files
-
-    source = tmp_path / "pending"
-    target = tmp_path / "snapshot"
-    source.write_text("new")
-    target.write_text("old")
-    calls = 0
-
-    def refused_replace(src: Path, dst: Path) -> None:
-        nonlocal calls
-        calls += 1
-        error = PermissionError(13, "access denied")
-        error.winerror = 3
-        raise error
-
-    monkeypatch.setattr(store_files.os, "replace", refused_replace)
-    with pytest.raises(PermissionError):
-        store_files._replace_snapshot(source, target, windows=True)
-    assert calls == 1
-    assert target.read_text() == "old"
-
-
 @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
 def test_private_marker_checks_relative_and_absolute_ancestor_permissions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

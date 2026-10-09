@@ -10,6 +10,7 @@ from functools import partial
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
+from acp.exceptions import RequestError
 from acp.schema import (
     PromptResponse,
     RequestPermissionResponse,
@@ -416,9 +417,10 @@ class TurnRunner:
                 )
             else:
                 return pi.CancelledUiChoice()
-        except Exception:
-            # An ACP controller exception is denial, never a raw error in Pi
-            # RPC/model output or a reason to resend an uncertain MCP call.
+        except (TimeoutError, ConnectionError, ValueError, RequestError):
+            # An unanswered, disconnected, refusing or invalid controller reply
+            # is denial, never a raw error in Pi RPC/model output or a reason to
+            # resend an uncertain MCP call. Any other failure is a defect.
             return pi.CancelledUiChoice()
         if not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
             return pi.CancelledUiChoice()

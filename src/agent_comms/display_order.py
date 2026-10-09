@@ -28,13 +28,6 @@ class ThreadSort(DisplayOrder):
     CREATED = "created_at", "Date created"
     LAST_ACTIVITY = "last_activity", "Last activity"
 
-    @classmethod
-    def resolve(cls, value: str) -> ThreadSort:
-        try:
-            return cls(value)
-        except ValueError:
-            return cls.CREATED
-
     def key(
         self, name: str, created: float, activity: float, sent: float
     ) -> tuple[float, float, str]:

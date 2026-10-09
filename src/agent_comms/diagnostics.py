@@ -247,7 +247,7 @@ def _write_diagnostic_document(root: Path, name: str, document: dict) -> Path:
     directory = root / "diagnostics"
     directory.mkdir(mode=0o700, exist_ok=True)
     if os.name == "posix":
-        fd = os.open(root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(fd)
         finally:

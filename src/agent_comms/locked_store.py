@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Generic, TypeVar
 
 from .field_codec import FieldCodec
-from .store_files import _replace_snapshot, _store_lock
+from .store_files import _store_lock
 
 T = TypeVar("T")
 
@@ -135,14 +135,14 @@ class LockedStore(ABC, Generic[T]):
                 os.fsync(output.fileno())
             if os.name == "posix":
                 directory_fd = os.open(
-                    self.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                    self.path.parent, os.O_RDONLY | os.O_DIRECTORY
                 )
             try:
                 os.link(self.path, backup)
                 had_original = True
             except FileNotFoundError:
                 pass
-            _replace_snapshot(staged, self.path)
+            os.replace(staged, self.path)
             published = True
             if directory_fd is not None:
                 os.fsync(directory_fd)
@@ -153,7 +153,7 @@ class LockedStore(ABC, Generic[T]):
             if published:
                 if had_original:
                     try:
-                        _replace_snapshot(backup, self.path)
+                        os.replace(backup, self.path)
                     except BaseException:
                         # Keep the recovery bytes if the filesystem also
                         # refuses rollback; never erase the remaining copy.
