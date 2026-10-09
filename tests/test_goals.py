@@ -25,7 +25,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Verify the release"))
-    comms.threads.set_thread_model("worker", "test/model")
+    comms.threads.set_thread_configuration(comms.registry.require('worker'), model='test/model')
     comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     monkeypatch.setenv("PI_AGENT_ID", "worker")
     comms.threads.rename_self("renamed")

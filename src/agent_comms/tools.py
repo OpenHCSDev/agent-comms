@@ -266,14 +266,11 @@ class CommsModelTool(NativeOwnerCommand, ToolRequest):
         """Change this thread's model or another thread's model for future turns."""
         thread_name = self.thread or _executing_thread()
         model = self.model.strip()
-        thread = (
-            comms.threads.set_thread_model(thread_name, model)
-            if model
-            else comms.registry.require(thread_name)
-        )
         thinking_level = (self.thinking_level or "").strip()
-        if thinking_level:
-            thread = comms.threads.set_thread_thinking_level(thread.name, thinking_level)
+        thread = comms.threads.set_thread_configuration(
+            comms.registry.require(thread_name),
+            model=model or None, thinking_level=thinking_level or None,
+        )
         return {
             "thread": thread.name,
             "model": thread.model,

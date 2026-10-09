@@ -215,7 +215,7 @@ class SavedSelectedSession(SelectedSession):
         settings = await read_selected_compaction_decision(
             persistent, session_file=self.session_file,
             expected_package=turn.launch.package, selected=selected,
-            registry=participant.comms.registry, thread_name=participant.owner.thread.name,
+            registry=participant.comms.registry, captured=participant.owner,
         )
         if settings.trigger:
             await Coordination.run_async(

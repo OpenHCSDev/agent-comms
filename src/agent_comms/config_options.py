@@ -8,6 +8,7 @@ from abc import abstractmethod
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from functools import partial
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from acp import RequestError
@@ -51,7 +52,7 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
 
     @abstractmethod
     async def change(
-        self, owner: ConfigOptions, session_id: str, thread: Thread, value: str
+        self, owner: ConfigOptions, thread: Thread, value: str
     ) -> None: ...
 
 
@@ -109,23 +110,23 @@ class CatalogConfigOption(ConfigOption):
 
     @abstractmethod
     async def apply(
-        self, owner: ConfigOptions, session_id: str, thread: Thread, value: str
+        self, owner: ConfigOptions, thread: Thread, value: str
     ) -> None: ...
 
     async def change(
-        self, owner: ConfigOptions, session_id: str, thread: Thread, value: str
+        self, owner: ConfigOptions, thread: Thread, value: str
     ) -> None:
         choices = await self.choices(thread)
         if value not in {choice.value for choice in choices}:
             raise RequestError.invalid_params(
                 {"reason": f"Unknown {self.title.lower()}: {value!r}"}
             )
-        await self.apply(owner, session_id, thread, value)
+        await self.apply(owner, thread, value)
 
 
 class ModelConfigOption(CatalogConfigOption):
     title = "Model"
-    description = "Model used by this persistent agent thread"
+    description = "Model selected for the next turn; the running turn keeps its captured model"
     category = "model"
 
     def current_value(self, thread: Thread) -> str | None:
@@ -150,20 +151,19 @@ class ModelConfigOption(CatalogConfigOption):
         ]
 
     async def apply(
-        self, owner: ConfigOptions, session_id: str, thread: Thread, value: str
+        self, owner: ConfigOptions, thread: Thread, value: str
     ) -> None:
         from .pi_commands import SetModel
 
         provider, model = value.split("/", 1)
-        await owner.set_active_backend_option(
-            session_id, SetModel(provider=provider, model_id=model), "Model change timed out"
+        await owner.configure_thread(
+            thread, SetModel(provider=provider, model_id=model),
         )
-        await Coordination.run_worker(partial(owner.comms.threads.set_thread_model, thread.name, value))
 
 
 class ThinkingLevelConfigOption(CatalogConfigOption):
     title = "Thinking level"
-    description = "Reasoning effort used by this persistent agent thread"
+    description = "Thinking level selected for the next turn; the running turn keeps its captured effort"
     category = "thought_level"
 
     def current_value(self, thread: Thread) -> str | None:
@@ -182,14 +182,13 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         return [SessionConfigSelectOption(value=level, name=level.title()) for level in levels]
 
     async def apply(
-        self, owner: ConfigOptions, session_id: str, thread: Thread, value: str
+        self, owner: ConfigOptions, thread: Thread, value: str
     ) -> None:
         from .pi_commands import SetThinkingLevel
 
-        await owner.set_active_backend_option(
-            session_id, SetThinkingLevel(level=value), "Thinking level change timed out"
+        await owner.configure_thread(
+            thread, SetThinkingLevel(level=value),
         )
-        await Coordination.run_worker(partial(owner.comms.threads.set_thread_thinking_level, thread.name, value))
 
 
 class ConfigOptions:
@@ -264,34 +263,34 @@ class ConfigOptions:
             return SetSessionConfigOptionResponse.model_validate(result)
         name = await self.sessions.sync_identity(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
-        await self.catalog_for(member).change(self, session_id, thread, value)
+        try:
+            await self.catalog_for(member).change(self, thread, value)
+        except (NativePiUnavailable, ValueError) as error:
+            raise RequestError.invalid_params({"reason": str(error)}) from error
         await self.effects.turns.close_idle_backend(session_id)
         async with self.session_options(name) as options:
             await self._publish(session_id, options)
             return SetSessionConfigOptionResponse(config_options=options)
 
-    async def set_active_backend_option(
-        self,
-        session_id: str,
-        command: SettingCommand,
-        timeout_message: str,
+    async def configure_thread(
+        self, thread: Thread, command: SettingCommand,
     ) -> None:
-        try:
-            turn = await self.effects.turns.active_native_session(session_id)
-            if turn is None:
-                return
-            async with command.pending_response(turn.native.reader, turn.native.proc.stdin) as future:
-                response = await asyncio.wait_for(future, timeout=10)
-                if response.success is not True:
-                    raise RuntimeError(response.error or command.error_message)
-        except asyncio.CancelledError as error:
-            if asyncio.current_task().cancelling():
-                raise
-            raise RequestError.invalid_params({
-                "reason": "The native session ended before confirming the configuration change"
-            }) from error
-        except (TimeoutError, RuntimeError, OSError) as error:
-            raise RequestError.invalid_params({"reason": str(error) or timeout_message}) from error
+        """Persist the native owner's complete next-turn result, never steer a turn."""
+        arguments = self.agent_args.with_model(thread.model).with_thinking(
+            ThinkingLevel.optional_name(thread.thinking_level)
+        )
+        state = await command.configure(
+            self.agent_bin, arguments.argv, worktree=Path(thread.worktree),
+        )
+        model = state.model.display_name
+        level = ThinkingLevel.optional_name(state.thinking_level)
+        if model is None or level is None:
+            raise NativePiUnavailable("Native configuration did not report model and thinking level")
+        state.model.for_compaction(model)
+        await Coordination.run_worker(partial(
+            self.comms.threads.set_thread_configuration,
+            thread, model=model, thinking_level=level,
+        ))
 
     async def sync_thread(self, session_id: str) -> None:
         name = await self.sessions.sync_identity(session_id)

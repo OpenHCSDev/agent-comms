@@ -205,9 +205,9 @@ async def test_compaction_fault_reaches_acp_client_without_original_send(
     attempts = []
 
     async def compact(*args, **kwargs):
-        assert args[3].model.id == "fixture"
-        assert args[5].custody.child.proc.alive()
-        attempts.extend(args[4])
+        assert args[2].model.id == "fixture"
+        assert args[4].custody.child.proc.alive()
+        attempts.extend(args[3])
         raise failure from source
 
     async def forbidden_stream(*args, **kwargs):

@@ -77,7 +77,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
 
     def ready(beta):
         recipient.append(beta)
-        comms.threads.set_thread_model(beta.name, "openai-codex/gpt-6-sol")
+        comms.threads.set_thread_configuration(comms.registry.require(beta.name), model='openai-codex/gpt-6-sol')
         # The ordinary public API, not send_initial_cohort or a candidate bridge.
         receipt = invoke_tool(comms, "comms_send", {"from": "sender", "to": target, "body": body})
         original.append(comms.bus.log.message_by_id(receipt["id"]))

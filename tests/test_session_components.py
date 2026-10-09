@@ -108,7 +108,7 @@ async def test_native_observation_only_initializes_unset_configuration(owner, tm
     observed = owner._comms.registry.require(thread.name)
     assert observed.model == "test/one"
     assert observed.thinking_level is HighThinkingLevel
-    owner._comms.threads.set_thread_thinking_level(thread.name, "off")
+    owner._comms.threads.set_thread_configuration(owner._comms.registry.require(thread.name), thinking_level='off')
     before = (owner._comms.root / "registry.json").read_bytes()
     await owner.sessions.observe_native_configuration(
         session.session_id, thread.name, events.AgentInfo(model="test/two", thinking_level="high")

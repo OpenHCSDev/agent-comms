@@ -25,8 +25,7 @@ from .thread_identity import TurnId
 
 async def maybe_compact_owner_turn(
     registry: Registration,
-    thread_name: str,
-    turn_id: str,
+    captured: RegistryOwner,
     prepared: StateData,
     original_input_keys: tuple[str, ...],
     persistent: PersistentPiSession,
@@ -44,10 +43,8 @@ async def maybe_compact_owner_turn(
     """
     snapshot = registry.snapshot()
     try:
-        captured = RegistryOwner.capture(snapshot, thread_name, "Selected compaction owner changed")
+        captured.require_snapshot(snapshot, "Selected compaction owner changed")
         turn = captured.require_active_turn()
-        if TurnId(turn.id) != TurnId(turn_id):
-            raise ValueError("Selected compaction turn changed")
         owner = captured.thread
         session_file = owner.require_saved_session()
         selected = prepared.model.for_compaction(owner.model)
@@ -62,7 +59,7 @@ async def maybe_compact_owner_turn(
     settings = await read_selected_compaction_decision(
         persistent, session_file=session_file,
         expected_package=package, selected=selected,
-        registry=registry, thread_name=owner.name,
+        registry=registry, captured=captured,
     )
     # Native source budget owns mandatory readiness even when autonomous Pi
     # compaction is disabled. Do not reinterpret its decision in Python.
@@ -77,7 +74,7 @@ async def maybe_compact_owner_turn(
         except SessionRevisionUnavailable as error:
             raise PiSettingsEvidenceError("Selected saved source is unavailable") from error
         source = SelectedAdmissionSource.capture(
-            owner, TurnId(turn_id), turn.admission_generation, original_input_keys,
+            owner, TurnId(turn.id), turn.admission_generation, original_input_keys,
             bridge.inputs.read(), input_text, revision,
         )
         result = await bridge.compact_selected(

@@ -78,9 +78,8 @@ def test_native_source_publication_retains_captured_configuration(tmp_path):
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()), model="test/old"))
     original = comms.agents.begin_turn("owner", "configuration-source-check")
-    comms.threads.set_thread_model("owner", "test/next")
-    with pytest.raises(StaleFence, match="registry_model"):
-        original.require_snapshot(comms.registry.snapshot(), "Fresh input changed")
+    comms.threads.set_thread_configuration(comms.registry.require('owner'), model='test/next')
+    original.require_snapshot(comms.registry.snapshot(), "The claimed turn keeps its configuration")
     selected = comms.registry.attach_native_session(original, str(tmp_path / "saved.jsonl"))
     assert selected.thread.model == "test/old"
     assert selected.thread.thinking_level == original.thread.thinking_level

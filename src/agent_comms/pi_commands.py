@@ -304,7 +304,11 @@ class GetSessionStats(SessionSnapshot, PiCommand):
 class CatalogQuery(NativeQuery):
     """Catalog discovery uses the shared typed query transaction."""
 
-    async def discover(self, agent_bin: str, arguments: Sequence[str]) -> PiResponseData:
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
         from .child_process import BoundedRun
         from .native_pi import NativePiRpcLaunch, NativePiUnavailable
         from .pi_rpc import PiRpcChannel
@@ -314,22 +318,28 @@ class CatalogQuery(NativeQuery):
                 NativePiRpcLaunch.catalog,
                 agent_bin,
                 tuple(arguments),
-                worktree=Path.cwd(),
+                worktree=Path.cwd() if worktree is None else worktree,
             )
             async with BoundedRun.session(
                 launch.argv, cwd=launch.cwd, env=launch.env, timeout=10
             ) as child:
                 stderr = asyncio.create_task(child.discard_stderr())
                 try:
-                    response = await self.exchange(PiRpcChannel(child.stdout), child.stdin)
-                    if response.success is True:
-                        return response.data.require_payload()
-                    raise NativePiUnavailable(response.error or "Native catalog query was refused")
+                    yield PiRpcChannel(child.stdout), child.stdin
                 finally:
                     stderr.cancel()
                     await asyncio.gather(stderr, return_exceptions=True)
         except (TimeoutError, EOFError, ValueError, OSError) as error:
             raise NativePiUnavailable(f"Native catalog discovery failed: {error}") from error
+
+    async def discover(self, agent_bin: str, arguments: Sequence[str]) -> PiResponseData:
+        from .native_pi import NativePiUnavailable
+
+        async with self.catalog(agent_bin, arguments) as (channel, writer):
+            response = await self.exchange(channel, writer)
+            if response.success is True:
+                return response.data.require_payload()
+            raise NativePiUnavailable(response.error or "Native catalog query was refused")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -364,12 +374,33 @@ class InterruptSteering(PiCommand):
     )
 
 
-class SettingCommand(PiCommand):
+class SettingCommand(CatalogQuery):
+    response_payload = EmptyData
+
     @property
     @abstractmethod
     def result_type(self) -> type[events.SettingChangeResult]: ...
 
     error_message: ClassVar[str]
+
+    async def configure(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path,
+    ) -> StateData:
+        """Let native settings own validation/defaults, then observe their result.
+
+        The catalog session is in memory. Its normal SetModel/SetThinkingLevel
+        semantics cannot change a running turn, a saved transcript or its budget.
+        """
+        from .native_pi import NativePiUnavailable
+
+        async with self.catalog(agent_bin, arguments, worktree=worktree) as (channel, writer):
+            response = await self.exchange(channel, writer)
+            if response.success is not True:
+                raise NativePiUnavailable(response.error or self.error_message)
+            state = await GetState().exchange(channel, writer)
+            if state.success is not True:
+                raise NativePiUnavailable(state.error or "Native configuration was not reported")
+            return state.data.require_payload()
 
     @classmethod
     async def on_response(

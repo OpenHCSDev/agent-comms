@@ -384,8 +384,7 @@ class OwnedTurn:
                 prepared = await self.runner.prepare_selected_session(self.session_id, self.thread)
                 self.committed = await maybe_compact_owner_turn(
                     self.runner.comms.registry,
-                    self.thread_name,
-                    self.turn_id,
+                    self.registry_owner,
                     prepared,
                     pending_keys,
                     self.runner.persistent_backends.setdefault(

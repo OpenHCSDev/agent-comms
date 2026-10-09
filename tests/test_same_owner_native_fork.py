@@ -164,7 +164,7 @@ async def test_saved_fork_refuses_before_retiring_successor(native_backend, boun
                     # owner generations, even when this PID/incarnation survive.
                     comms.threads.heartbeat(session)
                     return comms.owners.acquire_thread(session, owner_pid=os.getpid())
-                return comms.threads.set_thread_thinking_level(session, "low")
+                return comms.threads.set_thread_configuration(comms.registry.require(session), thinking_level='low')
 
             successor = await Coordination.run_worker(acquire)
             await agent.turns.prepare_selected_session(session, successor)

@@ -26,7 +26,7 @@ from agent_comms.owner_compaction_prepare import prepare_native_source
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.pi_vocabulary import ThinkingLevel
 from agent_comms.retained_task_facts import InputTaskFact, RetainedTaskFacts
-from agent_comms.selected_pi_route import read_selected_compaction_decision
+from agent_comms.selected_pi_route import observe_selected_compaction_decision
 from agent_comms.selected_source import ManualSource, SelectedAdmissionSource, SessionRevision
 from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
@@ -135,7 +135,7 @@ async def run(stage, package):
         state.model.require_selection(original.model)
         children.append(persistent.custody.child.proc)
         selected = state.model.for_compaction(original.model)
-        decision = await read_selected_compaction_decision(persistent,
+        decision = await observe_selected_compaction_decision(persistent,
             session_file=fork.session_file, expected_package=package, selected=selected)
         prepared = await asyncio.to_thread(prepare_native_source, package, fork.session_file,
             settings=decision.summary_settings(), context_window=selected.context_window)
