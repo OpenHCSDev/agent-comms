@@ -7,7 +7,6 @@ claim historical proof that a model consumed an old channel message.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from abc import ABC, abstractmethod
@@ -385,13 +384,6 @@ class ThreadRelationships:
         self._recent_revision: tuple[int, int, int, int] | None = None
         self._recent: tuple[Message, ...] = ()
         self._limited = False
-
-    def revision(self) -> tuple:
-        return (
-            *self.views.revision().files,
-            file_revision(self.store.path),
-            self.views.revision().expiry_tick,
-        )
 
     def collaborations(self, owner: str) -> tuple[Collaboration, ...]:
         with _store_lock(self._wire_lock_path):

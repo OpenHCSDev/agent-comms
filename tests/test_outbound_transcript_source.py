@@ -306,11 +306,11 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     sender_page = before.read()
     wire_before = comms.bus.log.path.read_bytes()
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        published_revision = comms.views.revision().files
+        published_revision = comms.views.revision()
         store.assignments.transition_preengagement(
             original.assignment_id, IgnoredAssignment, expected_revision=original.revision
         )
-        assert comms.views.revision().files != published_revision
+        assert comms.views.revision().stores_changed_since(published_revision)
     after = comms.transcripts.capture_page_read("sender")
     assert not before.current()
     assert before.content_current()

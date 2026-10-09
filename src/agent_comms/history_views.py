@@ -433,21 +433,18 @@ class HistoryViews:
         from .notification_assignment import NotificationAssignment
 
         return WireRevision(
-            tuple(
-                file_revision(path)
-                for path in (
-                    self.registry.store.path,
-                    self.channels.catalog.path,
-                    self.bus.log.path,
-                    self.bus.history.path,
-                    self.agents.activity._path,
-                    self.agents.runtime_info.path,
-                    self.bus.reads.path,
-                    self.root / GoalWaits.filename,
-                    *NotificationAssignment.source_paths(self.root),
-                )
+            registry=file_revision(self.registry.store.path),
+            catalog=file_revision(self.channels.catalog.path),
+            bus_log=file_revision(self.bus.log.path),
+            history=file_revision(self.bus.history.path),
+            activity=file_revision(self.agents.activity._path),
+            runtime_info=file_revision(self.agents.runtime_info.path),
+            reads=file_revision(self.bus.reads.path),
+            goal_waits=file_revision(self.root / GoalWaits.filename),
+            notifications=tuple(
+                file_revision(path) for path in NotificationAssignment.source_paths(self.root)
             ),
-            int(time.time()),
+            expiry_tick=int(time.time()),
         )
 
     def who(self) -> Sequence[Mapping]:
