@@ -55,13 +55,17 @@ class PrivateInputs(JournalRole):
 
         created = await ForkSessionHelper.run(request, cwd=cwd, env=env)
         created.source.require_session(request.file)
-        with self.journal.transaction() as db:
-            SessionJournalHistory.require_pristine(db, created.session_file)
-            with NativeEntry.open_evidence(created.path) as evidence:
-                _, entries = evidence.observe()
+        # Corroborate the whole inherited history before the journal's write
+        # transaction: every owner's input reservation opens that same journal,
+        # so it must not wait on reading a large fork. The transaction re-checks
+        # the unchanged revision and publishes the creation.
+        with NativeEntry.open_evidence(created.path) as evidence:
+            _, entries = evidence.observe()
+            created.covered_prefix(evidence, entries)
+            with self.journal.transaction() as db:
+                SessionJournalHistory.require_pristine(db, created.session_file)
                 if FileRevision.from_stat(created.path.stat()) != created.revision:
                     raise CompactionJournalError("Native fork changed before creation publication")
-                created.covered_prefix(evidence, entries)
                 created.insert(db)
         return created
 

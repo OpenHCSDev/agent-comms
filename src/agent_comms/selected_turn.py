@@ -14,7 +14,6 @@ from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.responses import ResponseObligation
 from .durable_turn import DurableTurn
 from .envelope_claim_transitions import WakeAdmission
-from .native_pi import NativePiUnavailable
 from .optional_awareness_projection import OptionalAwarenessProjection
 from .owner_fence import prepare_fence_token
 from .private_send_stage import FullNativeSend, TriageNativeSend
@@ -178,10 +177,12 @@ class SelectedAttempt:
             request = SelectedRequest.reserve(
                 participant, session, self.stage, self.token, prompt
             )
-        except NativePiUnavailable:
+        except Exception:
             # The attempt exists even if preparation fails before a request can
-            # own a reserved ID. Preserve the old dead-attempt UNKNOWN boundary;
-            # no previous triage ID is reused for this failed full preparation.
+            # own a reserved ID (native unavailability, or a busy journal or
+            # coordinator store). Preserve the old dead-attempt UNKNOWN boundary
+            # so the owner's pointer does not stay on a wedged attempt; no
+            # previous triage ID is reused for this failed full preparation.
             # A revoked attempt remains with the recovery owner.
             with suppress(StaleFence):
                 self.stage.fail_unknown(
