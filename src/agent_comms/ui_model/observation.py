@@ -25,6 +25,7 @@ from agent_comms.coordination_errors import CoordinationReadUnavailable
 if TYPE_CHECKING:
     from multiprocessing.connection import Connection
 
+    from agent_comms.history_views import RetiredViews
     from agent_comms.presentation import CoordinationSnapshot, WireRevision
     from agent_comms.thread_presentation import ThreadPresentation
     from agent_comms.ui_model.sidebar import ChannelRowModel, ThreadRowModel
@@ -40,6 +41,7 @@ class Interest:
 
     sidebar: ObserveSidebar | None = None
     threads: frozenset[str] = frozenset()
+    views: ObserveViews | None = None
 
 
 class ObservationRequest(ABC):
@@ -74,6 +76,17 @@ class ObserveThreads(ObservationRequest):
 
 
 @dataclass(frozen=True)
+class ObserveViews(ObservationRequest):
+    """The thread incarnations and channel views open in the UI, to learn when one is retired."""
+
+    threads: frozenset
+    channels: frozenset[str]
+
+    def apply(self, interest: Interest) -> Interest:
+        return replace(interest, views=self)
+
+
+@dataclass(frozen=True)
 class Observed:
     """A result, as of one revision of Core's stores."""
 
@@ -105,6 +118,13 @@ class ThreadsObserved(Observed):
 
 
 @dataclass(frozen=True)
+class ViewsRetired(Observed):
+    """Open views whose thread was deleted or replaced, or whose channel is gone or archived."""
+
+    retired: RetiredViews
+
+
+@dataclass(frozen=True)
 class ObservationFailed:
     """The service failed; the UI raises this, it does not run on stale data."""
 
@@ -129,6 +149,7 @@ class ObservationService:
         self.revision: WireRevision | None = None
         self.sent_sidebar: tuple[ObserveSidebar, int] | None = None
         self.sent_threads: frozenset[str] | None = None
+        self.checked_views: tuple[ObserveViews, WireRevision] | None = None
         self.retry_threads = False
         self.closed = False
 
@@ -185,6 +206,13 @@ class ObservationService:
                     unavailable.add(name)
             self.connection.send(ThreadsObserved(revision, presentations, frozenset(unavailable), frozenset(busy)))
             self.sent_threads, self.retry_threads = threads, bool(busy)
+        views = self.interest.views
+        if views is not None and (self.checked_views is None or self.checked_views[0] != views
+                                  or revision.registrations_changed_since(self.checked_views[1])):
+            retired = self.comms.views.retired_views(views.threads, views.channels)
+            if retired.threads or retired.channels:
+                self.connection.send(ViewsRetired(revision, retired))
+            self.checked_views = (views, revision)
 
     async def run(self) -> None:
         loop = asyncio.get_running_loop()
