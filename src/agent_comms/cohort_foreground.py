@@ -78,13 +78,13 @@ async def _accept_visible_deliveries(
     after_seq: int,
     *,
     owner_name: str,
-    native_package: Path | None = None,
+    acquire_package: Callable[[], None] | None = None,
 ) -> int:
     """Accept only committed initial rows addressed to this durable recipient.
 
-    Take a bounded snapshot under the bus authority, then release the bus lock
-    before the SQL transaction. All N identities must already be registered.
-    Never infer a cohort from an ordinary public message or its body.
+    Membership comes from the certified addressed index; only unsealed rows are
+    captured and decoded. All N identities must already be registered. Never
+    infer a cohort from an ordinary public message or its body.
     """
     def accept(resource: Coordination) -> int:
         sealed = sealed_cohort_sequences(resource, root_id)
@@ -94,23 +94,26 @@ async def _accept_visible_deliveries(
             if marker.root_id != root_id:
                 raise IdentityConflict("private initial wire root changed")
             admitted_after = max(after_seq, marker.admission_after_seq)
-        visited_after = admitted_after
-        unaccepted = []
-        for initial in bus.log.addressed_sources(lookup, admitted_after):
-            # Progress comes from every original actually visited in the fixed
-            # source cut, including already sealed/historical recipient rows.
-            visited_after = initial.message.seq
-            if initial.message.seq not in sealed and any(
-                r.recipient_lookup == lookup and r.canonical_thread == owner_name
-                for r in initial.audience.recipients
-            ):
-                unaccepted.append(initial)
+            addressed = source.addressed_sequences(bus.log, lookup, admitted_after)
+            # Progress comes from every addressed original in the fixed source
+            # cut, including already sealed/historical recipient rows.
+            unaccepted = []
+            for seq in addressed:
+                if seq in sealed:
+                    continue
+                initial = source.delivery(seq)
+                recipients = [r for r in initial.audience.recipients if r.recipient_lookup == lookup]
+                if not recipients:
+                    raise RelationViolationError("Certified initial lookup differs from bus row.")
+                if any(r.canonical_thread == owner_name for r in recipients):
+                    unaccepted.append(initial)
+        visited_after = addressed[-1] if addressed else admitted_after
         if len(unaccepted) > 100:
             raise IdentityConflict("recipient initial cohort batch exceeds bounded foreground scan")
-        if unaccepted and native_package is not None:
+        if unaccepted and acquire_package is not None:
             # An ACP observation with new originals must still validate the package
             # before SQL acceptance. Sealed receipts require no repeated preflight.
-            _preflight(bus.log.path.parent, root_id, native_package, True)
+            acquire_package()
         for initial in unaccepted:
             # A prior canonical name is historical after a private owner rename.
             # Never create a NEW generation's selected attempt from that old

@@ -42,8 +42,8 @@ class SelectedExecution:
     selected_tool_intent: SelectedToolIntent | None = None
     write_authority: SelectedWriteAuthority = field(default_factory=NoSelectedWritePlans)
     _run_permit: threading.Lock = field(init=False, default_factory=threading.Lock)
-    _tracked_factory: Callable[..., NativePiRpcLaunch] = field(
-        init=False, repr=False, compare=False,
+    _tracked_factory: Callable[..., NativePiRpcLaunch] | None = field(
+        init=False, default=None, repr=False, compare=False,
     )
 
     def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch:
@@ -55,9 +55,14 @@ class SelectedExecution:
         """
         if package != self.native_package:
             raise IdentityConflict("Selected launch differs from its execution package")
+        if self._tracked_factory is None:
+            raise IdentityConflict("Selected launch precedes its execution package acquisition")
         return self._tracked_factory(**options)
 
     def validate(self) -> None:
+        """Acquire this execution's package once; claim acceptance and launch share it."""
+        if self._tracked_factory is not None:
+            return
         if not self.opt_in:
             raise PublicationActivationBlocked("coordinated runtime requires explicit activation")
         _private_session_dir(self.root)

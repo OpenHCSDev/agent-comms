@@ -217,6 +217,25 @@ class CertifiedSourceRead:
         self.require_current()
         return original
 
+    def addressed_sequences(self, bus: WireLog, lookup: str, after_seq: int) -> tuple[int, ...]:
+        """Every committed addressed sequence in this certificate, without bytes.
+
+        Callers that only need membership consult the index; they capture and
+        decode an original only for the sequences they actually consume.
+        """
+        self.require_current()
+        self.require_marker(bus._private_marker_unlocked())
+        try:
+            rows = self.connection.execute(
+                f"SELECT a.seq FROM {Addressed.declared_name} a "
+                "WHERE a.lookup=? AND a.seq>? AND a.seq<=? ORDER BY a.seq",
+                (lookup, after_seq, self.witness.through_seq),
+            ).fetchall()
+        except sqlite3.Error as error:
+            raise RelationViolationError("Certified addressed index is unavailable.") from error
+        self.require_current()
+        return tuple(seq for seq, in rows)
+
     def addressed_page(
         self, bus: WireLog, request: AddressedPage, *, prefix: PrefixWitness | None = None,
     ):
