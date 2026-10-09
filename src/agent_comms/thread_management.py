@@ -523,18 +523,25 @@ class ThreadManagement:
 
 
     def fork(self, spec: ForkSpec, pi_bin: str | None = None) -> Thread:
-        """Fork with the current owner's backend executable unless overridden."""
-        resolved_bin = pi_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", "pi")
-        with _store_lock(self._wire_lock_path):
-            return self._fork_unlocked(spec, resolved_bin)
+        """Fork with the current owner's backend executable unless overridden.
 
-    def _fork_unlocked(self, spec: ForkSpec, pi_bin: str) -> Thread:
-        """Spawn a child pi thread from the parent's session.
-
-        Proves the parent is registered and has a session file, declares the
-        child thread, registers it, then launches the subprocess. Fail-closed:
-        if the launch fails the registration is rolled back.
+        The native fork copies the parent's whole saved history (the SDK holds
+        both session writer locks and fsyncs). It runs before the global wire
+        lock, in the same writer-then-wire order as other native source edits,
+        so a large parent no longer blocks every owner on the root. The locked
+        declaration re-checks the parent and name against the captured source.
         """
+        from .compaction_journal import CompactionJournal
+        from .native_fork import fork_native_session
+
+        resolved_bin = pi_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", "pi")
+        parent = self._fork_parent(spec)
+        session = fork_native_session(parent.session_file, parent.worktree, resolved_bin,
+            private_inputs=CompactionJournal(self.root / "compaction-commits.sqlite3").private_inputs)
+        with _store_lock(self._wire_lock_path):
+            return self._fork_unlocked(spec, resolved_bin, session)
+
+    def _fork_parent(self, spec: ForkSpec) -> Thread:
         parent = self.registry.require(spec.parent)
         parent.execution.require_native()
         if self.registry.name_reserved(spec.name):
@@ -545,12 +552,24 @@ class ThreadManagement:
             raise RelationViolationError(
                 f"Parent thread {spec.parent!r} has no session file to fork."
             )
+        return parent
 
-        from .compaction_journal import CompactionJournal
-        from .native_fork import fork_native_session
+    def _fork_unlocked(self, spec: ForkSpec, pi_bin: str, session) -> Thread:
+        """Declare and launch the forked child under the wire lock.
 
-        session = fork_native_session(parent.session_file, parent.worktree, pi_bin,
-            private_inputs=CompactionJournal(self.root / "compaction-commits.sqlite3").private_inputs)
+        Proves the parent is still registered with the forked source and the
+        name is still free, declares the child, registers it, then launches the
+        subprocess. Fail-closed: if the launch fails the registration is rolled
+        back. A lost race leaves the already-created fork unregistered.
+        """
+        parent = self._fork_parent(spec)
+        try:
+            session.source.require_session(parent.session_file)
+        except ValueError as error:
+            raise RelationViolationError(
+                f"Parent thread {spec.parent!r} changed its saved session during the fork; "
+                f"the created fork {session.session_file} was not registered."
+            ) from error
         child = Thread(
             name=spec.name,
             tags=parent.tags if spec.tags is None else spec.tags,

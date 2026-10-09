@@ -25,7 +25,7 @@ class ForkSessionHelper(PiHelper):
 
 
 def fork_native_session(file: str, worktree: str, launcher: str, *, private_inputs) -> NativeSessionIdentity:
-    """Capture once under the caller's wire lock and native writer's source lock.
+    """Capture once under the native writer's source lock, before any wire lock.
 
     The native owner fsyncs the new history. An uncertain helper outcome is not
     retried or inferred from an orphan file, and no input is sent.
