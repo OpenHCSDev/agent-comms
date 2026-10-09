@@ -19,6 +19,7 @@ from pathlib import Path
 
 from .goal_waits import GoalWaits
 
+_IN_MODIFY = 0x00000002
 _IN_CLOSE_WRITE = 0x00000008
 _IN_MOVED_TO = 0x00000080
 _IN_DELETE_SELF = 0x00000400
@@ -48,8 +49,9 @@ class WireWatch(ABC):
         pass
 
     @staticmethod
-    async def observations(root: Path) -> AsyncIterator[None]:
-        watcher = open_wire_watcher(root)
+    async def observations(root: Path, names: frozenset[bytes] = _AUTHORITY_FILES,
+                           *, modified: bool = False) -> AsyncIterator[None]:
+        watcher = open_wire_watcher(root, names, modified=modified)
         try:
             while True:
                 await watcher.prepare()
@@ -68,7 +70,8 @@ class PollingWireWatch(WireWatch):
 
 
 class WireChangeWatch(WireWatch):
-    def __init__(self, fd: int, loop: asyncio.AbstractEventLoop):
+    def __init__(self, fd: int, loop: asyncio.AbstractEventLoop, names: frozenset[bytes] = _AUTHORITY_FILES):
+        self.names = names
         self.fd = fd
         self.loop = loop
         self.changed = asyncio.Event()
@@ -96,7 +99,7 @@ class WireChangeWatch(WireWatch):
                     offset += _HEADER.size
                     name = raw[offset : offset + length].partition(b"\0")[0]
                     offset += length
-                    if name in _AUTHORITY_FILES or mask & (
+                    if name in self.names or mask & (
                         _IN_Q_OVERFLOW | _IN_IGNORED | _IN_DELETE_SELF | _IN_MOVE_SELF
                     ):
                         self.changed.set()
@@ -115,8 +118,13 @@ class WireChangeWatch(WireWatch):
             self.fd = -1
 
 
-def open_wire_watcher(root: Path) -> WireWatch:
-    """Use Linux notifications when available; callers retain periodic polling."""
+def open_wire_watcher(root: Path, names: frozenset[bytes] = _AUTHORITY_FILES,
+                      *, modified: bool = False) -> WireWatch:
+    """Use Linux notifications when available; callers retain periodic polling.
+
+    ``names`` are the store files in ``root`` that prompt a read; ``modified``
+    also reports writes to files that stay open (SQLite's write-ahead log).
+    """
     if sys.platform != "linux":
         return PollingWireWatch()
     try:
@@ -132,11 +140,11 @@ def open_wire_watcher(root: Path) -> WireWatch:
     fd = init(os.O_NONBLOCK | os.O_CLOEXEC)
     if fd < 0:
         return PollingWireWatch()
-    if add(fd, os.fsencode(root), _MASK) < 0:
+    if add(fd, os.fsencode(root), _MASK | (_IN_MODIFY if modified else 0)) < 0:
         os.close(fd)
         return PollingWireWatch()
     try:
-        return WireChangeWatch(fd, asyncio.get_running_loop())
+        return WireChangeWatch(fd, asyncio.get_running_loop(), names)
     except (NotImplementedError, OSError):
         os.close(fd)
         return PollingWireWatch()
