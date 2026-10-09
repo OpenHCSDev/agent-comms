@@ -700,6 +700,27 @@ class UserSendCliCommand(CliCommand, declared_name="user-send"):
 
 
 @dataclass(frozen=True, kw_only=True)
+class ConfigureCliCommand(CliCommand, declared_name="configure"):
+    help = "Set a stopped thread's model or thinking level for its next start"
+    name: str = option("--name")
+    model: str | None = option("--model", default=None)
+    thinking: str | None = option("--thinking", default=None)
+
+    def apply(self, ctx: Comms) -> Any:
+        from .pi_vocabulary import ThinkingLevel
+        from .errors import RelationViolationError
+
+        thread = ctx.registry.require(self.name)
+        if ctx.registry.status(thread.name).active:
+            raise RelationViolationError(
+                f"{thread.name} is running; change its settings through its session")
+        level = ThinkingLevel.decode(self.thinking).declared_name if self.thinking is not None else None
+        updated = ctx.threads.set_thread_configuration(thread, model=self.model, thinking_level=level)
+        return {"configured": updated.name, "model": updated.model,
+                "thinking_level": ThinkingLevel.optional_name(updated.thinking_level)}
+
+
+@dataclass(frozen=True, kw_only=True)
 class PinConstraintCliCommand(CliCommand, declared_name="pin-constraint"):
     help = "Pin a certified original human message for its recipient"
     thread: str = option("thread")
