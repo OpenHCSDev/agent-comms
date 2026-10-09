@@ -38,7 +38,18 @@ class RegistryIdentityCheck(RuleCheck):
 
 
 class RegistryAdmissionCheck(RegistryIdentityCheck):
-    """A send also requires the captured active turn to remain unchanged."""
+    """A claimed turn uses its captured settings, not the next-turn selection.
+
+    Before a claim, configuration must still match. After a claim, the exact
+    lease/process/session checks retain this operation's original authority;
+    native launch and compaction use the captured Thread and observed model.
+    """
+
+    def model_matches(self) -> bool:
+        return self.expected.turn_lease is not None or super().model_matches()
+
+    def thinking_matches(self) -> bool:
+        return self.expected.turn_lease is not None or super().thinking_matches()
 
 
 class RegistryPublicationCheck(RegistryAdmissionCheck):
@@ -50,13 +61,6 @@ class RegistryPublicationCheck(RegistryAdmissionCheck):
 
     def worktree_matches(self) -> bool:
         return self.actual.contains_worktree(self.expected.worktree)
-
-    def model_matches(self) -> bool:
-        # Source publication selects no model and admits no new input.
-        return True
-
-    def thinking_matches(self) -> bool:
-        return True
 
 
 class GoalRegistryIdentityCheck(RegistryIdentityCheck):

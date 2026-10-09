@@ -10,6 +10,7 @@ from pathlib import Path
 from .backend import PersistentPiSession
 from .native_pi import NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
+from .native_input_owner import RegistryOwner
 from .owner_compaction_prepare import NativePreparationResult
 from .owner_compaction_settings import PiCompactionDecision, PiCompactionSettings
 from .pi_commands import AgentCommsCompactionSettings, AgentCommsPrepareCompaction, NativeQuery
@@ -125,11 +126,15 @@ async def prepare_selected_native_source(
 
 async def read_selected_compaction_decision(
     persistent: PersistentPiSession, *, session_file: str, expected_package: Path,
-    selected: SelectedModel, registry: Registration, thread_name: str,
+    selected: SelectedModel, registry: Registration, captured: RegistryOwner,
     purpose: type[CompactionReason] = ThresholdCompactionReason,
     timeout: float = AgentCommsCompactionSettings.default_observation_timeout_seconds,
 ) -> PiCompactionDecision:
-    """Select authored evidence only when the actual native policy opts in."""
+    """Use this turn's selected model and one current authored-source cut.
+
+    Registry settings select the next turn. They cannot replace the model
+    already observed by this native child or the captured task scope.
+    """
     settings = await observe_selected_compaction_decision(
         persistent, session_file=session_file, expected_package=expected_package,
         selected=selected, purpose=purpose, timeout=timeout,
@@ -142,9 +147,11 @@ async def read_selected_compaction_decision(
     from .compaction_journal import CompactionJournal
 
     def authored_boundary():
-        retained = WireLog(registry.store.path.with_name("bus.jsonl")).retained_context(thread_name, registry)
-        snapshot = registry.snapshot()
-        boundary = retained.retained.optional_boundary(snapshot.require(thread_name), snapshot)
+        with WireLog(registry.store.path.with_name("bus.jsonl")).retained_sources(
+            captured.thread.name, registry,
+        ) as (_, snapshot, facts, _, _):
+            captured.require_snapshot(snapshot, "Selected compaction owner changed")
+            boundary = facts.optional_boundary(captured.thread, snapshot)
         if boundary and CompactionJournal(
             registry.store.path.with_name("compaction-commits.sqlite3")
         ).summaries.attempted_boundary(session_file, boundary):

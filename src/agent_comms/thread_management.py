@@ -433,25 +433,30 @@ class ThreadManagement:
         with _store_lock(self._wire_lock_path):
             self.registry.heartbeat(name)
 
-    def set_thread_model(self, name: str, model: str) -> Thread:
-        """Persist the model selected for every future turn of a thread."""
-        selected = model.strip()
-        if not selected:
-            raise ValueError("Thread model cannot be empty.")
-        with _store_lock(self._wire_lock_path):
-            thread = self.registry.require(name)
-            thread.execution.require_native()
-            updated = replace(thread, model=selected)
-            self.registry.register(updated, self.registry.status(thread.name))
-            return updated
+    def set_thread_configuration(
+        self, original: Thread, *, model: str | None = None,
+        thinking_level: str | None = None,
+    ) -> Thread:
+        """Publish next-turn settings together against their acquired declaration.
 
-    def set_thread_thinking_level(self, name: str, level: str) -> Thread:
-        """Persist Pi's thinking level for every future turn of a thread."""
+        Progress and goals belong to the current document. A changed selection
+        or project invalidates the native settings result acquired by the caller.
+        """
+        Thread.require_declaration(original)
         with _store_lock(self._wire_lock_path):
-            thread = self.registry.require(name)
+            thread = self.registry.require(original.name)
+            if (thread.incarnation, thread.worktree, thread.model, thread.thinking_level) != (
+                original.incarnation, original.worktree, original.model, original.thinking_level,
+            ):
+                raise RelationViolationError("Thread configuration changed before publication")
             thread.execution.require_native()
-            updated = replace(thread, thinking_level=level)
-            self.registry.register(updated, self.registry.status(thread.name))
+            updated = replace(
+                thread,
+                model=thread.model if model is None else model.strip(),
+                thinking_level=thread.thinking_level if thinking_level is None else thinking_level,
+            )
+            if updated != thread:
+                self.registry.register(updated, self.registry.status(thread.name))
             return updated
 
     def initialize_native_configuration(

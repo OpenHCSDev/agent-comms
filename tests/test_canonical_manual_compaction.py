@@ -15,6 +15,7 @@ from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDocument
 from agent_comms.owner_compaction_manual import compact_manual_owner
+from agent_comms.native_input_owner import RegistryOwner
 from selected_summary_cases import admission_identity, manual_source
 from test_selected_owner_compaction_integration import owner_fixture
 
@@ -48,7 +49,9 @@ async def test_explicit_manual_selected_commit_never_invents_original_input(tmp_
             ),
         )
         before_inputs = inputs.path.read_bytes()
-        result = await compact_manual_owner(runner, "owner", "owner", info, None)
+        result = await compact_manual_owner(
+            runner, "owner", RegistryOwner.capture_local(registry.snapshot(), "owner"), info, None,
+        )
         assert isinstance(result, CommittedCompactionResult)
         journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
         assert journal.operations.get(result.commit_id).state.committed
@@ -107,7 +110,9 @@ async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(
                 _private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve()
             ),
         )
-        result = await compact_manual_owner(runner, "owner", "owner", info, None)
+        result = await compact_manual_owner(
+            runner, "owner", RegistryOwner.capture_local(registry.snapshot(), "owner"), info, None,
+        )
         assert isinstance(result, CommittedCompactionResult)
         assert journal.summaries.get(operation).state.declared_name == "retired_refusal"
         assert inputs.path.read_bytes() == before_inputs
@@ -165,7 +170,9 @@ async def test_manual_does_not_retire_or_repeat_uncertain_provider(
             ),
         )
         with pytest.raises(CompactionJournalError, match="uncertain"):
-            await compact_manual_owner(runner, "owner", "owner", info, None)
+            await compact_manual_owner(
+                runner, "owner", RegistryOwner.capture_local(registry.snapshot(), "owner"), info, None,
+            )
         assert journal.summaries.get(operation) == attempt
         assert Path(file).read_bytes() == before
         assert not native_input_admitted(tmp_path, file)

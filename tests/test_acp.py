@@ -261,7 +261,7 @@ class TestHandlers:
                 async with asyncio.timeout(10):
                     while not native.provider.requests:
                         await asyncio.sleep(0.01)
-                turn = await agent.turns.active_native_session(session)
+                turn = backend.TurnSession.active[agent.turns.turn_tasks[session]]
                 identity = turn.native.proc.identity
                 if selected:
                     from agent_comms.tracked_turn import TrackedTurnSession
@@ -1876,7 +1876,7 @@ class TestLiveConfigSync:
         assert facts(sent[0].field_meta, GoalChangedUpdate) == (GoalChangedUpdate(None, None),)
         assert "title" not in sent[0].model_fields_set
         sent.clear()
-        wired.threads.set_thread_model("proj", "openrouter/deepseek/deepseek-v4.1-flash")
+        wired.threads.set_thread_configuration(wired.registry.require('proj'), model='openrouter/deepseek/deepseek-v4.1-flash')
         await agent.sessions.config.sync_thread("proj")
         assert len(sent) == 1
         assert isinstance(sent[0], ConfigOptionUpdate)

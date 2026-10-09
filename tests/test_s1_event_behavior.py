@@ -354,7 +354,7 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(
     )
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
-    comms.threads.set_thread_model(name, "response-local/fixture")
+    comms.threads.set_thread_configuration(comms.registry.require(name), model='response-local/fixture')
     comms.threads.attach_session(name, str(native.session))
     observed = []
     emit = owner._emit_event

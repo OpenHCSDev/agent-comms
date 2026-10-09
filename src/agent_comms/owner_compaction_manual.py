@@ -43,7 +43,8 @@ class ManualSelectedSummary(NativeSummary):
 
 
 async def compact_manual_owner(
-    runner, session_id: str, thread_name: str, prepared: StateData, instructions: str | None
+    runner, session_id: str, captured: RegistryOwner,
+    prepared: StateData, instructions: str | None,
 ) -> CompactionResult:
     persistent: PersistentPiSession | None = runner.persistent_backends.get(session_id)
     if persistent is None or not persistent.available:
@@ -51,7 +52,7 @@ async def compact_manual_owner(
             "Canonical manual compaction requires the prepared selected native session"
         )
     snapshot = await Coordination.run_worker(runner.comms.registry.snapshot)
-    captured = RegistryOwner.capture(snapshot, thread_name, "Manual compaction owner changed")
+    captured.require_snapshot(snapshot, "Manual compaction owner changed")
     owner = captured.thread
     turn = captured.require_active_turn()
     session_file = owner.require_saved_session()
@@ -68,7 +69,7 @@ async def compact_manual_owner(
         settings = await read_selected_compaction_decision(
             persistent, session_file=session_file,
             expected_package=Path(package), selected=selected,
-            registry=bridge.registry, thread_name=owner.name, purpose=ManualCompactionReason,
+            registry=bridge.registry, captured=captured, purpose=ManualCompactionReason,
         )
         source = ManualSource(
             incarnation=owner.incarnation,

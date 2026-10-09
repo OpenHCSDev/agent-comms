@@ -21,6 +21,7 @@ from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.owner_compaction_adaptive import maybe_compact_owner_turn
+from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.registration import Registration
 from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown
 from agent_comms.store_files import _store_lock
@@ -154,11 +155,9 @@ async def test_retained_summary_accounting_and_original_custody(tmp_path, monkey
             async def compact():
                 return await maybe_compact_owner_turn(
                     registry,
-                    "pi",
-                    "owner",
-                    "acceptance",
+                    RegistryOwner.capture_local(registry.snapshot(), "owner"),
                     prepared,
-                    "acp:acceptance",
+                    ("acp:acceptance",),
                     persistent,
                     input_text=original,
                     on_admission=admitted.append,

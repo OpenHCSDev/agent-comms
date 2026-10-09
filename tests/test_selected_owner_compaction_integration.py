@@ -26,6 +26,7 @@ from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.owner_compaction_adaptive import maybe_compact_owner_turn
+from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.registration import Registration
 from agent_comms.runtime_info import AgentRuntimeInfo
 from agent_comms.store_files import _store_lock
@@ -252,8 +253,7 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         assert (
             await maybe_compact_owner_turn(
                 registry,
-                "owner",
-                "turn",
+                RegistryOwner.capture_local(registry.snapshot(), "owner"),
                 info,
                 ("acp:original",),
                 persistent,
@@ -766,8 +766,7 @@ async def test_correction_after_native_commit_never_mints_original_admission(tmp
         with pytest.raises(RelationViolationError, match="Unsettled"):
             await maybe_compact_owner_turn(
                 registry,
-                "owner",
-                "turn",
+                RegistryOwner.capture_local(registry.snapshot(), "owner"),
                 info,
                 ("acp:original",),
                 persistent,
@@ -798,8 +797,7 @@ async def test_selected_effective_disabled_skips_without_reserving_or_mutating(
         before = Path(file).read_bytes()
         assert not await maybe_compact_owner_turn(
             registry,
-            "owner",
-            "turn",
+            RegistryOwner.capture_local(registry.snapshot(), "owner"),
             info,
             ("acp:original",),
             persistent,
@@ -831,8 +829,7 @@ async def test_selected_custom_model_and_project_settings_use_actual_owner(tmp_p
         assert info.model.display_name == "custom-local/custom-model"
         assert await maybe_compact_owner_turn(
             registry,
-            "owner",
-            "turn",
+            RegistryOwner.capture_local(registry.snapshot(), "owner"),
             info,
             ("acp:original",),
             persistent,
@@ -862,8 +859,7 @@ async def test_owner_without_goal_compacts_with_exact_turn_authority(tmp_path, m
         admitted = []
         assert await maybe_compact_owner_turn(
             registry,
-            "owner",
-            "turn",
+            RegistryOwner.capture_local(registry.snapshot(), "owner"),
             info,
             ("acp:original",),
             persistent,
