@@ -24,6 +24,7 @@ from .registry_document import RegistrySnapshot
 from .store_files import _store_lock
 from .threads import Thread
 from .thread_identity import OwnerIdentity, AdmissionIdentity
+from .thread_owned_state import ThreadOwnedState
 from .restart_refusals import (
     OwnerSelectionChangedRefusal,
     OwnerGenerationChangedRefusal,
@@ -120,13 +121,24 @@ class OwnerReleaseReceipt:
         source.sent_owner_admission_generation.require_release(self, snapshot, current)
 
 
-class OwnerReleaseStore(LockedStore[dict[str, OwnerReleaseReceipt]]):
+class OwnerReleaseStore(ThreadOwnedState, LockedStore[dict[str, OwnerReleaseReceipt]]):
     @property
     def record_type(self):
         return dict[str, OwnerReleaseReceipt]
 
     def empty(self) -> dict[str, OwnerReleaseReceipt]:
         return {}
+
+    def remove_threads(self, threads: Sequence[Thread]) -> None:
+        """A receipt attests one declared owner; it ends with the declaration."""
+        names = {thread.name for thread in threads}
+        self.update(
+            lambda receipts: (
+                {name: receipt for name, receipt in receipts.items() if name not in names}
+                if names & receipts.keys()
+                else receipts
+            )
+        )
 
 
 from .owner_cutover import OwnerCutover, PreserveOwnerRuntime

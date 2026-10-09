@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .channel_targets import is_channel_target
+from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
@@ -163,7 +164,7 @@ class DMDisplayBasis:
             peer_name = snapshot.canonical_name(peer)
             scope = DMDisplayScope.capture_human(viewer_name, peer_name, snapshot)
             viewer_thread = snapshot.threads[viewer_name]
-            peer_thread = snapshot.threads[peer_name]
+            peer_thread = snapshot.participant(peer_name)
             viewer_names, peer_names = scope.first_names, scope.second_names
             bus_identity = bus.reads.bus_identity(bus.log.path)
         # Native admission uses this same wire lock. Page preparation and the
@@ -283,9 +284,9 @@ class DMDisplayBasis:
                 thread for thread in snapshot.threads.values() if not thread.role.executable
             )
             viewer = snapshot.threads[self.viewer]
-            target = snapshot.threads[snapshot.canonical_name(self.requested_peer)]
+            target = snapshot.participant(self.requested_peer)
             scope = DMDisplayScope.capture_human(self.viewer, self.requested_peer, snapshot)
-        except (KeyError, StopIteration, ValueError) as error:
+        except (KeyError, StopIteration, ValueError, UnregisteredThreadError) as error:
             raise ValueError("DM viewer/peer incarnation changed; refresh the page.") from error
         if (
             selected.incarnation != self.viewer_identity
@@ -332,8 +333,8 @@ class DMDisplayScope(MessageDisplayScope):
     def capture_human(cls, viewer: str, peer: str, snapshot: RegistrySnapshot) -> DMDisplayScope:
         try:
             first = snapshot.threads[snapshot.canonical_name(viewer)]
-            second = snapshot.threads[snapshot.canonical_name(peer)]
-        except KeyError as error:
+            second = snapshot.participant(peer)
+        except (KeyError, UnregisteredThreadError) as error:
             raise ValueError("DM display identity changed; refresh the page.") from error
         if first.role.executable or first.incarnation == second.incarnation:
             raise ValueError("DM display identity changed; refresh the page.")

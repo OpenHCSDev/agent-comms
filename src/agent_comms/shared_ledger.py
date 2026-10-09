@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from .field_codec import FieldCodec
 from .locked_store import LockedStore
+from .thread_owned_state import ThreadOwnedState
+
+if TYPE_CHECKING:
+    from .threads import Thread
 
 
 @dataclass(frozen=True, slots=True)
-class SharedLedger(LockedStore[dict[str, Any]]):
+class SharedLedger(ThreadOwnedState, LockedStore[dict[str, Any]]):
     """One free-form JSON document; no in-memory mirror or closed value family."""
 
     filename: ClassVar[str] = "ledger.json"
@@ -28,15 +32,19 @@ class SharedLedger(LockedStore[dict[str, Any]]):
         changes = FieldCodec.decode(self.record_type, dict(updates))
         self.update(lambda values: {**values, **changes, "last_updated_by": author})
 
-    def remove_thread(self, name: str) -> int:
-        """Remove exact structural references to a thread identity."""
+    def remove_threads(self, threads: Sequence[Thread]) -> None:
+        """Remove exact structural references to these thread names."""
+        names = frozenset(thread.name for thread in threads)
+
+        def named(value: object) -> bool:
+            return isinstance(value, str) and value in names
 
         def clean(value: object) -> tuple[object, int]:
             if isinstance(value, dict):
                 result: dict[str, object] = {}
                 removed = 0
                 for key, child in value.items():
-                    if key == name or child == name:
+                    if key in names or named(child):
                         removed += 1
                         continue
                     cleaned, count = clean(child)
@@ -47,7 +55,7 @@ class SharedLedger(LockedStore[dict[str, Any]]):
                 result_list: list[object] = []
                 removed = 0
                 for child in value:
-                    if child == name:
+                    if named(child):
                         removed += 1
                         continue
                     cleaned, count = clean(child)
@@ -64,7 +72,6 @@ class SharedLedger(LockedStore[dict[str, Any]]):
             return cast(dict[str, Any], cleaned) if removed else values
 
         self.update(change)
-        return removed
 
     def rename_thread(self, old_name: str, new_name: str) -> int:
         """Replace exact structural references without touching free text."""

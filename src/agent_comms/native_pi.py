@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from .native_arguments import NativeArguments
+from .native_session_files import NativeSessionFiles
 from .native_package import OWNER_INSTRUCTIONS
 from .owner_launch import RestartEnvironment
 from .field_codec import FieldCodec
@@ -234,7 +235,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
         Open existing storage read/write for SQLite rollback, then forbid SQL
         writes. A cold history view can recover without a model turn or receipt.
         """
-        path = Path(str(session_file) + ".input-proof")
+        path = NativeSessionFiles(Path(session_file)).input_proof
         with ExitStack() as custody:
             try:
                 held = custody.enter_context(closing(

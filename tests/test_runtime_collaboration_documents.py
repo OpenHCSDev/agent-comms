@@ -13,6 +13,7 @@ from agent_comms.locked_store import LockedStore
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
 from agent_comms.store_files import _store_lock
+from agent_comms.threads import Thread
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -123,7 +124,7 @@ def test_free_form_ledger_has_no_retained_mutable_mirror(tmp_path):
     SharedLedger(store.path).merge({"other": [1, 2]}, "other")
     assert store.rename_thread("old", "new") == 2
     assert store.read()["nested"] == {"new": ["new", None, True, 9, {"free": "old is prose"}]}
-    assert store.remove_thread("new") == 1
+    store.remove_threads((Thread("new", frozenset(), str(tmp_path)),))
     assert store.read() == {**saved, "nested": {}, "other": [1, 2], "last_updated_by": "other"}
 
 

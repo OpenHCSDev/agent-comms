@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 from abc import abstractmethod
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from enum import Enum
@@ -23,10 +23,12 @@ from .store_files import (
     file_revision,
 )
 from .thread_identity import OwnerIdentity
+from .thread_owned_state import ThreadOwnedState
 from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
     from .presentation import MessageNotification
+    from .threads import Thread
 
 
 class ActivityState(Enum):
@@ -186,7 +188,7 @@ class ObservedActivity(ActivityData):
         return self.readiness.presentation(super().presentation(title), busy=self.state.busy)
 
 
-class ActivityLog:
+class ActivityLog(ThreadOwnedState):
     """Persists Activity events as an append-only JSONL log.
 
     The latest event per thread is its current activity; stale events
@@ -300,16 +302,17 @@ class ActivityLog:
                     self.checkpoint.replace(captured)
             return self._latest
 
-    def remove_thread(self, thread: str) -> int:
-        """Remove all persisted activity for one thread."""
+    def remove_threads(self, threads: Sequence[Thread]) -> None:
+        """Remove all persisted activity for these threads."""
+        names = {thread.name for thread in threads}
         with _store_lock(self._path):
             records = [dict(record) for record in _jsonl_records(self._path)]
-            retained = [record for record in records if record.get("thread") != thread]
-            _atomic_write_text(
-                self._path,
-                "".join(f"{json.dumps(record)}\n" for record in retained),
-            )
-        return len(records) - len(retained)
+            retained = [record for record in records if record.get("thread") not in names]
+            if len(retained) != len(records):
+                _atomic_write_text(
+                    self._path,
+                    "".join(f"{json.dumps(record)}\n" for record in retained),
+                )
 
     def rename_thread(self, old_name: str, new_name: str) -> None:
         with _store_lock(self._path):
