@@ -27,6 +27,7 @@ from .activity import StoppedDrainDiagnostic, UnavailableDrainDiagnostic
 from .agent_events import Done
 from .comms import Comms
 from .coordination_errors import CoordinationError, IdentityConflict
+from .native_pi import NativePiUnavailable
 from .coordination_cohort import next_sealed_assignment
 from .coordinator import Coordination
 from .bus_publication import stable_thread_lookup
@@ -229,6 +230,10 @@ class InputDrain(FutureInputQueue):
                     sqlite3.Error,
                     CoordinationError,
                     RequestError,
+                    # A failed native input has already been settled and
+                    # published by its request owner; it is never replayed, so
+                    # the owner keeps taking later inputs, as a restart would.
+                    NativePiUnavailable,
                 ) as error:
                     await Coordination.run_worker(partial(
                         self.comms.agents.set_drain_diagnostic, thread, owner,
