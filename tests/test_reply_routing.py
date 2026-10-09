@@ -1,14 +1,20 @@
 import asyncio
 import json
+import os
+from pathlib import Path
 
 import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms import invoke_tool
+from agent_comms.acp import CommsAgent
+from agent_comms.acp_extension import TextRouteUpdate, decode_updates
 from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import wire
 from agent_comms.routing import MessageRoute
 from agent_comms.threads import Thread
+
+pytest_plugins = ("test_backend_native_lifecycle",)
 
 
 def test_incoming_route_distinguishes_channel_and_direct_delivery():
@@ -94,88 +100,49 @@ async def test_sent_tool_message_is_visible_live_and_in_saved_history(
         await agent.shutdown()
 
 
-async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = wire(tmp_path / "wire")
-    agent = canonical_agent(comms, agent_bin="pi", agent_args=[], runtime_enabled=True, auto_wake=False)
-    await agent.new_session(str(tmp_path / "worker"))
-    comms.channels.update_tags("worker", add=frozenset({"test"}))
-    session = tmp_path / "session.jsonl"
-    session.write_text('{"type":"session","id":"session","version":3}\n')
-    comms.threads.attach_session("worker", str(session))
+async def test_route_is_forwarded_live_and_preserved_by_entry_id(native_backend, monkeypatch):
+    native = native_backend
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
+    comms = wire(native.root)
+    agent = CommsAgent(
+        comms, agent_bin="pi", runtime_enabled=True, auto_wake=False,
+        private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+        private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
+        agent_args=["--provider", "response-local", "--model", "fixture", "--thinking", "off",
+                    "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+                    "--no-prompt-templates", "--no-tools"],
+    )
     updates = []
 
     class Client:
         async def session_update(self, **kwargs):
             updates.append(kwargs["update"])
 
-    agent.sessions.client = Client()
-
-    async def events(*args, **kwargs):
-        native_id = "a" * 32
-        with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
-            assert allowed
-        assert kwargs["native_start"](None, native_id, args[2])
-        with session.open("a") as output:
-            for identity, role, content in (
-                ("u1", "user", args[2]),
-                ("a1", "assistant", "Channel answer"),
-            ):
-                output.write(
-                    json.dumps(
-                        {
-                            "type": "message",
-                            "id": identity,
-                            "message": {
-                                "role": role,
-                                "content": content,
-                                **({"inputId": native_id} if role == "user" else {}),
-                            },
-                        }
-                    )
-                    + "\n"
-                )
-        yield ae.Chunk(text="Channel answer")
-        yield ae.StreamSettled()
-        yield ae.Done(ok=True, text="")
-
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+    agent.on_connect(Client())
     try:
+        await agent.new_session(str(native.project))
+        name = native.project.name
+        comms.channels.update_tags(name, add=frozenset({"test"}))
+        comms.threads.attach_session(name, str(native.session))
         message = comms.messaging.send_user_message(
-            "#test", "Question in channel", worktree=str(tmp_path)
+            "#test", "Question in channel", worktree=str(native.project)
         )
-        # Routing persists by entry identity on the current owned turn. Native
-        # channel notification/admission is covered by the canonical drain tests.
-        await asyncio.wait_for(agent.turns.run_agent_turn(
-            "worker", "worker", message.body,
-            reply_targets=(message.target,), origins=(message,),
-        ), 2)
-        routed = [
-            update
-            for update in updates
-            if (update.field_meta or {}).get("agentComms", {}).get("route")
-        ]
-        assert routed[0].field_meta["agentComms"]["route"]["targets"] == ("#test",)
-        page = wire(tmp_path / "wire").transcripts.thread_transcript_page("worker")
+        await agent.turns.run_agent_turn(
+            name, name, message.body, reply_targets=(message.target,), origins=(message,),
+        )
+        routes = [fact.route for update in updates for fact in decode_updates(update.field_meta)
+                  if isinstance(fact, TextRouteUpdate) and fact.route is not None]
+        assert routes and all(route.targets == ("#test",) for route in routes)
+        page = wire(native.root).transcripts.thread_transcript_page(name)
         assert page.events[0].text == "Question in channel"
         assert page.events[0].routing.requests[0].sender == "user"
         assert page.events[-1].routing.reply.outgoing_label == "To #test"
-        # Equal private text must not inherit routing from matching content.
-        with session.open("a") as output:
-            output.write(
-                json.dumps(
-                    {
-                        "type": "message",
-                        "id": "private",
-                        "message": {"role": "assistant", "content": "Channel answer"},
-                    }
-                )
-                + "\n"
-            )
-        assert (
-            wire(tmp_path / "wire").transcripts.thread_transcript_page("worker").events[-1].routing
-            is None
-        )
+        # A real private turn with identical assistant text must not inherit a route.
+        await agent.turns.run_agent_turn(name, name, "Private request")
+        page = wire(native.root).transcripts.thread_transcript_page(name)
+        assert page.events[-1].text == "Native response lifecycle."
+        assert page.events[-1].routing is None
+        assert native.provider.posts == 2
     finally:
         await agent.shutdown()
 
