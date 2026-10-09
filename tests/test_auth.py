@@ -67,10 +67,11 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
     project.mkdir()
     session = (await agent.new_session(str(project))).session_id
     try:
-        await agent.sessions.config.refresh_auth_models()
-        assert not updates, "The session response already supplied this catalogue"
+        await agent.sessions.config.publish_configuration(session, session)
+        assert updates, "The private session response did not broadcast this catalogue"
+        updates.clear()
         revision[0] = 1
-        await agent.sessions.config.refresh_auth_models()
+        await agent.sessions.config.publish_configuration(session, session)
         # The background drain may publish this same catalogue; what matters is
         # that the refresh happens and never changes the selected model.
         assert updates
@@ -83,7 +84,7 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
             ]
         assert agent._comms.registry.require(session).model == "test/base"
         published = len(updates)
-        await agent.sessions.config.refresh_auth_models()
+        await agent.sessions.config.publish_configuration(session, session)
         assert len(updates) == published
     finally:
         await agent.shutdown()

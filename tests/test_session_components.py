@@ -65,10 +65,7 @@ async def test_state_is_owned_once_and_attachments_do_not_share_negotiation(owne
         participant = store.participants.get(stable_thread_lookup(thread.created_at))
     assert participant.committed and participant.owner_thread == thread.name
     assert participant.pointer.execution_id is None
-    assert (
-        owner.sessions.config.session_catalog_generation[session.session_id]
-        == owner.sessions.config.catalog_generation
-    )
+    assert session.session_id not in owner.sessions.config.publications
     assert not other.sessions.bindings
     assert not {
         "_sessions",

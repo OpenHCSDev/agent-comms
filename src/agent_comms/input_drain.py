@@ -221,7 +221,6 @@ class InputDrain(FutureInputQueue):
                         ))
                         next_goal_wait_check = time.monotonic() + GOAL_WAIT_RECHECK_INTERVAL
                     await self.effects.turns.goals.schedule_goal(session_id)
-                    await self.sessions.config.refresh_auth_models()
                 except asyncio.CancelledError:
                     raise
                 except (

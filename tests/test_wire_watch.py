@@ -79,7 +79,6 @@ async def test_idle_owner_wakes_on_bus_append_without_polling(tmp_path, monkeypa
     monkeypatch.setattr(agent.inputs, "drain_inbox", drain)
     monkeypatch.setattr(agent.sessions.config, "sync_thread", noop)
     monkeypatch.setattr(agent.turns.goals, "schedule_goal", AsyncMock(return_value=None))
-    monkeypatch.setattr(agent.sessions.config, "refresh_auth_models", noop)
     agent.inputs.ensure_live_drain("owner")
     task = agent.inputs.drain_tasks["owner"]
     try:
@@ -135,7 +134,6 @@ async def test_shutdown_cancels_idle_file_wait(tmp_path, monkeypatch):
     monkeypatch.setattr(agent.inputs, "drain_inbox", drain)
     monkeypatch.setattr(agent.sessions.config, "sync_thread", noop)
     monkeypatch.setattr(agent.turns.goals, "schedule_goal", AsyncMock(return_value=None))
-    monkeypatch.setattr(agent.sessions.config, "refresh_auth_models", noop)
     agent.inputs.ensure_live_drain("owner")
     await asyncio.wait_for(entered.wait(), timeout=1)
     await asyncio.sleep(0)
