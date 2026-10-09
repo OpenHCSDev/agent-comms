@@ -23,6 +23,7 @@ from .selected_actions import CodingSelectedAction, NoSelectedTools, SelectedAct
 
 if TYPE_CHECKING:
     from .coordinated_runtime import SelectedExecution
+    from .native_custody import RetainedNative
     from .selected_participant import SelectedParticipant
     from .tracked_turn import TrackedTurnSession
 
@@ -136,6 +137,11 @@ class SelectedSession:
                 selected = path if path is not None else participant.owner.thread.session_file
                 if selected is None:
                     return cls(directory)
+                # The owner's idle child already attested this exact saved source
+                # and the file is unchanged since; no helper re-reads its history.
+                retained = execution.retained_source(Path(selected).absolute())
+                if retained is not None:
+                    return SavedSelectedSession(directory, identity=retained.identity, attested=retained)
                 return SavedSelectedSession(directory, identity=SessionIdentityHelper.locate(
                     execution.native_package, str(Path(selected).absolute()),
                 ))
@@ -181,6 +187,9 @@ class SelectedSession:
 class SavedSelectedSession(SelectedSession):
     """Continue the exact captured native identity, irrespective of storage parent."""
     identity: NativeSessionIdentity = field(kw_only=True)
+    # The idle child that attested this source, when one exists. Custody only;
+    # it never takes part in the launch key.
+    attested: RetainedNative | None = field(default=None, kw_only=True, compare=False, repr=False)
 
     @property
     def path(self) -> Path:
@@ -248,6 +257,9 @@ class SavedSelectedSession(SelectedSession):
 
 
     def require_launch_header(self) -> None:
+        attested = self.attested
+        if attested is not None and attested.current and attested.identity.same_session(self.identity):
+            return  # Its live child read this header at launch; the file has not changed since.
         FreshPrivateSession.require_launch_header(self.path, None)
 
     def attest(self, identity: NativeSessionIdentity) -> Path:
