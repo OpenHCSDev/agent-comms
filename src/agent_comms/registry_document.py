@@ -296,12 +296,16 @@ class RegistryDocument(RegistryPresence):
                 replace(current, tags=tags), self.status(current.name), new_owner=False)
             change.apply(self)
 
-    def delete_originals(self, originals: Sequence[Thread]) -> None:
+    def begin_delete_originals(self, originals: Sequence[Thread]) -> None:
+        """Fence admission first; a stopped status is required by its owner."""
         self.require_originals(originals)
         for original in originals:
             self.begin_delete(original.name)
-        for original in originals:
-            self.remove(original.name)
+
+    def remove_originals(self, originals: Sequence[Thread]) -> dict[str, tuple[str, ...]]:
+        """Remove deleting declarations, detaching children; generations stay as the record."""
+        self.require_originals(originals)
+        return {original.name: self.remove(original.name) for original in originals}
 
     def begin_delete(self, name: str) -> None:
         name = self.canonical_name(name)
@@ -435,6 +439,10 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     aliases: Mapping[str, str]
     owner_generations: Mapping[str, int]
     admission_generations: Mapping[str, int]
+
+    def retired(self, name: str) -> bool:
+        """Removal keeps the name's generations; they are the deletion record."""
+        return name not in self.threads and name in self.admission_generations
 
     def restorable_aliases(
         self, available: Mapping[str, Thread], retained: Mapping[str, str]

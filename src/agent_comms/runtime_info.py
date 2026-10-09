@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .locked_store import LockedStore
+from .thread_owned_state import ThreadOwnedState
+
+if TYPE_CHECKING:
+    from .threads import Thread
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,7 +49,7 @@ class AgentRuntimeInfo:
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeInfoStore(LockedStore[dict[str, AgentRuntimeInfo]]):
+class RuntimeInfoStore(ThreadOwnedState, LockedStore[dict[str, AgentRuntimeInfo]]):
     """Latest observations, independently committed from the registry/log."""
 
     filename: ClassVar[str] = "runtime_info.json"
@@ -60,11 +65,12 @@ class RuntimeInfoStore(LockedStore[dict[str, AgentRuntimeInfo]]):
     def set(self, info: AgentRuntimeInfo) -> None:
         self.update(lambda values: {**values, info.thread: info})
 
-    def remove(self, thread: str) -> None:
+    def remove_threads(self, threads: Sequence[Thread]) -> None:
+        names = {thread.name for thread in threads}
         self.update(
             lambda values: (
-                {name: value for name, value in values.items() if name != thread}
-                if thread in values
+                {name: value for name, value in values.items() if name not in names}
+                if names & values.keys()
                 else values
             )
         )

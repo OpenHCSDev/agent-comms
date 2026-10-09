@@ -29,10 +29,12 @@ from .errors import RelationViolationError
 from .importing import ImportFormat, ImportLimits, ImportReceipt
 from .input_disposition import InputDispositions
 from .message_bus import MessageBus
+from .native_session_files import NativeSessionFiles
 from .owner_lifecycle import OwnerLifecycle
 from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
 from .store_files import _atomic_write_text, _store_lock
+from .thread_owned_state import ThreadOwnedState
 from .threads import Thread, current_thread
 
 _LOG = logging.getLogger(__name__)
@@ -68,6 +70,13 @@ class ForkSpec:
         return self.task if self.prompt is None else self.prompt
 
 
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadDeleted:
+    deleted: str
+    session_bytes_freed: int
+    detached_children: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -509,17 +518,61 @@ class ThreadManagement:
 
     def _archive_unlocked(self, originals: Sequence[Thread]) -> None:
         self.registry.archive_originals(originals)
-        for original in originals:
-            self.agents.runtime_info.remove(original.name)
+        self.agents.runtime_info.remove_threads(originals)
 
-    def _delete_unlocked(self, originals: Sequence[Thread]) -> None:
-        """Remove stopped declarations, preserving histories and uncertain inputs."""
-        self.registry.delete_originals(originals)
-        with self.catalog.editing() as document:
-            for original in originals:
-                document.remove_thread(original.name)
+    @property
+    def thread_owned_states(self) -> tuple[ThreadOwnedState, ...]:
+        """Every store whose rows end with a thread declaration."""
+        from .goal_waits import GoalWaits
+        from .relationships import RelationshipStore
+        from .view_unread import transcript_read_state
+
+        states = (
+            self.agents.activity,
+            self.agents.runtime_info,
+            self.ledger,
+            self.catalog,
+            self.owners.releases,
+            self.bus.reads,
+            transcript_read_state(self.bus.reads.path),
+            GoalWaits(self.root / GoalWaits.filename),
+            RelationshipStore(self.root / RelationshipStore.filename),
+        )
+        ThreadOwnedState.require_complete(states)
+        return states
+
+    def delete(self, name: str) -> ThreadDeleted:
+        """Permanently delete one stopped or archived thread."""
+        with _store_lock(self._wire_lock_path):
+            return self._delete_unlocked((self.registry.require(name),))[0]
+
+    def _delete_unlocked(self, originals: Sequence[Thread]) -> tuple[ThreadDeleted, ...]:
+        """Remove stopped declarations and everything they own.
+
+        The bus, goal history and uncertain-input records are the record and
+        stay; their readers resolve a removed name as a deleted thread. Every
+        refusal happens before the registry fences admission.
+        """
+        states = self.thread_owned_states
+        sessions: dict[str, NativeSessionFiles] = {}
         for original in originals:
-            self.agents.runtime_info.remove(original.name)
+            if original.process_alive:
+                raise RelationViolationError(
+                    f"Thread {original.name!r} still has a live process; stop it first."
+                )
+            if original.session_file:
+                sessions[original.name] = NativeSessionFiles.of(original.session_file)
+                sessions[original.name].require_unreferenced()
+        self.registry.begin_delete_originals(originals)
+        for state in states:
+            state.remove_threads(originals)
+        # A failure from here leaves a Deleting declaration to retry, not orphans.
+        freed = {name: files.delete() for name, files in sessions.items()}
+        detached = self.registry.remove_originals(originals)
+        return tuple(
+            ThreadDeleted(original.name, freed.get(original.name, 0), detached[original.name])
+            for original in originals
+        )
 
 
     def fork(self, spec: ForkSpec, pi_bin: str | None = None) -> Thread:

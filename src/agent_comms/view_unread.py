@@ -3,17 +3,23 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Mapping
+from contextlib import closing
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Event, RLock
 from time import monotonic
+from typing import TYPE_CHECKING
 from weakref import WeakValueDictionary
 
 from .native_entries import NativeEntry
 from .read_ledger import ReadLedger
 from .store_files import file_revision
+from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, SQLiteUserVersion, TypedRow, TypedTable
+
+if TYPE_CHECKING:
+    from .threads import Thread
 
 _INDEX_VERSION = 3
 
@@ -78,7 +84,7 @@ class IndexSlice:
         self.records_left -= 1
 
 
-class TranscriptReadState:
+class TranscriptReadState(ThreadOwnedState):
     """Index completed replies incrementally; keep the human cursor separate.
 
     The SQLite index is a disposable projection of the native session files. It
@@ -150,6 +156,20 @@ class TranscriptReadState:
         self._close_database()
         for suffix in ("", "-journal", "-wal", "-shm"):
             self._index_path.with_name(self._index_path.name + suffix).unlink(missing_ok=True)
+
+    def remove_threads(self, threads: Sequence[Thread]) -> None:
+        """Drop the reply projection of each deleted thread's transcript."""
+        sources = tuple(thread.session_file for thread in threads if thread.session_file)
+        if not sources or not self._index_path.exists():
+            return
+        # Deletion waits for the indexer instead of sharing its UI budget.
+        with self._lock, closing(sqlite3.connect(self._index_path, timeout=5.0)) as database:
+            with database:
+                for table in (ReplyIndex, TranscriptReply):
+                    database.executemany(
+                        f"DELETE FROM {table.declared_name} WHERE source = ?",
+                        ((source,) for source in sources),
+                    )
 
     def _index(self, source: str, budget: IndexSlice) -> ReplyIndex:
         path = Path(source)

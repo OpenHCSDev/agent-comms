@@ -290,10 +290,10 @@ class MessageBus:
         return
 
     def dm_history(self, a: str, b: str) -> Sequence[Message]:
-        """Full conversation between two threads, in seq order."""
+        """Full conversation between two threads, either possibly deleted, in seq order."""
+        snapshot = self._registry.snapshot()
         scope = DMDisplayScope.capture(
-            self._registry.require(a).name, self._registry.require(b).name,
-            self._registry.snapshot(),
+            snapshot.participant(a).name, snapshot.participant(b).name, snapshot
         )
         return [message for message in self.log.full_history() if scope.includes(message)]
 
@@ -347,10 +347,11 @@ class MessageBus:
         limit: int = 100,
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
-        """Return one bounded page between two threads in ascending order."""
-        a = self._registry.require(a).name
-        b = self._registry.require(b).name
-        scope = DMDisplayScope.capture(a, b, self._registry.snapshot())
+        """Return one bounded page between two threads, either possibly deleted."""
+        snapshot = self._registry.snapshot()
+        scope = DMDisplayScope.capture(
+            snapshot.participant(a).name, snapshot.participant(b).name, snapshot
+        )
         return self.display_page(
             scope, before=before, after=after, limit=limit, max_bytes=max_bytes
         )

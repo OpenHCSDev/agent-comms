@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from .child_process import ProcessIdentity
 from .coordination_errors import StaleRevision
 from .declared_family import DeclaredFamily
+from .native_session_files import NativeSessionFiles
 from .private_path import FileRevision
 from .input_origin import InputProvenance
 from .text_digest import TextDigest
@@ -74,7 +75,7 @@ class SessionRevision(SessionObservation):
             native = FileRevision.from_stat(Path(session_file).stat())
             try:
                 proof = PresentInputProofRevision(
-                    FileRevision.from_stat(Path(session_file + ".input-proof").stat())
+                    FileRevision.from_stat(NativeSessionFiles(Path(session_file)).input_proof.stat())
                 )
             except FileNotFoundError:
                 proof = MissingInputProofRevision()

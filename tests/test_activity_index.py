@@ -8,6 +8,7 @@ import pytest
 from agent_comms.activity import Activity, ActivityLog, ActivityState
 from agent_comms.field_codec import FieldCodec
 from agent_comms.store_files import _atomic_write_text
+from agent_comms.threads import Thread
 
 
 def encoded(name="a", detail="before"):
@@ -91,7 +92,7 @@ def test_replacement_truncation_rename_delete_and_missing_file_reset_index(tmp_p
     assert set(reader.all_current()) == {"a", "b"}
     writer.rename_thread("a", "renamed")
     assert set(reader.all_current()) == {"renamed", "b"}
-    writer.remove_thread("b")
+    writer.remove_threads((Thread("b", frozenset(), str(tmp_path)),))
     assert set(reader.all_current()) == {"renamed"}
     path.write_text(encoded("c") + "\n")
     assert set(reader.all_current()) == {"c"}

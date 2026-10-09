@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import CommittedDelivery, stable_thread_lookup
 
@@ -13,8 +14,12 @@ from .goals import Goal
 from .input_attempt import InputAttempt
 from .locked_store import LockedStore
 from .registry_document import RegistrySnapshot
+from .thread_owned_state import ThreadOwnedState
 
 from .wire_log import WireLog
+
+if TYPE_CHECKING:
+    from .threads import Thread
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,7 +126,7 @@ class GoalInputReview:
 
 
 @dataclass(frozen=True, slots=True)
-class GoalWaits(LockedStore[dict[str, GoalWait]]):
+class GoalWaits(ThreadOwnedState, LockedStore[dict[str, GoalWait]]):
     filename: ClassVar[str] = "goal_waits.json"
 
     @property
@@ -133,6 +138,17 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
 
     def record(self, wait: GoalWait) -> None:
         self.update(lambda rows: {**rows, wait.goal_id: wait})
+
+    def remove_threads(self, threads: Sequence[Thread]) -> None:
+        """A wait belongs to its owner's goal, which ends with the declaration."""
+        goals = {thread.goal.id for thread in threads if thread.goal is not None}
+        self.update(
+            lambda rows: (
+                {key: row for key, row in rows.items() if key not in goals}
+                if goals & rows.keys()
+                else rows
+            )
+        )
 
     def clear(self, goal_id: str, *, wait_id: str | None = None) -> bool:
         removed = False

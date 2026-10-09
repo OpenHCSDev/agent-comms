@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError
@@ -23,6 +23,18 @@ if TYPE_CHECKING:
 class ThreadIncarnation:
     name: str
     created_at: float
+
+    # The persisted birth of a deleted participant: its declaration and real
+    # birth are gone, its name stays on the bus. See DeletedThread.
+    DELETED_BIRTH: ClassVar[float] = -1.0
+
+    @classmethod
+    def deleted(cls, name: str) -> ThreadIncarnation:
+        return cls(name, cls.DELETED_BIRTH)
+
+    @property
+    def names_deleted_thread(self) -> bool:
+        return self.created_at == self.DELETED_BIRTH
 
     def __post_init__(self) -> None:
         from .field_codec import FieldCodec
@@ -38,7 +50,7 @@ class ThreadIncarnation:
 
     def resolved(self, snapshot: RegistryProvenance) -> ThreadIncarnation:
         """Follow retained rename aliases only for this exact historical owner."""
-        if self.created_at == -1.0 or not self.current(snapshot):
+        if self.names_deleted_thread or not self.current(snapshot):
             return self
         return snapshot.threads[snapshot.canonical_name(self.name)].incarnation
 
@@ -46,7 +58,7 @@ class ThreadIncarnation:
         thread = snapshot.threads.get(snapshot.canonical_name(self.name))
         return (
             thread is None
-            if self.created_at == -1.0
+            if self.names_deleted_thread
             else thread is not None and thread.created_at == self.created_at
         )
 
