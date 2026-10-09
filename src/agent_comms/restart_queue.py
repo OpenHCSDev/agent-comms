@@ -27,10 +27,7 @@ from .owner_restart import StoppedOwnerFailure
 from .restart_refusals import RestartRefusal
 from pathlib import Path
 
-try:
-    import fcntl
-except ImportError:  # pragma: no cover - Linux-only execution; tools still import on Windows
-    fcntl = None
+import fcntl
 
 from .comms import Comms, wire
 from .errors import RelationViolationError
@@ -300,7 +297,7 @@ def _watch(root: Path, directory: Path):
 
 
 def run(comms: Comms) -> None:
-    if sys.platform != "linux" or fcntl is None:
+    if sys.platform != "linux":
         raise ValueError("Queued restarts require Linux inotify and /proc")
     directory = _directory(comms)
     lock = os.open(directory / "watcher.lock", os.O_CREAT | os.O_RDWR, 0o600)

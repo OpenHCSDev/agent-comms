@@ -151,7 +151,7 @@ def test_authoritative_documents_keep_bytes_on_failed_publication(
     def fail(source, destination):
         raise OSError("publication failed")
 
-    monkeypatch.setattr("agent_comms.locked_store._replace_snapshot", fail)
+    monkeypatch.setattr("agent_comms.locked_store.os.replace", fail)
     with pytest.raises(OSError, match="publication failed"):
         operation(store)
     assert store.path.read_text() == initial

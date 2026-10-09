@@ -43,10 +43,8 @@ def prompt_images(blocks: Sequence[object]) -> tuple[ImageInput, ...]:
     images = []
     for block in blocks:
         if not isinstance(block, Mapping):
-            dump = getattr(block, "model_dump", None)
-            if dump is None:
-                continue
-            block = dump(by_alias=True, exclude_none=True)
+            # ACP content blocks are protocol models; anything else is a defect.
+            block = block.model_dump(by_alias=True, exclude_none=True)
         if block.get("type") == "image":
             data, mime = block.get("data"), block.get("mimeType")
         elif block.get("type") == "resource" and isinstance(block.get("resource"), Mapping):

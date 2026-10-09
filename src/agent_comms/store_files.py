@@ -148,18 +148,6 @@ async def _async_store_lock(
             yield lock
 
 
-def _replace_snapshot(source: Path, target: Path, *, windows: bool = os.name == "nt") -> None:
-    """Allow a short-lived Windows reader to release the old snapshot handle."""
-    for attempt in range(8):
-        try:
-            os.replace(source, target)
-            return
-        except OSError as error:
-            if not windows or getattr(error, "winerror", None) not in {5, 32} or attempt == 7:
-                raise
-            time.sleep(min(0.01 * (2**attempt), 0.1))
-
-
 def _atomic_write_text(
     path: Path, text: str, *, fsync_parent: bool = False,
     mode: int = PrivateFileRole.permissions,
@@ -174,11 +162,9 @@ def _atomic_write_text(
             output.write(text)
             output.flush()
             os.fsync(output.fileno())
-        _replace_snapshot(temporary_path, path)
-        # Windows does not expose directory fsync; Linux-only private claim
-        # opt-in still requires the full parent-durability boundary below.
-        if fsync_parent and os.name == "posix":
-            directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        os.replace(temporary_path, path)
+        if fsync_parent:
+            directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
             try:
                 os.fsync(directory_fd)
             finally:
@@ -187,7 +173,10 @@ def _atomic_write_text(
         temporary_path.unlink(missing_ok=True)
 
 
-def file_revision(path: Path) -> tuple[int, int, int, int] | None:
+StoreRevision = tuple[int, int, int, int] | None
+
+
+def file_revision(path: Path) -> StoreRevision:
     """Identity of an on-disk revision, including atomic replacements."""
     try:
         stat = path.stat()

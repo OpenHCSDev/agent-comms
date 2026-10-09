@@ -102,9 +102,9 @@ class RestartEnvironment:
         """Observe this owner's credentials, never an ambient or fork directory."""
         try:
             info = (self.native_config / "auth.json").stat()
-            return info.st_mtime_ns, info.st_size
-        except OSError:
-            return 0, 0
+        except FileNotFoundError:
+            return 0, 0  # No credentials file yet.
+        return info.st_mtime_ns, info.st_size
 
     def settings_paths(self, worktree: Path) -> tuple[str, ...]:
         project = worktree / ".pi"

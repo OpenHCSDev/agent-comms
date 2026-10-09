@@ -344,7 +344,7 @@ class QueueProjection(DeclaredFamily, affix="QueueProjection"):
         rows = items + previous
         try:
             sizes = [len(row.text.encode("utf-8")) for row in rows]
-        except (AttributeError, UnicodeError):
+        except UnicodeError:
             return UnavailableQueueProjection()
         if len(rows) > 32 or any(size > 4096 for size in sizes) or sum(sizes) > 65536:
             return UnavailableQueueProjection()

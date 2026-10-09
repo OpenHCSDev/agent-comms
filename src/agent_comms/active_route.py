@@ -158,7 +158,7 @@ def read_active_route(path: Path | None = None) -> ActiveRoute | None:
     """Decode the one trusted default route; explicit roots bypass this file."""
     path = active_route_path() if path is None else path
     try:
-        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     except FileNotFoundError:
         return None
     try:
@@ -209,7 +209,7 @@ def guard_default_route_write(expected_root: Path, *, blocking: bool = True) -> 
     """
     path = active_route_path()
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
+    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         fcntl.flock(directory, fcntl.LOCK_SH | (0 if blocking else fcntl.LOCK_NB))
         info = os.fstat(directory)
@@ -246,7 +246,7 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
     FieldCodec.encode(route)
     _preflight(route.root, route.wire_root_id, route.native_package, True)
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
+    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         fcntl.flock(directory, fcntl.LOCK_EX)
         _publish_active_route_locked(route, path, directory)
@@ -290,7 +290,7 @@ def _publish_active_route_locked(
         temporary = f".active-route-{uuid.uuid4().hex}.tmp"
         fd = os.open(
             temporary,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
             0o600,
             dir_fd=directory,
         )

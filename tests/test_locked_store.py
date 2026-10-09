@@ -11,7 +11,6 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import locked_store
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import GoalWait, GoalWaits
@@ -145,7 +144,7 @@ def test_write_failure_preserves_previous_bytes(tmp_path, monkeypatch, existing,
         store.record(wait())
         store.path.chmod(0o640)
     original_fsync = os.fsync
-    original_replace = locked_store._replace_snapshot
+    original_replace = os.replace
     failed = False
 
     def fsync(fd):
@@ -164,7 +163,7 @@ def test_write_failure_preserves_previous_bytes(tmp_path, monkeypatch, existing,
         return original_replace(source, target)
 
     monkeypatch.setattr(os, "fsync", fsync)
-    monkeypatch.setattr(locked_store, "_replace_snapshot", publish)
+    monkeypatch.setattr(os, "replace", publish)
     with pytest.raises(OSError, match="injected"):
         store.record(replace(wait(), revision=999))
     if existing:

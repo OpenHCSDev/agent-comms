@@ -48,6 +48,7 @@ from .thread_identity import AdmissionIdentity
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
 from .wire_watch import WireWatch
+from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
 from .turn_context import TurnContext, UserFollowupSegment
 
@@ -110,7 +111,8 @@ class InputDrain(FutureInputQueue):
                 self.comms.registry.live_owner_with_admission,
                 self.sessions.bindings.get(session_id, session_id),
             ))
-        except (OSError, ValueError):
+        except (RelationViolationError, UnregisteredThreadError):
+            # No live local owner turn: the queue has no current scope.
             return None
         return QueueScope(
             session_id,

@@ -47,11 +47,11 @@ class NativeRecord:
 
     @classmethod
     def read(cls, start: int, end: int, raw: bytes):
-        try:
-            entry = NativeEntry.read(raw)
-        except (ValueError, TypeError, UnicodeError):
-            entry = None
-        return cls(start, end, entry, raw.endswith(b"\n"))
+        # Only a record still being appended lacks its newline; a complete
+        # record that does not decode is corrupt history and raises.
+        complete = raw.endswith(b"\n")
+        entry = NativeEntry.read(raw) if complete else None
+        return cls(start, end, entry, complete)
 
     def project(self, projection):
         """A decoded record owns whether it can produce presentation events."""
@@ -208,22 +208,12 @@ class NativeTranscript:
         raise RelationViolationError("Native turn has no final reply after its checkpoint")
 
     def tail(self, *, max_bytes: int | None = None):
-        try:
-            end = self.path.stat().st_size
-        except OSError:
-            return
+        end = self.path.stat().st_size
         floor = max(0, end - max_bytes) if max_bytes is not None else 0
-        records = iter(_reverse_records(self.path, end, floor=floor))
-        while True:
-            try:
-                _, _, raw = next(records)
-            except (StopIteration, OSError):
-                return
-            try:
-                entry = NativeEntry.read(raw)
-            except (ValueError, TypeError, UnicodeError):
-                continue
-            yield entry
+        for _, _, raw in _reverse_records(self.path, end, floor=floor):
+            # Skip only the record still being appended; corrupt history raises.
+            if raw.endswith(b"\n"):
+                yield NativeEntry.read(raw)
 
     def forward(self, after: int, through: int):
         with self.path.open("rb") as stream:

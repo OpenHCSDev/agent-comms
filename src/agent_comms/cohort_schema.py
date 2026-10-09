@@ -615,6 +615,6 @@ def install_private_cohort_schema(store: Coordination) -> None:
             _install_optional_awareness_schema(db)
         except (sqlite3.Error, SchemaVersionError, ValueError, TypeError) as error:
             db.execute("ROLLBACK TO optional_awareness_install")
-            _LOG.warning("Optional awareness schema unavailable (%s)", type(error).__name__)
+            _LOG.warning("Optional awareness schema unavailable: %r", error, exc_info=error)
         finally:
             db.execute("RELEASE optional_awareness_install")

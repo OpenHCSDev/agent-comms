@@ -11,10 +11,7 @@ from __future__ import annotations
 import asyncio
 import errno
 
-try:
-    import fcntl
-except ImportError:  # unsupported OS: start() fails closed
-    fcntl = None  # type: ignore[assignment]
+import fcntl
 import json
 import os
 import socket
@@ -181,10 +178,7 @@ class SnapshotInvocation:
 
     def run(self) -> bytes:
         root = Path(self.root)
-        try:
-            return _snapshot(root, root / "coordination.sqlite3", self.requested)
-        except Exception:
-            return _ERROR
+        return _snapshot(root, root / "coordination.sqlite3", self.requested)
 
 
 class RecoveryGateway:
@@ -206,7 +200,7 @@ class RecoveryGateway:
         self._orphaned = False
 
     def _prepare_directory(self) -> None:
-        if fcntl is None or os.getuid() != os.geteuid():
+        if os.getuid() != os.geteuid():
             raise GatewayUnavailableError("gateway platform or privileges unsupported")
         _validate_paths(self.root, self.database)
         with suppress(FileExistsError):
@@ -215,7 +209,7 @@ class RecoveryGateway:
 
     def _lock_instance(self) -> None:
         lock_path = self.directory / "gateway.lock"
-        flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+        flags = os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW
         fd = os.open(lock_path, flags, 0o600)
         try:
             info = os.fstat(fd)

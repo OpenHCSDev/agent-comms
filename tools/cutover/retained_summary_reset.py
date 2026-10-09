@@ -14,7 +14,6 @@ import tempfile
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.private_path import FileRevision, PrivateDirectoryRole, PrivateFileRole
-from agent_comms.store_files import _replace_snapshot
 from publish_openhcs_recovery import fsync_directory, retain_file
 
 
@@ -87,7 +86,7 @@ class RetainedRuntimeFile:
         if self.checksum() != self.sha256:
             raise ValueError('Staged candidate changed before publication')
         self.require_original()
-        _replace_snapshot(self.path, original.path)
+        os.replace(self.path, original.path)
         fsync_directory(original.path.parent)
 
 

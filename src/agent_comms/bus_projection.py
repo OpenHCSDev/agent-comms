@@ -92,8 +92,10 @@ class BusAppendIndex:
     def checkpoint(self, stream: BinaryIO, revision: BusFileRevision):
         try:
             record = FieldCodec.decode(self.record_type, json.loads(self.path.read_text()))
-        except (OSError, ValueError, TypeError, KeyError):
+        except FileNotFoundError:
             return None
+        except (ValueError, TypeError, KeyError):
+            return None  # Damaged disposable projection: rebuilt from the bus.
         return record if record.accepts(revision, stream) else None
 
     def write(self, record: AppendCheckpoint, *, fsync_parent: bool = False) -> None:

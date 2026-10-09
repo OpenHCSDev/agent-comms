@@ -11,7 +11,6 @@ No model tool, Pi RPC, or producer exposes this module.
 from __future__ import annotations
 
 import os
-import sqlite3
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
@@ -22,7 +21,6 @@ from .compaction_identity import JournalCustody, ReturnedSummaryTerminal
 from .compaction_journal import CompactionJournal
 from .compaction_records import SelectedSummarySource
 from .compaction_summaries import _consume_selected_ack
-from .reservation_rules import ReservationViolationError
 from .selected_source import SelectedAdmissionSource, SessionRevision, SessionRevisionUnavailable
 
 if TYPE_CHECKING:
@@ -134,6 +132,9 @@ class SelectedSummaryAdmission:
         if self._used:
             return False
         self._used = True
+        # The token is consumed. A changed selected authority is this
+        # admission's typed refusal; storage and decoding failures propagate
+        # as uncertain operations, never as a retryable policy refusal.
         try:
             if JournalCustody.capture(wire_root / "compaction-commits.sqlite3") != self._custody:
                 return False
@@ -155,7 +156,5 @@ class SelectedSummaryAdmission:
                 native_id=native_id,
                 text=sent_text,
             )
-        except ReservationViolationError:
-            raise
-        except (OSError, ValueError, TypeError, KeyError, sqlite3.Error, CompactionJournalError):
+        except CompactionJournalError:
             return False

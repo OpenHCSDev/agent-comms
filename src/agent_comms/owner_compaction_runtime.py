@@ -204,7 +204,7 @@ async def _commit_native_summary(
             executor.shutdown(wait=False)
         try:
             operation = await asyncio.shield(asyncio.wrap_future(committing))
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as cancellation:
             # The wrapper may itself become cancelled during loop shutdown, but
             # the concurrent Future cannot report completion while its native
             # worker is still mutating. Keep the caller's turn lock until that
@@ -214,10 +214,11 @@ async def _commit_native_summary(
                     await asyncio.sleep(0.01)
                 except asyncio.CancelledError:
                     continue
-            # Consume worker failure without treating cancellation as no-write.
-            # The journal's exact intent/outcome is still the recovery authority.
-            if not committing.cancelled():
-                committing.exception()
+            # Carry the worker's failure on the cancellation without treating
+            # cancellation as no-write. The journal's exact intent/outcome is
+            # still the recovery authority.
+            if not committing.cancelled() and (outcome := committing.exception()) is not None:
+                cancellation.__cause__ = outcome
             raise
         await retained.reload(
             source.after_native_commit(operation.committed_outcome()).native, operation, reason

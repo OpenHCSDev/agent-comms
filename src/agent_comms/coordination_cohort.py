@@ -222,7 +222,7 @@ def _record_optional_owner_generations(
             ).insert(db)
     except (sqlite3.Error, SchemaVersionError, IdentityConflict, ValueError, TypeError) as error:
         db.execute("ROLLBACK TO optional_awareness_claims")
-        _LOG.warning("Optional generation provenance omitted (%s)", type(error).__name__)
+        _LOG.warning("Optional generation provenance omitted: %r", error, exc_info=error)
     finally:
         db.execute("RELEASE optional_awareness_claims")
 

@@ -10,6 +10,10 @@ from .turn_context import ContextSegment, ContextSpan
 from .working_memory_questions import SpanQuestion
 
 
+class DisclosureWithheld(ValueError):  # noqa: N818 - nominal refusal state
+    """The original segment's policy does not permit this text to leave."""
+
+
 class DisclosurePolicy(DeclaredFamily, affix="Disclosure"):
     @abstractmethod
     def require_text(self, text: str) -> str: ...
@@ -18,7 +22,7 @@ class DisclosurePolicy(DeclaredFamily, affix="Disclosure"):
 @dataclass(frozen=True)
 class WithheldDisclosure(DisclosurePolicy):
     def require_text(self, text: str) -> str:
-        raise ValueError("This original segment does not permit third-party disclosure")
+        raise DisclosureWithheld("This original segment does not permit third-party disclosure")
 
 
 @dataclass(frozen=True)
@@ -32,7 +36,7 @@ class PublicInstructionDisclosure(DisclosurePolicy):
 
     def require_text(self, text: str) -> str:
         if self.credential.search(text):
-            raise ValueError("Credential-shaped original text cannot be disclosed")
+            raise DisclosureWithheld("Credential-shaped original text cannot be disclosed")
         return text
 
 

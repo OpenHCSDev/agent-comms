@@ -133,16 +133,14 @@ class FailedTurnObservation:
         current_admission: int | None,
         reason: FailureReason,
     ) -> FailedTurnObservation | None:
-        # Observation is passive. Its failure never changes reservation
-        # disposition or makes the enclosing failure settlement optional.
-        try:
-            evidence = FailedTurnEvidence(
-                reservation.attempt_id, reservation.goal_id, reservation.generation,
-                owner.name, owner.created_at, owner.worktree, admission,
-                lease.identity.generation, goal.revision, turn_id, reason,
-            )
-        except (ValueError, TypeError):
-            return None
+        # Observation is passive: a changed owner, goal or lease yields no
+        # observation. The evidence is built from already-trusted values, so a
+        # construction error is a defect and raises.
+        evidence = FailedTurnEvidence(
+            reservation.attempt_id, reservation.goal_id, reservation.generation,
+            owner.name, owner.created_at, owner.worktree, admission,
+            lease.identity.generation, goal.revision, turn_id, reason,
+        )
         if owner.goal != goal or reservation.goal_id != goal.id:
             return None
         if not lease.matches(evidence.turn):

@@ -14,7 +14,7 @@ import select
 import threading
 import time
 from collections.abc import Callable
-from contextlib import AbstractContextManager, ExitStack, suppress
+from contextlib import AbstractContextManager, ExitStack
 from .diagnostics import PublicationMeasurements
 
 _MAX_SEND_SECONDS = 5.0
@@ -169,7 +169,11 @@ async def send_fenced_prompt(
             try:
                 os.close(fd)
             except OSError as caught:
-                error = caught
+                # A close failure never replaces the write's own outcome.
+                if error is None:
+                    error = caught
+                else:
+                    error.add_note(f"Closing the native prompt fd also failed: {caught!r}")
         loop.call_soon_threadsafe(finish, error)
 
     writer = threading.Thread(target=worker, name="native-prompt-writer", daemon=False)
@@ -180,7 +184,7 @@ async def send_fenced_prompt(
         raise
     try:
         await asyncio.shield(done)
-    except asyncio.CancelledError:
+    except asyncio.CancelledError as cancellation:
         cancelled.set()
         # Repeated cancellation cannot abandon a still-writing fd or release
         # admission while bytes remain scheduled for transmission.
@@ -191,7 +195,8 @@ async def send_fenced_prompt(
                 cancelled.set()
             except Exception:
                 break
-        if done.done():
-            with suppress(BaseException):
-                done.result()
+        # Cancellation still propagates, carrying the writer's own outcome
+        # (for example an UNKNOWN partial write) instead of discarding it.
+        if not done.cancelled() and (outcome := done.exception()) is not None:
+            cancellation.__cause__ = outcome
         raise

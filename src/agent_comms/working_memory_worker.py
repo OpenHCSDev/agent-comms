@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from functools import partial
 
@@ -10,11 +11,13 @@ from acp.schema import SessionInfoUpdate
 from .acp_extension import ContextAnnotatedUpdate, encode_updates
 from .coordinator import Coordination
 from .working_memory_annotations import PreviouslyRequestedAnnotation, WorkingMemoryAnnotations
-from .working_memory_disclosure import DisclosureState
+from .working_memory_disclosure import DisclosureState, DisclosureWithheld
 from .working_memory_labels import QuestionVersion
 from .working_memory_policy import AnnotationPolicy
 from .working_memory_questions import KindQuestion
 from .working_memory_requests import AnnotationBudgetExhausted, DisclosureRequest, FailedAnnotationOutcome
+
+_LOG = logging.getLogger(__name__)
 
 
 class AnnotationWorker:
@@ -37,7 +40,7 @@ class AnnotationWorker:
     def retired(self, task):
         self.tasks.discard(task)
         if not task.cancelled() and (error := task.exception()) is not None:
-            self.effects._debug_log(f"annotation worker stopped: {type(error).__name__}")
+            _LOG.error("Annotation worker stopped", exc_info=error)
 
     async def close(self):
         tasks = tuple(self.tasks)
@@ -88,7 +91,7 @@ class AnnotationWorker:
                         labels.append(await self.answer(policy, manifest, segment, span, question))
                 except AnnotationBudgetExhausted:
                     break
-                except (PreviouslyRequestedAnnotation, ValueError):
+                except (PreviouslyRequestedAnnotation, DisclosureWithheld):
                     # Withheld or unsettled requests have no inferred label.
                     continue
         if labels:

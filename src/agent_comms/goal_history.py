@@ -123,7 +123,7 @@ class GoalHistoryStore:
 
     @staticmethod
     def _sync_directory(path: Path) -> None:
-        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(descriptor)
         finally:

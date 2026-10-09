@@ -19,10 +19,9 @@ from .restart_refusals import (
     OwnerGenerationChangedRefusal,
 )
 from .thread_identity import AdmissionIdentity, GenerationCounter, OwnerIdentity
-from .thread_presentation import ThreadOwnerBinding, LiveThreadOwnerBinding, UnavailableThreadOwnerBinding
+from .thread_presentation import ThreadOwnerBinding
 from .thread_status import (
     ArchivedThreadStatus,
-    RunningThreadStatus,
     StoppedThreadStatus,
     ThreadStatus,
 )
@@ -137,7 +136,8 @@ class RegistryDocument(RegistryPresence):
             raise RelationViolationError(
                 f"Thread name {thread.name!r} is a permanent alias and cannot be reused."
             )
-        self.statuses.get(thread.name, RunningThreadStatus()).require_mutable(thread.name)
+        if (current := self.statuses.get(thread.name)) is not None:
+            current.require_mutable(thread.name)
         previous = self.threads.get(thread.name)
         if previous is not None:
             thread = thread.preserve_registration_history(previous)

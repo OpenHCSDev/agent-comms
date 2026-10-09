@@ -602,7 +602,7 @@ class GoalAttemptStore:
         finally:
             os.close(file_fd)
         if os.name == "posix":
-            dir_fd = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
             try:
                 os.fsync(dir_fd)
             finally:

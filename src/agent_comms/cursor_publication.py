@@ -26,6 +26,7 @@ from .acp_extension import (
 from .comms import Comms
 from .coordinator import Coordination
 from .coordination_errors import CoordinationError
+from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .native_source_cursor import NativeSourceCursor
 from .native_runtime_input import CurrentNativeCursor
@@ -71,8 +72,8 @@ class CursorPublication:
             return None
         try:
             owner, generation = self.comms.registry.live_owner_with_admission(thread_name)
-        except (OSError, ValueError):
-            return None
+        except RelationViolationError:
+            return None  # No live owner admission in this process.
         if owner.pid != os.getpid():
             return None
         return CursorScope(

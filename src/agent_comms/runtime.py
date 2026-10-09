@@ -21,6 +21,7 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, cast
 
+from acp.exceptions import RequestError
 from acp.schema import RequestPermissionResponse
 
 from .jsonl_stream import JsonlStreamReader
@@ -116,8 +117,6 @@ class OwnerIdentityChangedError(RuntimeError):
 
 
 def _owner_error(error: Exception) -> dict[str, Any]:
-    from acp.exceptions import RequestError
-
     if isinstance(error, RequestError):
         data = error.data if isinstance(error.data, dict) else {}
         reason = data.get("details") or data.get("reason")
@@ -133,8 +132,6 @@ def _owner_error(error: Exception) -> dict[str, Any]:
 def _raise_owner_error(data: dict[str, Any]) -> None:
     if "error" not in data:
         return
-    from acp.exceptions import RequestError
-
     rpc = data.get("rpcError")
     if (
         isinstance(rpc, dict)
@@ -501,8 +498,12 @@ class RuntimeProxy(RuntimeConnection):
                         outcome = RequestPermissionResponse.model_validate(reply).model_dump(
                             by_alias=True, exclude_none=True
                         )["outcome"]
-                except (Exception, asyncio.CancelledError):
-                    # The owner receives a denial, not client exception text.
+                except (
+                    TimeoutError, ConnectionError, ValueError, RequestError, asyncio.CancelledError
+                ):
+                    # An unanswered, disconnected, refused or invalid client reply
+                    # is a denial; the owner never receives client exception text.
+                    # Any other failure is a defect and propagates after the denial.
                     pass
                 finally:
                     if (
@@ -537,7 +538,10 @@ class RuntimeProxy(RuntimeConnection):
             except (OSError, ConnectionError):
                 pass  # A reset subscription is safe to establish again.
             except ValueError:
-                return
+                # The owner is our component: an undecodable update is a defect,
+                # not an end of stream. Record it before this subscription dies.
+                _LOG.exception("Owner update stream failed (session=%s)", self.session_id)
+                raise
             self._controller_token = None
             await self.close_permissions()
             if self.writer is not None:

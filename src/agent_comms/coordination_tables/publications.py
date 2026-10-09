@@ -14,7 +14,7 @@ from agent_comms.coordination_contracts import (
     require_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_errors import IntegrityViolationError
+from agent_comms.coordination_errors import CoordinationError, IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.field_codec import projected
 from agent_comms.message_reference import MessageReference
@@ -260,8 +260,8 @@ END"""
         """SQLite positional input follows the declared constructor; validate once."""
         try:
             cls(*values)
-        except Exception:
-            return 0
+        except (TypeError, ValueError, CoordinationError):
+            return 0  # The trigger refuses an invalid envelope; other errors are defects.
         return 1
 
 

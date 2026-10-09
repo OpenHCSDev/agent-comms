@@ -41,11 +41,10 @@ class CompactionBoundary:
         """Inspect original attempts without constructing a journal writer."""
         from .compaction_journal import CompactionJournal
 
-        try:
-            session_file = owner.require_saved_session()
-        except ValueError as error:
-            return dict(available=False, reason=str(error),
+        if owner.session_file is None:
+            return dict(available=False, reason="Canonical saved session required",
                         scope="no canonical saved session; native facts cannot be inferred")
+        session_file = owner.session_file
         path = self.root / "compaction-commits.sqlite3"
         if diff:
             return CompactionJournal.retained_changes(path, session_file)

@@ -192,10 +192,9 @@ class TranscriptReadState:
                         complete = True  # Retry the writer's tail only after a revision change.
                         break
                     through = stream.tell()
-                    try:
-                        record = NativeEntry.read(raw)
-                    except (ValueError, TypeError, UnicodeDecodeError):
-                        continue
+                    # A complete native line that does not decode is a damaged
+                    # session, not an unread count of zero for that line.
+                    record = NativeEntry.read(raw)
                     if record.unread_reply:
                         total += 1
                         TranscriptReply(source, through, total).insert(database)

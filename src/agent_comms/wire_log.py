@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 import os
@@ -39,7 +38,6 @@ from .store_files import (
     StoreLock,
     StoreLockContention,
     _atomic_write_text,
-    _iter_jsonl_records,
     _iter_jsonl_stream,
     _store_lock,
     _store_lock_file,
@@ -431,7 +429,7 @@ class WireLog:
         metadata.last_seq = record.sequence_after(metadata.last_seq)
         self.write_metadata_unlocked(metadata)
         descriptor = os.open(
-            self.path, os.O_APPEND | os.O_CREAT | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600
+            self.path, os.O_APPEND | os.O_CREAT | os.O_WRONLY | os.O_NOFOLLOW, 0o600
         )
         try:
             info = os.fstat(descriptor)
@@ -447,7 +445,7 @@ class WireLog:
                 os.fsync(output.fileno())
         finally:
             os.close(descriptor)
-        directory_fd = os.open(self.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        directory_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(directory_fd)
         finally:
@@ -698,7 +696,7 @@ class WireLog:
             try:
                 descriptor = os.open(
                     self.metadata_path,
-                    os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0),
+                    os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
                 )
             except FileNotFoundError as error:
                 if required or self.metadata_path.is_symlink() or self.path.exists():

@@ -25,7 +25,6 @@ import sys
 import time
 from contextlib import AsyncExitStack
 from pathlib import Path
-from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from acp import RequestError, run_agent
@@ -55,6 +54,7 @@ from .acp_extension import (
 )
 from .agent_event_updates import AcpEventConsumer
 from .bus_publication import stable_thread_lookup
+from .image_inputs import prompt_images
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
 from .coordination_cohort import next_sealed_assignment
@@ -249,7 +249,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     async def _prompt_request(self, session_id: str, prompt: list[Any], request) -> PromptResponse:
         display_text = request.user_text or self._prompt_text(prompt)
         try:
-            images = self._prompt_images(prompt)
+            images = prompt_images(prompt)
         except ValueError as error:
             raise RequestError.invalid_params({"reason": str(error)}) from error
         if images and self._prompt_text(prompt).lstrip().startswith(("@", "#", RELAY_PREFIX)):
@@ -286,23 +286,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             finally:
                 if context is not None:
                     self._runtime.controller.reset(context)
-
-    @staticmethod
-    def _prompt_images(prompt: list[Any]) -> tuple[Any, ...]:
-        """Defer optional image support; never flatten unsupported blocks to text."""
-        try:
-            from .image_inputs import prompt_images
-        except ImportError as error:
-            if all(
-                (block.get("type") if isinstance(block, dict) else getattr(block, "type", None))
-                == "text"
-                for block in prompt
-            ):
-                return ()
-            raise RequestError.invalid_params(
-                {"reason": "Image/resource prompts require reviewed image support."}
-            ) from error
-        return prompt_images(prompt)
 
     @staticmethod
     def _require_compaction_text(prompt: list[Any]) -> None:
