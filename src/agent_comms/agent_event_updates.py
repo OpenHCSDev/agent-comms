@@ -18,6 +18,10 @@ from acp.schema import (
 
 from . import agent_events as events
 from . import backend
+from .acp_extension import (
+    BackendDeliveryFailure, InputFailedUpdate, TextRouteUpdate,
+    TurnSettledUpdate, encode_updates,
+)
 from .mro_dispatch import MroDispatch, handles
 from .tool_results import tool_result_content
 
@@ -61,13 +65,13 @@ class AcpEventConsumer(MroDispatch):
         if event.text:
             await self.agent._emit_text(self.session_id, event.text, self.client, self.route)
 
-    async def settled(self, turn_id: str) -> None:
+    async def settled(self, turn_id: str | None) -> None:
         await self.client.session_update(
             session_id=self.session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta={"agentComms": {"turnSettled": True, "turnId": turn_id}},
+                field_meta=encode_updates(TurnSettledUpdate(turn_id)),
             ),
         )
 
@@ -82,8 +86,7 @@ class AcpEventConsumer(MroDispatch):
 
     @handles(events.NoActiveTurn)
     async def no_active_turn(self, event: events.NoActiveTurn) -> None:
-        # Preserve the existing ACP replay format only at the external boundary.
-        await self.settled("")
+        await self.settled(None)
 
     @handles(events.ToolStart)
     async def on_tool_start(self, event: events.ToolStart) -> None:
@@ -264,18 +267,15 @@ class AcpEventConsumer(MroDispatch):
         if input_text and not self.agent.inputs.dispositions.read().all_started(
             self.agent.inputs.turn_original_input_keys.get(session_id, ())
         ):
-            failed_input = {"text": input_text, "reason": text}
+            failed_input = InputFailedUpdate(input_text, BackendDeliveryFailure(text))
         await client.session_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=f"[agent error] {text}"),
-                field_meta={
-                    "agentComms": {
-                        **({"inputFailed": failed_input} if failed_input else {}),
-                        "route": None,
-                    }
-                },
+                field_meta=encode_updates(
+                    TextRouteUpdate(None), *((failed_input,) if failed_input else ())
+                ),
             ),
         )
 

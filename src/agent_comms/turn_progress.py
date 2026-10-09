@@ -12,6 +12,8 @@ from acp.schema import (
     TextContentBlock,
 )
 
+from .acp_extension import TranscriptChangedUpdate, encode_updates
+
 from . import agent_events as events
 from .activity import ActivityState
 from .channel_targets import is_channel_target
@@ -489,16 +491,9 @@ class TurnProgress(events.AgentEventConsumer):
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta={
-                    "agentComms": {
-                        "transcriptChanged": True,
-                        "transcriptCursor": asdict(
-                            execution.runner.comms.transcripts.transcript_checkpoint(
-                                execution.thread_name
-                            )
-                        ),
-                    }
-                },
+                field_meta=encode_updates(TranscriptChangedUpdate(
+                    execution.runner.comms.transcripts.transcript_checkpoint(execution.thread_name)
+                )),
             ),
         )
 

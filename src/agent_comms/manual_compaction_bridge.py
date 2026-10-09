@@ -9,6 +9,8 @@ from uuid import uuid4
 
 from acp.schema import AgentMessageChunk, TextContentBlock
 
+from .acp_extension import TranscriptChangedUpdate, encode_updates
+
 from . import agent_events as events
 from .activity import ActivityState
 from .compaction_journal import CompactionJournalError
@@ -90,7 +92,7 @@ async def compact_context(
                     update=AgentMessageChunk(
                         session_update="agent_message_chunk",
                         content=TextContentBlock(type="text", text=""),
-                        field_meta={"agentComms": {"transcriptChanged": True}},
+                        field_meta=encode_updates(TranscriptChangedUpdate(None)),
                     ),
                 )
             return result
