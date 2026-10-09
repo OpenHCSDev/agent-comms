@@ -18,7 +18,7 @@ from .backend import PersistentPiSession
 from .comms import Comms
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked
 from .coordinator import Coordination
-from .native_pi import NativePiRpcLaunch, _private_session_dir
+from .native_pi import NativePiRpcLaunch, NativePiUnavailable, _private_session_dir
 from .selected_actions import SelectedAction, SelectedExistingFileWrite
 from .selected_participant import SelectedParticipant
 from .selected_result import CoordinatedTurn
@@ -61,6 +61,18 @@ class SelectedExecution:
         if self._tracked_factory is None:
             raise IdentityConflict("Selected launch precedes its execution package acquisition")
         return self._tracked_factory(**options)
+
+    def retained_source(self, session_file: Path):
+        """The owner's idle child on this saved source with this package, if still current."""
+        if self.native_custody is None:
+            return None
+        try:
+            retained = self.native_custody.custody.idle()
+        except NativePiUnavailable:
+            return None
+        if retained.identity.session_file != str(session_file) or retained.child.key[0].package != self.native_package:
+            return None
+        return retained
 
     def validate(self) -> None:
         """Acquire this execution's package once; claim acceptance and launch share it."""
