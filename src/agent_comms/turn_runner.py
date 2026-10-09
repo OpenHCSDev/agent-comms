@@ -16,6 +16,7 @@ from acp.schema import (
     RequestPermissionResponse,
 )
 
+from .image_inputs import prompt_images
 from .pi_vocabulary import ThinkingLevel
 from .queued_input import InitialInput, InputHandoffRefused
 from .input_origin import InputOrigin, UnattributedInputOrigin
@@ -240,7 +241,7 @@ class TurnRunner:
             thread_name = await self.sessions.sync_identity(session_id)
             await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
             text = self.effects._prompt_text(prompt)
-            images = self.effects._prompt_images(prompt)
+            images = prompt_images(prompt)
             agent_task: str | None = None
             relay_text: str | None = None
             if text.startswith(AGENT_PREFIX):
