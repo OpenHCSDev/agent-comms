@@ -532,8 +532,13 @@ class TurnRunner:
             self.turn_tasks[session_id] = task
             self.inputs.backend_inboxes[session_id] = inbox
             try:
+                from . import backend
+
                 result = await execution.run(
-                    on_compaction=partial(self.effects._emit_event, session_id)
+                    on_compaction=partial(self.effects._emit_event, session_id),
+                    native_custody=self.persistent_backends.setdefault(
+                        session_id, backend.PersistentPiSession()
+                    ),
                 )
                 while not inbox.empty():
                     command = inbox.get_nowait()

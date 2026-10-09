@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 from . import pi_commands as commands
 from . import pi_events as pi
 from .agent_events import AgentEvent
-from .backend import MODEL_WAIT_TIMEOUT_SECONDS, TurnSession
+from .backend import MODEL_WAIT_TIMEOUT_SECONDS, PersistentPiSession, TurnSession
 from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier
 from .mro_dispatch import MroDispatch, handles
@@ -159,6 +159,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         selected_tool_mode,
         observe_event,
         request_observer,
+        native_custody: PersistentPiSession | None = None,
     ):
         super().__init__(
             launch,
@@ -167,6 +168,11 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             startup=startup,
             request_observer=request_observer,
         )
+        if native_custody is not None:
+            # The owner's one native custody for this session: an idle child left
+            # by its previous input is reused when its launch and source still match.
+            self.native_session = native_custody
+        self.retainable = False
         self.command = command
         self.provider, self.model = provider, model
         self.prompt_send_boundary = prompt_send_boundary
@@ -245,6 +251,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             selected_tool_mode=selected_tool_mode,
             observe_event=observe_event,
             request_observer=request_observer,
+            native_custody=launch_owner.native_custody if launch_owner is not None else None,
         )
         return await turn.complete()
 
@@ -255,8 +262,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             custody.push(retirement)
             try:
                 self.custody = custody
-                self.native = await self.acquire_native(custody, reuse=False)
-                custody.push_async_callback(self.native_session.close)
+                self.native = await self.acquire_native(custody, reuse=True)
+                custody.push_async_callback(self.retain_or_close)
                 await custody.enter_async_context(self.native.failures())
                 custody.callback(self.native.reader.pending.cancel_all)
                 if self.tool_socket is not None:
@@ -276,7 +283,11 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                                     await self.observe_event(update)
                             if not self.finished and self.observe_event is not None:
                                 await self.observe_event(event)
-                        return await self.result()
+                        result = await self.result()
+                        # A per-input tool socket dies with this input; only a
+                        # tool-less child stays usable by the next input.
+                        self.retainable = self.tool_socket is None
+                        return result
                     except (SelectedToolDenied, PromptSendFailure, TimeoutError, OSError) as error:
                         raise NativePiUnavailable(
                             f"Native Pi operation failed: {type(error).__name__}: {error}"
@@ -287,6 +298,13 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 # LIFO starts the measurement immediately before cleanup. No
                 # await or manual close may separate this from stack retirement.
                 custody.callback(retirement.__enter__)
+
+    async def retain_or_close(self) -> None:
+        """Keep a settled, proved child idle in the owner's custody; retire anything else."""
+        identity = self.native.attestation.identity
+        if self.retainable and identity is not None and self.native_session.retain(self.native, identity):
+            return
+        await self.native_session.close()
 
     async def resume_prepared(self, resources: AsyncExitStack) -> None:
         await super().resume_prepared(resources)
