@@ -23,7 +23,7 @@ from .selected_actions import CodingSelectedAction, NoSelectedTools, SelectedAct
 
 if TYPE_CHECKING:
     from .coordinated_runtime import SelectedExecution
-    from .native_custody import RetainedNative
+    from .backend import PersistentPiSession
     from .selected_participant import SelectedParticipant
     from .tracked_turn import TrackedTurnSession
 
@@ -141,8 +141,10 @@ class SelectedSession:
                 # and the file is unchanged since; no helper re-reads its history.
                 retained = execution.retained_source(Path(selected).absolute())
                 if retained is not None:
-                    return SavedSelectedSession(directory, identity=retained.identity, attested=retained)
-                return SavedSelectedSession(directory, identity=SessionIdentityHelper.locate(
+                    return SavedSelectedSession(directory, identity=retained.identity,
+                                                custody=execution.native_custody)
+                return SavedSelectedSession(directory, custody=execution.native_custody,
+                                            identity=SessionIdentityHelper.locate(
                     execution.native_package, str(Path(selected).absolute()),
                 ))
             # Original wire→bus→registry→store→journal order spans exclusive file
@@ -187,9 +189,9 @@ class SelectedSession:
 class SavedSelectedSession(SelectedSession):
     """Continue the exact captured native identity, irrespective of storage parent."""
     identity: NativeSessionIdentity = field(kw_only=True)
-    # The idle child that attested this source, when one exists. Custody only;
-    # it never takes part in the launch key.
-    attested: RetainedNative | None = field(default=None, kw_only=True, compare=False, repr=False)
+    # The owner's native custody for this source. Custody only; it never takes
+    # part in the launch key.
+    custody: PersistentPiSession | None = field(default=None, kw_only=True, compare=False, repr=False)
 
     @property
     def path(self) -> Path:
@@ -257,9 +259,13 @@ class SavedSelectedSession(SelectedSession):
 
 
     def require_launch_header(self) -> None:
-        attested = self.attested
-        if attested is not None and attested.current and attested.identity.same_session(self.identity):
-            return  # Its live child read this header at launch; the file has not changed since.
+        if self.custody is not None:
+            try:
+                retained = self.custody.custody.idle()
+            except NativePiUnavailable:
+                retained = None
+            if retained is not None and retained.identity.same_session(self.identity):
+                return  # Its live child read this header at launch; the file has not changed since.
         FreshPrivateSession.require_launch_header(self.path, None)
 
     def attest(self, identity: NativeSessionIdentity) -> Path:
