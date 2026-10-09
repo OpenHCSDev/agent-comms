@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import threading
 import time
 from abc import abstractmethod
 from collections.abc import Iterable, Mapping
@@ -10,7 +12,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -186,6 +188,29 @@ class ObservedActivity(ActivityData):
         return self.readiness.presentation(super().presentation(title), busy=self.state.busy)
 
 
+@dataclass(slots=True)
+class ActivityReadState:
+    """What a process has read of one activity log: shared by every reader.
+
+    Each Comms builds its own ActivityLog; the decoded latest events belong
+    to the file, so a new reader continues from what this process already
+    read instead of decoding the log again. The lock makes one thread catch
+    up while concurrent readers wait for its result.
+    """
+
+    revision: tuple | None = None
+    latest: dict[str, Activity] = field(default_factory=dict)
+    complete_latest: dict[str, Activity] = field(default_factory=dict)
+    offset: int = 0
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+    _by_path: ClassVar[dict[str, ActivityReadState]] = {}
+
+    @classmethod
+    def for_path(cls, path: Path) -> ActivityReadState:
+        return cls._by_path.setdefault(os.path.abspath(path), cls())
+
+
 class ActivityLog:
     """Persists Activity events as an append-only JSONL log.
 
@@ -201,10 +226,7 @@ class ActivityLog:
             store_path.with_name(ActivityCheckpointStore.filename)
         )
         self._stale_after = stale_after
-        self._revision: tuple | None = None
-        self._latest: dict[str, Activity] = {}
-        self._complete_latest: dict[str, Activity] = self._latest
-        self._offset = 0
+        self._read = ActivityReadState.for_path(store_path)
 
     def emit(self, activity: Activity) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -241,28 +263,29 @@ class ActivityLog:
         }
 
     def _latest_events(self) -> Mapping[str, Activity]:
-        with _store_lock(self._path):
+        read = self._read
+        with read.lock, _store_lock(self._path):
             revision = file_revision(self._path)
-            if revision == self._revision:
-                return self._latest
+            if revision == read.revision:
+                return read.latest
             append = (
                 revision is not None
-                and self._revision is not None
-                and revision[0] == self._revision[0]
-                and revision[1] > self._revision[1]
+                and read.revision is not None
+                and revision[0] == read.revision[0]
+                and revision[1] > read.revision[1]
             )
             # Publish a new map: other threads may still be iterating the old
             # snapshot after the store lock has been released.
             checkpoint = (
-                self.checkpoint.read() if self._revision is None and revision is not None else None
+                self.checkpoint.read() if read.revision is None and revision is not None else None
             )
             if checkpoint is not None and not checkpoint.matches(self._path, revision):
                 checkpoint = None
             if checkpoint is not None:
                 complete, offset = checkpoint.latest, checkpoint.offset
             else:
-                complete = self._complete_latest.copy() if append else {}
-                offset = self._offset if append else 0
+                complete = read.complete_latest.copy() if append else {}
+                offset = read.offset if append else 0
             original_offset = offset
             latest = complete
             if revision is not None:
@@ -288,8 +311,8 @@ class ActivityLog:
                                 latest = {**complete, event.thread: event}
                         if terminated:
                             offset = stream.tell()
-            self._complete_latest, self._offset = complete, offset
-            self._latest, self._revision = latest, revision
+            read.complete_latest, read.offset = complete, offset
+            read.latest, read.revision = latest, revision
             if revision is not None and (checkpoint is None or offset != original_offset):
                 # The log remains authoritative if its disposable read
                 # projection cannot be persisted.
@@ -298,7 +321,7 @@ class ActivityLog:
 
                     captured = ActivityCheckpoint.capture(self._path, revision, complete, offset)
                     self.checkpoint.replace(captured)
-            return self._latest
+            return read.latest
 
     def remove_thread(self, thread: str) -> int:
         """Remove all persisted activity for one thread."""
