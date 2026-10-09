@@ -24,7 +24,7 @@ from .messages import Message
 from .read_basis import ChannelDisplayScope, DMDisplayScope
 from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
-from .store_files import _store_lock, file_revision
+from .store_files import StoreRevision, _store_lock, file_revision
 from .thread_presentation import ThreadPresentation, ThreadOwnerBinding, UnavailableThreadOwnerBinding
 from .thread_status import ThreadStatus
 from .thread_identity import ThreadIncarnation
@@ -681,5 +681,23 @@ class CoordinationSnapshot:
 
 @dataclass(frozen=True, slots=True)
 class WireRevision:
-    files: tuple[tuple[int, int, int, int] | None, ...]
+    """One observation of every Comms store a view derives from, by name."""
+
+    registry: StoreRevision
+    catalog: StoreRevision
+    bus_log: StoreRevision
+    history: StoreRevision
+    activity: StoreRevision
+    runtime_info: StoreRevision
+    reads: StoreRevision
+    goal_waits: StoreRevision
+    notifications: tuple[StoreRevision, ...]
     expiry_tick: int
+
+    def registrations_changed_since(self, earlier: WireRevision) -> bool:
+        """A thread registration or a channel declaration changed."""
+        return (self.registry, self.catalog) != (earlier.registry, earlier.catalog)
+
+    def stores_changed_since(self, earlier: WireRevision) -> bool:
+        """Any observed store changed; the activity expiry tick is not a store."""
+        return replace(self, expiry_tick=earlier.expiry_tick) != earlier
