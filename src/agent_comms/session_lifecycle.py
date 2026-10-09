@@ -267,12 +267,12 @@ class SessionLifecycle:
         thread = await Coordination.run_worker(partial(self.declare_thread, cwd))
         await self.bind_owned(thread, thread.name)
         self.effects.inputs.ensure_live_drain(thread.name)
-        options = await self.config.session_options(thread.name, thread.name)
-        return NewSessionResponse(
-            session_id=thread.name,
-            config_options=options,
-            field_meta=await self.metadata(thread.name, session_id=thread.name),
-        )
+        async with self.config.session_options(thread.name) as options:
+            return NewSessionResponse(
+                session_id=thread.name,
+                config_options=options,
+                field_meta=await self.metadata(thread.name, session_id=thread.name),
+            )
 
     async def load_session(
         self, cwd: str, session_id: str, mcp_servers: list[Any] | None = None, **kwargs: Any
@@ -294,12 +294,12 @@ class SessionLifecycle:
         await self.bind_owned(thread, session_id)
         await self.transcript.replay(session_id, thread.name)
         await self.effects.inputs.replay_unknown_inputs(session_id)
-        options = await self.config.session_options(session_id, thread.name)
-        self.effects.inputs.ensure_live_drain(session_id)
-        return LoadSessionResponse(
-            config_options=options,
-            field_meta=await self.metadata(thread.name, session_id=session_id),
-        )
+        async with self.config.session_options(thread.name) as options:
+            self.effects.inputs.ensure_live_drain(session_id)
+            return LoadSessionResponse(
+                config_options=options,
+                field_meta=await self.metadata(thread.name, session_id=session_id),
+            )
 
     async def attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
         async with self._attachment_lock:

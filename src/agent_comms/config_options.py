@@ -1,12 +1,14 @@
-"""Configuration owns its catalogs, generations and setting correlations."""
+"""Configuration owns its catalogs and the updates it has published."""
 
 from __future__ import annotations
 
 import asyncio
 import os
 from abc import abstractmethod
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from functools import partial
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from acp import RequestError
 from acp.schema import (
@@ -54,7 +56,7 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
 
 
 class CatalogConfigOption(ConfigOption):
-    """A selected option owns its catalog, auth revision, lock and generation."""
+    """A selected option owns its catalog, auth revision and acquisition lock."""
 
     def __init__(self, agent_bin: str, agent_args: NativeArguments, configuration: RestartEnvironment):
         self.agent_bin, self.agent_args = agent_bin, agent_args
@@ -62,7 +64,6 @@ class CatalogConfigOption(ConfigOption):
         self.catalogs: dict[str | None, list[SessionConfigSelectOption]] = {}
         self.auth: tuple[int, int] | None = None
         self.lock = asyncio.Lock()
-        self.generation = 0
 
     @property
     def current_auth(self) -> bool:
@@ -82,7 +83,6 @@ class CatalogConfigOption(ConfigOption):
                 if not choices:
                     raise NativePiUnavailable(f"{self.title} catalog has no available choices")
                 self.catalogs[key] = choices
-                self.generation += 1
             return self.catalogs[key]
 
     async def describe(self, thread: Thread) -> SessionConfigOptionSelect:
@@ -207,62 +207,44 @@ class ConfigOptions:
         self.configuration = RestartEnvironment.inherit(os.environ)
         self.catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = {}
         self.catalog_publish_lock = asyncio.Lock()
-        self.session_catalog_generation: dict[str, int] = {}
-        self.session_config_signature: dict[str, tuple[tuple[str, str | None], ...]] = {}
+        self.publications: dict[str, ConfigOptionUpdate] = {}
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
         if member not in self.catalogs:
             self.catalogs[member] = member(self.agent_bin, self.agent_args, self.configuration)
         return self.catalogs[member]
 
-    @property
-    def catalog_generation(self) -> int:
-        return sum(option.generation for option in self.catalogs.values())
-
-    async def options(self, thread: Thread) -> list[Any]:
-        """Describe the same captured owner used for the publication signature."""
+    async def options(self, thread: Thread) -> list[SessionConfigOptionSelect]:
+        """Describe declared choices and settings from one captured thread."""
         return [
             await self.catalog_for(member).describe(thread)
             for member in ConfigOption.members_with(CatalogConfigOption)
         ]
 
-    def signature(self, thread: Thread) -> tuple[tuple[str, str | None], ...]:
-        return tuple(
-            (member.declared_name, self.catalog_for(member).current_value(thread))
-            for member in ConfigOption.members_with(CatalogConfigOption)
-        )
+    @asynccontextmanager
+    async def session_options(
+        self, thread_name: str
+    ) -> AsyncIterator[list[SessionConfigOptionSelect]]:
+        """Hold the configuration observation until its consumer supplies it.
 
-    async def session_options(self, session_id: str, thread_name: str) -> list[Any]:
-        thread = await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
-        options = await self.options(thread)
-        self.session_catalog_generation[session_id] = self.catalog_generation
-        self.session_config_signature[session_id] = self.signature(thread)
-        return options
-
-    async def refresh_auth_models(self) -> None:
-        if not self.catalogs:
-            return
-        if all(option.current_auth for option in self.catalogs.values()) and all(
-            self.session_catalog_generation.get(sid) == self.catalog_generation
-            for sid in self.sessions.bindings
-        ):
-            return
+        A private new/load/Ready reply does not publish to other subscribers.
+        Its snapshot must not follow a newer broadcast on the same transport.
+        """
         async with self.catalog_publish_lock:
-            for sid, name in tuple(self.sessions.bindings.items()):
-                thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
-                options = await self.options(thread)
-                if self.session_catalog_generation.get(sid) == self.catalog_generation:
-                    continue
-                await self.publish(sid, options)
-                self.session_catalog_generation[sid] = self.catalog_generation
+            thread = await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
+            yield await self.options(thread)
 
-    async def publish(self, session_id: str, options: list[Any]) -> None:
-        await self.runtime.session_update(
-            session_id=session_id,
-            update=ConfigOptionUpdate(
-                session_update="config_option_update", config_options=options
-            ),
+    async def _publish(self, session_id: str, options: list[SessionConfigOptionSelect]) -> None:
+        """Publish within the original session_options acquisition lifetime."""
+        update = ConfigOptionUpdate(
+            session_update="config_option_update", config_options=options
         )
+        if self.publications.get(session_id) == update:
+            return
+        if await self.runtime.session_update(session_id=session_id, update=update):
+            # Retain exactly what this send supplied, not a later catalog
+            # generation or settings observation acquired during its await.
+            self.publications[session_id] = update
 
     async def set_option(
         self, config_id: str, session_id: str, value: str | bool
@@ -284,10 +266,9 @@ class ConfigOptions:
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         await self.catalog_for(member).change(self, session_id, thread, value)
         await self.effects.turns.close_idle_backend(session_id)
-        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
-        options = await self.options(thread)
-        await self.publish(session_id, options)
-        return SetSessionConfigOptionResponse(config_options=options)
+        async with self.session_options(name) as options:
+            await self._publish(session_id, options)
+            return SetSessionConfigOptionResponse(config_options=options)
 
     async def set_active_backend_option(
         self,
@@ -318,12 +299,7 @@ class ConfigOptions:
         await self.publish_configuration(session_id, name)
 
     async def publish_configuration(self, session_id: str, thread_name: str) -> None:
-        thread = await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
-        signature = self.signature(thread)
-        if self.session_config_signature.get(session_id) == signature:
-            return
         if self.sessions.client is None and not self.sessions.runtime_enabled:
-            self.session_config_signature[session_id] = signature
             return
-        await self.publish(session_id, await self.options(thread))
-        self.session_config_signature[session_id] = signature
+        async with self.session_options(thread_name) as options:
+            await self._publish(session_id, options)
