@@ -375,7 +375,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             raise NativePiUnavailable("Native Pi omitted its private session identity")
         self.active_session_file = self.launch.session.attest(observed.identity)
         self.native.attestation = observed
-        self.startup.release()
         self.startup.attest(state)
         if self.observe_event is not None:
             with self.startup.measurements.operation("attestation_publication"):

@@ -6,7 +6,7 @@ import os
 import select
 import signal
 import time
-from contextlib import ExitStack, aclosing
+from contextlib import aclosing
 from pathlib import Path
 
 import pytest
@@ -80,7 +80,6 @@ async def prepare(owner, preparation_type, monkeypatch):
             async for _ in stream:
                 pass
     finally:
-        admission.release()
         assert owner.provider.posts == len(owner.starts) == len(owner.saved_inputs()) == 1
         assert (
             owner.saved_inputs()[0]["content"][0]["text"]
@@ -188,51 +187,3 @@ async def test_actual_tracked_unresponsive_native_owns_not_sent_witness(
     assert path.stat().st_mode & 0o777 == 0o600
     assert owner.provider.posts == len(owner.saved_inputs()) == 0
     assert children and all(not child.alive() for child in children)
-
-
-async def test_actual_tracked_waiting_for_startup_cancels_without_prompt(native_backend, monkeypatch):
-    owner = native_backend
-    # SelectedExecution library callers supply their original root explicitly;
-    # they need not be launched with a worker's ambient root environment.
-    monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
-    entered = asyncio.Event()
-    original = owner.session.read_bytes()
-
-    class WaitingTracked(TrackedTurnSession):
-        async def open_tools(self, custody):
-            await super().open_tools(custody)
-            assert self.startup.directory == owner.root / "runtime" / "native-startup"
-            entered.set()
-
-    with ExitStack() as held:
-        for _ in range(NativeStartupAdmission(owner.root).policy.slots):
-            lease = NativeStartupAdmission(owner.root)
-            await lease.acquire()
-            held.callback(lease.release)
-        attempt = asyncio.create_task(
-            WaitingTracked.execute(
-                Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
-                input_id="974b3edee3ab41bbba62a4f5128d4265",
-                prompt="Private input cancelled before native startup, never replay",
-                worktree=owner.project,
-                session_dir=owner.session.parent,
-                session_file=owner.session,
-                provider="response-local",
-                model="fixture",
-                thinking_level="off",
-                maintenance_root=owner.root,
-            )
-        )
-        try:
-            await asyncio.wait_for(entered.wait(), 5)
-            await asyncio.sleep(0)
-            assert not attempt.done()
-            assert owner.provider.posts == 0
-            attempt.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await attempt
-        finally:
-            attempt.cancel()
-            await asyncio.gather(attempt, return_exceptions=True)
-    assert owner.session.read_bytes() == original
-    assert len(owner.saved_inputs()) == owner.provider.posts == 0

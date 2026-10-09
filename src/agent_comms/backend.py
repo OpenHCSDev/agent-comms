@@ -96,7 +96,7 @@ class PersistentPiSession:
         return self.custody.available
 
     async def open(
-        self, launch, *, reuse, require_input_id, startup, finish_event, watchdog
+        self, launch, *, reuse, require_input_id, startup, watchdog
     ) -> PiSessionChild:
         key = (launch, launch.configuration.auth_revision())
         child = self.custody.reuse(key) if reuse else None
@@ -104,7 +104,6 @@ class PersistentPiSession:
         if child is None:
             await self.close()
             attestation = await self.custody.expected(launch, require_input_id)
-            await startup.acquire(finish_event)
             watchdog.launching(asyncio.get_running_loop().time, launch.session.session_file)
             with startup.measurements.operation("native_spawn"):
                 child = await PiSessionChild.start(key, attestation)
@@ -514,7 +513,6 @@ class TurnSession:
 
     async def acquire_native(self, resources: AsyncExitStack, *, reuse: bool) -> PiSessionChild:
         """Acquire leaf transport once in the original turn's resource lifetime."""
-        resources.callback(self.startup.release)
         with self.native_acquisition():
             with self.startup.measurements.operation("open_transport"):
                 await self.open_transport(resources)
@@ -530,7 +528,7 @@ class TurnSession:
         with self.startup.measurements.operation("native_open"):
             return await self.native_session.open(
                 self.launch, reuse=reuse, require_input_id=self.require_input_id,
-                startup=self.startup, finish_event=self.finish_event, watchdog=self.watchdog,
+                startup=self.startup, watchdog=self.watchdog,
             )
 
     async def resume_prepared(self, resources: AsyncExitStack) -> None:
@@ -577,7 +575,6 @@ class TurnSession:
                                 await error.refuse(self)
                                 break
                             if self.native.attestation.observed:
-                                self.startup.release()
                                 await self.input_ready()
                                 if self.finished:
                                     break
