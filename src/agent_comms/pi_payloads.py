@@ -926,7 +926,9 @@ class NativeSessionSnapshot(PiPayload):
 class StateData(NativeSessionSnapshot, PiResponseData):
     session_name: str | None = wire_field("sessionName")
     native_input_proof_capability: str | None = wire_field("nativeInputProofCapability")
-    model: PiModel = field(default_factory=UnreportedModel)
+    # Native omission and null both mean no model observation. Omit the named
+    # default on output; its internal family tag is not a native model object.
+    model: PiModel = field(default_factory=UnreportedModel, metadata={"wire_omit_default": True})
     thinking_level: type[ThinkingLevel] | None = wire_field("thinkingLevel")
     message_count: int | None = wire_field("messageCount")
     pending_message_count: int | None = wire_field("pendingMessageCount")

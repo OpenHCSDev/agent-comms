@@ -138,6 +138,12 @@ def test_optional_native_observations_have_named_absence_and_one_serialization()
         with pytest.raises(ValueError, match="owner selection"):
             state.model.for_compaction("p/m")
         assert FieldCodec.decode(StateData, FieldCodec.encode(state)) == state
+        assert "model" not in state.to_wire()
+        assert StateData.from_wire(state.to_wire()) == state
+    empty_reported = StateData.from_wire({"model": {}})
+    assert isinstance(empty_reported.model, ReportedModel)
+    assert "model" in empty_reported.to_wire()
+    assert StateData.from_wire(empty_reported.to_wire()) == empty_reported
     reported = StateData.from_wire({"model": {"provider": "p", "id": "m", "contextWindow": 1024}})
     assert isinstance(reported.model, ReportedModel)
     assert reported.matches_model(("p", "m"))
