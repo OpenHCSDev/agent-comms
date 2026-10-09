@@ -29,9 +29,5 @@ class TurnEffects(ABC):
     @abstractmethod
     def _prompt_text(prompt: list[Any]) -> str: ...
 
-    @staticmethod
-    @abstractmethod
-    def _prompt_images(prompt: list[Any]) -> tuple[Any, ...]: ...
-
     @abstractmethod
     async def publish_pending_compaction(self, session_id: str, thread_name: str) -> int: ...
