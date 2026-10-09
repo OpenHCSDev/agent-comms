@@ -407,9 +407,25 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 return bus.log._private_marker_unlocked().admission_after_seq
         admission_after_seq = await Coordination.run_worker(read_admission)
         store_path = self._comms.root / "coordination.sqlite3"
+        # One execution owns this wake's package acquisition: acceptance of new
+        # originals and the selected launch share it instead of verifying twice.
+        execution = SelectedExecution(
+            root=self._comms.root,
+            wire_root_id=wire_root_id,
+            owner_name=thread_name,
+            native_package=package,
+            write_authority=AcpSelectedWriteAuthority(
+                self, session_id, SelectedWritePlans(self._comms, wire_root_id)
+            ),
+            **(
+                {"selected_tool_intent": self._private_selected_tool_intent}
+                if self._private_selected_tool_intent is not None
+                else {}
+            ),
+        )
         await _accept_visible_deliveries(
             bus, wire_root_id, store_path, stable_thread_lookup(owner.created_at), 0,
-            owner_name=owner.name, native_package=package,
+            owner_name=owner.name, acquire_package=execution.validate,
         )
         def select(store):
             participant = store.participants.get(stable_thread_lookup(owner.created_at))
@@ -420,20 +436,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         runnable = await Coordination.run_async(store_path, select)
         result = None
         if runnable:
-            execution = SelectedExecution(
-                root=self._comms.root,
-                wire_root_id=wire_root_id,
-                owner_name=thread_name,
-                native_package=package,
-                write_authority=AcpSelectedWriteAuthority(
-                    self, session_id, SelectedWritePlans(self._comms, wire_root_id)
-                ),
-                **(
-                    {"selected_tool_intent": self._private_selected_tool_intent}
-                    if self._private_selected_tool_intent is not None
-                    else {}
-                ),
-            )
             result = await self.turns.run_selected(session_id, execution)
         if result is None:
             # N (or absent-audience) rows prove coverage, not an injected
