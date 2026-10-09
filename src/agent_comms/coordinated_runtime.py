@@ -14,6 +14,7 @@ from pathlib import Path
 
 from .pi_vocabulary import ThinkingLevel
 from .agent_events import CompactionEvent
+from .backend import PersistentPiSession
 from .comms import Comms
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked
 from .coordinator import Coordination
@@ -42,6 +43,8 @@ class SelectedExecution:
     selected_tool_intent: SelectedToolIntent | None = None
     write_authority: SelectedWriteAuthority = field(default_factory=NoSelectedWritePlans)
     _run_permit: threading.Lock = field(init=False, default_factory=threading.Lock)
+    # The owner session's native custody; None gives each input its own child.
+    native_custody: PersistentPiSession | None = field(default=None, init=False, compare=False)
     _tracked_factory: Callable[..., NativePiRpcLaunch] | None = field(
         init=False, default=None, repr=False, compare=False,
     )
@@ -100,9 +103,13 @@ class SelectedExecution:
             return self.selected_existing_file_write
         return session.default_action()
 
-    async def run(self, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None) -> CoordinatedTurn | None:
+    async def run(
+        self, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None,
+        native_custody: PersistentPiSession | None = None,
+    ) -> CoordinatedTurn | None:
         if not self._run_permit.acquire(blocking=False):
             raise IdentityConflict("Selected execution cannot be reused")
+        self.native_custody = native_custody
         self.root = Path(self.root).absolute()
         # Package acquisition belongs to this execution before it can select
         # a claim. Join its blocking verification before that custody advances.
