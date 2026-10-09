@@ -37,6 +37,9 @@ class SelectedSession:
     """
     directory: Path
     creation: FreshPrivateSession | None = field(default=None, kw_only=True)
+    # The owner's native custody for this source. Custody only; it never takes
+    # part in the launch key.
+    custody: PersistentPiSession | None = field(default=None, kw_only=True, compare=False, repr=False)
 
     @property
     def path(self) -> Path | None:
@@ -101,7 +104,7 @@ class SelectedSession:
         self.require_context(context)
         return SavedSelectedSession(self.directory,
             identity=NativeSessionIdentity(context.session_id, str(context.session_file)),
-            creation=self.creation)
+            creation=self.creation, custody=self.custody)
 
     @classmethod
     def for_launch(cls, directory: Path, path: Path | None, package: Path) -> SelectedSession:
@@ -189,9 +192,6 @@ class SelectedSession:
 class SavedSelectedSession(SelectedSession):
     """Continue the exact captured native identity, irrespective of storage parent."""
     identity: NativeSessionIdentity = field(kw_only=True)
-    # The owner's native custody for this source. Custody only; it never takes
-    # part in the launch key.
-    custody: PersistentPiSession | None = field(default=None, kw_only=True, compare=False, repr=False)
 
     @property
     def path(self) -> Path:
