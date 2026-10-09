@@ -205,12 +205,11 @@ class ThreadManagement:
         tags: frozenset[str],
         worktree: str,
         pid: int = 0,
-        start_at_latest: bool = False,
         model: str | None = None,
         thinking_level: str | None = None,
         auto_title_pending: bool = False,
     ) -> Thread:
-        """Atomically register a unique thread and optionally baseline its inbox."""
+        """Atomically register a unique thread; its inbox starts at its creation."""
         with _store_lock(self._wire_lock_path):
             thread = Thread(
                 name=base_name,
@@ -221,10 +220,7 @@ class ThreadManagement:
                 thinking_level=thinking_level,
                 auto_title_pending=auto_title_pending,
             )
-            thread = self.registry._claim_unlocked(thread)
-            if start_at_latest:
-                self.bus.mark_delivered_through(thread.name, self.bus.log.latest_sequence())
-            return thread
+            return self.registry._claim_unlocked(thread)
 
     def rename_self(self, new_name: str) -> RenameThreadResult:
         """Rename the caller's own running thread, retaining its old aliases."""
@@ -581,8 +577,9 @@ class ThreadManagement:
             model=parent.model,
             thinking_level=parent.thinking_level,
         )
+        # A new incarnation's inbox already starts at its creation time
+        # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
         child = self.registry._declare_unlocked(child)
-        self.bus.mark_delivered_through(child.name, self.bus.log.latest_sequence())
 
         key = f"acp:{uuid4().hex}" if spec.initial_prompt else None
         try:
