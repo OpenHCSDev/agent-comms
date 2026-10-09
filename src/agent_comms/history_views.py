@@ -451,24 +451,28 @@ class HistoryViews:
                 self.transcript_reads.mark_read(viewer, checkpoint.session_file, checkpoint.offset)
             self.bus.mark_delivered(viewer, thread.name)
 
-    def revision(self) -> WireRevision:
-        """A cheap observer token; activity expiry is checked without rescanning idle logs."""
+    def revision_paths(self) -> dict[str, Path | tuple[Path, ...]]:
+        """The stores a view derives from, by WireRevision part: what to stat and to watch."""
         from .notification_assignment import NotificationAssignment
 
-        return WireRevision(
-            registry=file_revision(self.registry.store.path),
-            catalog=file_revision(self.channels.catalog.path),
-            bus_log=file_revision(self.bus.log.path),
-            history=file_revision(self.bus.history.path),
-            activity=file_revision(self.agents.activity._path),
-            runtime_info=file_revision(self.agents.runtime_info.path),
-            reads=file_revision(self.bus.reads.path),
-            goal_waits=file_revision(self.root / GoalWaits.filename),
-            notifications=tuple(
-                file_revision(path) for path in NotificationAssignment.source_paths(self.root)
-            ),
-            expiry_tick=int(time.time()),
-        )
+        return {
+            "registry": self.registry.store.path,
+            "catalog": self.channels.catalog.path,
+            "bus_log": self.bus.log.path,
+            "history": self.bus.history.path,
+            "activity": self.agents.activity._path,
+            "runtime_info": self.agents.runtime_info.path,
+            "reads": self.bus.reads.path,
+            "goal_waits": self.root / GoalWaits.filename,
+            "notifications": tuple(NotificationAssignment.source_paths(self.root)),
+        }
+
+    def revision(self) -> WireRevision:
+        """A cheap observer token; activity expiry is checked without rescanning idle logs."""
+        parts = {name: (tuple(file_revision(item) for item in path) if isinstance(path, tuple)
+                        else file_revision(path))
+                 for name, path in self.revision_paths().items()}
+        return WireRevision(**parts, expiry_tick=int(time.time()))
 
     def who(self) -> Sequence[Mapping]:
         """Presence: who is in the chat, with status and unread counts."""
