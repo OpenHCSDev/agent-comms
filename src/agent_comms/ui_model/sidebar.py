@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from agent_comms.display_order import ChannelSort, ThreadSort
 from agent_comms.presentation import CoordinationSnapshot, ThreadView
-from agent_comms.thread_execution import ConversationPreparation
+from agent_comms.thread_execution import ConversationPreparation, ThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.ui_model.changes import KeyedModel
 from agent_comms.ui_model.unread import ExactUnread, UnreadPresentation
@@ -45,6 +45,7 @@ class ThreadRowModel:
     model: str | None
     unread: UnreadPresentation
     active: bool
+    execution: type[ThreadExecution]
 
     @property
     def name(self) -> str:
@@ -57,7 +58,7 @@ class ThreadRowModel:
             person.thread.incarnation, presentation.title, presentation.label, presentation.summary,
             presentation.busy, person.runtime.model if person.runtime else person.thread.model,
             person.thread.execution.prepare_conversation(PersonUnread(person, snapshot)),
-            person.status.active,
+            person.status.active, person.thread.execution,
         )
 
 
@@ -91,17 +92,32 @@ class ChannelRowModel:
 class SidebarModel:
     """Channels in display order and the threads they list, from one snapshot.
 
-    ``apply`` derives every row (it may inspect process identity, so call it
-    off the UI thread) and replaces the models; each model flushes its change
-    set once per frame through the backend's scheduler.
+    ``derive`` builds every row (it may inspect process identity, so call it
+    off the UI thread); ``apply`` publishes them with the snapshot they came
+    from, which views borrow for per-target unread counts and membership.
+    Each keyed model flushes its change set once per frame through the
+    backend's scheduler.
     """
 
     def __init__(self, schedule: Callable[[Callable[[], None]], None]):
         self.channels: KeyedModel[str, ChannelRowModel] = KeyedModel(schedule)
         self.threads: KeyedModel[str, ThreadRowModel] = KeyedModel(schedule)
-        self.channel_order: ChannelSort = ChannelSort.NAME
-        self.read_marker_notice: str | None = None
-        self.filters: tuple[bool, bool] | None = None
+        self.snapshot: CoordinationSnapshot | None = None
+
+    @property
+    def channel_order(self) -> ChannelSort:
+        return self.snapshot.channel_order if self.snapshot is not None else ChannelSort.NAME
+
+    @property
+    def read_marker_notice(self) -> str | None:
+        return self.snapshot.read_marker_notice if self.snapshot is not None else None
+
+    @property
+    def filters(self) -> tuple[bool, bool] | None:
+        """The stopped/archived filters the published rows were read with."""
+        if self.snapshot is None:
+            return None
+        return self.snapshot.show_stopped, self.snapshot.show_archived
 
     @staticmethod
     def derive(snapshot: CoordinationSnapshot) -> tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]:
@@ -114,8 +130,6 @@ class SidebarModel:
               derived: tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]) -> None:
         """Publish rows derived from ``snapshot`` (on the UI thread; derivation is not)."""
         channels, threads = derived
-        self.channel_order = snapshot.channel_order
-        self.read_marker_notice = snapshot.read_marker_notice
-        self.filters = (snapshot.show_stopped, snapshot.show_archived)
+        self.snapshot = snapshot
         self.threads.replace(threads)
         self.channels.replace(channels)
