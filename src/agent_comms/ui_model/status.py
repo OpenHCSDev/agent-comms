@@ -1,31 +1,37 @@
-"""Status lines for the threads open in views, read in one pass per Core revision.
+"""Status lines for the threads open in views, from one observation per Core revision.
 
-Replaces a read per open view per coordination change: one pass reads every
-open thread's presentation off the UI thread, and the model flushes the rows
-that changed once per frame.
+Replaces a read per open view per coordination change: the observation
+service reads every open thread's presentation in its own process, and the
+model flushes the rows that changed once per frame.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.thread_presentation import ThreadPresentation
 from agent_comms.ui_model.changes import KeyedModel
+
+if TYPE_CHECKING:
+    from agent_comms.ui_model.observation import ThreadsObserved
 
 NOTIFICATION_EXCERPT = 110
 
 
 @dataclass(frozen=True)
 class ThreadStatusModel:
-    """What an open thread's status line shows."""
+    """What an open thread's status line shows, and its one-line overview."""
 
     name: str
     shown: bool
     lines: tuple[str, ...]
     working: bool
     attention: bool
+    available: bool = True
+    summary: tuple[str, ...] = ()
+    """Overview parts for a collapsed status: first summary line, latest inbound, recent count."""
 
     @classmethod
     def known(cls, name: str, presentation: ThreadPresentation | None) -> ThreadStatusModel:
@@ -43,39 +49,39 @@ class ThreadStatusModel:
             excerpts.append(f"{message.target} · {message.sender}: {excerpt} — {receipt.state}")
         if excerpts:
             lines += ["Recent incoming messages:", *excerpts]
-        return cls(name, True, tuple(lines), presentation.busy, presentation.attention)
+        summary = [presentation.summary.partition("\n")[0] or "Ready"]
+        latest = next((receipt for receipt in presentation.notifications if receipt.message is not None), None)
+        if latest is not None:
+            summary.append(f"Latest inbound {latest.message.target} from @{latest.message.sender}: {latest.state}")
+        if len(presentation.notifications) > 1:
+            summary.append(f"{len(presentation.notifications)} recent")
+        return cls(name, True, tuple(lines), presentation.busy, presentation.attention,
+                   summary=tuple(summary))
 
     @classmethod
     def unavailable(cls, name: str) -> ThreadStatusModel:
-        return cls(name, True, ("Agent status unavailable",), False, True)
+        return cls(name, True, ("Agent status unavailable",), False, True,
+                   available=False, summary=("Status unavailable",))
 
 
 class OpenThreadStatus:
     """Status rows for the threads currently open in views."""
 
-    # Core's read failures the line presents as "unavailable"; Core has no
-    # common base for them yet, so these are the families its reads raise.
-    UNAVAILABLE = (OSError, ValueError, RuntimeError)
-
     def __init__(self, schedule: Callable[[Callable[[], None]], None]):
         self.rows: KeyedModel[str, ThreadStatusModel] = KeyedModel(schedule)
 
-    def read(self, views, names: Iterable[str]) -> tuple[dict[str, ThreadStatusModel], bool]:
-        """Read each open thread's presentation (off the UI thread).
+    def observed(self, result: ThreadsObserved) -> None:
+        """Publish one observation of the open threads.
 
-        Returns the rows and whether a busy store left some rows at their
-        previous value, so the caller reads again on the next observation.
+        A thread whose store was busy keeps its previous row (or shows
+        unavailable until a first read succeeds); the service reads it again.
         """
-        rows, retry = {}, False
-        for name in names:
-            try:
-                rows[name] = ThreadStatusModel.known(name, views.thread_presentation(name))
-            except CoordinationReadUnavailable:
-                retry = True
-                rows[name] = self.rows.rows.get(name) or ThreadStatusModel.unavailable(name)
-            except self.UNAVAILABLE:
-                rows[name] = ThreadStatusModel.unavailable(name)
-        return rows, retry
-
-    def apply(self, rows: dict[str, ThreadStatusModel]) -> None:
+        rows = {name: ThreadStatusModel.known(name, presentation)
+                for name, presentation in result.presentations.items()}
+        rows.update((name, ThreadStatusModel.unavailable(name)) for name in result.unavailable)
+        rows.update((name, self.rows.rows.get(name) or ThreadStatusModel.unavailable(name))
+                    for name in result.busy)
         self.rows.replace(rows)
+
+    def clear(self) -> None:
+        self.rows.replace({})
