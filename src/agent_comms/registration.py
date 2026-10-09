@@ -221,10 +221,16 @@ class Registration:
             edit.document.archive_originals(originals)
             edit.commit()
 
-    def delete_originals(self, originals: Sequence[Thread]) -> None:
+    def begin_delete_originals(self, originals: Sequence[Thread]) -> None:
         with publication_identity_fence(self.store.path.parent, nonblocking=True), self.store.editing() as edit:
-            edit.document.delete_originals(originals)
+            edit.document.begin_delete_originals(originals)
             edit.commit()
+
+    def remove_originals(self, originals: Sequence[Thread]) -> dict[str, tuple[str, ...]]:
+        with publication_identity_fence(self.store.path.parent, nonblocking=True), self.store.editing() as edit:
+            detached = edit.document.remove_originals(originals)
+            edit.commit()
+            return detached
 
     def change_tag(self, originals: Sequence[Thread], tag: str, replacement: str | None) -> None:
         with self.store.editing() as edit:

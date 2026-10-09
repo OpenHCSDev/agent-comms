@@ -7,7 +7,7 @@ import os
 import threading
 import time
 from abc import abstractmethod
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from enum import Enum
@@ -25,20 +25,29 @@ from .store_files import (
     file_revision,
 )
 from .thread_identity import OwnerIdentity
+from .thread_owned_state import ThreadOwnedState
 from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
     from .presentation import MessageNotification
+    from .threads import Thread
 
 
 class ActivityState(Enum):
     IDLE = "idle"
     THINKING = "thinking"
     WORKING = "working"
+    # Appended once when the thread is permanently deleted. The log stays
+    # append-only; the latest-per-thread fold drops the thread on this record.
+    DELETED = "deleted"
 
     @property
     def busy(self) -> bool:
-        return self is not self.IDLE
+        return self in (self.THINKING, self.WORKING)
+
+    @property
+    def retires_thread(self) -> bool:
+        return self is self.DELETED
 
     def presentation(self, title: str, detail: str) -> ThreadPresentation:
         if not self.busy:
@@ -162,6 +171,13 @@ class Activity(ActivityData):
 
     diagnostic: DrainDiagnostic | None = field(default=None, metadata={"wire_omit_default": True})
 
+    def fold_into(self, latest: dict[str, Activity]) -> None:
+        """Apply this event to the latest-per-thread map; a deletion leaves no entry."""
+        if self.state.retires_thread:
+            latest.pop(self.thread, None)
+        else:
+            latest[self.thread] = self
+
     @classmethod
     def from_wire(cls, data: Mapping) -> Activity:
         # Historical event timestamps may be absent; they remain unknown.
@@ -211,7 +227,7 @@ class ActivityReadState:
         return cls._by_path.setdefault(os.path.abspath(path), cls())
 
 
-class ActivityLog:
+class ActivityLog(ThreadOwnedState):
     """Persists Activity events as an append-only JSONL log.
 
     The latest event per thread is its current activity; stale events
@@ -304,11 +320,12 @@ class ActivityLog:
                                 raise ValueError(f"JSONL record in {self._path} must be an object.")
                             event = Activity.from_wire(record)
                             if terminated:
-                                complete[event.thread] = event
+                                event.fold_into(complete)
                             else:
                                 # Preserve the existing reader's valid-EOF
                                 # behavior, but retry this tail on the next append.
-                                latest = {**complete, event.thread: event}
+                                latest = dict(complete)
+                                event.fold_into(latest)
                         if terminated:
                             offset = stream.tell()
             read.complete_latest, read.offset = complete, offset
@@ -323,16 +340,16 @@ class ActivityLog:
                     self.checkpoint.replace(captured)
             return read.latest
 
-    def remove_thread(self, thread: str) -> int:
-        """Remove all persisted activity for one thread."""
-        with _store_lock(self._path):
-            records = [dict(record) for record in _jsonl_records(self._path)]
-            retained = [record for record in records if record.get("thread") != thread]
-            _atomic_write_text(
-                self._path,
-                "".join(f"{json.dumps(record)}\n" for record in retained),
-            )
-        return len(records) - len(retained)
+    def remove_threads(self, threads: Sequence[Thread]) -> None:
+        """Append one deletion record per thread with current activity.
+
+        Never rewrite this append-only log: every reader then folds the
+        record incrementally instead of decoding the whole file again.
+        """
+        latest = self._latest_events()
+        for thread in threads:
+            if thread.name in latest:
+                self.emit(Activity(thread.name, ActivityState.DELETED))
 
     def rename_thread(self, old_name: str, new_name: str) -> None:
         with _store_lock(self._path):

@@ -8,7 +8,7 @@ represent that fact. Delivery cursors remain a separate executor contract.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -17,12 +17,14 @@ from .locked_store import LockedStore
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation
 from .sealed import Sealed
 from .thread_identity import ThreadIncarnation
+from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
     from .messages import Message
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadRole
+    from .threads import Thread
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,7 +35,7 @@ class ReadDocument:
     notice: str | None = None
 
 
-class ReadLedger(Sealed, LockedStore[ReadDocument]):
+class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
     filename = "read_ledger.json"
 
     @property
@@ -66,12 +68,7 @@ class ReadLedger(Sealed, LockedStore[ReadDocument]):
             {snapshot.canonical_name(name) for name in (message.sender, message.target)}
         )
         return Conversation(
-            participants=tuple(
-                ThreadIncarnation(
-                    name, snapshot.threads[name].created_at if name in snapshot.threads else -1.0
-                )
-                for name in names
-            )
+            participants=tuple(snapshot.participant(name).incarnation for name in names)
         )
 
     @staticmethod
@@ -175,6 +172,35 @@ class ReadLedger(Sealed, LockedStore[ReadDocument]):
             ):
                 return (thread.incarnation,)
         return ()
+
+    def remove_threads(self, threads: Sequence[Thread]) -> None:
+        """Drop a deleted viewer's reads and every read of its deleted transcript.
+
+        Other viewers' reads of conversations with the deleted thread remain:
+        those messages stay on the bus.
+        """
+        viewers = {thread.incarnation for thread in threads}
+        viewer_names = {thread.name for thread in threads}
+        sources = {
+            str(Path(thread.session_file).resolve()) for thread in threads if thread.session_file
+        }
+
+        def retained_message(key: str) -> bool:
+            name, created, _ = json.loads(key)
+            return ThreadIncarnation(name, created) not in viewers
+
+        def retained_transcript(key: str) -> bool:
+            name, source, _ = json.loads(key)
+            return source not in sources and name not in viewer_names
+
+        def remove(document: ReadDocument) -> ReadDocument:
+            messages = {k: v for k, v in document.messages.items() if retained_message(k)}
+            transcripts = {k: v for k, v in document.transcripts.items() if retained_transcript(k)}
+            if messages == document.messages and transcripts == document.transcripts:
+                return document
+            return replace(document, messages=messages, transcripts=transcripts)
+
+        self.update(remove)
 
     @staticmethod
     def _transcript_key(viewer: str, source: str, inode: int) -> str:

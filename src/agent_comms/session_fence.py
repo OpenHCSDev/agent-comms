@@ -9,10 +9,7 @@ from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 
-
-def _lock_path(session_file: str) -> Path:
-    session = Path(session_file).resolve()
-    return session.with_name(f".{session.name}.agent-comms-writer.lock")
+from .native_session_files import NativeSessionFiles
 
 
 def _try_lock(fd: int) -> None:
@@ -68,7 +65,7 @@ def idle_session_writer_fence(session_file: str) -> Iterator[int]:
     """
     if os.name != "posix":
         raise NotImplementedError("Inherited idle-session authority requires POSIX")
-    fd = _open_lock(_lock_path(session_file))
+    fd = _open_lock(NativeSessionFiles.of(session_file).writer_lock)
     try:
         try:
             _try_lock(fd)
@@ -89,7 +86,7 @@ async def session_writer_fence(session_file: str | None) -> AsyncIterator[None]:
     if session_file is None:
         yield
         return
-    path = _lock_path(session_file)
+    path = NativeSessionFiles.of(session_file).writer_lock
     fd = _open_lock(path)
     locked = False
     try:

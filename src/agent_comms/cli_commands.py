@@ -44,7 +44,7 @@ from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersio
 from .working_memory_questions import SpanAnswer
 from .messages import MessageType
 from .message_reference import MessageReference
-from .thread_management import ForkSpec
+from .thread_management import ForkSpec, ThreadDeleted
 from .thread_execution import ThreadExecution, ExternalThreadExecution
 from .owner_lifecycle import OwnerStartResult
 from .channel_management import TagDisposition, KeepThreadsTagDisposition, TagChangeResult
@@ -1183,6 +1183,15 @@ class ArchiveCliCommand(CliCommand):
     def apply(self, ctx: Comms) -> ThreadArchivedResult:
         ctx.threads.archive(self.name)
         return ThreadArchivedResult(self.name)
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeleteCliCommand(CliCommand, declared_name="delete"):
+    help = "Permanently delete a stopped or archived thread; its bus history stays"
+    name: str = option("--name")
+
+    def apply(self, ctx: Comms) -> ThreadDeleted:
+        return ctx.threads.delete(self.name)
 
 
 

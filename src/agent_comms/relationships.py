@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from threading import RLock
@@ -28,6 +29,7 @@ from .presentation import ThreadView
 from .registry_document import RegistrySnapshot
 from .store_files import _store_lock, file_revision
 from .thread_identity import ThreadIncarnation
+from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -352,7 +354,7 @@ class RemoveRelationshipEdit(RelationshipEdit):
         )
 
 
-class RelationshipStore(LockedStore[RelationshipDocument]):
+class RelationshipStore(ThreadOwnedState, LockedStore[RelationshipDocument]):
     """One current durable typed schema; retired formats are rejected."""
 
     filename = "relationships.json"
@@ -365,6 +367,22 @@ class RelationshipStore(LockedStore[RelationshipDocument]):
 
     def empty(self) -> RelationshipDocument:
         return RelationshipDocument()
+
+    def remove_threads(self, threads: Sequence[Thread]) -> None:
+        """A collaboration or order ends with either deleted incarnation."""
+        deleted = {thread.incarnation for thread in threads}
+
+        def remove(document: RelationshipDocument) -> RelationshipDocument:
+            collaborations = tuple(
+                edge for edge in document.collaborations
+                if not {edge.owner_incarnation, edge.peer_incarnation} & deleted
+            )
+            orders = tuple(order for order in document.orders if order.incarnation not in deleted)
+            if (collaborations, orders) == (document.collaborations, document.orders):
+                return document
+            return replace(document, collaborations=collaborations, orders=orders)
+
+        self.update(remove)
 
 
 class ThreadRelationships:
