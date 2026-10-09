@@ -686,6 +686,20 @@ class SendCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
+class UserSendCliCommand(CliCommand, declared_name="user-send"):
+    help = "Send as the human user to a thread (DM), #channel, or #all"
+    target: str = option("--to")
+    body: str = option("--body")
+    worktree: str = option("--worktree", default_factory=os.getcwd)
+
+    def apply(self, ctx: Comms) -> Any:
+        from .field_codec import FieldCodec
+
+        message = ctx.messaging.send_user_message(self.target, self.body, worktree=self.worktree)
+        return {"sent": FieldCodec.encode(message.reference)}
+
+
+@dataclass(frozen=True, kw_only=True)
 class PinConstraintCliCommand(CliCommand, declared_name="pin-constraint"):
     help = "Pin a certified original human message for its recipient"
     thread: str = option("thread")
