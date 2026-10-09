@@ -10,7 +10,7 @@ from agent_comms import backend
 from agent_comms.child_process import AttachedChild, BoundedRun
 from agent_comms.comms import Comms
 from agent_comms.config_options import ModelConfigOption, ThinkingLevelConfigOption
-from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
 from agent_comms.pi_commands import SetModel, SetThinkingLevel
 from agent_comms.pi_events import Response
 from agent_comms.pi_rpc import PiRpcChannel
@@ -211,9 +211,8 @@ async def test_actual_catalog_auth_refresh_preserves_selection_and_reaps_childre
     assert len(children) == 2
     auth = native.config / "auth.json"
     auth.write_text("{}\n")
-    unavailable = await model_catalog.describe(thread)
-    assert unavailable.current_value == "response-local/fixture"
-    assert "response-local/fixture" in {choice.value for choice in unavailable.options}
+    with pytest.raises(NativePiUnavailable, match="Configured model .* is absent from its native catalog"):
+        await model_catalog.describe(thread)
     assert len(children) == 3
     assert owner._comms.registry.require(session.session_id).model == "response-local/fixture"
     # Restore this fixture's credential and add another local model. Discovery
