@@ -67,8 +67,9 @@ def test_one_thread_entry_decodes_only_that_thread_and_matches_the_document(tmp_
         assert RegistryDocument.entry_from_wire(raw, name) == document.entry(name)
     # Another process's write leaves this process without a decoded revision.
     registration.store.cache.entry = None
-    assert registration.entry("owner") == document.entry("renamed")
-    assert registration.entry("owner").thread.name == "renamed"
+    read = registration.entry("owner")
+    assert read.entry == document.entry("renamed") and read.entry.thread.name == "renamed"
+    assert read.revision == registration.store.revision_unlocked()
     # Another thread's malformed declaration is not this thread's entry.
     raw["threads"]["other"]["created_at"] = "not a time"
     assert RegistryDocument.entry_from_wire(raw, "renamed") == document.entry("renamed")
