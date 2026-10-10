@@ -35,6 +35,13 @@ class StaleRevision(CoordinationError):  # noqa: N818 - nominal outcome name
     """The supplied CAS revision is not the authoritative revision."""
 
 
+class TranscriptChanged(StaleRevision):  # noqa: N818 - nominal outcome name
+    """A transcript page cursor no longer matches its thread's session file."""
+
+    def __init__(self) -> None:
+        super().__init__("Transcript changed; reload the latest page.")
+
+
 class StaleFence(CoordinationError):  # noqa: N818 - nominal outcome name
     """The owner, generation, pointer, token or attempt is no longer current."""
 

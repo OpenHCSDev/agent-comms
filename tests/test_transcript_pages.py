@@ -1,3 +1,4 @@
+from agent_comms.coordination_errors import TranscriptChanged
 import json
 from dataclasses import replace
 
@@ -66,11 +67,11 @@ def test_oversized_message_and_file_identity(tmp_path):
     assert page.events[0].text == text
     assert not page.has_older
     comms.registry.declare(replace(thread, session_file=str(tmp_path / "other.jsonl")))
-    with pytest.raises(ValueError, match="changed"):
+    with pytest.raises(TranscriptChanged):
         comms.transcripts.thread_transcript_page("worker", before=page.before)
     with pytest.raises(ValueError):
         comms.transcripts.thread_transcript_page("worker", max_messages=0)
-    with pytest.raises(ValueError):
+    with pytest.raises(TranscriptChanged):
         comms.transcripts.thread_transcript_page("worker", before=TranscriptCursor(str(path), -1))
 
 
@@ -140,7 +141,7 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
     assert comms.transcripts.thread_transcript_page("child").after.session_file == str(own_path)
     unrelated = tmp_path / "unrelated.jsonl"
     transcript(unrelated, 1)
-    with pytest.raises(ValueError, match="changed"):
+    with pytest.raises(TranscriptChanged):
         comms.transcripts.thread_transcript_page(
             "child", through=TranscriptCursor(str(unrelated), unrelated.stat().st_size)
         )
