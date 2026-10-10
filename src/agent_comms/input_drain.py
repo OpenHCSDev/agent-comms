@@ -43,7 +43,7 @@ from .runtime import UNBOUND_CONTROLLER, RuntimeServer
 from .schedule_rules import WakeScheduleCheck
 from .selected_summary_admission import SelectedSummaryAdmission
 from .session_lifecycle import SessionLifecycle
-from .store_files import _async_store_lock, _store_lock
+from .store_files import _async_store_lock, _store_lock, file_revision
 from .thread_identity import AdmissionIdentity
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
@@ -208,10 +208,61 @@ class InputDrain(FutureInputQueue):
 
         self.drain_tasks[session_id] = self.runtime.background(self.observe(session_id))
 
+    def _tick_revision(self, session_id: str) -> tuple:
+        """Stat revisions of every store an observation tick reads, plus its inputs.
+
+        The stores are compared by their existing file revisions only; nothing
+        is decoded. The view revision covers registry, bus log, activity and goal
+        waits; the drain additionally reads the private marker and checkpoint,
+        the sealed cohort store, the owner guard, goal attempts and credentials.
+        """
+        root = self.comms.root
+        stores = (
+            self.comms.bus.log.metadata_path,
+            root / "private_bus_checkpoint.sqlite3",
+            root / "coordination.sqlite3",
+            root / "coordination.sqlite3-wal",
+            self.comms.registry.store.path.parent / ".registry-owner-guard",
+            root / "goal-private" / "goal_attempts.sqlite3",
+            root / "goal-private" / "goal_attempts.sqlite3-wal",
+        )
+        return (
+            replace(self.comms.views.revision(), expiry_tick=0),
+            tuple(file_revision(path) for path in stores),
+            self.sessions.config.configuration.auth_revision(),
+            self.sessions.bindings.get(session_id),
+            self.auto_wake,
+            self.sessions.runtime_enabled,
+            self.effects._private_nk_native_package,
+        )
+
+    def _quiescent(self, session_id: str) -> bool:
+        """No process-local work or retry is waiting on the next tick."""
+        wake = self.wake_tasks.get(session_id)
+        return (
+            session_id in self._idle_private_revisions
+            and not self.effects.cursors.delivery(session_id).needs_refresh
+            and not self.pending_turns.get(session_id)
+            and session_id not in self.effects.turns.turn_tasks
+            and session_id not in self.backend_inboxes
+            and (wake is None or wake.done())
+        )
+
     async def observe(self, session_id: str) -> None:
         next_goal_wait_check = 0.0
+        settled: tuple | None = None
         async with aclosing(WireWatch.observations(self.comms.root)) as observations:
             async for _ in observations:
+                # A tick whose stores and inputs are unchanged since a settled
+                # tick has nothing new to observe; any change runs it in full.
+                revision = await Coordination.run_worker(partial(self._tick_revision, session_id))
+                if (
+                    revision == settled
+                    and time.monotonic() < next_goal_wait_check
+                    and self._quiescent(session_id)
+                ):
+                    continue
+                settled = None
                 thread = self.sessions.require(session_id)
                 snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
                 owner = snapshot.owner_identity(thread)
@@ -259,6 +310,8 @@ class InputDrain(FutureInputQueue):
                         await Coordination.run_worker(partial(
                             self.comms.agents.set_drain_diagnostic, thread, owner, None,
                         ))
+                        if not current.executing and self._quiescent(session_id):
+                            settled = revision
 
     async def drain_inbox(self, session_id: str) -> int:
         """Push undelivered messages to the client; returns count pushed."""

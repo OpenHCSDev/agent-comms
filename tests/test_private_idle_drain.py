@@ -251,6 +251,64 @@ async def test_settled_empty_cursor_is_not_rescanned_while_nothing_changes(
 
 
 @pytest.mark.asyncio
+async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkeypatch):
+    from agent_comms import input_drain
+
+    comms, agent, _root_id = _session(tmp_path)
+    ticks, done = asyncio.Queue(), asyncio.Queue()
+
+    async def observations(_root, *_args, **_kwargs):
+        while True:
+            await ticks.get()
+            yield None
+            done.put_nowait(None)
+
+    async def tick():
+        ticks.put_nowait(None)
+        await asyncio.wait_for(done.get(), timeout=10)
+
+    drains, syncs = [], []
+    drain = agent.inputs.drain_inbox
+
+    async def counted(session_id):
+        drains.append(session_id)
+        return await drain(session_id)
+
+    async def no_catalog(session_id):
+        syncs.append(session_id)
+
+    monkeypatch.setattr(input_drain.WireWatch, "observations", staticmethod(observations))
+    monkeypatch.setattr(agent.inputs, "drain_inbox", counted)
+    monkeypatch.setattr(agent.sessions.config, "sync_thread", no_catalog)
+    observer = asyncio.create_task(agent.inputs.observe("beta"))
+    try:
+        for _ in range(3):
+            await tick()
+        settled = len(drains)
+        assert settled <= 3
+        for _ in range(20):
+            await tick()
+        assert len(drains) == settled, "an unchanged tick re-read the stores"
+        assert len(syncs) == settled
+        # Any store change runs the full observation again.
+        owner = comms.registry.require("beta")
+        comms.registry.register(replace(owner, task="changed task"))
+        await tick()
+        assert len(drains) == settled + 1
+        # Process-local work waiting on the next tick is never skipped.
+        for _ in range(2):
+            await tick()
+        before = len(drains)
+        agent.inputs.pending_turns["beta"] = [object()]
+        await tick()
+        assert len(drains) == before + 1
+    finally:
+        agent.inputs.pending_turns.pop("beta", None)
+        observer.cancel()
+        await asyncio.gather(observer, return_exceptions=True)
+
+
+@pytest.mark.asyncio
 async def test_runtime_configuration_invalidates_idle_observation(tmp_path, monkeypatch):
     _comms, agent, _root_id = _session(tmp_path)
     calls = []
