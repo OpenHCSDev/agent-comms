@@ -93,50 +93,43 @@ class RegistryDocument(RegistryPresence):
             admission_generations=dict(self.admissions.generations),
         )
 
-    def entries(self, names: Iterable[str]) -> dict[str, RegistryEntry]:
-        """The named threads' entries, by the requested name; unregistered names are absent."""
-        found = {}
-        for name in names:
-            canonical = self.canonical_name(name)
-            if canonical in self.threads:
-                found[name] = RegistryEntry(
-                    thread=self.threads[canonical],
-                    status=self.statuses[canonical],
-                    last_seen=self.last_seen[canonical],
-                    owner_generation=self.owners.generations[canonical],
-                    admission_generation=self.admissions.generations[canonical],
-                )
-        return found
+    def entry(self, name: str) -> RegistryEntry:
+        thread = self.require(name)
+        return RegistryEntry(
+            thread=thread,
+            status=self.statuses[thread.name],
+            last_seen=self.last_seen[thread.name],
+            owner_generation=self.owners.generations[thread.name],
+            admission_generation=self.admissions.generations[thread.name],
+        )
 
     @classmethod
-    def entries_from_wire(cls, raw: dict, names: Iterable[str]) -> dict[str, RegistryEntry]:
-        """Decode the named threads' entries without decoding the other declarations.
+    def entry_from_wire(cls, raw: dict, name: str) -> RegistryEntry:
+        """Decode one thread's entry without decoding the other declarations.
 
-        Only these threads' rows go through the document decoder; another
+        Only this thread's rows go through the document decoder; another
         thread's declaration is neither decoded nor validated here.
         """
-        names = tuple(names)
         try:
-            aliases = {name: raw["aliases"][name] for name in names if name in raw["aliases"]}
-            wanted = {aliases.get(name, name) for name in names} & raw["threads"].keys()
+            canonical = raw["aliases"].get(name, name)
 
-            def rows(table: dict) -> dict:
-                return {name: table[name] for name in wanted if name in table}
+            def own(rows: dict) -> dict:
+                return {canonical: rows[canonical]} if canonical in raw["threads"] else {}
 
             def counter(raw_counter: dict) -> dict:
-                return {**raw_counter, "generations": rows(raw_counter["generations"])}
+                return {**raw_counter, "generations": own(raw_counter["generations"])}
 
             restricted = {
-                "threads": rows(raw["threads"]),
-                "statuses": rows(raw["statuses"]),
-                "last_seen": rows(raw["last_seen"]),
-                "aliases": {alias: target for alias, target in aliases.items() if target in wanted},
+                "threads": own(raw["threads"]),
+                "statuses": own(raw["statuses"]),
+                "last_seen": own(raw["last_seen"]),
+                "aliases": {name: canonical} if name != canonical else {},
                 "owners": counter(raw["owners"]),
                 "admissions": counter(raw["admissions"]),
             }
         except (AttributeError, KeyError, TypeError) as error:
             raise RelationViolationError(f"Invalid registry document: {error!r}") from error
-        return cls.from_wire(restricted).entries(names)
+        return cls.from_wire(restricted).entry(name)
 
     @classmethod
     def from_wire(cls, raw: dict) -> RegistryDocument:

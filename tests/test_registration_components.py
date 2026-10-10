@@ -56,28 +56,26 @@ def test_store_owns_document_and_failed_edit_cannot_leak_into_cache(tmp_path):
     assert not {"_threads", "_owners", "_admissions", "_statuses"} & vars(registration).keys()
 
 
-def test_named_entries_decode_only_those_threads_and_match_the_document(tmp_path):
+def test_one_thread_entry_decodes_only_that_thread_and_matches_the_document(tmp_path):
     registration = Registration(tmp_path / "registry.json")
     registration.register(owner(tmp_path))
     registration.register(replace(owner(tmp_path), name="other", created_at=11.0))
-    registration.register(replace(owner(tmp_path), name="third", created_at=12.0))
     registration.rename("owner", "renamed")
     document = registration.store.read()
     raw = json.loads(registration.store.path.read_text())
-    names = ("owner", "renamed", "other", "missing")
-    assert RegistryDocument.entries_from_wire(raw, names) == document.entries(names)
-    assert set(document.entries(names)) == {"owner", "renamed", "other"}
+    for name in ("renamed", "owner", "other"):
+        assert RegistryDocument.entry_from_wire(raw, name) == document.entry(name)
     # Another process's write leaves this process without a decoded revision.
     registration.store.cache.entry = None
-    assert registration.entry("owner") == document.entries(("renamed",))["renamed"]
+    assert registration.entry("owner") == document.entry("renamed")
     assert registration.entry("owner").thread.name == "renamed"
-    with pytest.raises(UnregisteredThreadError):
-        registration.entry("missing")
-    # Another thread's malformed declaration is not these threads' entries.
-    raw["threads"]["third"]["created_at"] = "not a time"
-    assert RegistryDocument.entries_from_wire(raw, names) == document.entries(names)
+    # Another thread's malformed declaration is not this thread's entry.
+    raw["threads"]["other"]["created_at"] = "not a time"
+    assert RegistryDocument.entry_from_wire(raw, "renamed") == document.entry("renamed")
     with pytest.raises(RelationViolationError):
-        RegistryDocument.entries_from_wire(raw, ("third",))
+        RegistryDocument.entry_from_wire(raw, "other")
+    with pytest.raises(UnregisteredThreadError):
+        RegistryDocument.entry_from_wire(raw, "missing")
 
 
 def test_registry_update_persists_across_reopen(tmp_path):

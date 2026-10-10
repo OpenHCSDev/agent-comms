@@ -331,23 +331,35 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         comms.registry.register(replace(owner, task="changed task"))
         await tick()
         assert len(drains) == settled + 1
-        # A goal waiting on another thread projects that thread's turn, so its
-        # entry concerns this owner: once settled with it, its change is observed.
+        # No activity append changes a settled tick: only this owner's tick
+        # writes its drain diagnostic and every other write carries it forward.
+        from agent_comms.activity import ActivityState
+
+        comms.agents.set_activity("sender", ActivityState.WORKING, "other owner's turn")
+        await tick()
+        comms.agents.set_activity("sender", ActivityState.IDLE, "")
+        await tick()
+        comms.agents.set_activity("beta", ActivityState.WORKING, "written elsewhere")
+        await tick()
+        assert len(drains) == settled + 1, "an activity append ran the tick"
+        # A standby's wait graph reads other threads' entries: any registry
+        # change runs its tick, including closed-group recovery. Nothing on a
+        # clock does.
         from agent_comms.goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget
 
+        recovered = []
+        monkeypatch.setattr(comms.goals, "recover_closed_goal_wait", recovered.append)
         sender = comms.registry.require("sender")
         agent.inputs.effects.turns.goals.goal_execution_signatures["beta"] = (None, GoalExecution(
             GoalExecutionState.STANDBY, "goal", (GoalWaitTarget("sender", sender.created_at),),
         ))
         comms.registry.declare(Thread("unrelated", frozenset(), str(tmp_path)))
         await tick()
-        assert len(drains) == settled + 2
-        comms.registry.register(replace(comms.registry.require("unrelated"), task="again"))
-        await tick()
-        assert len(drains) == settled + 2
-        comms.registry.register(replace(sender, task="the waited-on thread changed"))
-        await tick()
-        assert len(drains) == settled + 3
+        assert len(drains) == settled + 2 and recovered == ["beta"]
+        for _ in range(3):
+            await tick()
+        assert len(drains) == settled + 2 and recovered == ["beta"]
+        agent.inputs.effects.turns.goals.goal_execution_signatures.pop("beta")
         # Process-local work waiting on the next tick is never skipped.
         for _ in range(2):
             await tick()

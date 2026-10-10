@@ -5,11 +5,9 @@ from __future__ import annotations
 import asyncio
 import os
 import sqlite3
-import time
 from dataclasses import dataclass, replace
 from contextlib import aclosing
 from functools import partial
-from collections.abc import Mapping
 from typing import Any
 
 from acp import RequestError
@@ -50,11 +48,12 @@ from .thread_identity import AdmissionIdentity
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
 from .wire_watch import WireWatch
+from .goal_presentation import GoalExecutionState
+from .goal_waits import GoalWaits
 from .errors import RelationViolationError, UnregisteredThreadError
 from .turn_context import TurnContext, UserFollowupSegment
 
 AGENT_PREFIX = "!agent "
-GOAL_WAIT_RECHECK_INTERVAL = 60.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,8 +62,8 @@ class TickRevision:
 
     Every owner's entry lives in the one registry file and every owner's rows
     in the one coordination store, so their revisions change when any owner's
-    part does. This owner's registry entry, and its private observation for
-    the coordination store, say whether its own part did.
+    part does. This owner's registry entry and its private observation of the
+    coordination store say whether its own part did.
     """
 
     registry: tuple
@@ -74,10 +73,10 @@ class TickRevision:
 
 @dataclass(frozen=True, slots=True)
 class SettledTick:
-    """The revision a settled tick started from, and the registry entries it read then."""
+    """The revision a settled tick started from, and this owner's registry entry then."""
 
     revision: TickRevision
-    entries: Mapping[str, RegistryEntry]
+    entry: RegistryEntry
 
 
 class InputDrain:
@@ -235,31 +234,32 @@ class InputDrain:
         """Stat revisions of every store an observation tick reads, plus its inputs.
 
         The stores are compared by their existing file revisions only; nothing
-        is decoded. The view stores cover registry, bus log, activity and goal
-        waits; the drain additionally reads the private marker and checkpoint,
-        the sealed cohort store, the owner guard, goal attempts and credentials.
+        is decoded. A tick reads the registry, the bus log and its private
+        marker and checkpoint, the coordination store, goal waits and goal
+        attempts, and credentials. It reads no channel catalog, bus history,
+        runtime info or read markers: those serve views. Its only activity read
+        is its own drain diagnostic, which only this owner's tick writes
+        (set_drain_diagnostic is fenced to this owner; every other activity
+        write carries the current diagnostic forward), so no activity append
+        changes what a settled tick would do.
         """
         root = self.comms.root
         registry = self.comms.registry.store.path
-        registry = (registry, registry.parent / ".registry-owner-guard")
-        coordination = (root / "coordination.sqlite3", root / "coordination.sqlite3-wal")
-        stores = (
-            *(
-                path
-                for paths in self.comms.views.revision_paths().values()
-                for path in (paths if isinstance(paths, tuple) else (paths,))
-                if path not in registry + coordination
-            ),
-            self.comms.bus.log.metadata_path,
-            root / "private_bus_checkpoint.sqlite3",
-            root / "goal-private" / "goal_attempts.sqlite3",
-            root / "goal-private" / "goal_attempts.sqlite3-wal",
-        )
         return TickRevision(
-            registry=tuple(file_revision(path) for path in registry),
-            coordination=tuple(file_revision(path) for path in coordination),
+            registry=(file_revision(registry), file_revision(registry.parent / ".registry-owner-guard")),
+            coordination=(
+                file_revision(root / "coordination.sqlite3"),
+                file_revision(root / "coordination.sqlite3-wal"),
+            ),
             other=(
-                tuple(file_revision(path) for path in stores),
+                tuple(file_revision(path) for path in (
+                    self.comms.bus.log.path,
+                    self.comms.bus.log.metadata_path,
+                    root / "private_bus_checkpoint.sqlite3",
+                    root / GoalWaits.filename,
+                    root / "goal-private" / "goal_attempts.sqlite3",
+                    root / "goal-private" / "goal_attempts.sqlite3-wal",
+                )),
                 self.sessions.config.configuration.auth_revision(),
                 self.sessions.bindings.get(session_id),
                 self.auto_wake,
@@ -268,17 +268,21 @@ class InputDrain:
             ),
         )
 
-    def _registry_names(self, session_id: str) -> tuple[str, ...]:
-        """The threads whose registry entries a tick reads: this owner and those its goal waits on.
+    def _in_standby(self, session_id: str) -> bool:
+        """The published goal execution waits on other threads.
 
-        The published goal execution projects each wait target's turn, so a
-        target's entry concerns this owner; no other thread's entry does.
+        A standby projects its targets' turns and its closed-group recovery
+        walks the whole wait graph, so other threads' entries concern it.
         """
         _goal, execution = self.effects.turns.goals.goal_execution_signatures.get(
             session_id, (None, None),
         )
-        waits = execution.wait_for if execution is not None else ()
-        return (self.sessions.require(session_id), *(target.name for target in waits))
+        return execution is not None and execution.state is GoalExecutionState.STANDBY
+
+    async def _own_entry(self, session_id: str) -> RegistryEntry:
+        return await Coordination.run_worker(partial(
+            self.comms.registry.entry, self.sessions.require(session_id),
+        ))
 
     def _quiescent(self, session_id: str) -> bool:
         """No process-local work or retry is waiting on the next tick."""
@@ -293,51 +297,51 @@ class InputDrain:
         )
 
     async def observe(self, session_id: str) -> None:
-        next_goal_wait_check = 0.0
         settled: SettledTick | None = None
         async with aclosing(WireWatch.observations(self.comms.root)) as observations:
             async for _ in observations:
                 # A tick whose stores and inputs are unchanged since a settled
                 # tick has nothing new to observe; any change runs it in full.
                 # Another owner's registry or coordination change is not this
-                # owner's: the registry entries it reads and its own coordination
-                # observation are what it last settled.
+                # owner's: its own entry and private observation are what it
+                # last settled.
                 revision = await Coordination.run_worker(partial(self._tick_revision, session_id))
                 idle = (
                     settled is not None
                     and revision.other == settled.revision.other
-                    and time.monotonic() < next_goal_wait_check
                     and self._quiescent(session_id)
                 )
-                entries = settled.entries if idle else None
-                if idle and revision.registry != settled.revision.registry:
-                    entries = await Coordination.run_worker(partial(
-                        self.comms.registry.entries, self._registry_names(session_id),
-                    ))
-                    idle = entries == settled.entries
+                # The settled entry is still current only while the registry is unchanged.
+                entry = settled.entry if idle else None
+                entry_current = idle and revision.registry == settled.revision.registry
+                if idle and not entry_current:
+                    # A standby's wait graph reads other threads' entries.
+                    idle = not self._in_standby(session_id)
+                    if idle:
+                        entry, entry_current = await self._own_entry(session_id), True
+                        idle = entry == settled.entry
                 if idle and revision.coordination == settled.revision.coordination:
-                    settled = SettledTick(revision, entries)
+                    settled = SettledTick(revision, entry)
                     continue
                 settled = None
                 thread = self.sessions.require(session_id)
-                if entries is None:
-                    # Read after the revision: the tick observes at least these entries.
-                    entries = await Coordination.run_worker(partial(
-                        self.comms.registry.entries, self._registry_names(session_id),
-                    ))
-                owner = entries[thread].owner_identity
+                if not entry_current:
+                    # Read after the revision: the tick observes at least this entry.
+                    entry = await self._own_entry(session_id)
+                owner = entry.owner_identity
                 try:
                     # Only the coordination store changed; this owner's rows decide.
                     if idle and await self._own_observation_unchanged(session_id):
-                        settled = SettledTick(revision, entries)
+                        settled = SettledTick(revision, entry)
                         continue
                     await self.drain_inbox(session_id)
                     await self.sessions.config.sync_thread(session_id)
-                    if time.monotonic() >= next_goal_wait_check:
+                    if self._in_standby(session_id):
+                        # Recovery reads only stores in the revision, so it runs
+                        # when one of them changed, not on a clock.
                         await Coordination.run_worker(partial(
                             self.comms.goals.recover_closed_goal_wait, session_id,
                         ))
-                        next_goal_wait_check = time.monotonic() + GOAL_WAIT_RECHECK_INTERVAL
                     await self.effects.turns.goals.schedule_goal(session_id)
                 except asyncio.CancelledError:
                     raise
@@ -375,7 +379,7 @@ class InputDrain:
                             self.comms.agents.set_drain_diagnostic, thread, owner, None,
                         ))
                         if not current.executing and self._quiescent(session_id):
-                            settled = SettledTick(revision, entries)
+                            settled = SettledTick(revision, entry)
 
     async def drain_inbox(self, session_id: str) -> int:
         """Push undelivered messages to the client; returns count pushed."""
