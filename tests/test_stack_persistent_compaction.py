@@ -1,4 +1,4 @@
-"""Real retained Pi processes must reload the branch after manual compaction."""
+"""A manual /compact runs Pi's own engine in the retained child, which keeps serving."""
 
 from agent_comms.queued_input import InitialInput
 import asyncio
@@ -20,12 +20,12 @@ from agent_comms.acp_extension import (
     CompactionCommittedUpdate,
     CompactRequest,
     TranscriptChangedUpdate,
-    TurnSettledUpdate,
     decode_updates,
     encode_request,
 )
-from agent_comms.agent_events import ManualCompactionEnd
+from agent_comms.agent_events import CompactionEnd
 from agent_comms.comms import wire
+from agent_comms.pi_vocabulary import ManualCompactionReason
 from agent_comms.runtime import socket_path
 from delivery_owner_fixture import canonical_agent
 
@@ -95,7 +95,7 @@ def _history(session: Path, project: Path) -> None:
     session.chmod(0o600)
 
 
-async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
+async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
     native = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native:
         pytest.skip("Requires prepared native Pi stack")
@@ -194,6 +194,8 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             "NODE_OPTIONS": "",
             "AGENT_COMMS_ROOT": str(root / "wire"),
             "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
+            # Core's task brief: Pi adds it to every compaction's instructions.
+            "PI_TASK": "TASK_BRIEF_SENTINEL keep the experiment ledger",
         }.items():
             monkeypatch.setenv(key, value)
         project = root / "worker"
@@ -244,7 +246,7 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
         compact_task = None
         try:
             await owner.new_session(str(project))
-            comms.threads.attach_session("worker", str(session))
+            comms.threads.attach_session(comms.registry.require("worker"), str(session))
             await asyncio.wait_for(InitialInput.run(owner.inputs, "worker", "worker", "WARMUP"), 20)
             retained = owner.turns.persistent_backends["worker"].custody.idle().child.proc
             assert retained is not None and retained.returncode is None, json.dumps(
@@ -271,11 +273,12 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             if not entered and compact_task.done():
                 pytest.fail(f"Native compaction did not request summary: {compact_task.result()}")
             assert entered, "Native compaction did not reach localhost summary"
-            # The selected retained owner supplies summary before the commit replaces it.
+            # Pi's engine runs in the retained child; nothing is written until it places the summary.
             assert retained.returncode is None
             assert owner.turns.persistent_backends["worker"].custody.idle().child.proc is retained
             assert session.read_bytes() == before
             assert "LEGACY_DISCARDED_HISTORY" in json.dumps(requests[2]["messages"])
+            assert "TASK_BRIEF_SENTINEL" in json.dumps(requests[2]["messages"])
             release_summary.set()
             result = await asyncio.wait_for(compact_task, 20)
             assert result.stop_reason == "end_turn"
@@ -288,14 +291,10 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
             async with asyncio.timeout(10):
                 while True:
                     facts = attached_facts
-                    if (
-                        any(isinstance(fact, TurnSettledUpdate) for fact in facts)
-                        and any(isinstance(fact, TranscriptChangedUpdate) for fact in facts)
-                        and any(
-                            isinstance(fact, CompactionChangedUpdate)
-                            and isinstance(fact.event, ManualCompactionEnd)
-                            for fact in facts
-                        )
+                    if any(isinstance(fact, TranscriptChangedUpdate) for fact in facts) and any(
+                        isinstance(fact, CompactionChangedUpdate)
+                        and isinstance(fact.event, CompactionEnd)
+                        for fact in facts
                     ):
                         break
                     await asyncio.sleep(0.01)
@@ -303,30 +302,26 @@ async def test_native_retained_child_reloads_manual_compaction(monkeypatch):
                 fact.event
                 for fact in facts
                 if isinstance(fact, CompactionChangedUpdate)
-                and isinstance(fact.event, ManualCompactionEnd)
+                and isinstance(fact.event, CompactionEnd)
             ]
             assert len(terminal) == 1 and not terminal[0].aborted
+            assert terminal[0].reason is ManualCompactionReason
             assert terminal[0].summary == committed[0].summary
-            assert any(isinstance(fact, TranscriptChangedUpdate) for fact in facts)
             assert not attachment.turns.persistent_backends
-            assert retained.returncode is not None
-            assert not owner.turns.persistent_backends["worker"].available
+            # The child that compacted stays retained and current; nothing reopens it.
+            assert retained.returncode is None
+            assert owner.turns.persistent_backends["worker"].available
+            assert owner.turns.persistent_backends["worker"].custody.idle().child.proc is retained
             rows = [json.loads(line) for line in session.read_text().splitlines()]
             compactions = [row for row in rows if row.get("type") == "compaction"]
             assert len(compactions) == 1
             assert summary in compactions[0]["summary"]
-            from agent_comms.compaction_journal import CompactionJournal
-
-            assert (
-                CompactionJournal(comms.root / "compaction-commits.sqlite3").operations.get(committed[0].commit_id)
-                .state.committed
-            )
+            assert compactions[0]["firstKeptEntryId"] == committed[0].first_kept
             await asyncio.wait_for(
                 InitialInput.run(owner.inputs, "worker", "worker", "AFTER_COMPACT"), 20
             )
             resumed = owner.turns.persistent_backends["worker"].custody.idle().child.proc
-            assert resumed is not None and resumed.returncode is None
-            assert resumed.pid != retained.pid
+            assert resumed is retained and resumed.returncode is None
             assert len(requests) == 4
             context = json.dumps(requests[-1]["messages"])
             assert "COMPACTED_HISTORY_SENTINEL" in context

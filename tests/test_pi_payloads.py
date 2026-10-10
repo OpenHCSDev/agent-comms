@@ -28,10 +28,7 @@ def decode(record):
     return PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
 
 
-@pytest.mark.parametrize("command", [
-    "switch_session", "agent_comms_summarize_compaction", "agent_comms_compaction_settings",
-    "agent_comms_prepare_compaction", "agent_comms_restore_compaction",
-])
+@pytest.mark.parametrize("command", ["switch_session"])
 def test_selected_command_decodes_original_native_error_envelope(command):
     # Exact error(id, command, message) shape from the committed native RPC owner.
     event = decode({"id": "original", "type": "response", "command": command,
@@ -43,27 +40,12 @@ def test_selected_command_decodes_original_native_error_envelope(command):
         "success": False, "error": "Selected preparation source changed"}
 
 
-def test_selected_rejection_keeps_native_reason_without_payload_authority():
-    from agent_comms.pi_commands import SwitchSession
-
-    request = SwitchSession(id="original", session_path="/private/session.jsonl")
-    event = decode({"id": request.id, "type": "response", "command": "switch_session",
-                    "success": False, "error": "Original session is unavailable"})
-    with pytest.raises(ValueError, match="Original session is unavailable"):
-        event.require_request(request)
-    with pytest.raises(ValueError, match="does not match"):
-        event.require_request(SwitchSession(id="different", session_path=request.session_path))
-    successful = decode({"id": request.id, "type": "response", "command": "switch_session",
-                         "success": True, "data": {"cancelled": False}})
-    assert successful.require_request(request) is successful.data
-
-
 @pytest.mark.parametrize("change", [
     {"data": {}}, {"extra": True}, {"success": True}, {"success": 0},
     {"success": None}, {"error": None}, {"error": 1},
 ])
 def test_selected_error_envelope_rejects_mixed_or_untyped_fields(change):
-    row = {"id": "original", "type": "response", "command": "agent_comms_prepare_compaction",
+    row = {"id": "original", "type": "response", "command": "switch_session",
            "success": False, "error": "Native refusal"}
     with pytest.raises(ValueError, match="Unexpected selected response envelope"):
         decode({**row, **change})
@@ -131,8 +113,6 @@ def test_optional_native_observations_have_named_absence_and_one_serialization()
         assert not state.matches_model(("p", "m"))
         with pytest.raises(ValueError, match="owner selection"):
             state.model.require_selection(None)
-        with pytest.raises(ValueError, match="owner selection"):
-            state.model.for_compaction("p/m")
         assert FieldCodec.decode(StateData, FieldCodec.encode(state)) == state
         assert "model" not in state.to_wire()
         assert StateData.from_wire(state.to_wire()) == state
@@ -144,9 +124,8 @@ def test_optional_native_observations_have_named_absence_and_one_serialization()
     assert isinstance(reported.model, ReportedModel)
     assert reported.matches_model(("p", "m"))
     assert reported.model.require_selection("p/m") is reported.model
-    assert reported.model.for_compaction("p/m").context_window == 1024
     with pytest.raises(ValueError, match="owner selection"):
-        reported.model.for_compaction("p/other")
+        reported.model.require_selection("p/other")
     for result_wire in ({}, {"result": None}, {"result": {"content": []}}):
         event = decode({"type": "tool_execution_end", **result_wire})
         assert isinstance(event.result, ProvidedToolResult if "result" in result_wire and result_wire["result"] == {"content": []} else MissingToolResult)
@@ -229,32 +208,6 @@ def test_tracked_terminal_states_preserve_failure_and_unique_stream_relation():
     ],
 )
 def test_malformed_known_authority_fields_fail_at_boundary(record):
-    with pytest.raises((ValueError, TypeError)):
-        decode(record)
-
-
-@pytest.mark.parametrize("mutation", ["extra", "kind", "version", "reason", "envelope"])
-def test_selected_observations_keep_strict_envelope_and_payload(mutation):
-    record = {
-        "type": "response",
-        "id": "r",
-        "command": "agent_comms_summarize_compaction",
-        "success": True,
-        "data": {
-            "version": 1,
-            "operationId": "op",
-            "status": "unknown",
-            "reason": "402: configured provider",
-        },
-    }
-    if mutation == "envelope":
-        record["extra"] = 1
-    elif mutation == "version":
-        record["data"]["version"] = True
-    elif mutation == "reason":
-        record["data"]["reason"] = "hidden\nline"
-    else:
-        record["data"][mutation] = "unexpected"
     with pytest.raises((ValueError, TypeError)):
         decode(record)
 

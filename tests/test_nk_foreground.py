@@ -74,7 +74,7 @@ def _recipient(pipe, root: Path, root_id: str, name: str, decision: str = "FULL"
     model, calls = _fake_model(decision=decision)
     with (
         patch.object(foreground, "_trusted_package", side_effect=_fake_package),
-        patch.object(runtime, "_trusted_package", side_effect=_fake_package),
+        patch("agent_comms.native_pi._trusted_package", side_effect=_fake_package),
         patch.object(TrackedTurnSession, "execute", model),
     ):
         try:
@@ -198,7 +198,7 @@ def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(tmp_p
     root, comms, root_id = _private_root(tmp_path)
     with (
         patch("agent_comms.nk_foreground._trusted_package", side_effect=_fake_package),
-        patch("agent_comms.coordinated_runtime._trusted_package", side_effect=_fake_package),
+        patch("agent_comms.native_pi._trusted_package", side_effect=_fake_package),
     ):
         owner = reserve_foreground_owner(
             root,
@@ -263,7 +263,7 @@ def test_cli_main_ready_then_single_go_offline_model_boundary(
     )
     fake, calls = _fake_model()
     monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
-    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", _fake_package)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", _fake_package)
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
     commands: list[int] = []
 

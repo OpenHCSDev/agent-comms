@@ -64,7 +64,7 @@ def test_incomplete_saved_identity_cannot_authorize_an_owner(tmp_path):
         incomplete.pop(field)
         path.write_text(json.dumps(incomplete))
         with pytest.raises(RelationViolationError, match="generation"):
-            Registration(path).live_owner_with_generation("owner")
+            Registration(path).live_owner_with_admission("owner")
     raw["threads"]["owner"].pop("created_at")
     path.write_text(json.dumps(raw))
     with pytest.raises(RelationViolationError) as rejected:

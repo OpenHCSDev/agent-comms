@@ -46,6 +46,12 @@ class TurnOutput:
         if failure.supersedes(self.failure):
             self.failure = failure
 
+    def request_retried(self) -> None:
+        """Pi re-sends the refused request; that refusal no longer decides the turn."""
+        if self.failure is not None and self.failure.ends_with_request_retry:
+            self.failure = None
+        self.error_message = None
+
     @property
     def failure_text(self) -> str:
         return self.failure.text if self.failure else ""

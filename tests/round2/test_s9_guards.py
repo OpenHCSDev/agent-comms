@@ -19,10 +19,8 @@ def files():
             for name in (
                 "manual_compaction_bridge.py",
                 "native_session_reopen.py",
-                "selected_summary_admission.py",
                 "pi_helper.py",
                 "fresh_private_session.py",
-                "continued_private_session.py",
             )
         }
     )
@@ -112,4 +110,5 @@ def test_removed_mechanisms_and_settings_have_one_owner():
                 }
                 if {"reserve_tokens", "keep_recent_tokens"} <= declared:
                     declarations.append((path.name, node.name))
-    assert declarations == [("owner_compaction_settings.py", "PiCompactionSettings")]
+    # Pi's settings own compaction thresholds; Core declares no copy.
+    assert declarations == []

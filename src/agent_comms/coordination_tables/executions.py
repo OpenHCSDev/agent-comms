@@ -118,9 +118,6 @@ END"""
 
 @dataclass(frozen=True, slots=True)
 class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
-    def failed_by_native_terminal_failure(self) -> bool:
-        return self.lifecycle.failed and self.reason_code == "native_terminal_failure"
-
     def retry_authorized(self, replay: ReplayAssessments | None, obligations) -> bool:
         if replay is None:
             return False

@@ -8,7 +8,6 @@ from typing import ClassVar, TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 from .activity import ActivityState
-from .compaction_progress import CompactionSourceProgress
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -31,6 +30,9 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     detail: str = ""
     stall_reason: ClassVar[str] = "model_no_progress"
     pauses_input_clock: ClassVar[bool] = False
+    # Core's no-event backstop applies; False where Pi itself bounds the phase
+    # and ends it with its own event.
+    bounded_by_core: ClassVar[bool] = True
     busy: ClassVar[bool] = True
     accepts_prompt: ClassVar[bool] = False
     accepts_followup: ClassVar[bool] = True
@@ -63,9 +65,6 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
 
     def observed(self, phase: TurnPhase) -> TurnPhase:
         return phase
-
-    def following_compaction(self, previous: CompactionPhase) -> TurnPhase:
-        return self
 
     def on(self, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
         for member in TurnPhase.members_with(TurnPhase):
@@ -164,34 +163,11 @@ class SettlingStatsPhase(TurnPhase):
 @dataclass(frozen=True)
 class CompactionPhase(StallExempt, Excursion):
     resume: TurnPhase = field(default_factory=ModelWaitPhase)
-    operation_id: str = ""
-    source: CompactionSourceProgress | None = None
 
-    @property
-    def started_at(self) -> float | None:
-        return self.source.started_at_ms / 1000 if self.source is not None else None
-
-    @property
-    def summary(self) -> str:
-        label = self.detail or self.label
-        return f"{label} · {self.source.label}" if self.source is not None and self.source.label else label
-
-    def measured(self, operation_id: str, source: CompactionSourceProgress | None) -> TurnPhase:
-        if self.operation_id and operation_id and self.operation_id != operation_id:
-            raise ValueError("Compaction progress belongs to another operation")
-        return replace(self, operation_id=operation_id or self.operation_id,
-                       source=source if source is not None else self.source)
-
-    def observed(self, phase: TurnPhase) -> TurnPhase:
-        return phase.following_compaction(self)
-
-    def following_compaction(self, previous: CompactionPhase) -> TurnPhase:
-        return replace(self, operation_id=previous.operation_id,
-                       source=self.source if self.source is not None else previous.source)
     @classmethod
     def starts(cls, event: pi.PiEvent) -> bool:
         from . import pi_events as pi
-        return isinstance(event, (pi.CompactionStart, pi.CompactionProgress))
+        return isinstance(event, pi.CompactionStart)
 
     @classmethod
     def enter(cls, current: TurnPhase, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
@@ -200,8 +176,10 @@ class CompactionPhase(StallExempt, Excursion):
     def ends(self, event: pi.PiEvent) -> bool:
         from . import pi_events as pi
         return isinstance(event, pi.CompactionEnd)
-    stall_reason = "compaction_no_progress"
     pauses_input_clock = True
+    # Pi streams the summary without RPC events; its provider idle timeout
+    # bounds the request and compaction_end reports the outcome.
+    bounded_by_core = False
     activity_state = ActivityState.WORKING
     label = "Compacting context"
 

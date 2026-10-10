@@ -615,20 +615,6 @@ class RepairInputRoutingCliCommand(CliCommand, declared_name="repair-input-routi
 
 
 @dataclass(frozen=True, kw_only=True)
-class RecordFailedInputContextsCliCommand(CliCommand, declared_name="record-failed-input-contexts"):
-    help = "Report, or with --apply record, the model context of failed inputs that lack one"
-    persist: bool = option(
-        "--apply", help="Record contexts proven by all three records", default=False,
-        wire_name="apply",
-    )
-
-    def apply(self, ctx: Comms) -> Any:
-        from .failed_input_contexts import record_failed_input_contexts
-
-        return record_failed_input_contexts(ctx.root, apply=self.persist)
-
-
-@dataclass(frozen=True, kw_only=True)
 class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
     help = "Import an OpenCode/Codex context snapshot"
     format: ImportFormat = option("--format")
@@ -867,25 +853,6 @@ class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
     def apply(self, ctx: Comms) -> Any:
         return ctx.bus.log.retained_context(self.thread, ctx.registry).export(
             self.output, overwrite=self.overwrite).to_wire()
-
-
-@dataclass(frozen=True, kw_only=True)
-class RetainedContextCliCommand(CliCommand, declared_name="retained-context"):
-    help = "Inspect retained context and original provenance without native input"
-    thread: str = option("thread")
-    diff: bool = option("--diff", default=False, action="store_true",
-                        help="Compare the last two original selected compaction source cuts")
-
-    def apply(self, ctx: Comms) -> Any:
-        from .compaction_boundary import CompactionBoundary
-        from .input_disposition import InputDispositions
-
-        boundary = CompactionBoundary(ctx.registry,
-            InputDispositions(ctx.root / InputDispositions.filename))
-        if self.diff:
-            return dict(boundary.retained_history(ctx.registry.require(self.thread), diff=True),
-                        input_supplied=False)
-        return boundary.inspect(self.thread)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1299,31 +1266,6 @@ class PollCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CompactionStatusCliCommand(CliCommand, declared_name="compaction-status"):
-    help = "Inspect durable native compaction outcomes without replaying work"
-    thread: str = option("--thread")
-
-    def apply(self, ctx: Comms) -> Any:
-        from functools import partial
-        from .compaction_journal import CompactionJournal
-        from .compaction_records import SelectedSummaryAttempt
-
-        owner = ctx.registry.require(self.thread)
-        if owner.session_file is None:
-            return dict(thread=owner.name, attempts=[])
-        session_file = owner.session_file
-        attempts = CompactionJournal.observe_readonly(
-            ctx.root / "compaction-commits.sqlite3",
-            partial(SelectedSummaryAttempt.for_session, canonical=session_file),
-            absent=(),
-        )
-        return dict(thread=owner.name, attempts=[
-            dict(operation_id=row.operation_id, state=row.state)
-            for row in attempts
-        ])
-
-
-@dataclass(frozen=True, kw_only=True)
 class ContextCliCommand(CliCommand):
     help = "Inspect original context contributors without sending an input"
     thread: str = option("thread")
@@ -1354,8 +1296,6 @@ class ContextCliCommand(CliCommand):
             return {"manifests": selected,
                     "text_recorded": all(manifest.public_text_recorded for manifest in selected)}
         import asyncio
-        from .private_nk_entrypoint import PrivateNkLaunch
-        from .context_tokens import NativeTokenCounter
         from .field_codec import FieldCodec
         from .native_turn_context import NativeContextData
         from .runtime import RuntimeConnection, socket_path
@@ -1390,36 +1330,17 @@ class ContextCliCommand(CliCommand):
         }
         if native is None:
             return {**result, "native_error": native_error}
-        launch = PrivateNkLaunch.from_environment(
-            ctx.root, ctx.owners.restart_environment(os.environ))
-        if launch is None:
-            return {**result, "native_error": "Context token inspection requires this root's configured native package"}
-        try:
-            counts = NativeTokenCounter(launch.native_package).measure(
-                tuple(segment.text() for segment in context.segments))
-        except (OSError, ValueError, RuntimeError) as error:
-            return {**result, "native_error": str(error)}
         native_context = native.for_turn(owner, NextContextTurn())
         return {
             **result,
             "scope": "next-native-base-and-core-contributors; before future input and provider hooks",
             "input_supplied": False,
             "native_manifest": native_context.segments,
-            "manifest": context.manifest(counts.counts, counter=counts.counter),
             "native_provider_context": native_context.render().provider,
             "native_source_spans": [
                 {"segment": position, "sha256": segment.measured_manifest().sha256,
                  "spans": FieldCodec.encode(segment.source_ranges())}
                 for position, segment in enumerate(native.segments)
-            ],
-            "segments": [
-                dict(
-                    kind=type(segment),
-                    provenance=segment.provenance,
-                    tokens=count,
-                    text=segment.text(),
-                )
-                for segment, count in zip(context.segments, counts.counts, strict=True)
             ],
         }
 

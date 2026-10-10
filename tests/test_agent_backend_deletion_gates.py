@@ -35,8 +35,9 @@ def _called_names(tree: ast.AST) -> set[str]:
     # The Pi turn transport is the backend's private implementation.
     ("stream_agent_events", {"pi_native_backend.py"}),
     ("terminate_task_process", {"backend.py", "native_session_prepare.py", "pi_native_backend.py"}),
-    # A session's child custody is created only as (or inside) its backend.
-    ("PersistentPiSession", {"backend.py"}),
+    # A session's Pi child is created only by its backend, or by a foreground
+    # execution that owns its one child (default_factory, not a call).
+    ("PersistentPiSession", set()),
     ("PiNativeBackend", set()),
 ])
 def test_runtime_entry_points_have_one_owner(name, owners):

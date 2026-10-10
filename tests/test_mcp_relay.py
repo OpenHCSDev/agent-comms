@@ -11,7 +11,6 @@ import pytest
 from acp.schema import PromptResponse
 
 from agent_comms import agent_events as ae
-from agent_comms import backend
 from agent_comms import pi_events as pi
 from agent_comms.acp_extension import (
     McpClientReceiptUpdate,
@@ -23,6 +22,7 @@ from agent_comms.pi_payloads import McpLiveReceipt
 from agent_comms.runtime import UNBOUND_CONTROLLER, RuntimeProxy, SocketClient
 from delivery_owner_fixture import canonical_agent
 from test_backend_native_lifecycle import native_backend
+from pi_session_turn import one_turn_events
 
 pytestmark = [
     pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable stub"),
@@ -150,7 +150,7 @@ send({{"type": "agent_settled"}})
 async def collect_backend(program, cwd, controller):
     return [
         event
-        async for event in backend.stream_agent_events(
+        async for event in one_turn_events(
             program, [], "fixture", str(cwd), ui_request=controller
         )
     ]
@@ -285,7 +285,7 @@ send({{"type":"extension_ui_request","id":"late","method":"setStatus",
     # settled yield: this used to admit a late status after ACP TurnSettled.
     events = [
         event
-        async for event in backend.stream_agent_events(
+        async for event in one_turn_events(
             program, [], "fixture", str(tmp_path), finish_event=asyncio.Event()
         )
     ]

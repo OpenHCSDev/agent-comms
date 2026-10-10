@@ -36,10 +36,6 @@ class RegistrationChange(ABC):
 
     @property
     @abstractmethod
-    def changes_identity(self) -> bool: ...
-
-    @property
-    @abstractmethod
     def changes_owner(self) -> bool: ...
 
     @property
@@ -66,7 +62,6 @@ class RegistrationChange(ABC):
 
 class InitialRegistration(RegistrationChange):
     prior_goal = None
-    changes_identity = False
     changes_owner = True
 
     @property
@@ -116,13 +111,6 @@ class UpdatedRegistration(RegistrationChange):
         return self.thread.role.executable and (
             self.previous.process_identity != self.thread.process_identity
             or self.previous_status.starts_owner(self.status)
-        )
-
-    @property
-    def changes_identity(self) -> bool:
-        return (
-            self.previous.publication_identity != self.thread.publication_identity
-            or self.previous_status.changes_owner(self.status)
         )
 
     @property
@@ -182,4 +170,4 @@ class InitialOwnerRegistration(ExplicitOwnerChange, InitialRegistration):
 
 
 class OwnerRestartRegistration(ExplicitOwnerChange, UpdatedRegistration):
-    changes_identity = True
+    pass

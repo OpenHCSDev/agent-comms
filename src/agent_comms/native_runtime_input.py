@@ -116,24 +116,6 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             self.require_session_identity().path,
         )
 
-    @classmethod
-    def recorded_contexts(
-        cls, db: sqlite3.Connection, session: NativeSessionIdentity
-    ) -> dict[str, NativeContextProof]:
-        """Recover complete original receipts for the selected native source.
-
-        A routing name or resource directory cannot select these rows. Query
-        the originally admitted file, then corroborate its header identity.
-        A selected prewrite row without a context receipt remains a refusal.
-        """
-        proofs = {}
-        for row in cls.select(
-            db, where="session_file=?", parameters=(session.session_file,)
-        ):
-            session.require_same_session(row.require_session_identity())
-            proofs[row.input_id] = row.require_context_proof()
-        return proofs
-
     @property
     def execution(self) -> NativeInputExecution:
         try:

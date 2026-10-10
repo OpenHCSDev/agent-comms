@@ -16,8 +16,8 @@ from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.child_process import BoundedRun
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
+from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.owned_turn import OwnedTurn
-from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.queued_input import InitialInput
 from delivery_owner_fixture import canonical_agent
 from compaction_loopback import LoopbackProvider
@@ -28,13 +28,13 @@ class NativeBackendFixture:
     def __init__(self, root, project, session, provider, config):
         self.root, self.project, self.session, self.provider = root, project, session, provider
         self.config = config
-        self.persistent = backend.PersistentPiSession()
+        self.persistent = PersistentPiSession()
         self.starts = []
         self.children = []
         self.observed = []
 
     async def author_history(self):
-        """The SDK authors saved rows and their cut; no provider or receipt is invented."""
+        """The SDK authors saved rows; no provider or receipt is invented."""
         package = os.environ["PI_COMPACTION_TEST_PACKAGE"]
         result = await BoundedRun.run(
             ("node", "--input-type=module", "-e", """
@@ -45,17 +45,15 @@ const {SessionManager} = await import(pathToFileURL(join(process.argv[1],
 const manager = SessionManager.open(process.argv[2]);
 manager.appendModelChange('response-local','fixture');
 manager.appendThinkingLevelChange('off');
-const kept = manager.appendMessage({role:'user',content:'Original saved question',timestamp:1});
+manager.appendMessage({role:'user',content:'Original saved question',timestamp:1});
 manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original saved answer'}],
   api:'openai-completions',provider:'response-local',model:'fixture',stopReason:'stop',
   timestamp:2,usage:{input:8,output:4,cacheRead:0,cacheWrite:0,totalTokens:12,
     cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
-console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
 """, package, str(self.session)),
             timeout=10, cwd=self.project,
         )
         assert result.outcome.successful, result.stderr.decode()
-        return FieldCodec.decode(NativeWitness, json.loads(result.stdout))
 
     @staticmethod
     async def attach_saved_owner(agent, *, project, session):
@@ -74,7 +72,7 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
         """Acquire the restored SDK source's original attested native child."""
         session_id = await self.attach_saved_owner(agent, project=project, session=session)
         original = await Coordination.run_worker(partial(agent._comms.registry.require, session_id))
-        await agent.turns.prepare_selected_session(session_id, original)
+        await agent.turns.backend_for(session_id, original).prepare(original)
         child = agent.turns.persistent_backends[session_id].custody.child.proc
         self.children.append(child)
         return session_id
@@ -124,9 +122,8 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
                 yield turn
 
     async def force_reopen(self):
-        """Retire this fixture's actual attested child, preserving saved identity."""
-        identity = self.persistent.custody.child.attestation.require_identity()
-        self.persistent.require_reopen(identity)
+        """Retire this fixture's actual attested child; the next turn opens the saved session."""
+        self.persistent.custody.child.attestation.require_identity()
         await self.persistent.close_idle()
 
     def started(self, public_id, native_id, text):

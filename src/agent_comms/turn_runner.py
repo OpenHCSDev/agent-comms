@@ -85,10 +85,6 @@ class CompactionObservation(MroDispatch):
     async def start(self, event):
         await self.publish(self.phase.compacting())
 
-    @handles(events.CompactionSummaryProgress)
-    async def summary_progress(self, event):
-        await self.publish(self.phase.compacting().measured(event.operation_id, event.source))
-
     @handles(events.CompactionEnd)
     async def end(self, event):
         await self.publish(self.phase.compaction_ended())
@@ -186,11 +182,6 @@ class TurnRunner:
                 f"thread {thread.name!r} declares {thread.backend.declared_name}"
             )
         return current
-
-    async def prepare_selected_session(self, session_id: str, thread: Thread, *,
-                                       open_native=None) -> StateData:
-        """Launch and attest the session's idle runtime for ``thread``'s saved history."""
-        return await self.backend_for(session_id, thread).prepare(thread, open_native=open_native)
 
     async def observe_selected_preparation(
         self, session_id: str, thread: Thread, state: StateData, info: events.AgentInfo,
@@ -525,7 +516,7 @@ class TurnRunner:
                 ))
                 result = await execution.run(
                     on_compaction=partial(self.effects._emit_event, session_id),
-                    native_custody=self.backend_for(session_id, owner),
+                    pi_session=self.backend_for(session_id, owner),
                 )
                 while not inbox.empty():
                     command = inbox.get_nowait()

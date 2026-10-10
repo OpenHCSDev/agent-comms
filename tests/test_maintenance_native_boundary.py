@@ -69,7 +69,7 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(
         )
 
     with (
-        patch.object(runtime, "_trusted_package", lambda _package: None),
+        patch("agent_comms.native_pi._trusted_package", lambda _package: None),
         patch.object(native_pi.NativePiRpcLaunch, "tracked", launch),
         pytest.raises(RelationViolationError, match="Maintenance"),
     ):

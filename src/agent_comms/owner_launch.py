@@ -106,14 +106,6 @@ class RestartEnvironment:
             return 0, 0  # No credentials file yet.
         return info.st_mtime_ns, info.st_size
 
-    def settings_paths(self, worktree: Path) -> tuple[str, ...]:
-        project = worktree / ".pi"
-        return tuple(dict.fromkeys(map(str, (
-            self.agent_directory / "settings.json", project / "settings.json",
-            self.agent_directory / "models.json", self.native_config / "models.json",
-            project / "models.json",
-        ))))
-
     def encode(self) -> dict[str, str]:
         return FieldCodec.encode(self)
 

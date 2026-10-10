@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 
 from agent_comms import agent_events as events
-from agent_comms.backend import stream_agent_events
 from agent_comms.child_process import BoundedRun
 from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
+from pi_session_turn import one_turn_events
 
 
 @pytest.mark.parametrize("arguments,code", [(('--help',), 0), (('tools',), 2), ((), 1)])
@@ -79,7 +79,7 @@ async def test_unvalidated_configuration_refuses_before_child(tmp_path, monkeypa
     monkeypatch.setattr(AttachedChild, "start", forbidden)
     result = [
         item
-        async for item in stream_agent_events(
+        async for item in one_turn_events(
             str(tmp_path / "missing-native"), (), "must not send", str(tmp_path)
         )
     ]
@@ -93,7 +93,7 @@ async def test_native_early_exit_retains_failure_without_raw_stdout(tmp_path):
     child = tmp_path / "rpc-child"
     child.write_text(f"#!{sys.executable}\nimport sys\nprint('not a native record')\nsys.exit(3)\n")
     child.chmod(0o755)
-    result = [item async for item in stream_agent_events(str(child), (), "task", str(tmp_path))]
+    result = [item async for item in one_turn_events(str(child), (), "task", str(tmp_path))]
     assert not result[-1].ok
     assert not any(isinstance(item, events.Chunk) for item in result)
 

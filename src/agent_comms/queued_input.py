@@ -245,9 +245,6 @@ class QueuedInput:
         if row.key != f"acp:{input_id}":
             raise RelationViolationError("Queued input ID changed")
 
-    def future_receipt(self, owner: Thread) -> InputAttempt | None:
-        return None
-
     def after_clear(self) -> QueuedInput | None:
         return None
 
@@ -325,10 +322,3 @@ class DeferredQueuedInput(QueuedInput):
             **{field.name: getattr(self, field.name) for field in fields(QueuedInput)}
         )
 
-    def future_receipt(self, owner: Thread) -> InputAttempt | None:
-        turn = owner.active_turn
-        if turn is None or self.turn_id != turn.id:
-            return None
-        if self.context.owns(AdmissionIdentity(owner.incarnation, turn.admission_generation)):
-            return self.receipt
-        return None

@@ -156,7 +156,7 @@ async def main():
                 (SelectedRequest,('reserve',)),(NativePiRpcLaunch,('tracked',)),
                 (NativeStartupAdmission,('acquire','release')),(PiSessionChild,('start','close')),
                 (TrackedTurnSession,('attest','admit_prompt','committed_input','committed_context','context_proof','next_event')),
-                (PrivateSendAdmission,('reserve','prepare_context','_admit_once','verify','commit')),
+                (PrivateSendAdmission,('reserve','_admit_once','verify','commit')),
                 (Registration,('transition_turn','observe_native_phase','attach_native_session')),
                 (NativeSourceCursor,('advance',)),
                 (SourceCoverage,('prefix',)), (ProvenSourceCoverage,('last_proof','evidence')),

@@ -40,7 +40,6 @@ def _resource_root() -> Path:
 
 
 MANIFEST = _resource_root() / "pi-native.sha256"
-COMPACTION_HELPER = _resource_root() / "native-compaction-commit-child.mjs"
 OWNER_INSTRUCTIONS = _resource_root() / "APPEND_SYSTEM.md"
 
 

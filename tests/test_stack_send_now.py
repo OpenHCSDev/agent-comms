@@ -15,6 +15,7 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
+from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, SendNow, WhenBusy
 
@@ -322,6 +323,8 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     owner_store=owner.turns.goals.open_goal_store(),
                 )
 
+        pi_session = PersistentPiSession()
+
         async def collect():
             if owner is not None:
                 await InitialInput.run(owner.inputs, "project", "project", "ORIGINAL_INPUT")
@@ -342,6 +345,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 require_input_id=True,
                 native_start=lambda *_: True,
                 interrupt_boundary=lambda *_: nullcontext(surface != "revoked"),
+                persistent_session=pi_session,
             ):
                 events.append(event)
                 if isinstance(event, ae.Chunk) and "OLD_PARTIAL" in event.text:
@@ -492,6 +496,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             release.set()
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+            await pi_session.close()
             if owner is not None:
                 await owner.shutdown()
             server.shutdown()

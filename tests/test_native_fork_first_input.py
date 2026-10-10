@@ -10,13 +10,11 @@ from pathlib import Path
 import pytest
 from acp.schema import TextContentBlock
 
-from agent_comms.pi_summary_payloads import SelectedModel
 from agent_comms.relationships import RelationshipEdit
 from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import (
     CompactionChangedUpdate,
     CompactionCommittedUpdate,
-    CompactionPublishedUpdate,
     InputFailedUpdate,
     RequestFailedUpdate,
     decode_updates,
@@ -26,7 +24,6 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.pi_commands import GetSessionStats, GetState
 from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.selected_pi_route import observe_selected_compaction_decision
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
@@ -159,37 +156,11 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     print("PHYSICAL_PARENT_STATS", repr(stats), flush=True)
     assert state.model.context_window == 32768
     print("PHYSICAL_PARENT_STATE", repr(state), flush=True)
-    decision = await observe_selected_compaction_decision(
-        native.persistent,
-        session_file=str(native.session),
-        expected_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
-        selected=SelectedModel(state.model.provider, state.model.id, state.model.context_window),
-    )
-    print("ACTUAL_SELECTED_COMPACTION_DECISION", repr(decision), flush=True)
-    assert decision.enabled
-    assert not decision.trigger
+    # Pi's own threshold engine stays idle below contextWindow - reserveTokens.
+    reserve_tokens = json.loads((native.config / "settings.json").read_text())[
+        "compaction"]["reserveTokens"]
+    assert stats.context_usage.tokens < state.model.context_window - reserve_tokens
     original = native.session.read_bytes()
-    source_rows = [json.loads(line) for line in original.splitlines()]
-    selected_messages = [row["message"] for row in source_rows if row["type"] == "message"]
-    serialized_bytes = len(
-        json.dumps(selected_messages, ensure_ascii=False, separators=(",", ":")).encode()
-    )
-    effective_tokens = state.model.context_window - decision.reserve_tokens
-    old_mixed_unit_budget = effective_tokens * 0.75
-    assert stats.context_usage.tokens < effective_tokens
-    assert serialized_bytes > old_mixed_unit_budget
-    print(
-        "TOKEN_BYTE_MISMATCH",
-        "tokens",
-        stats.context_usage.tokens,
-        "effective_tokens",
-        effective_tokens,
-        "serialized_context_bytes",
-        serialized_bytes,
-        "old_mixed_unit_budget",
-        old_mixed_unit_budget,
-        flush=True,
-    )
 
     native.provider.text = "FIRST_OWNER_ANSWER"
     await native.persistent.close()
@@ -297,7 +268,6 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
         assert latency < 20
         assert not any(isinstance(fact, CompactionChangedUpdate) for fact in facts)
         assert not any(isinstance(fact, CompactionCommittedUpdate) for fact in facts)
-        assert not any(isinstance(fact, CompactionPublishedUpdate) for fact in facts)
         thread = comms.registry.require(child.name)
         assert thread.session_file
 

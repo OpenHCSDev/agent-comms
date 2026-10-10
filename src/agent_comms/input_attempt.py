@@ -13,12 +13,10 @@ from .field_codec import FieldCodec, TextRepresentation, projected
 from .native_input_record import NativeInputIdText
 from .thread_identity import GenerationCounter, ThreadIncarnation
 from .input_origin import InputOrigin, InputProvenance, UnattributedInputOrigin
-from .threads import Thread
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
     from .text_digest import TextDigest
-    from .thread_identity import TurnId
     from .turn_lease import TurnLeaseFence
 
 
@@ -66,9 +64,6 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     def matches_original_provenance(self, source: InputProvenance) -> bool:
         return False
 
-    def matches_original_source(self, source: StoredInput) -> bool:
-        return False
-
     def require_original_provenance(self, source: InputProvenance):
         raise RelationViolationError("Constraint lacks its original input provenance")
 
@@ -80,17 +75,6 @@ class InputAttempt(DeclaredFamily, affix="Input"):
 
     def require_started(self, admission: int) -> StartedInput:
         raise RelationViolationError("Input start lacks its original native disposition")
-
-    def proves_started(
-        self,
-        *,
-        owner: ThreadIncarnation,
-        admission: int,
-        turn: TurnId,
-        sent_digest: TextDigest,
-        original: StoredInput,
-    ) -> bool:
-        return False
 
     def bind(
         self, *, admission: int, turn_id: str, native_id: str, text: str
@@ -116,9 +100,6 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     ) -> StartedInput | None:
         return None
 
-    def pending_for(self, owner: Thread) -> bool:
-        return False
-
     def bound_bus_input(self) -> SentInput | None:
         return None
 
@@ -134,9 +115,6 @@ class StoredInput(InputAttempt):
 
     def matches_original_provenance(self, source: InputProvenance) -> bool:
         return self.context_provenance() == source
-
-    def matches_original_source(self, source: StoredInput) -> bool:
-        return self.matches_original_provenance(source.context_provenance()) and self.digest == source.digest
 
     def require_original_provenance(self, source: InputProvenance):
         if not self.matches_original_provenance(source):
@@ -191,14 +169,6 @@ class StoredInput(InputAttempt):
     def matches_admission(self, admission: int) -> bool:
         return self.admission == admission
 
-    def unsettled_for(self, pending_input_keys: tuple[str, ...]) -> bool:
-        """Settled delivery and confirmed non-delivery permit source compaction.
-
-        User attention is a separate fact: NotSent may still need review without
-        making a later original's native source uncertain.
-        """
-        return False
-
     def _transition(self, target: type[StoredInput], **changes) -> StoredInput:
         values = {item.name: getattr(self, item.name) for item in fields(self)}
         return target(**values, **changes)
@@ -241,10 +211,6 @@ class ReservedInput(StoredInput):
 
     accepts_reservation = True
 
-    def unsettled_for(self, pending_input_keys: tuple[str, ...]) -> bool:
-        """Only the captured original may wait for its own pre-send compaction."""
-        return self.key not in pending_input_keys
-
     def queued_for(self, owner: ThreadIncarnation, admission: int, text: str) -> bool:
         return (
             self.matches_owner(owner)
@@ -261,12 +227,6 @@ class ReservedInput(StoredInput):
             BoundUnknownInput, turn_id=turn_id, native_id=native_id, sent_text=text
         )
 
-    def pending_for(self, owner: Thread) -> bool:
-        assert owner.active_turn is not None
-        return self.matches_owner(owner.incarnation) and self.matches_admission(
-            owner.active_turn.admission_generation
-        )
-
     def finish_unbound(self) -> NotSentInput:
         return self._transition(NotSentInput)
 
@@ -277,10 +237,6 @@ class SentInput(StoredInput):
     turn_id: str = field(metadata={"public_exclude": True, "wire_required": True})
     native_id: str = field(metadata={"public_exclude": True, "wire_required": True})
     sent_text: str = field(metadata={"public_exclude": True, "wire_required": True})
-
-    def unsettled_for(self, pending_input_keys: tuple[str, ...]) -> bool:
-        """A native binding remains uncertain across admission and input changes."""
-        return True
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -293,12 +249,6 @@ class SentInput(StoredInput):
                 raise ValueError("Native input text cannot be empty")
         except ValueError as error:
             raise ValueError("Invalid native input attempt") from error
-
-    @property
-    def sent_digest(self) -> TextDigest:
-        from .text_digest import TextDigest
-
-        return TextDigest.of(self.sent_text)
 
     def matches_native(self, *, turn_id: str, native_id: str, text: str) -> bool:
         return (self.turn_id, self.native_id, self.sent_text) == (turn_id, native_id, text)
@@ -323,10 +273,6 @@ class StartedInput(SentInput):
     has_started = True
     public_status = "started"
     cancellation_feedback = "Native input started; turn cancelled — input not retried."
-
-    def unsettled_for(self, pending_input_keys: tuple[str, ...]) -> bool:
-        """The original native-start receipt settled this binding's delivery."""
-        return False
 
     def require_started(self, admission: int) -> StartedInput:
         if not self.matches_admission(admission):
@@ -356,24 +302,6 @@ class StartedInput(SentInput):
             if self.matches_native(turn_id=lease.turn_id, native_id=native_id, text=sent_text)
             else None
         )
-
-    def proves_started(
-        self,
-        *,
-        owner: ThreadIncarnation,
-        admission: int,
-        turn: TurnId,
-        sent_digest: TextDigest,
-        original: StoredInput,
-    ) -> bool:
-        return (
-            self.matches_owner(owner)
-            and self.matches_admission(admission)
-            and self.turn_id == turn.value
-            and self.sent_digest == sent_digest
-            and self.matches_original_source(original)
-        )
-
 
 class NotSentInput(StoredInput):
     unresolved = True

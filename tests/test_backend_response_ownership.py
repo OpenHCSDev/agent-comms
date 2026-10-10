@@ -15,6 +15,7 @@ from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.pi_payloads import StateData
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.turn_stats import StatsRequest
+from agent_comms.pi_native_backend import PersistentPiSession
 
 
 class InspectionSnapshot(commands.SessionSnapshot, commands.PiCommand):
@@ -28,7 +29,8 @@ class InspectionFork(commands.MutatesSession, commands.PiCommand):
 @pytest.mark.parametrize("success", [True, False])
 def test_new_command_capabilities_guard_identity_without_backend_dispatch_edits(success):
     session = TurnSession(
-        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), configuration=RestartEnvironment.inherit({})), "unused"
+        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), configuration=RestartEnvironment.inherit({})), "unused",
+        native_session=PersistentPiSession(),
     )
     session.native = SimpleNamespace(
         attestation=ObservedAttestation(

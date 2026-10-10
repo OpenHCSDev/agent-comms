@@ -267,14 +267,6 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
                 raise NativePiUnavailable("Native proof indexed evidence is unavailable") from error
 
     @classmethod
-    def first_generation(cls, db: sqlite3.Connection, input_id: str) -> int | None:
-        """The request an input was sent with; later requests only retain it."""
-        return db.execute(
-            f"SELECT MIN(request_generation) FROM {cls.declared_name} WHERE input_id=?",
-            (input_id,),
-        ).fetchone()[0]
-
-    @classmethod
     def for_input(
         cls, db: sqlite3.Connection, input_id: str, generation: int | None = None
     ) -> NativeContextJournal | None:
@@ -337,34 +329,6 @@ class NativeContextProof(NativeContextRecord):
                 if row is None:
                     raise NativePiUnavailable("The input has no assembled-context proof")
                 return row.corroborate(session_file, header, tracked)
-
-    @classmethod
-    def read_history_evidence(
-        cls, session_file: Path, header: SessionEntry, entries: tuple[NativeEntry, ...],
-        *, recorded: tuple[NativeContextProof, ...] = (),
-    ) -> dict[str, NativeContextProof]:
-        """Corroborate retained inputs using indexed, latest context inclusion.
-
-        This proves historical context inclusion. It never creates an input
-        disposition, an owner enrollment, or permission to replay an input.
-        """
-        from .native_entries import NativeEntry
-
-        tracked = NativeEntry.tracked_users(entries)
-        result = {}
-        with NativeContextJournal.open_evidence(session_file) as db:
-            for input_id in tracked:
-                row = NativeContextJournal.for_input(db, input_id)
-                if row is not None:
-                    result[input_id] = row.corroborate(session_file, header, tracked)
-            for proof in recorded:
-                if proof.session_file != session_file:
-                    raise NativePiUnavailable("Live-recorded context belongs to another session file")
-                row = NativeContextJournal.for_input(db, proof.input_id, proof.request_generation)
-                if row is None or row.corroborate(session_file, header, tracked) != proof:
-                    raise NativePiUnavailable("Live-recorded context differs from native journal")
-        return result
-
 
 class NativePiTerminalFailure(NativePiUnavailable):
     """A proved input ended in a failed terminal and its owned process was reaped."""

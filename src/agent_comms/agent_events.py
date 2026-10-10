@@ -7,17 +7,16 @@ ACP publication constructs SDK updates directly from these declared fields.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from .activity import ActivityState
-from .compaction_progress import CompactionSourceProgress
 from .declared_family import DeclaredFamily
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .pi_payloads import McpLiveReceipt, PiDiagnostic, PiUsage
-from .pi_vocabulary import CompactionReason, ManualCompactionReason, UnknownCompactionReason
+from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .tool_results import ToolDiff
 from .child_process import ProcessIdentity
 
@@ -172,13 +171,6 @@ class CompactionEvent(AgentEvent, DeclaredFamily, affix="Event"):
     def will_retry(self) -> bool:
         return False
 
-    @property
-    def publication_summary(self) -> str | None:
-        return self.summary if self.phase == "end" else None
-
-    @property
-    def summary_label(self) -> str:
-        return "Summary: "
 
 
 @dataclass(frozen=True)
@@ -186,19 +178,6 @@ class CompactionStart(CompactionEvent):
     @property
     def phase(self) -> str:
         return "start"
-
-
-@dataclass(frozen=True)
-class CompactionSummaryProgress(CompactionEvent):
-    """Provisional provider text and source work, never a committed summary."""
-
-    operation_id: str = ""
-    text: str = ""
-    source: CompactionSourceProgress | None = None
-
-    @property
-    def phase(self) -> str:
-        return "progress"
 
 
 @dataclass(frozen=True)
@@ -211,51 +190,6 @@ class CompactionEnd(CompactionEvent):
     @property
     def phase(self) -> str:
         return "abort" if self.aborted else "end"
-
-    @property
-    def result_label(self) -> str:
-        return "Compaction aborted" if self.aborted else "Context compacted"
-
-
-@dataclass(frozen=True, kw_only=True)
-class CompactionSkipped(CompactionEnd):
-    explanation: str
-
-    @property
-    def phase(self) -> str:
-        return "skip"
-
-    @property
-    def result_label(self) -> str:
-        return "Compaction skipped"
-
-    @property
-    def publication_summary(self) -> str:
-        return self.explanation
-
-    @property
-    def summary_label(self) -> str:
-        return ""
-
-
-@dataclass(frozen=True)
-class ManualCompactionEnd(CompactionEnd):
-    """An explicit manual result includes its safe failure explanation."""
-
-    reason: type[CompactionReason] = ManualCompactionReason
-
-    @property
-    def publication_summary(self) -> str | None:
-        return self.summary
-
-    @property
-    def summary_label(self) -> str:
-        return "" if self.aborted else "Summary: "
-
-
-@dataclass(frozen=True, kw_only=True)
-class CompactionProgress(CompactionSummaryProgress):
-    chunk_index: int
 
 
 @dataclass(frozen=True)

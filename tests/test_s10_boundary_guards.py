@@ -45,7 +45,7 @@ def test_s10_ui_choice_cannot_regain_a_raw_mapping_projection():
 def test_s10_native_lifetime_is_owned_by_a12_without_retired_guardian():
     package = Path(pi_events.__file__).parent
     assert not (package / "selected_pi_child_deadline.py").exists()
-    for name in ("native_pi.py", "pi_events.py", "selected_pi_summary_rpc.py"):
+    for name in ("native_pi.py", "pi_events.py"):
         tree = ast.parse((package / name).read_text())
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

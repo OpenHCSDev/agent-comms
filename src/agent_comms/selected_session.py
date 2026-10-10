@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .compaction_journal import CompactionJournal
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import _response_boundary
 from .coordinator import Coordination
@@ -23,9 +21,8 @@ from .selected_actions import CodingSelectedAction, NoSelectedTools, SelectedAct
 
 if TYPE_CHECKING:
     from .coordinated_runtime import SelectedExecution
-    from .backend import PersistentPiSession
+    from .pi_native_backend import PersistentPiSession
     from .selected_participant import SelectedParticipant
-    from .tracked_turn import TrackedTurnSession
 
 
 @dataclass(frozen=True)
@@ -54,9 +51,6 @@ class SelectedSession:
         from .native_attestation import PendingAttestation
 
         return PendingAttestation()
-
-    async def prepare_context(self, participant: SelectedParticipant, turn: TrackedTurnSession) -> None:
-        """A new unbound native source has no saved context to compact."""
 
     def startup_admission(self, launch, root, boundary, *,
                           measurements: PublicationMeasurements | None = None):
@@ -145,8 +139,8 @@ class SelectedSession:
                 retained = execution.retained_source(Path(selected).absolute())
                 if retained is not None:
                     return SavedSelectedSession(directory, identity=retained.identity,
-                                                custody=execution.native_custody)
-                return SavedSelectedSession(directory, custody=execution.native_custody,
+                                                custody=execution.pi_session)
+                return SavedSelectedSession(directory, custody=execution.pi_session,
                                             identity=SessionIdentityHelper.locate(
                     execution.native_package, str(Path(selected).absolute()),
                 ))
@@ -169,15 +163,6 @@ class SelectedSession:
                     directory,
                     worktree=worktree,
                     selected_thinking_level=thinking_level,
-                )
-                CompactionJournal(
-                    participant.comms.root / "compaction-commits.sqlite3"
-                ).private_inputs.enroll(
-                    creation,
-                    incarnation=participant.owner.thread.incarnation,
-                    owner_lookup=participant.lookup,
-                    owner_generation=participant.identity.generation,
-                    admission_generation=participant.owner.admission_generation,
                 )
             if thinking_level is not None:
                 return FirstSelectedSession(directory,
@@ -206,58 +191,6 @@ class SavedSelectedSession(SelectedSession):
 
         return PendingAttestation(self.identity)
 
-    async def prepare_context(self, participant: SelectedParticipant, turn: TrackedTurnSession) -> None:
-        """Prepare through the original acquired child before its raw prompt writer."""
-        from .owner_compaction_commit import OwnerCompactionCommit
-        from .selected_pi_route import read_selected_compaction_decision
-        from .selected_source import ManualSource, SessionRevision
-        from .thread_identity import TurnId
-
-        persistent = turn.native_session
-        observed = turn.native.attestation
-        self.identity.require_same_session(observed.require_identity())
-        selected = observed.state.model.for_compaction(
-            f"{participant.provider}/{participant.model}"
-        )
-        # This same child/custody lends its idle RPC reader to the preparation
-        # operation. A journal writer retires it through existing strict reopen.
-        if not persistent.retain(turn.native, self.identity):
-            raise NativePiUnavailable("Selected context preparation lost its native child")
-        settings = await read_selected_compaction_decision(
-            persistent, session_file=self.session_file,
-            expected_package=turn.launch.package, selected=selected,
-            registry=participant.comms.registry, captured=participant.owner,
-        )
-        if settings.trigger:
-            await Coordination.run_async(
-                participant.store.session.path, participant.require_current
-            )
-            owner = participant.owner.thread
-            self.identity.require_session(owner.require_saved_session())
-            snapshot = await Coordination.run_worker(participant.comms.registry.snapshot)
-            generation = snapshot.owner_generations[owner.name]
-            async with OwnerCompactionCommit.open(
-                participant.comms.registry.store.path, turn.launch.package, self.session_file,
-                native_launch=turn.launch,
-            ) as bridge:
-                source = ManualSource(
-                    incarnation=owner.incarnation, owner=owner.process_identity,
-                    turn=TurnId(participant.owner.require_active_turn().id),
-                    reserved_revision=SessionRevision.observe(self.session_file).require_available(),
-                )
-                result = await bridge.compact_selected(
-                    owner, generation, persistent, source, selected, settings,
-                    on_event=participant.dispatch,
-                )
-                settings.require_prepared(result)
-            # A committed compaction retires/reopens the selected source. Only
-            # that crossing needs a new native acquisition and attestation.
-            # An unchanged original child remains under this turn's custody.
-            await turn.resume_prepared(turn.custody)
-        else:
-            persistent.custody.idle()
-
-
     def require_launch_header(self) -> None:
         if self.custody is not None:
             try:
@@ -283,11 +216,6 @@ class SavedSelectedSession(SelectedSession):
 @dataclass(frozen=True)
 class FirstSelectedSession(SavedSelectedSession):
     creation: FreshPrivateSession = field(kw_only=True)
-
-    async def prepare_context(self, participant: SelectedParticipant, turn: TrackedTurnSession) -> None:
-        # The existing mint/startup capability attests its pristine header.
-        # It cannot be opened as an ordinary owner or consume its first-start grant.
-        self.creation.verify_selected_startup()
 
     def default_action(self) -> SelectedAction:
         return NoSelectedTools()

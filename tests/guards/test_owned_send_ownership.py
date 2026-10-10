@@ -9,20 +9,19 @@ import pytest
 from agent_comms.owned_send_admission import OwnedSendAdmission
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.turn_goal_permission import TurnGoalPermission
-from agent_comms.turn_input_binding import TurnInputBinding
+from agent_comms.input_disposition import InputDispositions
 from agent_comms.turn_input_source import OriginalTurnInput, TurnInputSource
 
 pytestmark = pytest.mark.refactor_guard
 
 
-def test_original_input_cases_inherit_reservation_and_compaction():
+def test_original_input_cases_inherit_reservation():
     """New input cases cannot silently opt out of the shared original path."""
     cases = list(OriginalTurnInput.__subclasses__())
     while cases:
         case = cases.pop()
         cases.extend(case.__subclasses__())
         assert case.reserve is OriginalTurnInput.reserve, case
-        assert case.compaction_keys is OriginalTurnInput.compaction_keys, case
 
 
 def test_owned_turn_no_longer_owns_send_authority_or_native_binding():
@@ -39,7 +38,7 @@ def test_owned_turn_no_longer_owns_send_authority_or_native_binding():
 def test_admission_components_own_state_without_capturing_runner():
     for path in {
         Path(inspect.getfile(owner))
-        for owner in (OwnedSendAdmission, TurnGoalPermission, TurnInputBinding, TurnInputSource)
+        for owner in (OwnedSendAdmission, TurnGoalPermission, InputDispositions, TurnInputSource)
     }:
         source = path.read_text()
         assert len(source.splitlines()) <= 1000, path
@@ -67,7 +66,7 @@ def test_ordinary_admission_preserves_named_rule_dispatch_until_callback():
 
 
 def test_new_input_owners_do_not_restore_long_boolean_chains():
-    for owner in (TurnInputSource, TurnInputBinding):
+    for owner in (TurnInputSource, InputDispositions):
         path = Path(inspect.getfile(owner))
         assert not any(
             isinstance(node, ast.BoolOp) and len(node.values) >= 4

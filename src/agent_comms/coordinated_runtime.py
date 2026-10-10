@@ -14,7 +14,7 @@ from pathlib import Path
 
 from .pi_vocabulary import ThinkingLevel
 from .agent_events import CompactionEvent
-from .backend import PersistentPiSession
+from .pi_native_backend import PersistentPiSession
 from .comms import Comms
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked
 from .coordinator import Coordination
@@ -46,8 +46,11 @@ class SelectedExecution:
     # place) and hands every run that one verified launcher, only when needed.
     verified_launcher: Callable[[], Callable[..., NativePiRpcLaunch]] | None = None
     _run_permit: threading.Lock = field(init=False, default_factory=threading.Lock)
-    # The owner session's native custody; None gives each input its own child.
-    native_custody: PersistentPiSession | None = field(default=None, init=False, compare=False)
+    # The thread's Pi session child. A foreground execution owns its own; a
+    # worker runs this execution on its thread backend's child (run(pi_session=...)).
+    pi_session: PersistentPiSession = field(
+        default_factory=PersistentPiSession, init=False, compare=False,
+    )
     _tracked_factory: Callable[..., NativePiRpcLaunch] | None = field(
         init=False, default=None, repr=False, compare=False,
     )
@@ -67,10 +70,8 @@ class SelectedExecution:
 
     def retained_source(self, session_file: Path):
         """The owner's idle child on this saved source with this package, if still current."""
-        if self.native_custody is None:
-            return None
         try:
-            retained = self.native_custody.custody.idle()
+            retained = self.pi_session.custody.idle()
         except NativePiUnavailable:
             return None
         if retained.identity.session_file != str(session_file) or retained.child.key[0].package != self.native_package:
@@ -126,11 +127,12 @@ class SelectedExecution:
 
     async def run(
         self, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None,
-        native_custody: PersistentPiSession | None = None,
+        pi_session: PersistentPiSession | None = None,
     ) -> CoordinatedTurn | None:
         if not self._run_permit.acquire(blocking=False):
             raise IdentityConflict("Selected execution cannot be reused")
-        self.native_custody = native_custody
+        if pi_session is not None:
+            self.pi_session = pi_session
         self.root = Path(self.root).absolute()
         # Package acquisition belongs to this execution before it can select
         # a claim. Join its blocking verification before that custody advances.

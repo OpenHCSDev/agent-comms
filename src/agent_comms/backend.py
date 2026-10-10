@@ -23,7 +23,7 @@ from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, 
 from contextlib import AbstractContextManager, AsyncExitStack, aclosing, asynccontextmanager, contextmanager, nullcontext
 from functools import partial
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from .agent_backend import InputRequest, SendNow
 from .child_process import ProcessIdentity
@@ -39,12 +39,11 @@ from .extension_ui import ExtensionUiSession
 from .image_inputs import ImageInput
 from .turn_context import InputContributionCoordinates
 from .maintenance_barrier import MaintenanceBarrier
-from .native_attestation import AttestationError, SavedSessionReopenError
-from .native_custody import EmptyNative, PiSessionChild
+from .native_attestation import AttestationError
+from .native_custody import PiSessionChild
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .coordinator import Coordination
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
-from .pi_native_backend import PersistentPiSession
 from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import SelectedToolDenied
 from .turn_admission import UnwrittenPrompt
@@ -54,6 +53,9 @@ from .turn_phase import ShutdownPhase, TurnPhase
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount
 from .turn_watchdog import ProgressWatchdog
+
+if TYPE_CHECKING:
+    from .pi_native_backend import PersistentPiSession
 
 
 def compaction_summary(value: Any) -> str:
@@ -125,7 +127,8 @@ async def stream_agent_events(
         Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
     ) = None,
     native_start: Callable[[str | None, str, str], bool] | None = None,
-    persistent_session: PersistentPiSession | None = None,
+    *,
+    persistent_session: PersistentPiSession,
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
     context_contributions: tuple[InputContributionCoordinates, ...] = (),
     request_observer: Callable[[RequestProgress, ProcessIdentity], None] | None = None,
@@ -140,10 +143,10 @@ async def stream_agent_events(
     """
     owner = asyncio.current_task()
     try:
-        async with persistent_session.lock if persistent_session is not None else nullcontext():
+        async with persistent_session.lock:
             try:
                 launch = await Coordination.run_worker(partial(
-                    (persistent_session.custody if persistent_session is not None else EmptyNative()).managed_launch,
+                    persistent_session.custody.managed_launch,
                     agent_bin,
                     tuple(agent_args),
                     worktree=Path(cwd),
@@ -212,6 +215,7 @@ class TurnSession:
         ) = None,
         native_start: Callable[[str | None, str, str], bool] | None = None,
         persistent_session: PersistentPiSession | None = None,
+        native_session: PersistentPiSession | None = None,
         ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
         startup: NativeStartupAdmission | None = None,
         context_contributions: tuple[InputContributionCoordinates, ...] = (),
@@ -231,10 +235,13 @@ class TurnSession:
         self.send_boundary = send_boundary
         self.interrupt_boundary = interrupt_boundary
         self.native_start = native_start
+        # persistent_session: an owned turn keeps its child for the next input.
+        # A tracked (selected) turn borrows the owner's child without that retention.
         self.persistent_session = persistent_session
-        self.native_session = (
-            persistent_session if persistent_session is not None else PersistentPiSession()
-        )
+        session = persistent_session if persistent_session is not None else native_session
+        if session is None:
+            raise ValueError("A Pi turn runs on its thread's Pi session child")
+        self.native_session: PersistentPiSession = session
         self.extension_ui = ExtensionUiSession(ui_request)
         self.startup = startup if startup is not None else NativeStartupAdmission.for_launch(launch)
         self.inputs = InputForwarding(steering_queue)
@@ -413,7 +420,7 @@ class TurnSession:
         """The original acquisition failures preserve their source disposition."""
         try:
             yield
-        except (OSError, TimeoutError, SelectedToolDenied, SavedSessionReopenError) as error:
+        except (OSError, TimeoutError, SelectedToolDenied) as error:
             failure = NativePiUnavailable(
                 f"Native resource acquisition failed: {type(error).__name__}: {error}"
             )
@@ -438,16 +445,8 @@ class TurnSession:
         """Initial acquisition and prepared continuation share the same custody."""
         with self.startup.measurements.operation("native_open"):
             return await self.native_session.open(
-                self.launch, reuse=reuse, require_input_id=self.require_input_id,
-                startup=self.startup, watchdog=self.watchdog,
+                self.launch, reuse=reuse, startup=self.startup, watchdog=self.watchdog,
             )
-
-    async def resume_prepared(self, resources: AsyncExitStack) -> None:
-        """Borrow the prepared source through the existing transport and turn."""
-        with self.native_acquisition():
-            self.native = await self.open_native(reuse=True)
-        await resources.enter_async_context(self.native.failures())
-        resources.callback(self.native.reader.pending.cancel_all)
 
     async def run(self) -> AsyncGenerator[events.AgentEvent, None]:
         self.finished = self.skip = False
@@ -611,6 +610,10 @@ class TurnSession:
         self.output.record_failure(failures.IdentityUncertain(_IDENTITY_FAILURE_TEXT))
         await self.abort_stalled_rpc()
         self.finished = True
+
+    def request_retried(self) -> None:
+        """Pi compacted after an overflow and re-sends the same request."""
+        self.output.request_retried()
 
     def prepare_launch(self) -> None:
         self.prompt_id = (

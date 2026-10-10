@@ -13,11 +13,13 @@ from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart, UnknownPiEvent
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.pi_native_backend import PersistentPiSession
 
 
 async def test_native_tool_lifecycle_publishes_actual_phase_after_effects():
     root = Path.cwd()
-    session = TurnSession(NativePiRpcLaunch(("unused",), root, {}, SelectedSession(root), root, configuration=RestartEnvironment.inherit({})), "unused")
+    session = TurnSession(NativePiRpcLaunch(("unused",), root, {}, SelectedSession(root), root, configuration=RestartEnvironment.inherit({})), "unused",
+                          native_session=PersistentPiSession())
     session.native = SimpleNamespace(proc=SimpleNamespace(identity=ProcessIdentity.capture(os.getpid())))
     session.active_tools = set()
     session.watchdog.clock = asyncio.get_running_loop().time

@@ -11,8 +11,8 @@ The prototype routes **every** `SessionManager` mutation path through one
 canonical-path cross-process lock per session file:
 
 - `_appendEntry` (all appends: messages, model changes, compaction, branch
-  summaries), `flushInputDurably`, `_rewriteFile`, and the guarded
-  `appendCompactionIfCurrent` all execute inside `pr48WriterLock`.
+  summaries), `flushInputDurably` and `_rewriteFile` all execute inside
+  `pr48WriterLock`.
 - Under the lock, each mutation rechecks the on-disk revision against the
   revision recorded when this `SessionManager` instance loaded the file
   (`_pr48LoadedRevision`). Any drift → refuse **before** mutation.
@@ -30,7 +30,6 @@ canonical-path cross-process lock per session file:
 | --- | --- | --- |
 | `Native session writer lock unavailable` | Pure pre-write lock contention; no bytes written | Bounded pre-write retry is safe (fixture uses 200 × 2 ms) |
 | `Native session writer changed` | Another writer advanced the file after our load | **Never retry blind**; reload the session and re-derive all evidence |
-| `Native compaction commit outcome unknown` | Bytes may have reached disk before an error | **Never retry**; treat commit as unknown (blocker 5 handles recovery) |
 
 The live runtime must additionally enforce a *canonical single writer per
 session* (one `SessionManager` per session file per process, coordinated
@@ -48,12 +47,8 @@ optimization.
   crashed one without operator knowledge).
 - The only sanctioned recovery is an **explicit operator action**: verify the
   holder is gone, delete the lock file, then reload the session and re-derive
-  all evidence before the next append. The prototype proves this in the
-  `crash-lock` probe case: refusal while the lock persists → operator
-  `unlink` → recovered append commits.
+  all evidence before the next append.
 - Recovery does not repair session content; it only re-enables the writer.
-  Any compaction whose outcome was unknown at crash time stays unknown
-  (blocker 5 responsibility).
 
 ## Non-goals
 

@@ -6,7 +6,6 @@ import os
 import time
 from pathlib import Path
 from dataclasses import dataclass, field, fields, replace
-from typing import TYPE_CHECKING
 
 from .agent_backend import AgentBackend
 from .child_process import ProcessIdentity
@@ -20,18 +19,11 @@ from .goals import (
 )
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
 from .thread_identity import (
-    ThreadIncarnation,
-    ThreadPublicationIdentity,
     ThreadRole,
     TurnId,
     TurnIdentity,
 )
 from .turn_lease import ActiveTurn, TurnFence, TurnLeaseFence, TurnState
-
-if TYPE_CHECKING:
-    from .owner_compaction_gate import OwnerCompactionAttestation
-    from .owner_compaction_prepare import NativeWitness
-
 
 
 class _GeneratedCreationTime(float):
@@ -193,23 +185,6 @@ class Thread(ThreadProvenance):
             raise RelationViolationError(f"Thread {self.name!r} has no owner process")
         return self.process_identity
 
-    def compaction_attestation(self, owner_generation: int, witness: NativeWitness) -> OwnerCompactionAttestation:
-        """Project this captured owner; registry and native CAS still recheck it."""
-        from pathlib import Path
-
-        from .owner_compaction_gate import OwnerCompactionAttestation
-
-        if self.active_turn is None or self.session_file is None:
-            raise ValueError("Claimed owner with canonical session required")
-        session = str(Path(self.session_file).resolve(strict=True))
-        witness.require_session(session)
-        return OwnerCompactionAttestation(
-            self.name, owner_generation, self.active_turn.id,
-            self.goal.id if self.goal is not None else None,
-            self.goal.revision if self.goal is not None else None,
-            session, witness.leaf_id, witness.revision, None,
-        )
-
     def require_saved_session(self) -> str:
         if self.session_file is None:
             raise ValueError("Canonical saved session required")
@@ -320,13 +295,6 @@ class Thread(ThreadProvenance):
     @property
     def has_process(self) -> bool:
         return self.process_identity is not None
-
-    @property
-    def publication_identity(self) -> ThreadPublicationIdentity:
-        return ThreadPublicationIdentity(
-            self.incarnation, self.process_identity, self.role, self.session_file, self.worktree,
-            self.execution,
-        )
 
     def without_turn_admission(self) -> Thread:
         if self.active_turn is None:

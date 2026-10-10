@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.maintenance_barrier import MaintenancePhase
-from agent_comms.backend import _maintenance_send_boundary, stream_agent_events
+from agent_comms.backend import _maintenance_send_boundary
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
@@ -20,6 +20,7 @@ from agent_comms.registration import Registration
 from agent_comms.store_files import _async_store_lock, _store_lock
 from agent_comms.threads import Thread
 from maintenance_control_fixture import FixtureMaintenanceControl
+from pi_session_turn import one_turn_events
 
 
 def test_production_has_no_same_uid_phase_mutator(tmp_path: Path) -> None:
@@ -296,7 +297,7 @@ async def test_real_backend_fake_rpc_never_writes_prompt_after_pause(tmp_path: P
     stub.chmod(0o700)
     result = [
         row
-        async for row in stream_agent_events(
+        async for row in one_turn_events(
             str(stub), [], "fake-only", str(tmp_path), env_extra={"AGENT_COMMS_ROOT": str(root)}
         )
     ]

@@ -37,7 +37,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
     comms, agent, _ = _session(tmp_path)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, _ = _fake_model()
     entered, release = asyncio.Event(), asyncio.Event()
     starts = []
@@ -122,7 +122,7 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
     comms, agent, _ = _session(tmp_path)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, _ = _fake_model()
     entered, release = asyncio.Event(), asyncio.Event()
 
@@ -206,7 +206,7 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
     comms, agent, _ = _session(tmp_path)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, _ = _fake_model()
     entered, release = asyncio.Event(), asyncio.Event()
     goal = comms.goals.update_goal("beta", SetGoalAction(text="Preserve this goal"))
@@ -457,7 +457,7 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
     monkeypatch.setattr(agent.turns, "extension_ui_permission", permission)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, _ = _fake_model()
     entered, release = asyncio.Event(), asyncio.Event()
     started = []
@@ -471,12 +471,7 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
         request = object()
         assert await kwargs["ui_request"](request) is request
         assert kwargs["images"][0].data == "eA=="
-        owner = comms.registry.require("beta")
         original_key = agent.inputs.original_sources["beta"].notice_keys[0]
-        receipts = agent.inputs.future_inputs(owner, original_key)
-        assert len(receipts) == 2
-        # The adaptive compaction owner accepts the same live queued receipts.
-        agent.inputs.dispositions.read().compaction_rows(owner, original_key, agent.inputs)
         first_id = original_key.removeprefix("acp:")
         with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
             assert allowed is True

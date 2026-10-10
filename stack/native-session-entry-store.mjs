@@ -22,7 +22,6 @@ export class EntryMetadata {
         this.role = entry.message?.role ?? null;
         this.inputId = entry.message?.inputId ?? null;
         this.inputDigest = entry.message?.inputDigest ?? null;
-        this.commitId = entry.details?.agentCommsCommit?.commitId ?? null;
         this.firstKeptEntryId = entry.firstKeptEntryId ?? null;
         this.contextMessageCount = sessionEntryToContextMessages(entry).length;
         // Statistics consume facts from the same strict scan/append that owns
@@ -152,15 +151,6 @@ export class EntryStore {
             if (keeping) yield meta;
         }
     }
-    *uncompactedMetadata(leafId = this.lastId) {
-        this.assertCurrent();
-        try {
-            for (const meta of this.branchMetadata(leafId)) {
-                // A stored summary replaces source; it is not raw ancestry.
-                if (meta.type !== 'compaction') yield meta;
-            }
-        } finally { this.assertCurrent(); }
-    }
     *contextEntries(leafId = this.lastId) {
         for (const meta of this.contextMetadata(leafId)) yield this.get(meta.id);
     }
@@ -186,9 +176,6 @@ export class EntryStore {
     trackedInput(inputId) {
         const meta = this.trackedInputMetadata(inputId);
         return meta ? this.get(meta.id) : undefined;
-    }
-    *commits(commitId) {
-        for (const meta of this.metadataEntries()) if (meta.commitId === commitId) yield this.get(meta.id);
     }
     *children(parentId) {
         for (const meta of this.metadataEntries()) if (meta.parentId === parentId) yield this.get(meta.id);
@@ -279,17 +266,16 @@ export class DiskEntryStore extends EntryStore {
             this.#db.exec('PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF; PRAGMA mmap_size=0; PRAGMA locking_mode=EXCLUSIVE;');
             this.#db.exec(`CREATE TABLE entries(sequence INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL,
                 parent TEXT, type TEXT NOT NULL, offset INTEGER NOT NULL, length INTEGER NOT NULL,
-                input_id TEXT, commit_id TEXT, selectors TEXT NOT NULL);
+                input_id TEXT, selectors TEXT NOT NULL);
                 CREATE INDEX entry_parent ON entries(parent);
                 CREATE INDEX entry_input ON entries(input_id);
-                CREATE INDEX entry_commit ON entries(commit_id);
                 CREATE INDEX entry_label ON entries(json_extract(selectors,'$.label.targetId'),sequence);`);
             // SQLite has initialized and owns an exclusive open inode. Derived pages
             // live on persistent disk, but no pathname survives reader exit or SIGKILL.
             unlinkSync(index);
             rmSync(directory, {recursive:true});
             this.#metadata = this.#db.prepare('SELECT selectors FROM entries WHERE id=?');
-            this.#insert = this.#db.prepare('INSERT INTO entries VALUES(?,?,?,?,?,?,?,?,?)');
+            this.#insert = this.#db.prepare('INSERT INTO entries VALUES(?,?,?,?,?,?,?,?)');
             this.refresh();
         } catch (error) {
             this.close();
@@ -333,10 +319,6 @@ export class DiskEntryStore extends EntryStore {
         const label = EntryMetadata.fromIndex(row)?.label;
         return label?.label ? label : undefined;
     }
-    *commits(commitId) {
-        this.assertUsable();
-        for (const row of this.#db.prepare('SELECT id FROM entries WHERE commit_id=? ORDER BY sequence').iterate(commitId)) yield this.get(row.id);
-    }
     *children(parentId) {
         this.assertUsable();
         for (const row of this.#db.prepare('SELECT id FROM entries WHERE parent IS ? ORDER BY sequence').iterate(parentId)) yield this.get(row.id);
@@ -375,7 +357,7 @@ export class DiskEntryStore extends EntryStore {
         if (!this.#header) { this.#header = EntryStore.validateHeader(entry); return; }
         this.validate(entry);
         const meta = new EntryMetadata(entry, ++this.#sequence, offset, length);
-        this.#insert.run(meta.sequence, meta.id, meta.parentId, meta.type, offset, length, meta.inputId, meta.commitId, JSON.stringify(meta));
+        this.#insert.run(meta.sequence, meta.id, meta.parentId, meta.type, offset, length, meta.inputId, JSON.stringify(meta));
         this.#last = meta.id;
     }
     refresh() {

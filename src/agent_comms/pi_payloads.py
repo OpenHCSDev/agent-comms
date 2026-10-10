@@ -143,9 +143,6 @@ class PiUsage(PiPayload):
 
 @dataclass(frozen=True)
 class PiContent(PiPayload, DeclaredFamily, affix="Content"):
-    def tool_calls(self):
-        return ()
-
     def preserve_evidence(self, raw: dict) -> PiContent:
         """Keep unrepresented native fields opaque, never equivalent to plain text."""
         return self if self.to_wire() == raw else UnknownContent(raw)
@@ -214,9 +211,6 @@ class ThinkingContent(PiContent):
 
 @dataclass(frozen=True)
 class ToolCallContent(PiContent, declared_name="toolCall"):
-    def tool_calls(self):
-        return (self,)
-
     def assistant_transcript(self):
         from .transcript_events import ToolStartTranscript
 
@@ -388,19 +382,10 @@ class UnknownDiagnostic(PiDiagnostic):
 
 @dataclass(frozen=True)
 class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
-    def retained_tool_calls(self):
-        return ()
-
-    def retained_tool_facts(self, session, entry, originals):
-        return ()
-
     def annotation_disclosure(self):
         from .working_memory_disclosure import WithheldDisclosure
 
         return WithheldDisclosure()
-
-    def require_artifact_request(self, request):
-        raise ValueError("Native message is not a completed file operation")
 
     def tracked_end(self, session) -> None:
         """Non-assistant messages cannot supply a tracked final response."""
@@ -501,9 +486,6 @@ class AssistantMessage(PiMessage):
 
         return PublicInstructionDisclosure()
 
-    def retained_tool_calls(self):
-        return tuple(call for part in self.parts for call in part.tool_calls())
-
     # Pi's assistant record always carries an array, including failed terminals.
     content: tuple[PiContent, ...] = field(default=(), metadata={"wire_required": True})
     # Original Pi completion metadata. These are observations, not registry
@@ -597,7 +579,7 @@ class UserMessage(PiMessage):
         session.observe_input_during_abort(event)
 
     def transcript_events(self, context):
-        from .transcript_events import ContextTranscript, UserTranscript
+        from .transcript_events import ContextTranscript
 
         routing, display = context.routing, context.input_display
         # Preserve exact separators, including empty text blocks, for provenance.
@@ -640,41 +622,6 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
     tool_name: str = wire_field("toolName", "tool")
     is_error: bool = wire_field("isError", False)
     details: NativeToolDetails = field(default_factory=lambda: NoToolDetails())
-
-    def completed_artifacts(self):
-        from .native_tools import NativeTool
-
-        return NativeTool.for_name(self.tool_name).result_artifacts(
-            ProvidedToolResult(content=self.parts, details=self.details), not self.is_error)
-
-    def require_tool_request(self, request):
-        calls = tuple(call for call in request.retained_tool_calls()
-                      if call.id == self.tool_call_id)
-        if len(calls) != 1 or calls[0].name != self.tool_name:
-            raise ValueError("Native tool result lacks its exact original SDK call")
-        return calls[0]
-
-    def require_artifact_request(self, request):
-        self.require_tool_request(request)
-        if not self.completed_artifacts():
-            raise ValueError("Native result has no successful original file operation evidence")
-
-    def retained_tool_facts(self, session, entry, originals):
-        from .retained_task_facts import NativeArtifactTaskFact
-        from .turn_context import JournalProvenance
-
-        artifacts = self.completed_artifacts()
-        if not artifacts:
-            originals.pop(self.tool_call_id, None)
-            return ()
-        try:
-            request = originals.pop(self.tool_call_id)
-        except KeyError as error:
-            raise ValueError("Completed file operation lacks its original SDK request") from error
-        self.require_artifact_request(request)
-        source = JournalProvenance(session.session_file,
-            (request.require_entry_id(), entry.require_entry_id()))
-        return tuple(NativeArtifactTaskFact(source, artifact) for artifact in artifacts)
 
     def transcript_events(self, context):
         from .native_tools import NativeTool
@@ -796,9 +743,6 @@ class PiModel(PiPayload, DeclaredFamily, affix="Model"):
     def require_selection(self, selected: str | None):
         raise ValueError("Prepared native model does not match the owner selection")
 
-    def for_compaction(self, configured_model: str | None):
-        return self.require_selection(configured_model)
-
 
 class UnreportedModel(PiModel):
     """The external state has not reported a model; no identity is implied."""
@@ -827,12 +771,6 @@ class ReportedModel(PiModel):
             return super().require_selection(selected)
         return self
 
-    def for_compaction(self, configured_model: str | None):
-        from .pi_summary_payloads import SelectedModel
-
-        self.require_selection(configured_model)
-        return SelectedModel(self.provider, self.id, self.context_window)
-
     @property
     def display_name(self):
         name = self.id or self.name
@@ -859,9 +797,6 @@ class PiResponseData(PiPayload, DeclaredFamily, affix="Data"):
     @property
     def session_busy(self) -> bool:
         return False
-
-    def require_request(self, request):
-        raise ValueError("Native response data does not declare this selected request")
 
     def require_payload(self):
         return self
@@ -1017,9 +952,6 @@ class PiToolResult(PiPayload, DeclaredFamily, affix="ToolResult"):
     def edit_diff(self, ok):
         return None
 
-    def artifacts(self, ok):
-        return ()
-
     def sent_message(self, ok):
         return None
 
@@ -1042,9 +974,6 @@ class ProvidedToolResult(ToolDetailsPayload, PiToolResult):
 
     def edit_diff(self, ok):
         return self.details.edit_diff() if ok else None
-
-    def artifacts(self, ok):
-        return self.details.artifacts() if ok else ()
 
     def sent_message(self, ok):
         return self.details.sent_message() if ok else None
@@ -1100,9 +1029,6 @@ class NativeToolDetails(PiPayload, DeclaredFamily, affix="ToolDetails"):
     def edit_diff(self):
         return None
 
-    def artifacts(self):
-        return ()
-
     def sent_message(self):
         return None
 
@@ -1144,10 +1070,6 @@ class FileMutationToolDetails(NativeToolDetails, NativeEditDetails):
 
     def edit_diff(self):
         return self.reported_diff()
-
-    def artifacts(self):
-        return (self.artifact,)
-
 
 class McpCallPolicy(DeclaredFamily, affix="McpCallPolicy"):
     @classmethod

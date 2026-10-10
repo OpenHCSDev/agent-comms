@@ -259,9 +259,7 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             assert "OLD_UNKNOWN_BODY_0000:" in excerpt
             assert "OLD_UNKNOWN_BODY_0001:" not in excerpt
             assert len(set(artifacts)) == 1
-            assert not any(
-                isinstance(event, (ae.CompactionEvent, ae.CompactionProgress)) for event in events
-            )
+            assert not any(isinstance(event, ae.CompactionEvent) for event in events)
             assert not any(isinstance(event, ae.Error) for event in events)
             terminal = [event for event in events if isinstance(event, ae.Done)]
             assert len(terminal) == 1 and terminal[0].ok is True

@@ -34,7 +34,7 @@ tmp_path = private_root_fixture
 async def test_pre_send_drift_refuses_all_prompt_bytes(tmp_path, monkeypatch, direct, drift):
     root, root_id, comms, _, people = _root(tmp_path, direct=direct)
     owner = people[2] if direct else people[1]
-    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
 
     async def race(*args, **kwargs):
@@ -111,7 +111,7 @@ else:
 async def test_actual_raw_writes_follow_committed_admission_without_global_exclusions(tmp_path, monkeypatch, direct, revoke):
     root, root_id, comms, _, people = _root(tmp_path, direct=direct)
     owner = people[2] if direct else people[1]
-    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
     create = AttachedChild.start
     children = []
@@ -174,7 +174,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         root, root_id, comms, _, people = _root(directory, direct=True)
         owner = people[2]
         comms.registry.declare(replace(owner, task="x" * 24000))
-        patch.setattr(runtime, "_trusted_package", lambda _: None)
+        patch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
         patch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
         patch.setattr(native_prompt_send, "_MAX_SEND_SECONDS", 0.35)
         native_turn = TrackedTurnSession.execute
@@ -340,7 +340,7 @@ async def test_short_admission_contention_sends_once_after_release(
 
     root, root_id, comms, _initial, people = _root(tmp_path, direct=True)
     owner = people[2]
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
     create = AttachedChild.start
     received = tmp_path / "received.json"
@@ -532,7 +532,7 @@ async def test_actual_native_admission_commits_before_bytes_and_releases_feedbac
 ):
     root, root_id, _comms, _initial, people = _root(tmp_path, direct=direct)
     owner = people[2] if direct else people[1]
-    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
     create = AttachedChild.start
     received = tmp_path / "received.json"

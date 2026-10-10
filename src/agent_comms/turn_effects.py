@@ -28,6 +28,3 @@ class TurnEffects(ABC):
     @staticmethod
     @abstractmethod
     def _prompt_text(prompt: list[Any]) -> str: ...
-
-    @abstractmethod
-    async def publish_pending_compaction(self, session_id: str, thread_name: str) -> int: ...

@@ -168,11 +168,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     # ─── ACP methods ─────────────────────────────────────────────────────────
 
-    async def publish_pending_compaction(self, session_id: str, thread_name: str) -> int:
-        from .compaction_publication import publish_pending_local
-
-        return await publish_pending_local(self, session_id, thread_name)
-
     async def initialize(
         self,
         protocol_version: int,
@@ -212,21 +207,21 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     async def _compact_request(self, session_id: str, instructions: str | None) -> PromptResponse:
         from . import manual_compaction_bridge
-        from .compaction_result import CompactionResult
+        from .agent_backend import CompactionOutcome
 
-        # Idle owner bridge alone owns the lock and the one-POST budget.
+        # The owner process's bridge alone owns the turn lock.
         if session_id in self.sessions.proxies:
-            result = FieldCodec.decode(
-                CompactionResult,
+            outcome = FieldCodec.decode(
+                CompactionOutcome,
                 await self.sessions.proxies[session_id].request(
                     "compact", instructions=instructions
                 ),
             )
         else:
-            result = await manual_compaction_bridge.compact_context(
+            outcome = await manual_compaction_bridge.compact_context(
                 self.turns, session_id, instructions
             )
-        return result.prompt_response()
+        return manual_compaction_bridge.CompactionReply().reply(outcome)
 
     async def _selected_write_request(self, session_id: str, request) -> PromptResponse:
         from .selected_write_plan import SelectedWritePlans

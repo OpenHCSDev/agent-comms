@@ -52,7 +52,6 @@ class FailureReason(StrEnum):
     PREFLIGHT_TIMEOUT = "native_preflight_timeout"
     PREFLIGHT_EXIT = "native_preflight_exit"
     INPUT_ID_UNAVAILABLE = "pi_input_id_unavailable"
-    COMPACTION_FAILED = "prestart_compaction_failed"
     IDENTITY_UNCERTAIN = "session_identity_uncertain"
     AUTHORITY_CHANGED = "input_authority_changed"
     FOLLOWUP_UNRECOGNIZED = "unrecognized_followup_input"
@@ -95,8 +94,7 @@ class PublicationMeasurements:
                 self.maximum_started_ns, self.maximum_finished_ns = started, finished
 
 
-def record_request_progress(root, lease, progress, native_process, summary_operation=None,
-                            *, publication=None):
+def record_request_progress(root, lease, progress, native_process, *, publication=None):
     """Append original measurements with the exact existing turn/owner fence.
 
     This private diagnostic does not contain prompt bodies, headers or credentials,
@@ -109,8 +107,6 @@ def record_request_progress(root, lease, progress, native_process, summary_opera
               "recorded_monotonic_ns": now}
     if publication is not None:
         record["publication_completed_cumulative"] = FieldCodec.encode(publication)
-    if summary_operation is not None:
-        record["selected_summary"] = FieldCodec.encode(summary_operation)
     _record_request_observation(root, lease, record)
 
 

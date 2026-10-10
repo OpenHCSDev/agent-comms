@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 
 from .declared_family import DeclaredFamily
 
@@ -107,24 +106,7 @@ class UnreportedStopReason(PiStopReason):
 
 
 class CompactionReason(DeclaredFamily, affix="CompactionReason"):
-    triggers = True
-
-    @classmethod
-    def prepare(cls, preparation):
-        return preparation
-
-    @classmethod
-    def require_prepared(cls, result):
-        result.require_prepared()
-
-    @classmethod
-    async def boundary_current(cls, retained, boundary, owner, registry):
-        return True
-
-    @classmethod
-    def declined_manual(cls, data, journal, settle_refusal):
-        journal.summaries.refuse(data.operation_id, data.reason)
-        raise ValueError(f"Selected Pi declined manual summary ({data.reason})")
+    """Why Pi's own engine compacted: Pi's reason names, decoded once at ingress."""
 
     @classmethod
     def from_external(cls, value):
@@ -150,39 +132,7 @@ class ThresholdCompactionReason(CompactionReason):
 
 
 class UnknownCompactionReason(CompactionReason):
-    triggers = False
-
-
-class UnneededCompactionReason(CompactionReason):
-    triggers = False
-
-
-class TaskBoundaryCompactionReason(CompactionReason):
-    @classmethod
-    def declined_manual(cls, data, journal, settle_refusal):
-        from .compaction_result import RefusedCompactionResult
-
-        data.require_clean_prestart()
-        settle_refusal(data)
-        return RefusedCompactionResult(f"Optional subtask compaction skipped: {data.reason}")
-
-    @classmethod
-    async def boundary_current(cls, retained, boundary, owner, registry):
-        # Only authored-task timing needs this read. Read and resolve its scope
-        # together off the owner loop, through the original registry resource.
-        return bool(boundary) and await asyncio.to_thread(
-            lambda: retained.optional_boundary(owner, registry.snapshot()) == boundary
-        )
-
-    @classmethod
-    def prepare(cls, preparation):
-        return preparation.at_complete_boundary()
-
-    @classmethod
-    def require_prepared(cls, result):
-        # A clean optional refusal keeps original context. UNKNOWN/transport
-        # failures raise before a result and never become permission to retry.
-        pass
+    pass
 
 
 class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):

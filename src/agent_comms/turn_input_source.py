@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from .goal_waits import GoalWait
     from .goals import Goal
     from .input_disposition import InputDispositions
-    from .input_drain import InputDrain
     from .thread_identity import TurnId
     from .threads import Thread
 
@@ -45,9 +44,6 @@ class TurnInputSource(ABC):
 
     @abstractmethod
     def display(self, dispositions: InputDispositions, text: str) -> str | None: ...
-
-    def selected_admission(self, inputs: InputDrain, session_id: str):
-        return None
 
     def consume_wait(self, comms: Comms, canonical: str, wait: GoalWait | None) -> bool:
         return True
@@ -124,10 +120,6 @@ class OriginalTurnInput(TurnInputSource):
     def valid_keys(self, text: str) -> bool:
         return super().valid_keys(text) or (self.batch.admits_multiple and text == self.prompt)
 
-    def compaction_keys(self, session_file: str | None) -> tuple[str, ...]:
-        """Every original in this captured input shares its saved-context preparation."""
-        return self.keys if session_file is not None else ()
-
     def reserve(
         self, dispositions: InputDispositions, owner: Thread, turn: TurnId, admission: int,
         *, custody: ExitStack,
@@ -143,9 +135,6 @@ class OriginalTurnInput(TurnInputSource):
             owner.name, turn, admission, self.prompt, custody=custody,
         )
         return replace(self, batch=batch)
-
-    def selected_admission(self, inputs: InputDrain, session_id: str):
-        return inputs.selected_summary_admissions.get(session_id)
 
     def display(self, dispositions: InputDispositions, text: str) -> str | None:
         return self.original_display

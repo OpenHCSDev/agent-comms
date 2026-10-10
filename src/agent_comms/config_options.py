@@ -286,7 +286,7 @@ class ConfigOptions:
         level = ThinkingLevel.optional_name(state.thinking_level)
         if model is None or level is None:
             raise NativePiUnavailable("Native configuration did not report model and thinking level")
-        state.model.for_compaction(model)
+        state.model.require_selection(model)
         await Coordination.run_worker(partial(
             self.comms.threads.set_thread_configuration,
             thread, model=model, thinking_level=level,

@@ -26,6 +26,7 @@ from agent_comms.image_inputs import MAX_IMAGE_BYTES, ImageInput, prompt_images
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
 from delivery_owner_fixture import canonical_agent
+from pi_session_turn import one_turn_events
 
 pytestmark = pytest.mark.usefixtures("native_rpc_fixture")
 PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDqkAAAAASUVORK5CYII="
@@ -205,7 +206,7 @@ async def test_failed_image_child_never_exposes_encoded_attachment(tmp_path, mon
     stub.chmod(493)
     events = [
         event
-        async for event in backend.stream_agent_events(
+        async for event in one_turn_events(
             str(stub),
             ["--model", "test/model"],
             "inspect",
@@ -250,7 +251,7 @@ async def test_failed_queued_image_child_never_exposes_encoded_attachment(tmp_pa
     ))
     events = [
         event
-        async for event in backend.stream_agent_events(
+        async for event in one_turn_events(
             str(stub), ["--model", "test/model"], "first", str(tmp_path), steering_queue=queue
         )
     ]
@@ -306,7 +307,7 @@ async def test_rpc_prompt_serializes_images_unchanged(tmp_path):
     stub.chmod(493)
     events = [
         event
-        async for event in backend.stream_agent_events(
+        async for event in one_turn_events(
             str(stub), [], "inspect", str(tmp_path), images=(ImageInput(PNG, "image/png"),)
         )
     ]

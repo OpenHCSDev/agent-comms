@@ -40,9 +40,9 @@ from agent_comms.acp_extension import (
     encode_request,
 )
 from agent_comms.activity import ActivityState
+from agent_comms.agent_backend import FailedCompaction
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.compaction_result import RefusedCompactionResult
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration, ReadyGeneration
 from agent_comms.goal_states import ActiveGoal
@@ -230,8 +230,8 @@ class TestHandlers:
             async with native.original_input(agent, session, "Current response") as turn:
                 assert agent.turns.owns_turn(session, turn.turn_id)
                 result = await compact_context(agent.turns, session)
-                assert isinstance(result, RefusedCompactionResult)
-                assert "current response" in result.error
+                assert isinstance(result, FailedCompaction)
+                assert "current response" in result.message
                 assert agent.turns.owns_turn(session, turn.turn_id)
             assert not agent.turns.turn_state(session).busy
         assert native.session.read_bytes() == saved and native.provider.posts == 0

@@ -14,11 +14,12 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
-from agent_comms.compaction_progress import CompactionSourceProgress
+from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.image_inputs import ImageInput
 from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_vocabulary import ThresholdCompactionReason
+from pi_session_turn import one_turn_events
 
 
 def steer(text: str, input_id: str | None = None) -> InputRequest:
@@ -43,6 +44,27 @@ def _stub(tmp_path: Path, body: str, name: str = "pi-stub") -> str:
     stub.write_text(body)
     stub.chmod(0o755)
     return str(stub)
+
+
+def _replay_stub(tmp_path: Path, lines: str) -> str:
+    """Replay recorded RPC lines, answering each ``agent-comms-prompt`` reply with
+    the id of the request it names, as Pi does for an owned turn's prompt."""
+    return _stub(
+        tmp_path,
+        f"#!{sys.executable}\n"
+        + f"""\
+import json, sys
+for line in {lines.splitlines()!r}:
+    record = json.loads(line)
+    if record.get("type") == "response" and record.get("id") == "agent-comms-prompt":
+        for request in sys.stdin:
+            request = json.loads(request)
+            if request.get("type") == record["command"]:
+                record["id"] = request["id"]
+                break
+    print(json.dumps(record), flush=True)
+""",
+    )
 
 
 _NATIVE_PROMPT_START = f"""\
@@ -98,8 +120,8 @@ async def _rpc_events(
             {"type": "message_start", "message": {"role": "user", "content": "t"}},
         )
     lines = "\n".join(json.dumps(record) for record in records)
-    stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{lines}\nEOF\n")
-    return [event async for event in backend.stream_agent_events(stub, [], "t", str(tmp_path))]
+    stub = _replay_stub(tmp_path, lines)
+    return [event async for event in one_turn_events(stub, [], "t", str(tmp_path))]
 
 
 class TestRpcParsing:
@@ -310,7 +332,7 @@ for line in sys.stdin:
         )
         finish = asyncio.Event() if managed_finish else None
         events = []
-        async for event in backend.stream_agent_events(
+        async for event in one_turn_events(
             stub, [], "task", str(tmp_path), finish_event=finish
         ):
             events.append(event)
@@ -350,7 +372,7 @@ for line in sys.stdin:
         )
         owner = asyncio.current_task()
         with pytest.raises(ValueError, match="Pi RPC record has wrong type"):
-            async for _ in backend.stream_agent_events(
+            async for _ in one_turn_events(
                 stub, [], "task", str(tmp_path), steering_queue=asyncio.Queue()
             ):
                 pass
@@ -368,7 +390,7 @@ for line in sys.stdin:
         queue.put_nowait(steer("[peer] pending"))
 
         async def consume() -> None:
-            async for _ in backend.stream_agent_events(
+            async for _ in one_turn_events(
                 stub,
                 [],
                 "task",
@@ -415,8 +437,8 @@ for line in sys.stdin:
                 '{"type":"agent_settled"}',
             ]
         )
-        stub = _stub(tmp_path, f"#!/bin/sh\ntrue\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
-        events = [e async for e in backend.stream_agent_events(stub, [], "task", str(tmp_path))]
+        stub = _replay_stub(tmp_path, rpc_lines)
+        events = [e async for e in one_turn_events(stub, [], "task", str(tmp_path))]
         # pi-named stub triggers rpc mode; prompt goes to stdin.
         types = [type(e) for e in events]
         assert types == [
@@ -485,9 +507,9 @@ for line in sys.stdin:
             {"type": "agent_settled"},
         ]
         lines = "\n".join(json.dumps(record) for record in records)
-        stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{lines}\nEOF\n")
+        stub = _replay_stub(tmp_path, lines)
         events = [
-            event async for event in backend.stream_agent_events(stub, [], "task", str(tmp_path))
+            event async for event in one_turn_events(stub, [], "task", str(tmp_path))
         ]
         assert [event.text for event in events if isinstance(event, ae.CommittedProgress)] == [
             "Working"
@@ -518,7 +540,7 @@ for line in sys.stdin:
         )
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub, [], "current prompt", str(tmp_path)
             )
         ]
@@ -539,8 +561,8 @@ for line in sys.stdin:
                 '{"contextUsage":{"tokens":200,"contextWindow":1000,"percent":20}}}',
             ]
         )
-        stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
-        events = [e async for e in backend.stream_agent_events(stub, [], "t", str(tmp_path))]
+        stub = _replay_stub(tmp_path, rpc_lines)
+        events = [e async for e in one_turn_events(stub, [], "t", str(tmp_path))]
         info = [event for event in events if isinstance(event, ae.AgentInfo)]
         assert info[0].model == "openrouter/z-ai/glm"
         assert info[0].session_file == "/tmp/pi-session.jsonl"
@@ -1101,7 +1123,7 @@ for line in sys.stdin:
         events = []
         queue: asyncio.Queue[InputRequest] = asyncio.Queue()
         pending = steer("[peer] pending", "in-1")
-        async for event in backend.stream_agent_events(
+        async for event in one_turn_events(
             stub, [], "task", str(tmp_path), steering_queue=queue, rpc_abort_grace=0.3
         ):
             events.append(event)
@@ -1209,7 +1231,7 @@ EOF
 
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub,
                 [],
                 "parent task",
@@ -1247,7 +1269,7 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
         finish = asyncio.Event()
         events = []
 
-        async for event in backend.stream_agent_events(
+        async for event in one_turn_events(
             stub,
             [],
             "coordinate",
@@ -1287,7 +1309,7 @@ time.sleep(60)
 
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub,
                 [],
                 "task",
@@ -1341,7 +1363,7 @@ time.sleep(60)
 
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub,
                 [],
                 "task",
@@ -1378,7 +1400,7 @@ time.sleep(60)
 
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub,
                 [],
                 "task",
@@ -1409,9 +1431,9 @@ time.sleep(60)
                 '{"contextUsage":{}}}',
             ]
         )
-        stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
+        stub = _replay_stub(tmp_path, rpc_lines)
 
-        events = [e async for e in backend.stream_agent_events(stub, [], "task", str(tmp_path))]
+        events = [e async for e in one_turn_events(stub, [], "task", str(tmp_path))]
 
         states = [event for event in events if isinstance(event, ae.TurnState)]
         assert [event.state for event in states] == ["retrying", "recovered"]
@@ -1435,9 +1457,9 @@ time.sleep(60)
                 '{"contextUsage":{}}}',
             ]
         )
-        stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
+        stub = _replay_stub(tmp_path, rpc_lines)
 
-        events = [e async for e in backend.stream_agent_events(stub, [], "task", str(tmp_path))]
+        events = [e async for e in one_turn_events(stub, [], "task", str(tmp_path))]
 
         assert not [event for event in events if isinstance(event, ae.TurnState)]
         assert events[-1] == ae.Done(ok=True, text="after compaction", diagnostic={"exit_code": 0})
@@ -1456,9 +1478,9 @@ time.sleep(60)
                 '{"contextUsage":{}}}',
             ]
         )
-        stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
+        stub = _replay_stub(tmp_path, rpc_lines)
 
-        events = [e async for e in backend.stream_agent_events(stub, [], "task", str(tmp_path))]
+        events = [e async for e in one_turn_events(stub, [], "task", str(tmp_path))]
 
         states = [event for event in events if isinstance(event, ae.TurnState)]
         assert [event.state for event in states] == ["retrying", "recovered"]
@@ -1467,7 +1489,8 @@ time.sleep(60)
         assert all(event.replay_safe is False for event in states)
         assert all(event.side_effects_possible is True for event in states)
 
-    async def test_compaction_stall_is_non_replayable(self, tmp_path):
+    async def test_pi_bounded_compaction_is_not_a_core_model_stall(self, tmp_path):
+        """Pi bounds its own compaction; Core's model-wait backstop does not abort it."""
         stub = _stub(
             tmp_path,
             f"#!{sys.executable}\n"
@@ -1478,16 +1501,22 @@ def emit(value):
 """
             + _NATIVE_PROMPT_START
             + """\
-emit({"type": "compaction_start", "reason": "auto"})
-abort = json.loads(sys.stdin.readline())
-emit({"id": abort.get("id"), "type": "response", "command": "abort", "success": True})
-time.sleep(60)
+emit({"type": "compaction_start", "reason": "threshold"})
+time.sleep(0.6)
+emit({"type": "compaction_end", "reason": "threshold", "result": {"summary": "kept"},
+      "aborted": False, "willRetry": False})
+emit({"type": "message_update", "assistantMessageEvent": {"type": "text_delta", "delta": "ok"}})
+emit({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop",
+      "content": [{"type": "text", "text": "ok"}]}})
+emit({"type": "agent_settled"})
+emit({"type": "response", "command": "get_session_stats", "success": True,
+      "data": {"contextUsage": {}}})
 """,
         )
 
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub,
                 [],
                 "task",
@@ -1498,24 +1527,11 @@ time.sleep(60)
             )
         ]
 
-        states = [event for event in events if isinstance(event, ae.TurnState)]
-        assert [event.state for event in states] == [
-            "model_stalled",
-            "aborting",
-            "failed",
-        ]
-        stalled = next(
-            event
-            for event in states
-            if isinstance(event, ae.TurnState) and event.state == "model_stalled"
-        )
-        assert stalled.phase == "compaction"
-        assert stalled.reason_code == "compaction_no_progress"
-        assert all(event.replay_safe is False for event in states)
-        assert all(event.retryable is False for event in states)
-        assert all(event.side_effects_possible is True for event in states)
+        assert not [event for event in events if isinstance(event, ae.TurnState)]
+        assert events[-1] == ae.Done(ok=True, text="ok", diagnostic={"exit_code": 0})
 
     async def test_prestart_compaction_outlives_prompt_start_wait(self, tmp_path, monkeypatch):
+        """Pi answers ``prompt`` only after its pre-prompt threshold compaction finishes."""
         monkeypatch.setattr(backend, "PROMPT_START_TIMEOUT_SECONDS", 0.1)
         stub = _stub(
             tmp_path,
@@ -1528,26 +1544,16 @@ state = json.loads(sys.stdin.readline())
 emit({"id": state["id"], "type": "response", "command": "get_state", "success": True,
       "data": {"nativeInputProofCapability": "pi-native-input-v1-live-only"}})
 prompt = json.loads(sys.stdin.readline())
-emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
 emit({"type": "compaction_start", "reason": "threshold"})
 time.sleep(0.25)
-emit({"type": "compaction_progress", "reason": "threshold", "chunkIndex": 0, "operationId": "auto-native",
-      "source": {"sourceBytesDone": 0, "sourceBytesTotal": 1000, "summaryPhase": "history",
-                 "startedAtMs": 1000, "observedAtMs": 1250}})
-emit({"type": "compaction_progress", "reason": "threshold", "chunkIndex": 1, "operationId": "auto-native",
-      "source": {"sourceBytesDone": 500, "sourceBytesTotal": 1000, "summaryPhase": "history",
-                 "startedAtMs": 1000, "observedAtMs": 1500},
-      "usage": {"totalTokens": 10}})
-emit({"type": "compaction_progress", "reason": "threshold", "chunkIndex": 2, "operationId": "auto-native",
-      "source": {"sourceBytesDone": 1000, "sourceBytesTotal": 1000, "summaryPhase": "synthesis",
-                 "startedAtMs": 1000, "observedAtMs": 1750}, "usage": {"totalTokens": 11}})
-emit({"type": "compaction_end", "reason": "threshold", "result": {"summary": "saved",
-      "usage": {"totalTokens": 21}},
+emit({"type": "compaction_end", "reason": "threshold", "result": {"summary": "saved"},
       "aborted": False, "willRetry": False})
+emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
 emit({"type": "message_start", "message": {"role": "user", "content": prompt["message"],
       "inputId": prompt["inputId"]}})
 emit({"type": "message_update", "assistantMessageEvent": {"type": "text_delta", "delta": "ok"}})
-emit({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop"}})
+emit({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop",
+      "content": [{"type": "text", "text": "ok"}]}})
 emit({"type": "agent_settled"})
 emit({"type": "response", "command": "get_session_stats", "success": True,
       "data": {"contextUsage": {}}})
@@ -1555,7 +1561,7 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
         )
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub,
                 [],
                 "task",
@@ -1564,65 +1570,11 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
                 require_input_id=True,
             )
         ]
-        assert [
-            type(e) for e in events if isinstance(e, (ae.CompactionEvent, ae.CompactionProgress))
-        ] == [
+        assert [type(e) for e in events if isinstance(e, ae.CompactionEvent)] == [
             ae.CompactionStart,
-            ae.CompactionProgress,
-            ae.CompactionProgress,
-            ae.CompactionProgress,
             ae.CompactionEnd,
         ]
-        progress = [e for e in events if isinstance(e, ae.CompactionProgress)]
-        assert progress[0] == ae.CompactionProgress(
-            reason=ThresholdCompactionReason, operation_id="auto-native", chunk_index=0,
-            source=CompactionSourceProgress(0, 1000, "history", 1000, 1250)
-        )
-        assert progress[1].source.source_bytes_done == 500
-        assert progress[1].source.elapsed_ms == 500
-        assert progress[2].source.summary_phase == "synthesis"
-        assert [e.usage.total_tokens for e in events if isinstance(e, ae.ProviderUsage)] == [
-            10,
-            11,
-        ]
         assert events[-1] == ae.Done(ok=True, text="ok", diagnostic={"exit_code": 0})
-
-    async def test_prestart_compaction_failure_refuses_prompt(self, tmp_path):
-        stub = _stub(
-            tmp_path,
-            f"#!{sys.executable}\n"
-            + """\
-import json, sys
-def emit(value):
-    print(json.dumps(value), flush=True)
-state = json.loads(sys.stdin.readline())
-emit({"id": state["id"], "type": "response", "command": "get_state", "success": True,
-      "data": {"nativeInputProofCapability": "pi-native-input-v1-live-only"}})
-prompt = json.loads(sys.stdin.readline())
-emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
-emit({"type": "compaction_start", "reason": "threshold"})
-emit({"type": "compaction_end", "reason": "threshold", "result": None,
-      "aborted": False, "willRetry": False,
-      "errorMessage": "Auto-compaction failed: context budget exceeded"})
-emit({"type": "message_start", "message": {"role": "user", "content": prompt["message"],
-      "inputId": prompt["inputId"]}})
-emit({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop"}})
-emit({"type": "agent_settled"})
-""",
-        )
-        events = [
-            event
-            async for event in backend.stream_agent_events(
-                stub,
-                [],
-                "task",
-                str(tmp_path),
-                require_input_id=True,
-            )
-        ]
-        assert not [event for event in events if isinstance(event, ae.InputStarted)]
-        assert events[-1].ok is False
-        assert events[-1].reason_code == "prestart_compaction_failed"
 
     async def test_summarization_retry_stall_is_bounded_and_non_replayable(self, tmp_path):
         stub = _stub(
@@ -1644,7 +1596,7 @@ time.sleep(60)
 
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub,
                 [],
                 "task",
@@ -1702,7 +1654,7 @@ time.sleep(60)
 
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub,
                 [],
                 "task",
@@ -1768,7 +1720,7 @@ time.sleep(60)
 
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub,
                 [],
                 "task",
@@ -1819,7 +1771,7 @@ for line in sys.stdin:
 
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub,
                 [],
                 "task",
@@ -1856,7 +1808,7 @@ for line in sys.stdin:
 
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub,
                 [],
                 "task",
@@ -1891,8 +1843,8 @@ for line in sys.stdin:
                 '{"type":"agent_settled"}',
             ]
         )
-        stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
-        events = [e async for e in backend.stream_agent_events(stub, [], "t", str(tmp_path))]
+        stub = _replay_stub(tmp_path, rpc_lines)
+        events = [e async for e in one_turn_events(stub, [], "t", str(tmp_path))]
         assert events[-1].ok is True
         tool_end = events[1]
         assert tool_end.ok is False
@@ -1944,7 +1896,7 @@ for line in sys.stdin:
         break
 ''')
         async with asyncio.timeout(4):
-            events = [event async for event in backend.stream_agent_events(
+            events = [event async for event in one_turn_events(
                 stub, [], 'work', str(tmp_path))]
         assert events[-1].ok
 
@@ -1974,7 +1926,7 @@ if select.select([sys.stdin], [], [], 0.3)[0]:
 
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub, [], "work", str(tmp_path), send_boundary=send_boundary
             )
         ]
@@ -2007,7 +1959,7 @@ while True: time.sleep(0.1)
         )
         observed = []
         with pytest.raises(ValueError):
-            async for event in backend.stream_agent_events(stub, [], "work", str(tmp_path)):
+            async for event in one_turn_events(stub, [], "work", str(tmp_path)):
                 observed.append(event)
         assert not [event for event in observed if isinstance(event, ae.Done)]
         assert pid_file.exists()
@@ -2047,7 +1999,7 @@ while True: time.sleep(0.1)
 """,
         )
         queue: asyncio.Queue[str] = asyncio.Queue()
-        stream = backend.stream_agent_events(stub, [], "work", str(tmp_path), steering_queue=queue)
+        stream = one_turn_events(stub, [], "work", str(tmp_path), steering_queue=queue)
         try:
             if exit_mode == "malformed":
                 with pytest.raises(ValueError):
@@ -2097,7 +2049,7 @@ if case != "eof":
 """,
         )
         events = [
-            event async for event in backend.stream_agent_events(stub, [], "work", str(tmp_path))
+            event async for event in one_turn_events(stub, [], "work", str(tmp_path))
         ]
         assert [event for event in events if isinstance(event, ae.Done)] == [events[-1]]
         assert events[-1].ok is False
@@ -2159,7 +2111,7 @@ send({{"type":"response", "command":"get_session_stats", "success":True,
         async with asyncio.timeout(4):
             events = [
                 event
-                async for event in backend.stream_agent_events(
+                async for event in one_turn_events(
                     stub, [], "initial turn", str(tmp_path), steering_queue=queue
                 )
             ]
@@ -2199,7 +2151,7 @@ for line in sys.stdin:
         finish = asyncio.Event()
         events = []
         async with asyncio.timeout(4):
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub, [], "initial turn", str(tmp_path), steering_queue=queue, finish_event=finish
             ):
                 events.append(event)
@@ -2227,7 +2179,7 @@ if select.select([sys.stdin], [], [], 0.2)[0]:
 """,
         )
         events = [
-            event async for event in backend.stream_agent_events(stub, [], "work", str(tmp_path))
+            event async for event in one_turn_events(stub, [], "work", str(tmp_path))
         ]
         assert events[-1].ok is False
         assert "native input-ID capability" in events[-1].text
@@ -2256,7 +2208,7 @@ sys.exit(1)
         )
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub, [], "private unsent prompt", str(tmp_path)
             )
         ]
@@ -2293,7 +2245,7 @@ if select.select([sys.stdin], [], [], 0)[0]:
         monkeypatch.setattr(backend, "CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS", 0.05)
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub, [], "secret prompt", str(tmp_path), session_file=str(session_file)
             )
         ]
@@ -2346,7 +2298,7 @@ if select.select([sys.stdin], [], [], 0.15)[0]:
         session.write_bytes(b"x" * 64)
         small = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub,
                 [],
                 "secret prompt",
@@ -2377,7 +2329,7 @@ if select.select([sys.stdin], [], [], 0.15)[0]:
         )
         large = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 fast_stub,
                 [],
                 "secret prompt",
@@ -2453,7 +2405,7 @@ for line in sys.stdin:
                "success":True,"data":{{"contextUsage":{{"tokens":10}}}}}})
 """,
         )
-        persistent = backend.PersistentPiSession()
+        persistent = PersistentPiSession()
         try:
             first = [
                 event
@@ -2699,7 +2651,7 @@ send({{"type":"agent_settled"}})
             queue.put_nowait(steer("peer"))
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub, [], "same text", str(tmp_path), steering_queue=queue
             )
         ]
@@ -2748,7 +2700,7 @@ for line in sys.stdin:
 
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub,
                 [],
                 "goal request",
@@ -2805,7 +2757,7 @@ for line in sys.stdin:
 
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub,
                 [],
                 "set a goal",
@@ -2858,8 +2810,8 @@ class TestPrRpcParsing:
                 '{"type":"agent_settled"}',
             ]
         )
-        stub = _stub(tmp_path, f"#!/bin/sh\ntrue\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
-        events = [e async for e in backend.stream_agent_events(stub, [], "task", str(tmp_path))]
+        stub = _replay_stub(tmp_path, rpc_lines)
+        events = [e async for e in one_turn_events(stub, [], "task", str(tmp_path))]
         # pi-named stub triggers rpc mode; prompt goes to stdin.
         types = [type(e) for e in events]
         assert types == [
@@ -2898,8 +2850,8 @@ class TestPrRpcParsing:
                 '{"contextUsage":{"tokens":200,"contextWindow":1000,"percent":20}}}',
             ]
         )
-        stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
-        events = [e async for e in backend.stream_agent_events(stub, [], "t", str(tmp_path))]
+        stub = _replay_stub(tmp_path, rpc_lines)
+        events = [e async for e in one_turn_events(stub, [], "t", str(tmp_path))]
         info = [event for event in events if isinstance(event, ae.AgentInfo)]
         assert info[0].model == "openrouter/z-ai/glm"
         assert info[0].session_file == "/tmp/pi-session.jsonl"
@@ -2916,7 +2868,7 @@ class TestPrRpcParsing:
 printf '%s' "$*" > '{args_path}'
 IFS= read -r state
 IFS= read -r prompt
-echo '{{"type":"response","command":"prompt","id":"agent-comms-prompt","success":true}}'
+printf '%s' "$prompt" | {sys.executable} -c 'import json, sys; print(json.dumps({{"type": "response", "command": "prompt", "id": json.load(sys.stdin)["id"], "success": True}}))'
 echo '{{"type":"message_start","message":{{"role":"user","content":"parent task"}}}}'
 IFS= read -r steering
 printf '%s' "$steering" > '{steering_path}'
@@ -2932,7 +2884,7 @@ EOF
 
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub,
                 [],
                 "parent task",
@@ -2955,25 +2907,25 @@ EOF
     async def test_rpc_stays_open_for_steered_child_reply(self, tmp_path):
         stub = _stub(
             tmp_path,
-            """#!/bin/sh
+            f"""#!/bin/sh
 IFS= read -r state
 IFS= read -r prompt
-echo '{"type":"response","command":"prompt","id":"agent-comms-prompt","success":true}'
-echo '{"type":"message_start","message":{"role":"user","content":"coordinate"}}'
-echo '{"type":"agent_settled"}'
+printf '%s' "$prompt" | {sys.executable} -c 'import json, sys; print(json.dumps({{"type": "response", "command": "prompt", "id": json.load(sys.stdin)["id"], "success": True}}))'
+echo '{{"type":"message_start","message":{{"role":"user","content":"coordinate"}}}}'
+echo '{{"type":"agent_settled"}}'
 IFS= read -r steering
-echo '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"pong"}}'
-echo '{"type":"agent_settled"}'
+echo '{{"type":"message_update","assistantMessageEvent":{{"type":"text_delta","delta":"pong"}}}}'
+echo '{{"type":"agent_settled"}}'
 IFS= read -r state_after
 IFS= read -r stats
-echo '{"type":"response","command":"get_session_stats","success":true,"data":{"contextUsage":{}}}'
+echo '{{"type":"response","command":"get_session_stats","success":true,"data":{{"contextUsage":{{}}}}}}'
 """,
         )
         queue: asyncio.Queue[str] = asyncio.Queue()
         finish = asyncio.Event()
         events = []
 
-        async for event in backend.stream_agent_events(
+        async for event in one_turn_events(
             stub,
             [],
             "coordinate",
@@ -3023,7 +2975,7 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
             f"for event in {rpc_events!r}: print(json.dumps(event), flush=True)\n",
         )
         events = [
-            event async for event in backend.stream_agent_events(stub, [], "work", str(tmp_path))
+            event async for event in one_turn_events(stub, [], "work", str(tmp_path))
         ]
         assert next(
             event
@@ -3051,8 +3003,8 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
                 '{"type":"agent_settled"}',
             ]
         )
-        stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{rpc_lines}\nEOF\n")
-        events = [e async for e in backend.stream_agent_events(stub, [], "t", str(tmp_path))]
+        stub = _replay_stub(tmp_path, rpc_lines)
+        events = [e async for e in one_turn_events(stub, [], "t", str(tmp_path))]
         assert events[-1].ok is True
         tool_end = events[1]
         assert tool_end.ok is False
@@ -3088,9 +3040,9 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
             {"type": "agent_settled"},
         ]
         lines = "\n".join(json.dumps(record) for record in records)
-        stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{lines}\nEOF\n")
+        stub = _replay_stub(tmp_path, lines)
         events = [
-            event async for event in backend.stream_agent_events(stub, [], "t", str(tmp_path))
+            event async for event in one_turn_events(stub, [], "t", str(tmp_path))
         ]
         assert events[-1].ok is (expected_reason is None)
         if expected_reason is not None:
@@ -3130,9 +3082,9 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
                 {"type": "agent_settled"},
             ]
         )
-        stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{lines}\nEOF\n")
+        stub = _replay_stub(tmp_path, lines)
         events = [
-            event async for event in backend.stream_agent_events(stub, [], "t", str(tmp_path))
+            event async for event in one_turn_events(stub, [], "t", str(tmp_path))
         ]
         assert events[-1].ok is False
         assert events[-1].reason_code == "current_prompt_input_missing"
@@ -3173,7 +3125,7 @@ send({{"type": "agent_settled"}})
         queue.put_nowait(steer("peer"))
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub, [], "t", str(tmp_path), steering_queue=queue
             )
         ]
@@ -3209,7 +3161,7 @@ send({"type": "agent_settled"})
         queue.put_nowait(steer("peer"))
         events = [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 stub, [], "t", str(tmp_path), steering_queue=queue
             )
         ]
@@ -3242,7 +3194,7 @@ time.sleep(30)
         async def collect():
             return [
                 event
-                async for event in backend.stream_agent_events(
+                async for event in one_turn_events(
                     stub, [], "t", str(tmp_path), finish_event=finish
                 )
             ]
@@ -3272,9 +3224,9 @@ time.sleep(30)
             {"type": "agent_settled"},
         ]
         lines = "\n".join(json.dumps(record) for record in records)
-        stub = _stub(tmp_path, f"#!/bin/sh\ncat <<'EOF'\n{lines}\nEOF\n")
+        stub = _replay_stub(tmp_path, lines)
         events = [
-            event async for event in backend.stream_agent_events(stub, [], "t", str(tmp_path))
+            event async for event in one_turn_events(stub, [], "t", str(tmp_path))
         ]
         assert events[-1].ok is False
         assert events[-1].reason_code == "assistant_final_stop_missing"

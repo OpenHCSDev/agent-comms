@@ -15,12 +15,12 @@ function fixture(rows) {
     return {dir,file,close:()=>rmSync(dir,{recursive:true,force:true})};
 }
 
-test('both stores preserve branch context, settings, archived input and commit identity',()=>{
+test('both stores preserve branch context, settings and archived input',()=>{
     const rows = [
         {type:'model_change',id:'model',parentId:null,provider:'test',modelId:'model'},
         {...entry('a','model'),message:{role:'user',content:'original',inputId:'tracked',inputDigest:'digest'}},
         entry('b','a'), entry('sibling','a'),
-        {type:'compaction',id:'compact',parentId:'b',firstKeptEntryId:'b',summary:'summary',details:{agentCommsCommit:{commitId:'commit'}}},
+        {type:'compaction',id:'compact',parentId:'b',firstKeptEntryId:'b',summary:'summary'},
         entry('c','compact'),
     ];
     const f=fixture(rows);
@@ -34,7 +34,6 @@ test('both stores preserve branch context, settings, archived input and commit i
             assert.equal(store.trackedInput('tracked').id,'a');
             assert.equal(store.trackedInputMetadata('tracked').inputDigest,'digest');
             assert.equal([...store.trackedMetadata()][0].id,'a');
-            assert.equal([...store.commits('commit')][0].id,'compact');
             assert.deepEqual([...store.entries()],rows);
             assert.equal(store.commonAncestor('c','sibling'),'a');
             assert.equal(store.commonAncestor(null,'c'),null);

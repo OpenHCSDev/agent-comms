@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -57,10 +56,8 @@ if TYPE_CHECKING:
 # all in @earendil-works/pi-coding-agent 0.85.1 as patched by stack/:
 #   dist/core/agent-session.d.ts   AgentSessionEvent union
 #   pi-agent-core dist/types.d.ts   AgentEvent union (agent_start .. tool_execution_end)
-#   dist/modes/rpc/rpc-mode.js      output(): response, extension_ui_request, extension_error,
-#                                   agent_comms_compaction_progress
+#   dist/modes/rpc/rpc-mode.js      output(): response, extension_ui_request, extension_error
 #   stack/patch-native-steering.py  steering_interrupt_started / _completed
-#   stack native compaction patches compaction_progress
 PI_0_85_1_EVENT_KINDS: frozenset[str] = frozenset({
     "agent_start", "agent_end", "agent_settled",
     "turn_start", "turn_end",
@@ -69,7 +66,7 @@ PI_0_85_1_EVENT_KINDS: frozenset[str] = frozenset({
     "input_committed", "context_committed", "turn_context_observed", "model_request_progress",
     "queue_update", "entry_appended", "session_info_changed", "thinking_level_changed",
     "bash_execution_update",
-    "compaction_start", "compaction_progress", "compaction_end", "agent_comms_compaction_progress",
+    "compaction_start", "compaction_end",
     "auto_retry_start", "auto_retry_end",
     "summarization_retry_scheduled", "summarization_retry_attempt_start",
     "summarization_retry_finished",
@@ -102,9 +99,7 @@ class PersistentPiSession:
     def available(self) -> bool:
         return self.custody.available
 
-    async def open(
-        self, launch, *, reuse, require_input_id, startup, watchdog
-    ) -> PiSessionChild:
+    async def open(self, launch, *, reuse, startup, watchdog) -> PiSessionChild:
         from .native_custody import BorrowedNative, EmptyNative, PiSessionChild
 
         key = (launch, launch.configuration.auth_revision())
@@ -112,7 +107,7 @@ class PersistentPiSession:
         reused = child is not None
         if child is None:
             await self.close()
-            attestation = await self.custody.expected(launch, require_input_id)
+            attestation = launch.session.attestation()
             watchdog.launching(asyncio.get_running_loop().time, launch.session.session_file)
             with startup.measurements.operation("native_spawn"):
                 child = await PiSessionChild.start(key, attestation)
@@ -125,7 +120,7 @@ class PersistentPiSession:
 
     def retain(self, child: PiSessionChild, identity: NativeSessionIdentity) -> bool:
         from .native_custody import RetainedNative
-        from .selected_source import SessionRevision, SessionRevisionUnavailable
+        from .session_revision import SessionRevision, SessionRevisionUnavailable
 
         if not child.proc.alive():
             return False
@@ -138,10 +133,6 @@ class PersistentPiSession:
 
     async def close(self) -> None:
         await self._finish_retirement(self.custody.retire())
-
-    async def close_owned(self, identity: NativeSessionIdentity, binding, arguments, worktree: Path) -> None:
-        """Refuse unrelated custody before initiating the original stop task."""
-        await self._finish_retirement(self.custody.retire_owned(identity, binding, arguments, worktree))
 
     async def _finish_retirement(self, retiring: NativeCustody) -> None:
         from .native_custody import NativeCleanupFailed
@@ -156,28 +147,6 @@ class PersistentPiSession:
     async def close_idle(self) -> None:
         async with self.lock:
             await self.close()
-
-    def require_reopen(self, identity: NativeSessionIdentity) -> None:
-        self.custody = self.custody.retire(self.custody.reopen(identity))
-
-    @asynccontextmanager
-    async def external_write(self, identity: NativeSessionIdentity):
-        """Own an idle child while its source is changed by the guarded writer.
-
-        Reopen custody refuses observations and new borrows of the old runtime.
-        This resource owns the actual child until its explicit reload succeeds;
-        any exceptional exit retires it without changing the writer's outcome.
-        """
-        async with self.lock:
-            retained = self.custody.idle()
-            self.custody = retained.reopen(identity)
-            try:
-                yield retained
-                self.custody = retained.idle()
-            except BaseException:
-                self.custody = retained.retire(self.custody)
-                await self.close()
-                raise
 
 
 class PiNativeBackend(
@@ -355,16 +324,13 @@ class PiNativeBackend(
     # -- Forks ------------------------------------------------------------
 
     @classmethod
-    async def fork(cls, parent: Thread, root: Path, launcher: str) -> PiSessionFile:
+    async def fork(cls, parent: Thread, launcher: str) -> PiSessionFile:
         """Copy the parent's whole saved history with Pi's own session manager."""
-        from .compaction_journal import CompactionJournal
         from .coordinator import Coordination
         from .native_fork import fork_native_session
 
         identity = await Coordination.run_worker(partial(
-            fork_native_session,
-            parent.require_saved_session(), parent.worktree, launcher,
-            private_inputs=CompactionJournal(root / "compaction-commits.sqlite3").private_inputs,
+            fork_native_session, parent.require_saved_session(), parent.worktree, launcher,
         ))
         return PiSessionFile(identity.session_file)
 

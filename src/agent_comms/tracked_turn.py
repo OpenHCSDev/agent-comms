@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 from . import pi_commands as commands
 from . import pi_events as pi
 from .agent_events import AgentEvent
-from .backend import MODEL_WAIT_TIMEOUT_SECONDS, PersistentPiSession, TurnSession
+from .backend import MODEL_WAIT_TIMEOUT_SECONDS, TurnSession
 from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier
 from .mro_dispatch import MroDispatch, handles
@@ -47,6 +47,7 @@ from .turn_context import InputContributionCoordinates
 
 
 if TYPE_CHECKING:
+    from .pi_native_backend import PersistentPiSession
     from .coordinated_runtime import SelectedExecution
     from .private_send_admission import PrivateSendAdmission
 
@@ -193,19 +194,18 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         selected_tool_mode,
         observe_event,
         request_observer,
-        native_custody: PersistentPiSession | None = None,
+        pi_session: PersistentPiSession | None,
     ):
+        # The owner's Pi session child: an idle child left by its previous
+        # input is reused when its launch and source still match.
         super().__init__(
             launch,
             command.message,
             model_wait_timeout=model_wait_timeout,
             startup=startup,
             request_observer=request_observer,
+            native_session=pi_session,
         )
-        if native_custody is not None:
-            # The owner's one native custody for this session: an idle child left
-            # by its previous input is reused when its launch and source still match.
-            self.native_session = native_custody
         self.retainable = False
         self.command = command
         self.provider, self.model = provider, model
@@ -241,6 +241,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         acquisition_measurements: PublicationMeasurements | None = None,
         request_observer: Callable[[RequestProgress, ProcessIdentity], None] | None = None,
         launch_owner: SelectedExecution | None = None,
+        pi_session: PersistentPiSession | None = None,
     ) -> NativeTurnResult:
         if type(input_id) is not str or re.fullmatch(r"[0-9a-f]{32}", input_id) is None:
             raise ValueError("A native turn requires a 128-bit lowercase hex input ID")
@@ -285,7 +286,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             selected_tool_mode=selected_tool_mode,
             observe_event=observe_event,
             request_observer=request_observer,
-            native_custody=launch_owner.native_custody if launch_owner is not None else None,
+            # A selected stage runs on its execution's child; an independent
+            # execution names the child it runs on.
+            pi_session=launch_owner.pi_session if launch_owner is not None else pi_session,
         )
         return await turn.complete()
 
@@ -306,9 +309,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 try:
                     try:
                         await self.attest()
-                        if self.prompt_send_boundary is not None:
-                            with self.startup.measurements.operation("selected_context_preparation"):
-                                await self.prompt_send_boundary.prepare_context(self)
                         await self.admit_prompt()
                         while not self.finished:
                             event = await self.next_event()
@@ -339,13 +339,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         if self.retainable and identity is not None and self.native_session.retain(self.native, identity):
             return
         await self.native_session.close()
-
-    async def resume_prepared(self, resources: AsyncExitStack) -> None:
-        await super().resume_prepared(resources)
-        if self.tool_socket is not None:
-            self.tool_socket.expected_pid = self.native.proc.pid
-        self.watchdog.reading()
-        await self.attest()
 
     async def open_transport(self, custody: AsyncExitStack) -> None:
         if self.selected_tool_mode is not None:
@@ -511,6 +504,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     def fail_terminal(self, text: str):
         self.terminal = self.terminal.fail(text)
+
+    def request_retried(self) -> None:
+        super().request_retried()
+        self.terminal = PendingTrackedTerminal()
 
     async def context_proof(self) -> NativeContextProof:
         if not self.admission.acknowledged:

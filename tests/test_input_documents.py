@@ -19,7 +19,6 @@ from agent_comms.input_attempt import (
 )
 from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.locked_store import LockedStore
-from agent_comms.retained_task_facts import InputTaskFact, RetainedTaskFacts
 from agent_comms.errors import RelationViolationError
 from agent_comms.thread_identity import TurnId
 
@@ -286,38 +285,6 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
         InputDocument(rows={"missing": missing})
 
 
-def test_compaction_input_custody_survives_attention_and_admission_changes(tmp_path):
-    from agent_comms.thread_identity import ThreadIncarnation
-
-    store = InputDispositions(tmp_path / InputDispositions.filename)
-    owner = ThreadIncarnation("owner", 1.0)
-    for key, admission in (("acp:old", 1), ("acp:current", 2)):
-        assert store.record(key, seq=None, owner="owner", admission=admission,
-                            target="owner", text=key)
-    # A reserved predecessor cannot disappear through a later admission.
-    with pytest.raises(RelationViolationError):
-        store.read().require_compaction_ready(owner, ("acp:current",))
-    assert isinstance(store.settle_unbound(("acp:old",)).lookup("acp:old"), NotSentInput)
-    before = store.path.read_bytes()
-    store.read().require_compaction_ready(owner, ("acp:current",))
-    assert store.path.read_bytes() == before
-    assert store.read().lookup("acp:old").unresolved  # Attention is still required.
-
-    assert store.bind("acp:current", admission=2, turn_id="actual-turn",
-                      native_id="a" * 32, text="acp:current")
-    before = store.path.read_bytes()
-    # Even naming this bound original as pending must not grant a new send.
-    for pending in ((), ("acp:current",), ("acp:future",)):
-        with pytest.raises(RelationViolationError):
-            store.read().require_compaction_ready(owner, pending)
-    assert isinstance(store.settle_unbound(("acp:current",)).lookup("acp:current"),
-                      BoundUnknownInput)
-    assert store.path.read_bytes() == before
-    assert store.started("acp:current", turn_id="actual-turn", native_id="a" * 32,
-                         text="acp:current")
-    store.read().require_compaction_ready(owner, ())
-
-
 def test_batch_retirement_returns_published_cut_without_changing_native_evidence(tmp_path):
     store = InputDispositions(tmp_path / InputDispositions.filename)
     keys = ("acp:reserved", "acp:bound", "acp:started", "acp:unsent", "acp:unrelated")
@@ -410,44 +377,17 @@ def test_current_reservation_wire_has_only_declared_fields(tmp_path):
     assert not {"native_id", "turn_id", "sent_text"}.intersection(record)
 
 
-@pytest.mark.parametrize(
-    "mismatch", [None, "owner", "admission", "turn", "sent", "original", "original_key"]
-)
-def test_only_exact_started_input_proves_recorded_native_delivery(mismatch):
+def test_reserved_input_is_queued_only_for_its_own_owner_admission_and_text():
     from agent_comms.text_digest import TextDigest
-
-    from agent_comms.thread_identity import ThreadIncarnation, TurnId
+    from agent_comms.thread_identity import ThreadIncarnation
 
     reserved = ReservedInput("acp:x", None, "owner", 1, "owner", "original")
     bound = reserved.bind(admission=1, turn_id="turn", native_id="a" * 32, text="wrapped input")
-    started = bound.started(turn_id="turn", native_id="a" * 32, text="wrapped input")
-    proof = dict(
-        owner=ThreadIncarnation("owner", 1.0),
-        admission=1,
-        turn=TurnId("turn"),
-        sent_digest=TextDigest.of("wrapped input"),
-        original=reserved,
-    )
-    for state in (MissingInput(), reserved, bound, reserved.finish_unbound()):
-        assert not state.proves_started(**proof)
+    owner = ThreadIncarnation("owner", 1.0)
     assert reserved.digest == TextDigest.of("original")
-    assert bound.sent_digest == TextDigest.of("wrapped input")
-    assert reserved.queued_for(proof["owner"], 1, "original")
-    assert not reserved.queued_for(proof["owner"], 1, "different")
-    assert not bound.queued_for(proof["owner"], 1, "original")
-    if mismatch == "owner":
-        proof["owner"] = ThreadIncarnation("other", 1.0)
-    elif mismatch == "admission":
-        proof["admission"] = 2
-    elif mismatch == "turn":
-        proof["turn"] = TurnId("different")
-    elif mismatch == "sent":
-        proof["sent_digest"] = TextDigest.of("different wrapper")
-    elif mismatch == "original":
-        proof["original"] = replace(reserved, source_text="different original")
-    elif mismatch == "original_key":
-        proof["original"] = replace(reserved, key="acp:foreign")
-    assert started.proves_started(**proof) is (mismatch is None)
+    assert reserved.queued_for(owner, 1, "original")
+    assert not reserved.queued_for(owner, 1, "different")
+    assert not bound.queued_for(owner, 1, "original")
 
 
 @pytest.mark.parametrize(
@@ -458,28 +398,13 @@ def test_only_exact_started_input_proves_recorded_native_delivery(mismatch):
 def test_started_delivery_and_original_ingress_use_distinct_owned_relations(
     tmp_path, key, sequence, target
 ):
-    from selected_summary_cases import admission_identity
-
-    session = tmp_path / "session.jsonl"
-    session.write_text('{"type":"session","id":"source"}\n')
-    source = admission_identity(
-        str(session), text="wrapped input", original_text="original", key=key,
-        turn="turn", owner="owner",
-    ).source
     store = InputDispositions(tmp_path / InputDispositions.filename)
     assert store.record(
         key, seq=sequence, owner="owner", admission=1, target=target, text="original"
     )
-    retained = RetainedTaskFacts((InputTaskFact(store.read().rows[key]),))
     assert store.bind(key, admission=1, turn_id="turn", native_id="a" * 32, text="wrapped input")
     assert store.started(key, turn_id="turn", native_id="a" * 32, text="wrapped input")
-    document = store.read()
-    assert source.original_has_started(document, retained)
-    # A bus/channel delivery is still genuine native-start evidence. It cannot
-    # lend that evidence to a different selected source's original ingress.
-    foreign = replace(source, originals=(replace(source.originals[0], key="acp:foreign"),))
-    with pytest.raises(RelationViolationError, match="unique original input"):
-        foreign.original_has_started(document, retained)
+    assert store.read().lookup(key).has_started
     original_bytes = store.path.read_bytes()
     # Routing cannot be rewritten by recording another target at the original
     # key. That ownership belongs to first durable acceptance, not start proof.
@@ -488,4 +413,4 @@ def test_started_delivery_and_original_ingress_use_distinct_owned_relations(
     )
     assert store.path.read_bytes() == original_bytes
     assert store.read().lookup(key).target == target
-    assert source.original_has_started(store.read(), retained)
+    assert store.read().lookup(key).has_started

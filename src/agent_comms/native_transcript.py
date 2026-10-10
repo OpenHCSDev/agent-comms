@@ -89,7 +89,7 @@ class NativeTranscript:
         producer may also prepend model/settings records. Stop at conversation;
         never scan the remaining history or claim this was a model request.
         """
-        from .selected_source import SessionRevision
+        from .session_revision import SessionRevision
 
         revision = SessionRevision.observe(str(self.path)).require_available()
         with self.path.open("rb") as stream:

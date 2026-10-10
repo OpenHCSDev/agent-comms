@@ -140,5 +140,3 @@ class LostAttestation(NativeAttestation):
     uncertain = True
 
 
-class SavedSessionReopenError(ValueError):
-    """Strict saved-session validation failed before a native process was started."""

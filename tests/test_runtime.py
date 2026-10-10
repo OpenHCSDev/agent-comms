@@ -14,9 +14,9 @@ from agent_comms.acp_extension import (
     TurnSettledUpdate,
     decode_updates,
 )
+from agent_comms.agent_backend import CompactionOutcome, PlacedCompaction
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.compaction_result import CommittedCompactionResult, CompactionResult
 from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime import RuntimeProxy, present_session, socket_path
 from agent_comms.thread_management import ForkSpec
@@ -169,12 +169,12 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
 
         async def compact_context(runner, session_id, instructions):
             compact_calls.append((session_id, instructions))
-            return CommittedCompactionResult("summary", "commit")
+            return PlacedCompaction("summary", "first-kept", 1200)
 
         monkeypatch.setattr("agent_comms.manual_compaction_bridge.compact_context", compact_context)
         assert FieldCodec.decode(
-            CompactionResult, await proxy.request("compact", instructions="focus")
-        ) == CommittedCompactionResult("summary", "commit")
+            CompactionOutcome, await proxy.request("compact", instructions="focus")
+        ) == PlacedCompaction("summary", "first-kept", 1200)
         assert compact_calls == [(response.session_id, "focus")]
         with pytest.raises(ValueError, match="not registered"):
             RuntimeProxy(client, "missing-thread", path)

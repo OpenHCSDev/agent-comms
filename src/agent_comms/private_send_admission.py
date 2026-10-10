@@ -16,7 +16,6 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
@@ -55,7 +54,6 @@ class PrivateSendAdmission:
     prompt: RenderedInput
     session: SelectedSession
     _once: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
-    _journal: CompactionJournal = field(init=False, repr=False)
     _measurements: PublicationMeasurements = field(default_factory=PublicationMeasurements,
                                                   init=False, compare=False, repr=False)
 
@@ -78,14 +76,6 @@ class PrivateSendAdmission:
     @property
     def participant(self) -> ParticipantOwner:
         return self.selected.identity
-
-    def __post_init__(self) -> None:
-        # Prepare schema before the deadline-constrained raw writer, as before.
-        object.__setattr__(
-            self,
-            "_journal",
-            CompactionJournal(self.bus.log.path.parent / "compaction-commits.sqlite3"),
-        )
 
     @classmethod
     def reserve(
@@ -132,10 +122,6 @@ class PrivateSendAdmission:
             prompt=self.prompt.text,
         )
         self.owner.require_registry(self.bus._registry)
-
-    async def prepare_context(self, turn: TrackedTurnSession) -> None:
-        """Use this original request's selected source and acquired native custody."""
-        await self.session.prepare_context(self.selected, turn)
 
     async def execute(
         self,
@@ -203,9 +189,9 @@ class PrivateSendAdmission:
 
         Stop, rename and maintenance before this grant refuse admission. After
         it, they are ordered after the original admitted attempt, whose raw
-        writer retains its own pipe and token. The durable UNKNOWN marker and
-        recorded admission remain the original recovery evidence; neither
-        successful pipe completion nor subsequent owner loss permits replay.
+        writer retains its own pipe and token. The recorded admission remains
+        the original recovery evidence; neither successful pipe completion nor
+        subsequent owner loss permits replay.
         """
         with ExitStack() as authority:
             try:
@@ -229,12 +215,7 @@ class PrivateSendAdmission:
                         self.prompt.text, blocking=False,
                     ))
                 with self._measurements.operation("selected_source_admission"):
-                    saved = self.session.admit(identity, selected_runtime_revision)
-                with self._measurements.operation("raw_journal_admission"):
-                    raw = authority.enter_context(
-                        self._journal.private_inputs.admission(
-                            saved, blocking=False, measurements=self._measurements)
-                    )
+                    self.session.admit(identity, selected_runtime_revision)
             except BlockingIOError as error:
                 raise PromptAdmissionBusy("Native admission exclusion is busy") from error
             except sqlite3.OperationalError as error:
@@ -257,14 +238,11 @@ class PrivateSendAdmission:
                     db, self.input_id, self.participant, self.token_digest
                 )
                 self.stage.require_claim(store)
-            with self._measurements.operation("raw_unknown_checkpoint"):
-                raw.mark_unknown(self.input_id)
             with self._measurements.operation("native_admission_record"):
                 reserved.sent_owner_admission_generation.record(
                     reserved, db, self.owner.admission_generation, identity
                 )
-            # ExitStack commits/closes the original journal and coordinator
-            # before releasing shared registry/wire custody. No bus publication
+            # ExitStack commits/closes the coordinator before releasing shared registry/wire custody. No bus publication
             # resource is borrowed: the selected claim and prompt are already
             # certified originals, and this grant changes only their SQL/input
             # records. No payload byte is

@@ -15,8 +15,6 @@ from .pi_vocabulary import ThinkingLevel
 from . import agent_backend as pivot
 from .declared_family import DeclaredFamily
 from .pi_payloads import PiMessage, PiPayload
-from .native_compaction_request import NativeSummaryPayload
-from .pi_summary_payloads import ManagedSummaryFiles, ManagedSummaryMetadata
 from .pi_rpc import unique_fields
 from .routing import TurnRouting
 from .transcript_events import NoticeTranscript, TranscriptEvent
@@ -53,21 +51,8 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
     input_boundary: ClassVar[bool] = False
     final_reply: ClassVar[bool] = False
 
-    def retained_tool_calls(self):
-        return ()
-
     def imported_sources(self):
         return ()
-
-    def covered_prefix(self, evidence, branch, db):
-        """This entry supplies no journaled compaction or creation coverage."""
-        return frozenset()
-
-    def retained_tool_facts(self, session, originals):
-        return ()
-
-    def require_artifact_request(self, request):
-        raise ValueError("Native entry is not a completed file operation")
 
     @classmethod
     def wire_member(cls, value):
@@ -291,88 +276,6 @@ class NativeEvidenceRead:
     def decode_rows(self, rows):
         return (NativeEntry.from_evidence(row) for row in rows)
 
-    def retained_task_facts(self, witness):
-        """Project only the witnessed branch of this original acquired resource.
-
-        Lookup maps are confined to this captured read. They have no persistent
-        storage, refresh lifecycle, publication or semantic authority.
-        """
-        from .native_session_reopen import NativeSessionIdentity
-
-        witness.require_current_file(self.source.path)
-        header, entries = self.observe()
-        if not witness.covers(self, witness.revision):
-            raise ValueError("Native retained facts belong to another session")
-        branch = self.branch(witness.leaf_id, entries)
-        calls = {}
-        facts = []
-        session = NativeSessionIdentity(header.id, str(self.source.path))
-        for entry in branch:
-            for call in entry.retained_tool_calls():
-                if call.id in calls:
-                    raise ValueError("Native retained SDK call identity was repeated")
-                calls[call.id] = entry
-            facts.extend(entry.retained_tool_facts(session, calls))
-        witness.require_current_file(self.source.path)
-        return tuple(facts)
-
-    def entry_index(self, entries):
-        """Resolve original coordinates only inside this acquired read."""
-        originals = {}
-        for entry in entries:
-            coordinates = entry.source_coordinates
-            originals[coordinates.original_id] = (entry, coordinates.parent_id)
-        if len(originals) != len(entries):
-            raise ValueError("Native source has ambiguous original entry identities")
-        return originals
-
-    def branch(self, leaf_id, entries):
-        """Resolve original ancestry inside this acquired source, never a catalog."""
-        originals = self.entry_index(entries)
-        branch = []
-        identity = leaf_id
-        while identity is not None:
-            try:
-                entry, parent = originals.pop(identity)
-            except KeyError as error:
-                raise ValueError("Native retained branch is missing or cyclic") from error
-            branch.append(entry)
-            identity = parent
-        return tuple(reversed(branch))
-
-    def recorded_source_prefix(self, entries, contexts):
-        """Locate retained ancestry at corroborated live-recorded input anchors.
-
-        The coordinator binds each anchor to this exact admitted session path;
-        its native journal independently corroborates the recorded generation.
-        An ancestor is retained source, not an input-delivery receipt, a fork
-        creation, or a claim that every ancestor entered the model context.
-        Sidecar-only context records cannot supply these anchors.
-        """
-        originals = self.entry_index(entries)
-        covered = set()
-        for context in contexts:
-            self.require_path(context.session_file)
-            pending = set()
-            identity = context.session_entry_id
-            while identity is not None and identity not in covered:
-                try:
-                    entry, identity = originals.pop(identity)
-                except KeyError as error:
-                    raise ValueError("Recorded source ancestry is missing or cyclic") from error
-                pending.add(entry.require_entry_id())
-            covered.update(pending)
-        return frozenset(covered)
-
-    def covered_prefix(self, entries, db):
-        from .compaction_records import NativeForkCreation
-
-        inherited = NativeForkCreation.recorded_prefix(db, self, entries)
-        branch = self.branch(entries[-1].require_entry_id(), entries)
-        entry = next((entry for entry in reversed(branch)
-            if entry.require_entry_id() not in inherited and isinstance(entry, CompactionEntry)), entries[0])
-        return inherited | entry.covered_prefix(self, branch, db)
-
 
 class NativeInputEvidenceRead(NativeEvidenceRead):
     """Verify every source byte; decode only the header and original input records.
@@ -483,15 +386,6 @@ class MessageEntry(NativeEntry):
     message: PiMessage
     is_message = True
 
-    def retained_tool_calls(self):
-        return self.message.retained_tool_calls()
-
-    def retained_tool_facts(self, session, originals):
-        return self.message.retained_tool_facts(session, self, originals)
-
-    def require_artifact_request(self, request):
-        return self.message.require_artifact_request(request)
-
     @property
     def input_boundary(self):
         return self.message.user
@@ -546,17 +440,9 @@ class MessageEntry(NativeEntry):
 
 @dataclass(frozen=True, kw_only=True)
 class CompactionEntry(NativeEntry):
-    """External native summaries grant no managed journal-cut coverage."""
+    """Pi's compaction entry: the summary that replaced the history before firstKeptEntryId."""
 
     summary: str = ""
-
-    @classmethod
-    def wire_variant(cls, value):
-        # This is the original Pi ingress, before FieldCodec constructs members.
-        details = value.get("details")
-        if isinstance(details, dict) and "agentCommsCommit" in details:
-            return ManagedCompactionEntry
-        return cls
 
     def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         text = self.summary.strip()
@@ -567,29 +453,6 @@ class CompactionEntry(NativeEntry):
 
     def transcript_text(self) -> str:
         return self.summary
-
-
-@dataclass(frozen=True, kw_only=True)
-class ManagedCompactionEntry(CompactionEntry, NativeSummaryPayload):
-    """The native payload owns validation/digests; the journal owns the cut."""
-
-    summary: str
-    first_kept_entry_id: str = field(metadata={"wire_name": "firstKeptEntryId"})
-    details: ManagedSummaryFiles | ManagedSummaryMetadata
-
-    def wire_discriminator(self):
-        from .field_codec import FieldCodec
-
-        return FieldCodec.encode(CompactionEntry)
-
-    def covered_prefix(self, evidence, branch, db):
-        from .compaction_records import CompactionOperation
-
-        operation = CompactionOperation.one(db, commit_id=self.details.agent_comms_commit.commit_id)
-        if operation is None:
-            # A copied marker is not an original journal operation.
-            return super().covered_prefix(evidence, branch, db)
-        return operation.covered_prefix(self, evidence, branch)
 
 
 class CustomEntry(NativeEntry):

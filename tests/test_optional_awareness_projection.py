@@ -247,7 +247,7 @@ async def test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered
                 )
         finally:
             store.close()
-        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
         runner, calls = _fake_model()
         monkeypatch.setattr(TrackedTurnSession, "execute", runner)
         outcome = await runtime.SelectedExecution(
@@ -507,7 +507,7 @@ async def test_real_selected_caller_after_rename_injects_only_new_generation(
             index.maintain(rebuild=True)
         finally:
             store.close()
-        monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
         runner, calls = _fake_model()
         monkeypatch.setattr(TrackedTurnSession, "execute", runner)
         outcome = await runtime.SelectedExecution(

@@ -174,10 +174,6 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
     permits_agent_revision = False
     observes_subtask = False
 
-    def optional_boundary(self, message: Message) -> tuple[MessageReference, ...]:
-        """Only an explicit authored completion can request optional timing."""
-        return ()
-
     def require_subtask(self) -> Subtask:
         raise RelationViolationError("Original wire message has no subtask observation")
 
@@ -433,9 +429,6 @@ class Subtask(ModelTaskDeclaration):
 
     def applies(self, owner, registry):
         return super().applies(owner, registry) and self.turn_scope_matches(owner, registry)
-
-    def optional_boundary(self, message):
-        return (message.reference,) if self.completed else ()
 
     def retained_task_facts(self, message):
         from .retained_task_facts import SubtaskTaskFact
