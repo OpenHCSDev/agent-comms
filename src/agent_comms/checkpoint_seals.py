@@ -82,6 +82,10 @@ class CheckpointSeal(DeclaredFamily, affix="Seal"):
     def check_final(self, saved: PrefixWitness, db_path: Path) -> None:
         raise RelationViolationError("Private bus checkpoint index seal changed or is pending.")
 
+    @abstractmethod
+    def require_final(self, saved: PrefixWitness, db_path: Path) -> None:
+        """Readers holding the shared lock accept only a final seal; repair needs the exclusive lock."""
+
 
 @dataclass(frozen=True)
 class FinalSeal(CheckpointSeal):
@@ -105,6 +109,9 @@ class FinalSeal(CheckpointSeal):
         info: os.stat_result,
     ) -> None:
         self.check_final(saved, path)
+
+    def require_final(self, saved: PrefixWitness, db_path: Path) -> None:
+        self.check_final(saved, db_path)
 
 
 @dataclass(frozen=True)
@@ -134,3 +141,8 @@ class PendingSeal(CheckpointSeal):
         ):
             raise RelationViolationError("Private bus checkpoint pending intent is inconsistent.")
         return _recover_pending_unlocked(bus, marker, db, path, info, self)
+
+    def require_final(self, saved: PrefixWitness, db_path: Path) -> None:
+        from .private_bus_checkpoint import CheckpointNeedsRepair
+
+        raise CheckpointNeedsRepair("Private bus checkpoint has an unfinished write.")

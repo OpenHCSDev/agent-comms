@@ -374,10 +374,10 @@ def test_open_thread_shares_original_notification_and_frontier_read(tmp_path, mo
     verify = WireLog.verify_before_read_unlocked
     barriers = []
 
-    def observed(log):
+    def observed(log, *, shared=False):
         if log.path == comms.bus.log.path:
             barriers.append(True)
-        return verify(log)
+        return verify(log, shared=shared)
 
     monkeypatch.setattr(WireLog, "verify_before_read_unlocked", observed)
     view = comms.views.thread_presentation("beta")
@@ -417,10 +417,10 @@ def test_original_page_reuses_captured_frontier_between_admission_fences(tmp_pat
     verify = WireLog.verify_before_read_unlocked
     barriers = []
 
-    def observed(log):
+    def observed(log, *, shared=False):
         if log.path == comms.bus.log.path:
             barriers.append(True)
-        return verify(log)
+        return verify(log, shared=shared)
 
     monkeypatch.setattr(WireLog, "verify_before_read_unlocked", observed)
     page = read.read()

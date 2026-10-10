@@ -296,7 +296,7 @@ class Goals:
 
     def goal_snapshot(self, name: str) -> tuple[Goal | None, GoalExecution | None]:
         """Read current goal and its scheduling projection as one owner snapshot."""
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             return self._goal_snapshot(name)
 
     def _goal_snapshot(self, name: str) -> tuple[Goal | None, GoalExecution | None]:

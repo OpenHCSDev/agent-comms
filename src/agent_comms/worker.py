@@ -36,6 +36,9 @@ async def run() -> None:
     initial: asyncio.Task | None = None
     try:
         await agent.sessions.start_owner(thread.worktree, name)
+        if private_nk is not None:
+            # Verify the native package at startup, before the first message.
+            await Coordination.run_worker(agent._verify_native_package_once)
         if key := os.environ.pop("AGENT_COMMS_STARTUP_INPUT_KEY", None):
             initial = asyncio.create_task(run_startup_input(agent, name, key))
         await stopped.wait()

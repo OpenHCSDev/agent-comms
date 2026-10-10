@@ -42,6 +42,9 @@ class SelectedExecution:
     selected_existing_file_write: SelectedExistingFileWrite | None = None
     selected_tool_intent: SelectedToolIntent | None = None
     write_authority: SelectedWriteAuthority = field(default_factory=NoSelectedWritePlans)
+    # The worker verifies its pinned package once (packages never change in
+    # place) and hands every run that one verified launcher, only when needed.
+    verified_launcher: Callable[[], Callable[..., NativePiRpcLaunch]] | None = None
     _run_permit: threading.Lock = field(init=False, default_factory=threading.Lock)
     # The owner session's native custody; None gives each input its own child.
     native_custody: PersistentPiSession | None = field(default=None, init=False, compare=False)
@@ -106,7 +109,13 @@ class SelectedExecution:
                 raise TypeError("selected tool requires a nominal owner intent")
             if self.selected_existing_file_write is not None:
                 raise IdentityConflict("selected tool cannot share an operator file plan")
-        self._tracked_factory = NativePiRpcLaunch.acquire_tracked(self.native_package)
+        if self.verified_launcher is None:
+            self._tracked_factory = NativePiRpcLaunch.acquire_tracked(self.native_package)
+            return
+        launcher = self.verified_launcher()
+        if launcher.args[0] != Path(self.native_package).absolute():
+            raise IdentityConflict("Worker's verified launcher is for a different package")
+        self._tracked_factory = launcher
 
     def action(self, session: SelectedSession) -> SelectedAction:
         if self.selected_tool_intent is not None:
