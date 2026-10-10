@@ -301,6 +301,9 @@ class GetSessionStats(SessionSnapshot, PiCommand):
                 session.finished = True
 
 
+CATALOG_TIMEOUT = 10  # seconds for one metadata child to start and answer
+
+
 class CatalogQuery(NativeQuery):
     """Catalog discovery uses the shared typed query transaction."""
 
@@ -321,7 +324,7 @@ class CatalogQuery(NativeQuery):
                 worktree=Path.cwd() if worktree is None else worktree,
             )
             async with BoundedRun.session(
-                launch.argv, cwd=launch.cwd, env=launch.env, timeout=10
+                launch.argv, cwd=launch.cwd, env=launch.env, timeout=CATALOG_TIMEOUT
             ) as child:
                 stderr = asyncio.create_task(child.discard_stderr())
                 try:
@@ -329,8 +332,13 @@ class CatalogQuery(NativeQuery):
                 finally:
                     stderr.cancel()
                     await asyncio.gather(stderr, return_exceptions=True)
-        except (TimeoutError, EOFError, ValueError, OSError) as error:
-            raise NativePiUnavailable(f"Native catalog discovery failed: {error}") from error
+        except TimeoutError as error:
+            raise NativePiUnavailable(
+                f"Native catalog discovery timed out: no catalog reply from {agent_bin!r} "
+                f"within {CATALOG_TIMEOUT} s"
+            ) from error
+        except (EOFError, ValueError, OSError) as error:
+            raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
 
     async def discover(self, agent_bin: str, arguments: Sequence[str]) -> PiResponseData:
         from .native_pi import NativePiUnavailable
