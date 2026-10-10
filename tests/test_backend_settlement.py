@@ -7,6 +7,7 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="executes a POSIX script")
 
@@ -96,7 +97,7 @@ for line in sys.stdin:
             )
             if inject and not injected:
                 injected = True
-                queue.put_nowait({"type": "prompt", "message": "second", "_input_id": "late"})
+                queue.put_nowait(InputRequest(input_id=InputId("late"), content=InputContent(text="second"), when_busy=WhenBusy.STEER))
                 if not inject_during_stats:
                     await asyncio.sleep(0.025)
             if isinstance(event, ae.StreamSettled):

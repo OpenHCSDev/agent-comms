@@ -48,7 +48,6 @@ if TYPE_CHECKING:
     from .backend import TurnSession
     from .pi_events import Response
     from .pi_rpc import PiRpcChannel
-    from .turn_inputs import ForwardedInput
 
 
 class SessionSnapshot:
@@ -69,17 +68,6 @@ class MutatesSession:
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
         return True
 
-    async def steer(self, session: TurnSession, forwarded: ForwardedInput) -> bool:
-        session.rejected_commands.append(
-            events.Error(
-                reason_code="steering_command_rejected",
-                command=self,
-                text=f"Mid-turn {self.declared_name} is not supported.",
-            )
-        )
-        session.rejected_signal.set()
-        return True
-
 
 @dataclass(frozen=True, kw_only=True)
 class PiCommand(DeclaredFamily):
@@ -90,11 +78,6 @@ class PiCommand(DeclaredFamily):
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
         return False
-
-    async def steer(self, session: TurnSession, forwarded: ForwardedInput) -> bool:
-        session.stdin.write(session.native.reader.encode(self))
-        await session.stdin.drain()
-        return True
 
     @asynccontextmanager
     async def pending_response(self, channel, writer):
@@ -154,9 +137,6 @@ class UnknownCommand(PiCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class Prompt(PiCommand):
-    async def steer(self, session: TurnSession, forwarded: ForwardedInput) -> bool:
-        return await session.inputs.send_prompt(self, session, forwarded)
-
     input_id: str | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "inputId"}
     )
@@ -282,7 +262,7 @@ class GetState(SessionSnapshot, NativeQuery):
 
 
 @dataclass(frozen=True, kw_only=True)
-class GetSessionStats(SessionSnapshot, PiCommand):
+class GetSessionStats(SessionSnapshot, NativeQuery):
     response_payload = SessionStatsData
 
     @classmethod
@@ -374,9 +354,6 @@ class InterruptSteering(PiCommand):
         if response.success is False:
             yield events.Error(text=str(response.error or "Send now was refused"))
 
-    async def steer(self, session: TurnSession, forwarded: ForwardedInput) -> bool:
-        return await session.inputs.interrupt(session, forwarded)
-
     input_ids: list[str] | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "inputIds"}
     )
@@ -439,7 +416,7 @@ class SetThinkingLevel(SettingCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class Compact(PiCommand):
+class Compact(NativeQuery):
     response_payload = CompactionData
     custom_instructions: str | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "customInstructions"}

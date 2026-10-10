@@ -1,15 +1,11 @@
 """Typed Pi boundaries exercised through the actual JSON-line codec and stream."""
 
-import asyncio
 import json
-import sys
 from types import SimpleNamespace
 from collections.abc import Mapping
 
 import pytest
 
-from agent_comms import agent_events as ae
-from agent_comms.backend import stream_agent_events
 from agent_comms.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.pi_events import MessageEnd, Response, UnknownPiEvent
 from agent_comms.pi_payloads import (
@@ -272,31 +268,6 @@ def test_image_forwarding_reuses_image_owner_and_preserves_native_shape():
     command = PiCommand.from_wire(record)
     assert isinstance(command, Prompt) and command.images[0].size == 3
     assert command.to_rpc() == record
-
-
-@pytest.mark.usefixtures("native_rpc_fixture")
-async def test_invalid_queued_command_reports_failure_and_reaps_child(tmp_path):
-    child = tmp_path / "pi-stub"
-    child.write_text(f"#!{sys.executable}\nimport time\ntime.sleep(60)\n")
-    child.chmod(0o700)
-    queue = asyncio.Queue()
-    queue.put_nowait(
-        {
-            "type": "prompt",
-            "message": "see",
-            "images": [{"type": "image", "data": "bad", "mimeType": "image/png"}],
-        }
-    )
-    async with asyncio.timeout(4):
-        events = [
-            event
-            async for event in stream_agent_events(
-                str(child), [], "task", str(tmp_path), steering_queue=queue, require_input_id=False
-            )
-        ]
-    assert isinstance(events[-1], ae.Done) and not events[-1].ok
-    assert any("Invalid queued Pi command" in getattr(event, "text", "") for event in events)
-    assert queue.empty()  # no implicit replay
 
 
 def test_native_startup_metadata_uses_existing_entry_family():

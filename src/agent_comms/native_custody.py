@@ -328,6 +328,8 @@ class RetainedNative(NativeCustody):
             response = await request.exchange(
                 current.child.reader,current.child.proc.stdin
             )
+            if response.success is not True:
+                raise ValueError(f"Native request did not succeed: {response.error}")
             return response.data.require_payload()
 
     def reuse(self, key):

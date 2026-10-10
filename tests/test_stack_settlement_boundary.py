@@ -12,6 +12,7 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
 
 
 @pytest.mark.asyncio
@@ -161,14 +162,11 @@ async def test_native_late_followup_outlives_previous_settlement(monkeypatch, de
                         finish_event.set()
                     if isinstance(event, ae.ProviderUsage) and not injected:
                         injected = True
-                        await queue.put(
-                            {
-                                "type": "prompt",
-                                "message": "LATE_FOLLOWUP",
-                                "streamingBehavior": "steer",
-                                "_input_id": "late",
-                            }
-                        )
+                        await queue.put(InputRequest(
+                            input_id=InputId("late"),
+                            content=InputContent(text="LATE_FOLLOWUP"),
+                            when_busy=WhenBusy.STEER,
+                        ))
                         async with asyncio.timeout(5):
                             while not second_started.is_set():
                                 await asyncio.sleep(0.01)

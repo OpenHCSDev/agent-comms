@@ -13,8 +13,8 @@ from uuid import uuid4
 from acp import RequestError
 
 from . import agent_events as events
-from . import backend
 from .acp_failure import PromptFailureReceipt
+from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
 from .goal_attempts import LaunchPermit
 from .messages import Message
@@ -59,6 +59,10 @@ class OwnedTurn:
     @property
     def turn_lease(self):
         return self.registry_owner.turn_lease
+
+    @property
+    def backend(self):
+        return self.runner.backend_for(self.session_id, self.thread)
 
     async def attach_native_session(self, session_file):
         """Publish through the owner returned by this original begin operation."""
@@ -387,9 +391,7 @@ class OwnedTurn:
                     self.registry_owner,
                     prepared,
                     pending_keys,
-                    self.runner.persistent_backends.setdefault(
-                        self.session_id, backend.PersistentPiSession()
-                    ),
+                    self.backend,
                     input_text=self.context.render().text,
                     on_admission=admit_original,
                     future_queue=self.runner.inputs,
@@ -416,7 +418,6 @@ class OwnedTurn:
                 await self.runner.effects.publish_pending_compaction(
                     self.session_id, self.thread_name
                 )
-        self.image_options: dict[str, Any] = {"images": self.images} if self.images else {}
 
     async def stream(self):
         await self.runner.transition_turn(self.session_id, self.turn_lease, PromptAcceptancePhase())
@@ -432,30 +433,25 @@ class OwnedTurn:
             goal_permit=self.goal_permit,
             original=replace(self.original, prompt=rendered.text),
         )
-        async for event in backend.stream_agent_events(
-            self.runner.agent_bin,
-            self.runner.native_arguments(self.thread),
-            rendered.text,
-            self.worktree,
-            self.env_extra,
-            **self.image_options,
-            context_contributions=rendered.contributions,
-            session_file=self.thread.session_file,
-            steering_queue=self.backend_inbox,
+        delivery = TurnDelivery(
+            worktree=self.worktree,
+            environment=self.env_extra,
+            inbox=self.backend_inbox,
             finish_event=self.finish_event,
             send_boundary=admission,
             interrupt_boundary=lambda public_id, native_id, text: admission(
                 public_id, native_id, text, already_bound=True
             ),
-            native_start=admission.native_start,
-            request_observer=self.progress.record_request_progress,
-            persistent_session=self.runner.persistent_backends.setdefault(
-                self.session_id, backend.PersistentPiSession()
-            ),
+            input_started=admission.native_start,
+            request_progress=self.progress.record_request_progress,
             ui_request=lambda request: self.runner.extension_ui_permission(
                 self.session_id, self.turn_id, self.controller, request
             ),
-        ):
+        )
+        content = InputContent(
+            text=rendered.text, images=tuple(self.images), contributions=rendered.contributions,
+        )
+        async for event in self.backend.run_turn(self.thread, content, delivery):
             await self.progress.consume(event)
 
     async def acquire(self, resources: AsyncExitStack, permit_custody: AsyncExitStack) -> bool:
@@ -473,7 +469,7 @@ class OwnedTurn:
         # Early failures close claims before inbox/lease retirement. Once all
         # stream capabilities exist, goal settlement belongs above those resources.
         resources.push_async_callback(permit_custody.pop_all().aclose)
-        resources.push_async_callback(backend.terminate_task_process, self.owner_task)
+        resources.push_async_callback(self.backend.abort, self.owner_task)
         return True
 
     async def run(self) -> None:
@@ -498,7 +494,7 @@ class OwnedTurn:
                 raise PromptFailureReceipt(failure, True).request_error()
         except asyncio.CancelledError:
             await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
-            await backend.terminate_task_process(self.owner_task)
+            await self.backend.abort(self.owner_task)
             state = await Coordination.run_worker(self.settle_unbound)
             await self.runner.effects._emit_event(
                 self.session_id, events.PromptCancelled(state), turn_id=self.turn_id

@@ -16,6 +16,7 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, SendNow, WhenBusy
 
 
 @pytest.mark.asyncio
@@ -357,22 +358,20 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 async with asyncio.timeout(3):
                     while not terminal_pid.exists():
                         await asyncio.sleep(0.01)
-            command = {
-                "type": "prompt",
-                "message": "x" * 800000 if surface == "oversized" else "URGENT_INPUT",
-                "streamingBehavior": "steer",
-                "_input_id": "urgent",
-            }
+            command = InputRequest(
+                input_id=InputId("urgent"),
+                content=InputContent(
+                    text="x" * 800000 if surface == "oversized" else "URGENT_INPUT"
+                ),
+                when_busy=WhenBusy.STEER,
+            )
             if owner is None:
                 if surface == "priority":
-                    await queue.put(
-                        {
-                            "type": "prompt",
-                            "message": "NORMAL_INPUT",
-                            "streamingBehavior": "steer",
-                            "_input_id": "normal",
-                        }
-                    )
+                    await queue.put(InputRequest(
+                        input_id=InputId("normal"),
+                        content=InputContent(text="NORMAL_INPUT"),
+                        when_busy=WhenBusy.STEER,
+                    ))
                 await queue.put(command)
             else:
                 await owner.prompt(
@@ -386,8 +385,9 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 events,
             )
             if surface == "backend_terminal_cancel":
-                await queue.put({"type": "abort"})
-                await asyncio.wait_for(task, 10)
+                # Cancelling the turn task is the backend's abort path.
+                task.cancel()
+                await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 10)
                 assert len(requests) == 1
                 assert not started.is_set(), "Cancel must not consume the queued input"
                 assert not Path(f"/proc/{terminal_pid.read_text()}").exists()
@@ -397,9 +397,9 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             if surface == "backend_terminal_queue":
                 terminal_release.touch()
             elif owner is None:
-                await queue.put({"type": "interrupt_steering", "_input_ids": ["urgent"]})
+                await queue.put(SendNow((InputId("urgent"),)))
                 if surface == "backend_duplicate":
-                    await queue.put({"type": "interrupt_steering", "_input_ids": ["urgent"]})
+                    await queue.put(SendNow((InputId("urgent"),)))
             else:
                 await owner.prompt(
                     "project", [{"type": "text", "text": " "}], agentComms={"sendNow": True}

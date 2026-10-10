@@ -1,33 +1,35 @@
-"""Input forwarding owns pending native IDs and never replays written inputs."""
+"""Input forwarding owns pending native IDs and never replays written inputs.
+
+The turn's inbox carries Core's records (``InputRequest``, ``SendNow``). This
+owner converts each to its Pi command when it writes it to the running child.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import secrets
-from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any
-from uuid import uuid4
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import pi_commands as commands
 from . import turn_failure as failures
+from .agent_backend import InputRequest, SendNow, WhenBusy
 
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .pi_events import MessageStart, Response
 
 
-@dataclass(frozen=True)
-class ForwardedInput:
-    original: str | dict[str, Any]
-    public_id: str | None
-    selected: list[str]
+# Pi's spelling of each busy policy it supports; Pi has no way to refuse an input.
+_PI_STREAMING_BEHAVIOR = {WhenBusy.STEER: "steer", WhenBusy.FOLLOW_UP: "followUp"}
 
 
 @dataclass
 class InputForwarding:
-    queue: asyncio.Queue[str | dict[str, Any]] | None = None
-    pending: list[tuple[str | None, str, str | dict[str, Any], str]] = field(default_factory=list)
+    queue: asyncio.Queue[InputRequest | SendNow] | None = None
+    # (public input ID, sent text, native input ID) for each written, unstarted input.
+    pending: list[tuple[str, str, str]] = field(default_factory=list)
     accepted: set[str] = field(default_factory=set)
     changed: asyncio.Event = field(default_factory=asyncio.Event)
     generation: int = 0
@@ -56,40 +58,20 @@ class InputForwarding:
         self.changed.set()
 
     async def forward(self, session: TurnSession) -> None:
-        while True:
-            message = await self.queue.get()
-            original = dict(message) if isinstance(message, dict) else message
-            wire = (
-                dict(original)
-                if isinstance(original, dict)
-                else {"type": "prompt", "message": original, "streamingBehavior": "steer"}
-            )
-            forwarded = ForwardedInput(
-                original, wire.pop("_input_id", None), wire.pop("_input_ids", [])
-            )
-            try:
-                command = commands.PiCommand.from_wire(wire)
-            except (ValueError, TypeError) as error:
+        while await (await self.queue.get()).deliver_to(self, session):
+            pass
 
-                session.output.record_failure(
-                    failures.PromptSendFailed(f"Invalid queued Pi command: {error}")
-                )
-                await session.native.proc.stop()
-                return
-            if not await command.steer(session, forwarded):
-                return
-
-    async def interrupt(self, session: TurnSession, forwarded: ForwardedInput) -> bool:
-
+    async def send_now(self, session: TurnSession, item: SendNow) -> bool:
+        selected = {input_id.value for input_id in item.input_ids}
         while True:
             self.changed.clear()
-            candidates = [item for item in self.pending if item[0] in forwarded.selected]
-            if not candidates or all(item[0] in self.accepted for item in candidates):
+            candidates = [entry for entry in self.pending if entry[0] in selected]
+            if not candidates or all(entry[0] in self.accepted for entry in candidates):
                 break
             await self.changed.wait()
         if not candidates:
             return True
-        public_id, sent_text, _, native_id = candidates[0]
+        public_id, sent_text, native_id = candidates[0]
         from .backend import _maintenance_send_boundary
 
         boundary = _maintenance_send_boundary(
@@ -103,7 +85,7 @@ class InputForwarding:
             if authorized:
                 session.stdin.write(
                     session.native.reader.encode(
-                        commands.InterruptSteering(input_ids=[item[3] for item in candidates])
+                        commands.InterruptSteering(input_ids=[entry[2] for entry in candidates])
                     )
                 )
         if not authorized:
@@ -117,18 +99,23 @@ class InputForwarding:
         await session.stdin.drain()
         return True
 
-    async def send_prompt(
-        self, command: commands.Prompt, session: TurnSession, forwarded: ForwardedInput
-    ) -> bool:
+    async def place(self, session: TurnSession, item: InputRequest) -> bool:
         from .backend import _maintenance_send_boundary
 
-        public_id = forwarded.public_id or f"agent-comms-steer-{uuid4().hex}"
+        public_id = item.input_id.value
         native_id = secrets.token_hex(16)
-        text = command.message
-        if not session.require_input_id and isinstance(forwarded.original, str):
-            text = f"[agent-comms input-id: {public_id}]\n{forwarded.original}"
-        command = replace(command, id=public_id, input_id=native_id, message=text)
-        self.pending.append((public_id, text, forwarded.original, native_id))
+        text = item.content.text
+        if not session.require_input_id:
+            text = f"[agent-comms input-id: {public_id}]\n{text}"
+        command = commands.Prompt(
+            id=public_id,
+            input_id=native_id,
+            message=text,
+            images=item.content.images or None,
+            context_contributions=item.content.contributions,
+            streaming_behavior=_PI_STREAMING_BEHAVIOR[item.when_busy],
+        )
+        self.pending.append((public_id, text, native_id))
         boundary = _maintenance_send_boundary(
             session.startup.root,
             session.send_boundary,
@@ -154,7 +141,7 @@ class InputForwarding:
             await session.native.proc.stop()
             return False
         # None means never sent; preserve the owner's UNKNOWN, not a replay.
-        self.pending[:] = [item for item in self.pending if item[3] != native_id]
+        self.pending[:] = [entry for entry in self.pending if entry[2] != native_id]
         session.rejected_commands.append(events.InputRefused(id=public_id))
         session.rejected_signal.set()
         return True
@@ -165,7 +152,7 @@ class InputForwarding:
             return False, None
         text = message.text
         native_id = message.input_id
-        for index, (input_id, queued_text, _, expected_native_id) in enumerate(self.pending):
+        for index, (input_id, queued_text, expected_native_id) in enumerate(self.pending):
             if (
                 (session.require_input_id or input_id in self.accepted)
                 and text == queued_text

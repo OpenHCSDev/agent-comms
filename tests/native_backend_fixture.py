@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from agent_comms import agent_events as events
 from agent_comms import backend
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
 from agent_comms.comms import Comms
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.child_process import BoundedRun
@@ -157,14 +158,11 @@ console.log(JSON.stringify(manager.captureCompactionWitness(kept)));
                 result.append(event)
                 self.observed.append(event)
                 if followup is not None and isinstance(event, events.InputStarted):
-                    queue.put_nowait(
-                        {
-                            "type": "prompt",
-                            "message": followup,
-                            "_input_id": "queued",
-                            "streamingBehavior": "steer",
-                        }
-                    )
+                    queue.put_nowait(InputRequest(
+                        input_id=InputId("queued"),
+                        content=InputContent(text=followup),
+                        when_busy=WhenBusy.STEER,
+                    ))
                     followup = None
         return result
 

@@ -9,6 +9,7 @@ from agent_comms import agent_events as events
 from agent_comms import backend
 from agent_comms import pi_commands as commands
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, SendNow, WhenBusy
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -44,15 +45,8 @@ async def test_actual_native_interrupt_promotes_only_selected_followup(native_ba
                 assert not task.done(), task.result() if task.done() else None
                 await asyncio.sleep(0.01)
         owner.provider.status = 200
-        queue.put_nowait(
-            {
-                "type": "prompt",
-                "message": "Selected followup",
-                "_input_id": "selected",
-                "streamingBehavior": "steer",
-            }
-        )
-        queue.put_nowait({"type": "interrupt_steering", "_input_ids": ["selected"]})
+        queue.put_nowait(InputRequest(input_id=InputId("selected"), content=InputContent(text="Selected followup"), when_busy=WhenBusy.STEER))
+        queue.put_nowait(SendNow((InputId("selected"),)))
         result = await task
         assert result[-1].ok, result[-1]
         assert any(isinstance(item, events.SteeringInterrupted) for item in result)

@@ -7,17 +7,28 @@ import signal
 import sys
 from contextlib import contextmanager, nullcontext, suppress
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
 from agent_comms.compaction_progress import CompactionSourceProgress
 from agent_comms.image_inputs import ImageInput
 from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.pi_commands import PiCommand
 from agent_comms.pi_vocabulary import ThresholdCompactionReason
+
+
+def steer(text: str, input_id: str | None = None) -> InputRequest:
+    """A queued steering input as Core hands it to the running turn."""
+    return InputRequest(
+        input_id=InputId(input_id or f"agent-comms-steer-{uuid4().hex}"),
+        content=InputContent(text=text),
+        when_busy=WhenBusy.STEER,
+    )
+
 
 pytestmark = [
     pytest.mark.usefixtures("native_rpc_fixture"),
@@ -354,7 +365,7 @@ for line in sys.stdin:
             f"#!{sys.executable}\n" + "import time\ntime.sleep(60)\n",
         )
         queue: asyncio.Queue[str] = asyncio.Queue()
-        queue.put_nowait("[peer] pending")
+        queue.put_nowait(steer("[peer] pending"))
 
         async def consume() -> None:
             async for _ in backend.stream_agent_events(
@@ -1018,79 +1029,6 @@ for line in sys.stdin:
         assert events[-1].ok is False
         assert not any(isinstance(e, ae.StreamSettled) for e in events)
 
-    @pytest.mark.parametrize("mutation_type", ["new_session", "switch_session", "fork", "clone"])
-    async def test_outbound_session_mutation_rejected_before_write_but_a_continues(
-        self, tmp_path, mutation_type
-    ):
-        release = tmp_path / "continue"
-        stub = _stub(
-            tmp_path,
-            f"#!{sys.executable}\n"
-            + """\
-import json, pathlib, sys, time
-release = pathlib.Path(__RELEASE__)
-def emit(value):
-    print(json.dumps(value), flush=True)
-initial = {"sessionId": "first", "sessionFile": "/tmp/first.jsonl",
-           "sessionName": "A", "model": {"provider": "test", "id": "A", "contextWindow": 1000}}
-assert json.loads(sys.stdin.readline())["type"] == "get_state"
-emit({"type": "response", "command": "get_state", "success": True, "data": initial})
-assert json.loads(sys.stdin.readline())["type"] == "prompt"
-emit({"type": "response", "command": "prompt", "id": "agent-comms-prompt", "success": True})
-emit({"type": "message_start", "message": {"role": "user", "content": "task"}})
-emit({"type": "tool_execution_start", "toolCallId": "a", "toolName": "bash",
-      "args": {"command": "echo A"}})
-emit({"type": "tool_execution_end", "toolCallId": "a", "toolName": "bash",
-      "result": {"content": [{"type": "text", "text": "A"}]}, "isError": False})
-emit({"type": "message_update", "assistantMessageEvent":
-      {"type": "text_delta", "delta": "A-before "}})
-for _ in range(300):
-    if release.exists():
-        break
-    time.sleep(.01)
-assert release.exists(), "rejection diagnostic did not wake backend"
-emit({"type": "message_update", "assistantMessageEvent":
-      {"type": "text_delta", "delta": "A-after"}})
-emit({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop",
-     "usage": {"totalTokens": 250}}})
-emit({"type": "agent_settled"})
-assert json.loads(sys.stdin.readline())["type"] == "get_state"
-assert json.loads(sys.stdin.readline())["type"] == "get_session_stats"
-emit({"type": "response", "command": "get_session_stats", "success": True,
-      "data": {**initial, "contextUsage": {"tokens": 250}}})
-""".replace("__RELEASE__", repr(str(release))),
-        )
-        queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
-        owner = asyncio.current_task()
-        events = []
-        process = None
-
-        async def consume():
-            nonlocal process
-            async for event in backend.stream_agent_events(
-                stub, [], "task", str(tmp_path), steering_queue=queue, model_wait_timeout=None
-            ):
-                events.append(event)
-                if isinstance(event, ae.Chunk) and event.text == "A-before ":
-                    process = backend.TurnSession.active[owner].native.proc
-                    queue.put_nowait({"type": mutation_type, "id": "rejected-1"})
-                if isinstance(event, ae.Error) and event.reason_code == "steering_command_rejected":
-                    release.touch()
-
-        async with asyncio.timeout(8):
-            await consume()
-        assert [e.text for e in events if isinstance(e, ae.Chunk)] == ["A-before ", "A-after"]
-        assert [type(e) for e in events].count(ae.ToolEnd) == 1
-        assert [
-            e.command
-            for e in events
-            if isinstance(e, ae.Error) and e.reason_code == "steering_command_rejected"
-        ] == [PiCommand.decode(mutation_type)(id="rejected-1")]
-        assert [type(e) for e in events].count(ae.Done) == 1
-        assert events[-1] == ae.Done(ok=True, text="A-before A-after", diagnostic={"exit_code": 0})
-        assert process is not None and process.returncode == 0
-        assert owner not in backend.TurnSession.active
-
     @pytest.mark.parametrize(
         "evidence", ["get_state", "get_session_stats", "fork_failed", "clone_cancelled"]
     )
@@ -1161,8 +1099,8 @@ for line in sys.stdin:
         owner = asyncio.current_task()
         process = None
         events = []
-        queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
-        pending = {"type": "prompt", "message": "[peer] pending", "_input_id": "in-1"}
+        queue: asyncio.Queue[InputRequest] = asyncio.Queue()
+        pending = steer("[peer] pending", "in-1")
         async for event in backend.stream_agent_events(
             stub, [], "task", str(tmp_path), steering_queue=queue, rpc_abort_grace=0.3
         ):
@@ -1267,7 +1205,7 @@ EOF
 """,
         )
         queue: asyncio.Queue[str] = asyncio.Queue()
-        queue.put_nowait("[peer] ping")
+        queue.put_nowait(steer("[peer] ping"))
 
         events = [
             event
@@ -1320,7 +1258,7 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
             events.append(event)
             if isinstance(event, ae.StreamSettled):
                 if not any(isinstance(item, ae.Chunk) for item in events):
-                    queue.put_nowait("[child] ping")
+                    queue.put_nowait(steer("[child] ping"))
                 else:
                     finish.set()
 
@@ -1820,14 +1758,12 @@ emit({{"id": abort.get("id"), "type": "response", "command": "abort", "success":
 time.sleep(60)
 """,
         )
-        original = {
-            "type": "prompt",
-            "message": "follow",
-            "streamingBehavior": "followUp",
-            "_input_id": "queued-1",
-            "images": [{"type": "image", "data": "YWJj", "mimeType": "image/png"}],
-        }
-        queue: asyncio.Queue[str | dict] = asyncio.Queue()
+        original = InputRequest(
+            input_id=InputId("queued-1"),
+            content=InputContent(text="follow", images=(ImageInput("YWJj", "image/png"),)),
+            when_busy=WhenBusy.FOLLOW_UP,
+        )
+        queue: asyncio.Queue[InputRequest] = asyncio.Queue()
         queue.put_nowait(original)
 
         events = [
@@ -2219,7 +2155,7 @@ send({{"type":"response", "command":"get_session_stats", "success":True,
 """,
         )
         queue: asyncio.Queue[str] = asyncio.Queue()
-        queue.put_nowait("inbox update")
+        queue.put_nowait(steer("inbox update"))
         async with asyncio.timeout(4):
             events = [
                 event
@@ -2268,7 +2204,7 @@ for line in sys.stdin:
             ):
                 events.append(event)
                 if isinstance(event, ae.StreamSettled):
-                    queue.put_nowait("late inbox update")
+                    queue.put_nowait(steer("late inbox update"))
                     finish.set()
         assert events[-1].ok is False
         assert events[-1].reason_code == "queued_input_start_missing"
@@ -2760,7 +2696,7 @@ send({{"type":"agent_settled"}})
         )
         queue = asyncio.Queue() if "steer" in case else None
         if queue is not None:
-            queue.put_nowait("peer")
+            queue.put_nowait(steer("peer"))
         events = [
             event
             async for event in backend.stream_agent_events(
@@ -2803,7 +2739,7 @@ for line in sys.stdin:
 """,
         )
         queue: asyncio.Queue[str] = asyncio.Queue()
-        queue.put_nowait("channel mention")
+        queue.put_nowait(steer("channel mention"))
         starts = []
 
         def native_start(public_id, native_id, text):
@@ -2856,7 +2792,7 @@ for line in sys.stdin:
 """,
         )
         queue: asyncio.Queue[str | dict] = asyncio.Queue()
-        queue.put_nowait({"type": "prompt", "message": "late direct", "_input_id": "bus-42"})
+        queue.put_nowait(steer("late direct", "bus-42"))
 
         @contextmanager
         def send_boundary(public_id, native_id, text):
@@ -2992,7 +2928,7 @@ EOF
 """,
         )
         queue: asyncio.Queue[str] = asyncio.Queue()
-        queue.put_nowait("[peer] ping")
+        queue.put_nowait(steer("[peer] ping"))
 
         events = [
             event
@@ -3048,7 +2984,7 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
             events.append(event)
             if isinstance(event, ae.StreamSettled):
                 if not any(isinstance(item, ae.Chunk) for item in events):
-                    queue.put_nowait("[child] ping")
+                    queue.put_nowait(steer("[child] ping"))
                 else:
                     finish.set()
 
@@ -3234,7 +3170,7 @@ send({{"type": "agent_settled"}})
 """,
         )
         queue: asyncio.Queue[str] = asyncio.Queue()
-        queue.put_nowait("peer")
+        queue.put_nowait(steer("peer"))
         events = [
             event
             async for event in backend.stream_agent_events(
@@ -3270,7 +3206,7 @@ send({"type": "agent_settled"})
 """,
         )
         queue: asyncio.Queue[str] = asyncio.Queue()
-        queue.put_nowait("peer")
+        queue.put_nowait(steer("peer"))
         events = [
             event
             async for event in backend.stream_agent_events(

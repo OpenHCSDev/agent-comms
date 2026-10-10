@@ -206,7 +206,7 @@ class SessionLifecycle:
         async with AsyncExitStack() as resources:
             async with self._attachment_lock:
                 self.require_original_local_binding(session_id, original)
-                async with self.effects.turns.idle_backend(session_id) as persistent:
+                async with self.effects.turns.idle_backend(session_id, original.thread) as persistent:
                     if persistent is None:
                         raise RelationViolationError("Native fork selection requires an idle turn")
                     def capture_binding():
@@ -215,7 +215,7 @@ class SessionLifecycle:
                         return snapshot.owner_binding(current.name)
 
                     binding = await Coordination.run_worker(capture_binding)
-                    arguments = NativeArguments.parse(self.effects.turns.native_arguments(original.thread))
+                    arguments = NativeArguments.parse(persistent.arguments(original.thread))
                     worktree = Path(original.thread.worktree)
                     await join_retirement(asyncio.create_task(
                         persistent.close_owned(creation.source, binding, arguments, worktree)))
@@ -230,7 +230,7 @@ class SessionLifecycle:
                     ))
             def retire_selected():
                 return join_retirement(asyncio.create_task(
-                    self._retire_native_fork(session_id, creation, binding, arguments, worktree)))
+                    self._retire_native_fork(session_id, original, creation, binding, arguments, worktree)))
 
             yield selected, retire_selected
 
@@ -238,8 +238,8 @@ class SessionLifecycle:
         if self.require(session_id) != original.thread.name or session_id in self.proxies:
             raise RelationViolationError("Native fork requires the original loaded local owner")
 
-    async def _retire_native_fork(self, session_id, creation, binding, arguments, worktree) -> None:
-        async with self.effects.turns.idle_backend(session_id) as persistent:
+    async def _retire_native_fork(self, session_id, original, creation, binding, arguments, worktree) -> None:
+        async with self.effects.turns.idle_backend(session_id, original.thread) as persistent:
             if persistent is None:
                 raise RelationViolationError("Native fork retirement requires its original turn to finish")
             await persistent.close_owned(creation, binding, arguments, worktree)
@@ -248,7 +248,7 @@ class SessionLifecycle:
         from .native_session_prepare import NativeSessionPreparation
 
         async with self._attachment_lock:
-            async with self.effects.turns.idle_backend(session_id) as persistent:
+            async with self.effects.turns.idle_backend(session_id, original.thread) as persistent:
                 if persistent is None:
                     raise RelationViolationError("Native fork restoration requires the original turn to finish")
                 await persistent.close_owned(creation, binding, arguments, worktree)
@@ -356,7 +356,7 @@ class SessionLifecycle:
             or thread.pid != os.getpid()
             or not snapshot.status(name).running
         ):
-            await self.effects.turns.close_idle_backend(session_id)
+            await self.effects.turns.close_idle_backend(session_id, thread)
         self.bindings[session_id] = name
         if (
             self.titles.get(session_id) != name

@@ -23,6 +23,7 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
 from agent_comms.threads import Thread
+from agent_comms.pi_native_backend import PiNativeBackend
 from test_selected_owner_compaction_integration import owner_fixture
 
 pytestmark = pytest.mark.skipif(
@@ -86,7 +87,10 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
         comms.agents.set_agent_info(
             "proj", model=info.model, context_used=info.context_used, context_size=info.context_size
         )
-        agent.turns.persistent_backends["proj"] = persistent
+        # The retained child becomes the session's declared backend's custody.
+        backend = PiNativeBackend.for_worker(agent.turns, "proj")
+        backend.custody = persistent.custody
+        agent.turns.persistent_backends["proj"] = persistent = backend
         selected_exchange = SelectedSummarySlot.run_selected_summary
         accepted = []
         operations = []

@@ -8,6 +8,7 @@ from pathlib import Path
 from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING
 
+from .agent_backend import AgentBackend
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
@@ -73,6 +74,11 @@ class Thread(ThreadProvenance):
     role: ThreadRole = ThreadRole.AGENT
     execution: type[ThreadExecution] = field(default=NativeThreadExecution, kw_only=True,
                                             metadata={"wire_omit_default": True})
+    # The runtime that holds this thread's history; it never changes on re-registration.
+    backend: type[AgentBackend] = field(
+        default_factory=AgentBackend.for_new_threads, kw_only=True,
+        metadata={"wire_omit_default": True, "registration_inheritance": InheritPrevious},
+    )
     active_turn: ActiveTurn | None = None
     channel_scope_generation: int = 0
     turn_generation: int = 0

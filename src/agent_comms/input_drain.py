@@ -24,6 +24,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .activity import StoppedDrainDiagnostic, UnavailableDrainDiagnostic
+from .agent_backend import InputContent, InputId, InputRequest, SendNow, WhenBusy
 from .agent_events import Done
 from .comms import Comms
 from .coordination_errors import CoordinationError, IdentityConflict
@@ -49,7 +50,6 @@ from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
 from .wire_watch import WireWatch
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import FieldCodec
 from .turn_context import TurnContext, UserFollowupSegment
 
 AGENT_PREFIX = "!agent "
@@ -70,7 +70,7 @@ class InputDrain(FutureInputQueue):
         self.runtime = runtime
         self.effects = effects
         self.drain_tasks: dict[str, asyncio.Task[None]] = {}
-        self.backend_inboxes: dict[str, asyncio.Queue[dict[str, Any]]] = {}
+        self.backend_inboxes: dict[str, asyncio.Queue[InputRequest | SendNow]] = {}
         self.queued_inputs: dict[str, dict[str, QueuedInput]] = {}
         self.restored_inputs: dict[str, dict[str, QueuedInput]] = {}
         self.queue_revisions: dict[str, int] = {}
@@ -438,16 +438,13 @@ class InputDrain(FutureInputQueue):
             rendered = TurnContext.render_segments((followup,), images=images)
             self.following_sources.setdefault(session_id, {})[item.input_id] = item.source()
             self.queued_inputs.setdefault(session_id, {})[item.input_id] = item
-            inbox.put_nowait(
-                {
-                    "type": "prompt",
-                    "message": item.prompt,
-                    "contextContributions": FieldCodec.encode(rendered.contributions),
-                    "streamingBehavior": "steer",
-                    "_input_id": item.input_id,
-                    **({"images": [image.to_rpc() for image in images]} if images else {}),
-                }
-            )
+            inbox.put_nowait(InputRequest(
+                input_id=InputId(item.input_id),
+                content=InputContent(
+                    text=item.prompt, images=tuple(images), contributions=rendered.contributions,
+                ),
+                when_busy=WhenBusy.STEER,
+            ))
             request.enqueue_control(inbox, item.input_id)
             custody.pop_all()
         await request.publish_acceptance(self, session_id)
@@ -458,7 +455,7 @@ class InputDrain(FutureInputQueue):
 
     def bind_native_turn(
         self, session_id: str, owner: Thread, admission: int, turn_id: str
-    ) -> asyncio.Queue[dict[str, Any]]:
+    ) -> asyncio.Queue[InputRequest | SendNow]:
         """Transfer existing live inputs to the new lease, never read them from disk."""
         inbox = self.backend_inboxes.setdefault(session_id, asyncio.Queue())
         for input_id, item in self.queued_inputs.get(session_id, {}).items():
@@ -500,7 +497,7 @@ class InputDrain(FutureInputQueue):
             if inbox is not None and queued:
                 for key, item in tuple(queued.items()):
                     queued[key] = item.immediate()
-                inbox.put_nowait({"type": "interrupt_steering", "_input_ids": list(queued)})
+                inbox.put_nowait(SendNow(tuple(InputId(input_id) for input_id in queued)))
 
     async def close(self) -> None:
         """Retire input producers before their sessions and turns are closed."""
@@ -572,7 +569,7 @@ class InputDrain(FutureInputQueue):
             return self.dispositions.settle_unbound(keys)
 
     async def finish_turn_inputs(
-        self, session_id: str, inbox: asyncio.Queue[dict[str, Any]]
+        self, session_id: str, inbox: asyncio.Queue[InputRequest | SendNow]
     ) -> None:
         """Retire this turn's live capabilities; retain UNKNOWN only as notices."""
         if self.backend_inboxes.get(session_id) is inbox:

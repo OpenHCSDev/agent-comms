@@ -80,7 +80,7 @@ async def queue_followup(agent, kwargs):
     )
     assert public_id is not None
     command = kwargs["steering_queue"].get_nowait()
-    assert command["_input_id"] == public_id
+    assert command.input_id.value == public_id
     return public_id, command
 
 

@@ -110,7 +110,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
         [{"type": "text", "text": "valid task"}],
         field_meta=encode_request(QueuePromptRequest("\ud800", True)),
     )
-    exact = inbox.get_nowait()["_input_id"]
+    exact = inbox.get_nowait().input_id.value
     assert any(
         isinstance(f, InputDeliveryChangedUpdate) for f in decode_updates(response.field_meta)
     )
