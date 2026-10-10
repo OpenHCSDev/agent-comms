@@ -38,8 +38,8 @@ async def test_queued_and_steered_followups_both_reach_the_next_boundary(tmp_pat
         queue = kwargs["steering_queue"]
         commands.append(await queue.get())
         commands.append(await queue.get())
-        yield ae.InputStarted(id=commands[1]["_input_id"])
-        yield ae.InputStarted(id=commands[0]["_input_id"])
+        yield ae.InputStarted(id=commands[1].input_id.value)
+        yield ae.InputStarted(id=commands[0].input_id.value)
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")
 

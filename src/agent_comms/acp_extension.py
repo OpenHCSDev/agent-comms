@@ -12,6 +12,7 @@ from dataclasses import dataclass, field, replace
 from hashlib import sha256
 from typing import TYPE_CHECKING, Annotated, Callable, ClassVar
 
+from .agent_backend import InputId, SendNow
 from .acp_failure import ACPFailure, BackendDeliveryFailure, DeliveryFailure
 from .agent_events import CompactionEvent
 from .compaction_states import CompactionPublishedMetadata
@@ -555,7 +556,7 @@ class SteerPromptRequest(PromptRequest):
         return item
 
     def enqueue_control(self, inbox: asyncio.Queue[Any], input_id: str) -> None:
-        inbox.put_nowait({"type": "interrupt_steering", "_input_ids": [input_id]})
+        inbox.put_nowait(SendNow((InputId(input_id),)))
 
 
 @dataclass(frozen=True)

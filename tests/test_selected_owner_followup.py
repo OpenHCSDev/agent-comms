@@ -484,10 +484,10 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
         started.append(first_id)
         yield events.InputStarted(id=None)
         command = kwargs["steering_queue"].get_nowait()
-        second_id = command["_input_id"]
-        with kwargs["send_boundary"](second_id, "b" * 32, command["message"]) as allowed:
+        second_id = command.input_id.value
+        with kwargs["send_boundary"](second_id, "b" * 32, command.content.text) as allowed:
             assert allowed is True
-        assert kwargs["native_start"](second_id, "b" * 32, command["message"])
+        assert kwargs["native_start"](second_id, "b" * 32, command.content.text)
         started.append(second_id)
         yield events.InputStarted(id=second_id)
         with kwargs["send_boundary"](second_id, "c" * 32, command["message"]) as allowed:

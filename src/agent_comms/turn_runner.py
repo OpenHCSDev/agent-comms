@@ -17,14 +17,15 @@ from acp.schema import (
 )
 
 from .image_inputs import prompt_images
-from .pi_vocabulary import ThinkingLevel
 from .queued_input import InitialInput, InputHandoffRefused
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
 from .acp_failure import ACPFailure
+from .agent_backend import AgentBackend, InputRequest, SendNow
 from .channel_targets import BuiltinChannel
 from .comms import Comms
 from .coordinator import Coordination
+from .errors import RelationViolationError
 from .goal_actions import (
     GoalPrecondition,
     OwnerInvocable,
@@ -49,7 +50,6 @@ from .turn_lease import TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
 
 if TYPE_CHECKING:
-    from . import backend
     from . import pi_events as pi
     from .coordinated_runtime import SelectedExecution
     from .input_drain import InputDrain
@@ -95,7 +95,7 @@ class CompactionObservation(MroDispatch):
 
 
 class TurnRunner:
-    """Own session turn locks/tasks and persistent S2 children."""
+    """Own session turn locks/tasks and each session's agent backend."""
 
     def __init__(
         self,
@@ -120,7 +120,8 @@ class TurnRunner:
             else (shlex.split(arg_env) if arg_env is not None else list(DEFAULT_AGENT_ARGS))
         )
         self.turn_tasks: dict[str, asyncio.Task[Any]] = {}
-        self.persistent_backends: dict[str, backend.PersistentPiSession] = {}
+        # One backend per ACP session, of the bound thread's declared kind.
+        self.persistent_backends: dict[str, AgentBackend] = {}
         self.turn_locks: dict[str, asyncio.Lock] = {}
         self.emitted_errors: dict[str, ACPFailure] = {}
         self.goals = GoalScheduler(comms, effects)
@@ -173,32 +174,23 @@ class TurnRunner:
             return
         await CompactionObservation(self, session_id, lease, thread.turn_state.phase).dispatch(event)
 
-    def native_arguments(self, thread: Thread) -> tuple[str, ...]:
-        return self.agent_args.with_model(thread.model).with_thinking(ThinkingLevel.optional_name(thread.thinking_level)).argv
+    def backend_for(self, session_id: str, thread: Thread) -> AgentBackend:
+        """This session's backend, created for the thread's declared backend on first use."""
+        current = self.persistent_backends.get(session_id)
+        if current is None:
+            current = thread.backend.for_worker(self, session_id)
+            self.persistent_backends[session_id] = current
+        elif type(current) is not thread.backend:
+            raise RelationViolationError(
+                f"Session {session_id!r} holds a {type(current).__name__}, but "
+                f"thread {thread.name!r} declares {thread.backend.declared_name}"
+            )
+        return current
 
     async def prepare_selected_session(self, session_id: str, thread: Thread, *,
                                        open_native=None) -> StateData:
-        from . import backend
-
-        if thread.session_file is None:
-            raise ValueError("Native preparation requires a saved session")
-        if open_native is None:
-            from .native_session_prepare import NativeSessionPreparation
-
-            open_native = NativeSessionPreparation.open
-        environment = await Coordination.run_worker(lambda: thread.native_environment(
-            self.comms.root, self.comms.registry.snapshot(), thread.worktree,
-        ))
-        state = await open_native(
-            self.persistent_backends.setdefault(session_id, backend.PersistentPiSession()),
-            self.agent_bin,
-            self.native_arguments(thread),
-            worktree=thread.worktree,
-            environment=environment,
-            session_file=thread.session_file,
-            observe=partial(self.observe_selected_preparation, session_id, thread),
-        )
-        return state
+        """Launch and attest the session's idle runtime for ``thread``'s saved history."""
+        return await self.backend_for(session_id, thread).prepare(thread, open_native=open_native)
 
     async def observe_selected_preparation(
         self, session_id: str, thread: Thread, state: StateData, info: events.AgentInfo,
@@ -221,12 +213,7 @@ class TurnRunner:
         return context.recorded_public_text(manifest)
 
     async def inspect_native_request(self, session_id, thread, request):
-        from . import backend
-
-        persistent=self.persistent_backends.setdefault(session_id,backend.PersistentPiSession())
-        context = await persistent.custody.inspect(
-            persistent, partial(self.prepare_selected_session, session_id, thread), request,
-        )
+        context = await self.backend_for(session_id, thread).inspect(thread, request)
         return context.require_session_file(thread.require_saved_session())
 
     async def prompt_owned(
@@ -490,17 +477,17 @@ class TurnRunner:
         update = await Coordination.run_worker(partial(self.current_turn_update, session_id))
         await self.effects._emit_event(session_id, update, client=client)
 
-    async def active_backend_inbox(self, session_id: str) -> asyncio.Queue[dict[str, Any]] | None:
+    async def active_backend_inbox(self, session_id: str) -> asyncio.Queue[InputRequest | SendNow] | None:
         state = await Coordination.run_worker(partial(self.turn_state, session_id))
         return self.inputs.backend_inboxes.get(session_id) if state.accepts_followup else None
 
-    async def close_idle_backend(self, session_id: str) -> None:
-        async with self.idle_backend(session_id) as persistent:
+    async def close_idle_backend(self, session_id: str, thread: Thread) -> None:
+        async with self.idle_backend(session_id, thread) as persistent:
             if persistent is not None:
                 await persistent.close()
 
     @asynccontextmanager
-    async def idle_backend(self, session_id: str):
+    async def idle_backend(self, session_id: str, thread: Thread):
         """Hold this session's turn and child acquisition until an idle effect ends.
 
         Configuration retirement remains conditional on an idle owner. Source
@@ -515,9 +502,7 @@ class TurnRunner:
             if await Coordination.run_worker(partial(self.session_busy, session_id)):
                 yield None
                 return
-            from . import backend
-
-            persistent = self.persistent_backends.setdefault(session_id, backend.PersistentPiSession())
+            persistent = self.backend_for(session_id, thread)
             async with persistent.lock:
                 yield persistent
 
@@ -531,22 +516,22 @@ class TurnRunner:
         async with self.turn_locks.setdefault(session_id, asyncio.Lock()):
             task = asyncio.current_task()
             assert task is not None
-            inbox: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+            inbox: asyncio.Queue[InputRequest | SendNow] = asyncio.Queue()
             self.turn_tasks[session_id] = task
             self.inputs.backend_inboxes[session_id] = inbox
             try:
-                from . import backend
-
+                owner = await Coordination.run_worker(partial(
+                    self.comms.registry.require, execution.owner_name,
+                ))
                 result = await execution.run(
                     on_compaction=partial(self.effects._emit_event, session_id),
-                    native_custody=self.persistent_backends.setdefault(
-                        session_id, backend.PersistentPiSession()
-                    ),
+                    native_custody=self.backend_for(session_id, owner),
                 )
                 while not inbox.empty():
                     command = inbox.get_nowait()
-                    if not (input_id := command.get("_input_id")):
-                        continue  # No accepted prompt: clear/interrupt controls carry no input.
+                    if not command.carried_inputs:
+                        continue  # A send-now control carries no input of its own.
+                    (input_id,) = (carried.value for carried in command.carried_inputs)
                     item = self.inputs.queued_inputs.get(session_id, {}).get(input_id)
                     if item is None:
                         await self.inputs.input_refused(session_id, input_id)
@@ -600,17 +585,17 @@ class TurnRunner:
         ).run()
 
     async def close(self) -> None:
-        tasks = tuple(self.turn_tasks.values())
+        tasks = dict(self.turn_tasks)
         self.turn_tasks.clear()
-        for task in tasks:
+        for task in tasks.values():
             task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        if tasks:
-            from . import backend
-
-            await asyncio.gather(
-                *(backend.terminate_task_process(task) for task in tasks), return_exceptions=True
-            )
+        await asyncio.gather(*tasks.values(), return_exceptions=True)
+        # A relay-only turn never created a backend, so it has no runtime work to stop.
+        await asyncio.gather(
+            *(self.persistent_backends[session_id].abort(task)
+              for session_id, task in tasks.items() if session_id in self.persistent_backends),
+            return_exceptions=True,
+        )
         for persistent in self.persistent_backends.values():
             await persistent.close_idle()
         self.persistent_backends.clear()

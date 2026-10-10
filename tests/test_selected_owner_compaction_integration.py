@@ -31,6 +31,7 @@ from agent_comms.registration import Registration
 from agent_comms.runtime_info import AgentRuntimeInfo
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
+from agent_comms.pi_native_backend import PiNativeBackend
 from retained_native_fixture import retained_native_host
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
@@ -454,7 +455,10 @@ async def acp_selected_summary_journey(
         store = GoalAttemptStore.initialize(private)
         store.create_goal("goal-acp")
         agent.turns.goals.goal_store = store
-        agent.turns.persistent_backends["proj"] = persistent
+        # The retained child becomes the session's declared backend's custody.
+        backend = PiNativeBackend.for_worker(agent.turns, "proj")
+        backend.custody = persistent.custody
+        agent.turns.persistent_backends["proj"] = persistent = backend
         dispositions = InputDispositions(root / InputDispositions.filename)
         if private_session:
             with Coordination(str(root / "coordination.sqlite3")) as coordination:
@@ -1026,7 +1030,10 @@ async def test_private_retained_session_accepts_after_runtime_journal_reset(
                     process_identity=ProcessIdentity.capture(os.getpid()),
                 )
             )
-            agent.turns.persistent_backends["proj"] = persistent
+            # The retained child becomes the session's declared backend's custody.
+            backend = PiNativeBackend.for_worker(agent.turns, "proj")
+            backend.custody = persistent.custody
+            agent.turns.persistent_backends["proj"] = persistent = backend
             await agent.prompt("proj", [{"type": "text", "text": "Before quiet cutover"}])
             await agent.prompt("proj", [{"type": "text", "text": "Second retained turn"}])
             before_rows = [

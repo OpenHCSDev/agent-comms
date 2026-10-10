@@ -1,7 +1,8 @@
-"""Agent communications — streaming agent backend runner.
+"""Pi native turns: the private turn implementation behind ``PiNativeBackend``.
 
-Runs the selected native Pi process through its verified RPC launch contract.
-Pi's JSON-lines events carry text deltas, tool arguments and tool results for
+Core reaches this module only through ``PiNativeBackend.run_turn``. It runs the
+selected native Pi process through its verified RPC launch contract. Pi's
+JSON-lines events carry text deltas, tool arguments and tool results for
 thinking indicators and tool-call cards.
 
 Events are frozen nominal values declared in :mod:`agent_events`.
@@ -24,6 +25,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, ClassVar
 
+from .agent_backend import InputRequest, SendNow
 from .child_process import ProcessIdentity
 from .request_progress import RequestProgress
 
@@ -38,20 +40,12 @@ from .image_inputs import ImageInput
 from .turn_context import InputContributionCoordinates
 from .maintenance_barrier import MaintenanceBarrier
 from .native_attestation import AttestationError, SavedSessionReopenError
-from .native_custody import (
-    BorrowedNative,
-    EmptyNative,
-    NativeCleanupFailed,
-    NativeCustody,
-    PiSessionChild,
-    RetainedNative,
-)
+from .native_custody import EmptyNative, PiSessionChild
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .coordinator import Coordination
-from .native_session_reopen import NativeSessionIdentity
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
+from .pi_native_backend import PersistentPiSession
 from .pi_rpc import PiRpcChannel
-from .selected_source import SessionRevision, SessionRevisionUnavailable
 from .selected_tool_broker import SelectedToolDenied
 from .turn_admission import UnwrittenPrompt
 from .turn_inputs import InputForwarding
@@ -82,89 +76,6 @@ RPC_ABORT_GRACE_SECONDS = 2.0
 CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS = NATIVE_STARTUP_POLICY.readiness_seconds
 PROMPT_START_TIMEOUT_SECONDS = 180.0
 _IDENTITY_FAILURE_TEXT = "Pi session identity changed during this turn."
-
-
-class PersistentPiSession:
-    """Serialize borrowing and retirement of one native session's actual child."""
-
-    def __init__(self) -> None:
-        self.lock = asyncio.Lock()
-        self.custody: NativeCustody = EmptyNative()
-
-    @property
-    def available(self) -> bool:
-        return self.custody.available
-
-    async def open(
-        self, launch, *, reuse, require_input_id, startup, watchdog
-    ) -> PiSessionChild:
-        key = (launch, launch.configuration.auth_revision())
-        child = self.custody.reuse(key) if reuse else None
-        reused = child is not None
-        if child is None:
-            await self.close()
-            attestation = await self.custody.expected(launch, require_input_id)
-            watchdog.launching(asyncio.get_running_loop().time, launch.session.session_file)
-            with startup.measurements.operation("native_spawn"):
-                child = await PiSessionChild.start(key, attestation)
-            self.custody = BorrowedNative(child, self.custody)
-        else:
-            watchdog.launching(asyncio.get_running_loop().time, launch.session.session_file)
-            self.custody = BorrowedNative(child, EmptyNative())
-        watchdog.spawned(reused)
-        return child
-
-    def retain(self, child: PiSessionChild, identity: NativeSessionIdentity) -> bool:
-        if not child.proc.alive():
-            return False
-        try:
-            revision = SessionRevision.observe(identity.session_file).require_available()
-        except SessionRevisionUnavailable:
-            return False
-        self.custody = RetainedNative(child, identity, revision)
-        return True
-
-    async def close(self) -> None:
-        await self._finish_retirement(self.custody.retire())
-
-    async def close_owned(self, identity: NativeSessionIdentity, binding, arguments, worktree: Path) -> None:
-        """Refuse unrelated custody before initiating the original stop task."""
-        await self._finish_retirement(self.custody.retire_owned(identity, binding, arguments, worktree))
-
-    async def _finish_retirement(self, retiring: NativeCustody) -> None:
-        self.custody = retiring
-        try:
-            self.custody = await self.custody.closed()
-        except NativeCleanupFailed as error:
-            self.custody = error.successor
-            raise
-
-    async def close_idle(self) -> None:
-        async with self.lock:
-            await self.close()
-
-    def require_reopen(self, identity: NativeSessionIdentity) -> None:
-        self.custody = self.custody.retire(self.custody.reopen(identity))
-
-    @asynccontextmanager
-    async def external_write(self, identity: NativeSessionIdentity):
-        """Own an idle child while its source is changed by the guarded writer.
-
-        Reopen custody refuses observations and new borrows of the old runtime.
-        This resource owns the actual child until its explicit reload succeeds;
-        any exceptional exit retires it without changing the writer's outcome.
-        """
-        async with self.lock:
-            retained = self.custody.idle()
-            self.custody = retained.reopen(identity)
-            try:
-                yield retained
-                self.custody = retained.idle()
-            except BaseException:
-                self.custody = retained.retire(self.custody)
-                await self.close()
-                raise
-
 
 
 async def terminate_task_process(task: asyncio.Task[Any]) -> None:
@@ -201,7 +112,7 @@ async def stream_agent_events(
     cwd: str,
     env_extra: dict[str, str] | None = None,
     session_file: str | None = None,
-    steering_queue: asyncio.Queue[str | dict[str, Any]] | None = None,
+    steering_queue: asyncio.Queue[InputRequest | SendNow] | None = None,
     finish_event: asyncio.Event | None = None,
     images: Sequence[ImageInput] = (),
     model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
@@ -287,7 +198,7 @@ class TurnSession:
         self,
         launch: NativePiRpcLaunch,
         task: str,
-        steering_queue: asyncio.Queue[str | dict[str, Any]] | None = None,
+        steering_queue: asyncio.Queue[InputRequest | SendNow] | None = None,
         finish_event: asyncio.Event | None = None,
         images: Sequence[ImageInput] = (),
         model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,

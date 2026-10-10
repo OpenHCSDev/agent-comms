@@ -24,6 +24,7 @@ from agent_comms.acp_extension import (
 from agent_comms.comms import wire
 from agent_comms.image_inputs import MAX_IMAGE_BYTES, ImageInput, prompt_images
 from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
 from delivery_owner_fixture import canonical_agent
 
 pytestmark = pytest.mark.usefixtures("native_rpc_fixture")
@@ -240,9 +241,13 @@ async def test_failed_queued_image_child_never_exposes_encoded_attachment(tmp_pa
     )
     stub.chmod(493)
     queue = asyncio.Queue()
-    queue.put_nowait(
-        {"type": "prompt", "message": "User follow-up:\ninspect image", "images": [IMAGE]}
-    )
+    queue.put_nowait(InputRequest(
+        input_id=InputId("follow-up"),
+        content=InputContent(
+            text="User follow-up:\ninspect image", images=(ImageInput(PNG, "image/png"),),
+        ),
+        when_busy=WhenBusy.STEER,
+    ))
     events = [
         event
         async for event in backend.stream_agent_events(

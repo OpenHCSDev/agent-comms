@@ -267,7 +267,7 @@ class ConfigOptions:
             await self.catalog_for(member).change(self, thread, value)
         except (NativePiUnavailable, ValueError) as error:
             raise RequestError.invalid_params({"reason": str(error)}) from error
-        await self.effects.turns.close_idle_backend(session_id)
+        await self.effects.turns.close_idle_backend(session_id, thread)
         async with self.session_options(name) as options:
             await self._publish(session_id, options)
             return SetSessionConfigOptionResponse(config_options=options)

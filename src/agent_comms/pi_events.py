@@ -37,8 +37,20 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class PiEvent(PiPayload, DeclaredFamily):
+    """One record Pi writes to RPC stdout; each member converts one Pi event kind.
+
+    ``PiNativeBackend.event_kinds`` lists what Pi 0.85.1 emits; the family is
+    checked against it when this module finishes importing.
+    """
+
     wire_tag = "type"
     opaque = False
+    unknown_kind: ClassVar[bool] = False
+
+    @classmethod
+    def wire_kind(cls) -> str:
+        """The Pi ``type`` this member converts."""
+        return cls.declared_name
 
     @classmethod
     def normalize_field(cls, target, key, value, record):
@@ -98,11 +110,58 @@ class PiEvent(PiPayload, DeclaredFamily):
 
 
 @dataclass(frozen=True)
-class UnknownPiEvent(PiEvent):
-    """Unrecognized events remain ignorable, never admission evidence."""
+class UnreadPayload:
+    """A Pi event whose fields Core does not read; the record is kept as received."""
 
     payload: dict[str, Any]
-    opaque = True
+    opaque: ClassVar[bool] = True
+
+
+@dataclass(frozen=True)
+class UnknownPiEvent(UnreadPayload, PiEvent):
+    """Unrecognized events remain ignorable, never admission evidence."""
+
+    unknown_kind: ClassVar[bool] = True
+
+
+@dataclass(frozen=True)
+class TurnStart(UnreadPayload, PiEvent):
+    """Pi starts one model round. Core follows the run, not its rounds."""
+
+
+@dataclass(frozen=True)
+class TurnEnd(UnreadPayload, PiEvent):
+    """Pi ends one model round. Settlement comes from agent_end / agent_settled."""
+
+
+@dataclass(frozen=True)
+class QueueUpdate(UnreadPayload, PiEvent):
+    """Pi's own steering queue changed. Core keeps the queue the user sees."""
+
+
+@dataclass(frozen=True)
+class EntryAppended(UnreadPayload, PiEvent):
+    """Pi wrote a session entry. History is read from the session file."""
+
+
+@dataclass(frozen=True)
+class SessionInfoChanged(UnreadPayload, PiEvent):
+    """The session name changed. Core reads it from get_state."""
+
+
+@dataclass(frozen=True)
+class ThinkingLevelChanged(UnreadPayload, PiEvent):
+    """The thinking level changed. Core reads it from get_state."""
+
+
+@dataclass(frozen=True)
+class BashExecutionUpdate(UnreadPayload, PiEvent):
+    """Output of a user ``!`` bash command; Core never sends one."""
+
+
+@dataclass(frozen=True)
+class ExtensionError(UnreadPayload, PiEvent):
+    """An extension hook failed inside Pi; the failure stays in Pi's own handling."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -377,6 +436,10 @@ class ExtensionUiRequest(PiEvent):
 
     method: str | None = None
     id: str | None = None
+
+    @classmethod
+    def wire_kind(cls) -> str:
+        return ExtensionUiRequest.declared_name
 
     @classmethod
     def wire_case(cls, wire):
@@ -807,3 +870,8 @@ class AgentCommsCompactionProgress(PiEvent):
     def __post_init__(self):
         if type(self.sequence) is not int or self.sequence < 1:
             raise ValueError("Positive selected compaction progress sequence required")
+
+
+from .pi_native_backend import PiNativeBackend  # noqa: E402
+
+PiNativeBackend.require_event_family(PiEvent)
