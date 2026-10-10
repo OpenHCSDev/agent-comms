@@ -12,6 +12,8 @@ import pytest
 from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
 from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.compaction_errors import CompactionJournalError
+from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_session_reopen import NativeReopenError
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_records import SelectedSummarySource
 from agent_comms.field_codec import FieldCodec
@@ -22,6 +24,15 @@ from agent_comms.pi_summary_payloads import SelectedModel
 from agent_comms.retained_task_facts import InputTaskFact, RetainedTaskFacts
 from agent_comms.selected_source import SessionRevision
 from selected_summary_cases import admission_identity
+
+
+def install_coordinator(root):
+    """A real install always has the coordinator that records input contexts."""
+    from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+    from agent_comms.coordinator import Coordination
+
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        install_native_runtime_schema(store)
 
 
 @pytest.fixture
@@ -145,13 +156,14 @@ def test_continued_private_uncertain_or_mismatched_history_never_reserves(contin
     if damage == "duplicate":
         entries.append(entries[1])
     if damage == "raw":
+        install_coordinator(journal.path.parent)
         journal.private_inputs.reserve(session, "b" * 32)
     inputs.path.write_text(json.dumps(saved))
     session.write_text("".join(json.dumps(row) + "\n" for row in entries))
     if damage != "revision":
         source = replace(source, source=replace(source.source,
             reserved_revision=SessionRevision.observe(str(session)).require_available()))
-    with pytest.raises((CompactionJournalError, ValueError)):
+    with pytest.raises((CompactionJournalError, ValueError, NativePiUnavailable)):
         journal.summaries.reserve(str(session), source)
     assert journal.summaries.unresolved(str(session)) == ()
     assert json.loads(inputs.path.read_text())["rows"] == rows
@@ -258,9 +270,20 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
             TriageNativeExecution().record_sources(db, "a" * 32, (store.assignments.get("claim"),))
     source = replace(source, source=replace(source.source,
         reserved_revision=SessionRevision.observe(str(session)).require_available()))
-    if damage in {"context", "unsettled", "foreign", "historical-tail", "historical-sidecar",
-                  "historical-raw", "historical-generation", "historical-started", "historical-cycle"}:
-        with pytest.raises(CompactionJournalError, match="not covered by recorded inputs"):
+    refusals = {
+        "context": (NativePiUnavailable, "Live-recorded context differs from native journal"),
+        "historical-generation": (NativePiUnavailable, "Live-recorded context differs from native journal"),
+        "unsettled": (ValueError, "raw input remains UNKNOWN"),
+        "foreign": (NativeReopenError, "identity changed"),
+        "historical-sidecar": (NativeReopenError, "identity changed"),
+        "historical-tail": (ValueError, "lacks unique tracked input"),
+        "historical-raw": (ValueError, "no verified retained context"),
+        "historical-started": (ValueError, "differs from recorded native start"),
+        "historical-cycle": (ValueError, "missing or cyclic"),
+    }
+    if damage in refusals:
+        error, reason = refusals[damage]
+        with pytest.raises(error, match=reason):
             journal.summaries.reserve(str(session), source)
     else:
         journal.summaries.reserve(str(session), source)
@@ -322,14 +345,26 @@ def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
         foreign.write_bytes(session.read_bytes()); foreign.chmod(0o600)
         session = foreign
     if damage == "raw-unknown":
+        install_coordinator(journal.path.parent)
         journal.private_inputs.reserve(session, "a" * 32)
     source = replace(source, source=replace(source.source,
         reserved_revision=SessionRevision.observe(str(session)).require_available()))
     originals = session.read_bytes(), inputs.path.read_bytes()
+    refusals = {
+        "missing-operation": (ValueError, "lacks unique tracked input"),
+        "untracked-suffix": (ValueError, "lacks unique tracked input"),
+        "unknown-operation": (CompactionJournalError, "is unknown"),
+        "summary": (CompactionJournalError, "Original committed source cut differs"),
+        "cut": (CompactionJournalError, "Original committed source cut differs"),
+        "parent": (CompactionJournalError, "Original committed source cut differs"),
+        "foreign-file": (CompactionJournalError, "Original committed source cut differs"),
+        "raw-unknown": (ValueError, "raw input remains UNKNOWN"),
+    }
     if damage in {None, "marker-only"}:
         journal.summaries.reserve(str(session), source)
     else:
-        with pytest.raises(CompactionJournalError, match="not covered by recorded inputs"):
+        error, reason = refusals[damage]
+        with pytest.raises(error, match=reason):
             journal.summaries.reserve(str(session), source)
         assert journal.summaries.unresolved(str(session)) == ()
     assert originals == (session.read_bytes(), inputs.path.read_bytes())
@@ -382,13 +417,23 @@ def test_native_fork_creation_covers_only_its_original_prefix(continued, damage)
         replacement.write_bytes(session.read_bytes()); replacement.chmod(0o600)
         replacement.replace(session)
     if damage == 'raw-unknown':
+        install_coordinator(journal.path.parent)
         journal.private_inputs.reserve(session, 'a' * 32)
     source = replace(source, source=replace(source.source,
         reserved_revision=SessionRevision.observe(str(session)).require_available()))
     originals = session.read_bytes(), inputs.path.read_bytes()
+    refusals = {
+        'prefix': (CompactionJournalError, 'Original native fork source differs'),
+        'inode': (CompactionJournalError, 'Original native fork source differs'),
+        'header': (CompactionJournalError, 'Original native fork source differs'),
+        'parent': (CompactionJournalError, 'Original native fork source differs'),
+        'suffix': (ValueError, 'lacks unique tracked input'),
+        'raw-unknown': (ValueError, 'raw input remains UNKNOWN'),
+    }
     if damage in {None, 'inherited-marker'}:
         journal.summaries.reserve(str(session), source)
     else:
-        with pytest.raises(CompactionJournalError, match='not covered by recorded inputs'):
+        error, reason = refusals[damage]
+        with pytest.raises(error, match=reason):
             journal.summaries.reserve(str(session), source)
     assert originals == (session.read_bytes(), inputs.path.read_bytes())
