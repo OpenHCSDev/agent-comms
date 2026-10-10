@@ -191,20 +191,31 @@ class WireLog:
         delivery must not keep a POSIX lock until the event loop resumes.
         Cancellation joins acquired work before the original descriptor closes.
         """
+        from .private_bus_checkpoint import CheckpointNeedsRepair
+
+        # Readers share the bus lock so idle workers don't queue behind each
+        # other; only a checkpoint repair needs the exclusive lock.
+        try:
+            return await self._read_checked_under_lock(read, shared=True)
+        except CheckpointNeedsRepair:
+            return await self._read_checked_under_lock(read, shared=False)
+
+    async def _read_checked_under_lock(self, read: Callable, *, shared: bool):
         from .child_process import Platform
         from .coordinator import Coordination
 
         platform = Platform.current()
         with _store_lock_file(self.path) as lock_file:
             await StoreLockContention(math.inf).acquire_async(
-                lock_file.fileno(), platform, shared=False,
+                lock_file.fileno(), platform, shared=shared,
             )
             return await Coordination.run_worker(
-                partial(self._read_certified, lock_file, platform, read),
+                partial(self._read_certified, lock_file, platform, read, shared),
             )
 
-    def _read_certified(self, lock_file, platform, read):
-        with lock_file, _held_store_source(self.path, lock_file, platform, None) as lock:
+    def _read_certified(self, lock_file, platform, read, shared):
+        with lock_file, _held_store_source(self.path, lock_file, platform, None,
+                                           shared=shared) as lock:
             with self._certified_source(lock) as source:
                 return read(source)
 
@@ -654,7 +665,7 @@ class WireLog:
         return metadata if metadata.claims else None
 
     @contextmanager
-    def verify_before_read_unlocked(self):
+    def verify_before_read_unlocked(self, *, shared: bool = False):
         """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
 
         The marker is fsynced before the first claim send. A failed bus append may
@@ -678,7 +689,7 @@ class WireLog:
             raise RelationViolationError("Claim bus read barrier is not durable and private.")
         from .private_bus_checkpoint import opened_claim_source_unlocked
 
-        with opened_claim_source_unlocked(self, private_marker) as source:
+        with opened_claim_source_unlocked(self, private_marker, shared=shared) as source:
             yield source
 
     @property

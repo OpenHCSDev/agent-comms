@@ -117,6 +117,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 raise ValueError("private selected tool requires exact N/K root and native package")
         self._private_selected_tool_intent = private_selected_tool_intent
         self._private_nk_native_package = private_nk_native_package
+        self._verified_native_launcher = None
         self._private_nk_wire_root_id = private_nk_wire_root_id
         self._comms = comms
         self.use_unstable_protocol = use_unstable_protocol
@@ -328,14 +329,19 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     # ─── Helpers ─────────────────────────────────────────────────────────────
 
-    def _private_nk_marker(self) -> str:
-        """Require the configured, certified root before any selected request."""
-        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
-
+    def _configured_root_id(self) -> str:
+        """The configured bus root ID; the bus reader checks it against the marker."""
         if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
             raise PublicationActivationBlocked(
                 "private N/K ACP session requires explicit matching root and package"
             )
+        return self._private_nk_wire_root_id
+
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+
+        self._configured_root_id()
         with self._comms.bus.log.locked():
             marker = self._comms.bus.log._private_marker_unlocked()
             if marker.root_id != self._private_nk_wire_root_id:
@@ -344,6 +350,20 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 )
             verify_private_bus_checkpoint_unlocked(self._comms.bus.log, marker)
             return marker.root_id
+
+    def _verify_native_package_once(self):
+        """Verify this worker's pinned native package once, for the worker's life.
+
+        Builds publish new package directories and never edit one in use, so
+        each message reuses this check instead of hashing the package again.
+        """
+        from .native_pi import NativePiRpcLaunch
+
+        if self._verified_native_launcher is None:
+            self._verified_native_launcher = NativePiRpcLaunch.acquire_tracked(
+                self._private_nk_native_package
+            )
+        return self._verified_native_launcher
 
     async def _drain_private_nk(self, session_id: str, wire_root_id: str) -> int:
         """Run a selected private wake for this ACP session.
@@ -399,6 +419,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             write_authority=AcpSelectedWriteAuthority(
                 self, session_id, SelectedWritePlans(self._comms, wire_root_id)
             ),
+            verified_launcher=self._verify_native_package_once,
             **(
                 {"selected_tool_intent": self._private_selected_tool_intent}
                 if self._private_selected_tool_intent is not None

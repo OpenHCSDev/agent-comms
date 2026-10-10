@@ -143,14 +143,34 @@ class CertifiedSourceRead:
         original stream. Public consumers borrow that result rather than
         reconstructing message bodies/tasks or delivery policies a second time.
         Retained public rows remain present even when they have no SQL pointer.
+        The checkpoint already records the byte ranges of context-manifest
+        rows, which carry no message, so only the rows between them are read
+        (kilobytes instead of the whole bus). Every message row is still
+        parsed from the bus bytes.
         """
         from .store_files import _iter_jsonl_stream
         from .wire_record import WireRecord
 
         self.require_open_prefix()
-        self.stream.seek(0)
-        for row, _ in _iter_jsonl_stream(self.stream, boundary=self.witness.offset):
-            yield from WireRecord.certified_public_references(row)
+        try:
+            context_rows = self.connection.execute(
+                f'SELECT "offset", length FROM "{ContextManifestSources.declared_name}" '
+                'WHERE "offset" < ? ORDER BY "offset"',
+                (self.witness.offset,),
+            ).fetchall()
+        except sqlite3.Error as error:
+            raise RelationViolationError("Checkpoint context-row index is unavailable.") from error
+        position = 0
+        for offset, length in (*context_rows, (self.witness.offset, 0)):
+            if offset < position:
+                raise RelationViolationError("Checkpoint context-row ranges overlap.")
+            if offset > position:
+                self.stream.seek(position)
+                for row, _ in _iter_jsonl_stream(self.stream, boundary=offset):
+                    yield from WireRecord.certified_public_references(row)
+                if self.stream.tell() != offset:
+                    raise RelationViolationError("Checkpoint context row is not at a row boundary.")
+            position = offset + length
         self.require_open_prefix()
 
     def capture_sources(self, rows: tuple[WireSourcePointer[OriginalSource], ...]) -> Iterator[OriginalSource]:
@@ -766,6 +786,37 @@ def _recover_pending_unlocked(
     return expected
 
 
+class CheckpointNeedsRepair(Exception):  # noqa: N818 - names a state
+    """A reader holding the shared bus lock found rows the checkpoint does not
+    cover yet, or an unfinished checkpoint write.
+
+    Only a holder of the exclusive bus lock may repair the checkpoint, so the
+    reader takes the exclusive lock and checks again.
+    """
+
+
+def _check_final_checkpoint_read_only(bus, marker, db, stream, path) -> PrefixWitness:
+    """Check a final, up-to-date checkpoint under the shared bus lock; never writes."""
+    saved = _saved(db)
+    info = os.fstat(stream.fileno())
+    if (
+        saved.root_id != marker.root_id
+        or (saved.device, saved.inode) != (info.st_dev, info.st_ino)
+        or info.st_size < saved.offset
+    ):
+        raise RelationViolationError("Private bus checkpoint root/inode/size changed.")
+    marker.seal.require_final(saved, path)
+    if _tail(stream, saved.offset) != saved.tail:
+        raise RelationViolationError("Private bus checkpoint prefix tail changed.")
+    if saved.through_seq > marker.last_seq:
+        raise RelationViolationError(
+            "Private bus checkpoint exceeds the durable sequence marker."
+        )
+    if file_revision(info) != saved.revision:
+        raise CheckpointNeedsRepair("Bus has rows the checkpoint does not cover yet.")
+    return saved
+
+
 def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWitness:
     """The durability owner verifies its already opened source and certificate."""
     saved = _saved(db)
@@ -856,14 +907,19 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
 
 
 @contextmanager
-def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata):
-    """Keep only this canonical lock's verified source/index resources open."""
+def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata, *, shared: bool = False):
+    """Keep only this canonical lock's verified source/index resources open.
+
+    Under the shared bus lock other readers run concurrently, so the check is
+    read-only and raises CheckpointNeedsRepair where an exclusive holder would
+    repair the checkpoint.
+    """
     path = _path(bus.path)
     with ExitStack() as resources:
         try:
-            db = resources.enter_context(closing(marker.access.open_checkpoint(path)))
+            db = resources.enter_context(closing(marker.access.open_checkpoint(path, shared=shared)))
             stream = resources.enter_context(bus.path.open("rb"))
-            saved = marker.access.verify_checkpoint(bus, marker, db, stream, path)
+            saved = marker.access.verify_checkpoint(bus, marker, db, stream, path, shared=shared)
             db.execute("PRAGMA query_only=ON")
         except (sqlite3.Error, OSError) as error:
             raise RelationViolationError(
@@ -873,7 +929,8 @@ def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata):
 
 
 @contextmanager
-def opened_claim_source_unlocked(bus: WireLog, private_marker: WireMetadata):
+def opened_claim_source_unlocked(bus: WireLog, private_marker: WireMetadata, *,
+                                 shared: bool = False):
     """The existing claim durability owner supplies this lock's opened source."""
     with ExitStack() as resources:
         try:
@@ -905,7 +962,7 @@ def opened_claim_source_unlocked(bus: WireLog, private_marker: WireMetadata):
                     finally:
                         os.close(directory_fd)
                     source = resources.enter_context(
-                        opened_private_checkpoint_unlocked(bus, private_marker)
+                        opened_private_checkpoint_unlocked(bus, private_marker, shared=shared)
                     )
                 else:
                     scan = WireScan(private_marker)

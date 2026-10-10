@@ -523,3 +523,53 @@ def test_warm_witness_rejects_changed_revision_even_with_complete_row(tmp_path: 
         os.fsync(stream.fileno())
     with pytest.raises(RelationViolationError, match="prefix tail changed"):
         _page(comms, stable_thread_lookup(17002.0))
+
+
+def test_shared_reader_hands_lagged_suffix_to_exclusive_repair(tmp_path: Path, monkeypatch) -> None:
+    import asyncio
+
+    import agent_comms.private_bus_checkpoint as checkpoint
+    from agent_comms.child_process import Platform
+    from agent_comms.store_files import _store_lock_file
+
+    comms, _ = _root(tmp_path)
+    comms.messaging.send_initial_cohort("sender", "Alice", "first")
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            checkpoint,
+            "append_private_bus_checkpoint_unlocked",
+            lambda *_: (_ for _ in ()).throw(OSError("crash")),
+        )
+        with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
+            comms.messaging.send_initial_cohort("sender", "Bob", "lagged row")
+    log = comms.bus.log
+    platform = Platform.current()
+    # A shared-lock reader never writes the checkpoint; it names the repair.
+    with _store_lock_file(log.path) as lock_file:
+        platform.acquire_store_lock(lock_file.fileno(), shared=True, blocking=True)
+        with pytest.raises(checkpoint.CheckpointNeedsRepair):
+            log._read_certified(lock_file, platform, lambda source: None, True)
+    # The async reader then takes the exclusive lock, which repairs and reads.
+    through = asyncio.run(log.read_certified_async(lambda source: source.witness.through_seq))
+    assert through == 2
+    # Once repaired, a shared read succeeds without writing.
+    assert asyncio.run(log.read_certified_async(lambda source: source.witness.through_seq)) == 2
+
+
+def test_message_references_skip_only_indexed_context_rows(tmp_path: Path) -> None:
+    from agent_comms.store_files import _iter_jsonl_stream
+    from agent_comms.wire_record import WireRecord
+
+    comms, _ = _root(tmp_path)
+    for body in ("one", "two", "three"):
+        comms.messaging.send_initial_cohort("sender", "Alice", body)
+    with comms.bus.log.certified_read() as source:
+        indexed = tuple(source.public_message_references())
+        source.stream.seek(0)
+        scanned = tuple(
+            reference
+            for row, _ in _iter_jsonl_stream(source.stream, boundary=source.witness.offset)
+            for reference in WireRecord.certified_public_references(row)
+        )
+    assert indexed == scanned
+    assert [reference.seq for _, reference in indexed] == [1, 2, 3]

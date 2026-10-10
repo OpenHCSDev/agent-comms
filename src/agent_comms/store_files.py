@@ -83,7 +83,7 @@ def _store_lock_file(store_path: Path):
 
 
 @contextmanager
-def _held_store_source(store_path, lock_file, platform, max_bus_bytes):
+def _held_store_source(store_path, lock_file, platform, max_bus_bytes, *, shared=False):
     """One durability guard after physical custody, with exact release on refusal."""
     try:
         if max_bus_bytes is not None:
@@ -95,7 +95,7 @@ def _held_store_source(store_path, lock_file, platform, max_bus_bytes):
                     raise RelationViolationError("Bus exceeds bounded read budget.")
         from .wire_log import WireLog
 
-        with WireLog(store_path).verify_before_read_unlocked() as source:
+        with WireLog(store_path).verify_before_read_unlocked(shared=shared) as source:
             yield StoreLock(lock_file.fileno(), source)
     finally:
         platform.release_store_lock(lock_file.fileno())
@@ -119,7 +119,8 @@ def _store_lock(
             platform.acquire_store_lock(lock_file.fileno(), shared=shared, blocking=blocking)
         else:
             contention.acquire(lock_file.fileno(), platform, shared=shared)
-        with _held_store_source(store_path, lock_file, platform, max_bus_bytes) as lock:
+        with _held_store_source(store_path, lock_file, platform, max_bus_bytes,
+                                shared=shared) as lock:
             yield lock
 
 
@@ -144,7 +145,8 @@ async def _async_store_lock(
     wait = contention if contention is not None else StoreLockContention(math.inf if blocking else 0)
     with _store_lock_file(store_path) as lock_file:
         await wait.acquire_async(lock_file.fileno(), platform, shared=shared)
-        with _held_store_source(store_path, lock_file, platform, max_bus_bytes) as lock:
+        with _held_store_source(store_path, lock_file, platform, max_bus_bytes,
+                                shared=shared) as lock:
             yield lock
 
 
