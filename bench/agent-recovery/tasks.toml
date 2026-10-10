@@ -14,7 +14,7 @@ changing delivery semantics. Report measured before/after numbers.
 # for a one-line channel reply (human send -> first reply visible). Empty = skipped.
 metric = ""
 metric_better = "lower"
-tests = "python -m pytest -q -x --timeout=300 tests"
+tests = "python -m pytest -q -x tests"
 
 [[task]]
 id = "toad-frame-time"
@@ -29,7 +29,7 @@ without changing what the reader sees. Report measured before/after numbers.
 # {"value": worst_frame_ms} for the scroll scenario. Empty = skipped.
 metric = ""
 metric_better = "lower"
-tests = "python -m pytest -q -x --timeout=300 tests"
+tests = "python -m pytest -q -x tests"
 
 [[arm]]
 id = "codex-gpt-6-astra"
