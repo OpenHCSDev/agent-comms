@@ -281,3 +281,10 @@ Each has a recommended default that I will use unless you say otherwise.
 6. **Upstream versus local changes.** *Default: no patches to Pi Durable. File upstream issues for exporting `estimateContext`, for Send-now placement, and for chunked or cached summaries.*
 7. **Background compaction.** *Default: on, with Pi's defaults (`reserveTokens` 16384, `keepRecentTokens` 20000, `backgroundTokens` 32768).*
 8. **Model and provider for step (b) measurements.** *Default: your configured provider and model only, under the standing authorization. Nothing else paid without asking.*
+
+---
+
+## Decisions (Tristan, 2026-10-10)
+
+- **Send now:** Pi Durable threads without Send-now are acceptable for now; upstream is expected to add it. The `Interrupts` role stays unimplemented for `PiDurableBackend` until upstream adds it.
+- **Other open questions:** the defaults in section 6 stand unless Tristan says otherwise.
