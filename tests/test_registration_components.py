@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import LockedStore
 from agent_comms.registration import Registration
@@ -53,6 +54,30 @@ def test_store_owns_document_and_failed_edit_cannot_leak_into_cache(tmp_path):
     assert registration.snapshot() == prior
     assert registration.store.path.read_bytes() == raw
     assert not {"_threads", "_owners", "_admissions", "_statuses"} & vars(registration).keys()
+
+
+def test_named_entries_decode_only_those_threads_and_match_the_document(tmp_path):
+    registration = Registration(tmp_path / "registry.json")
+    registration.register(owner(tmp_path))
+    registration.register(replace(owner(tmp_path), name="other", created_at=11.0))
+    registration.register(replace(owner(tmp_path), name="third", created_at=12.0))
+    registration.rename("owner", "renamed")
+    document = registration.store.read()
+    raw = json.loads(registration.store.path.read_text())
+    names = ("owner", "renamed", "other", "missing")
+    assert RegistryDocument.entries_from_wire(raw, names) == document.entries(names)
+    assert set(document.entries(names)) == {"owner", "renamed", "other"}
+    # Another process's write leaves this process without a decoded revision.
+    registration.store.cache.entry = None
+    assert registration.entry("owner") == document.entries(("renamed",))["renamed"]
+    assert registration.entry("owner").thread.name == "renamed"
+    with pytest.raises(UnregisteredThreadError):
+        registration.entry("missing")
+    # Another thread's malformed declaration is not these threads' entries.
+    raw["threads"]["third"]["created_at"] = "not a time"
+    assert RegistryDocument.entries_from_wire(raw, names) == document.entries(names)
+    with pytest.raises(RelationViolationError):
+        RegistryDocument.entries_from_wire(raw, ("third",))
 
 
 def test_registry_update_persists_across_reopen(tmp_path):
@@ -99,6 +124,7 @@ import json, os, sys
 from dataclasses import replace
 from pathlib import Path
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.threads import Thread
 from agent_comms.registration import Registration
 import time

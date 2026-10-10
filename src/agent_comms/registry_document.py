@@ -93,6 +93,51 @@ class RegistryDocument(RegistryPresence):
             admission_generations=dict(self.admissions.generations),
         )
 
+    def entries(self, names: Iterable[str]) -> dict[str, RegistryEntry]:
+        """The named threads' entries, by the requested name; unregistered names are absent."""
+        found = {}
+        for name in names:
+            canonical = self.canonical_name(name)
+            if canonical in self.threads:
+                found[name] = RegistryEntry(
+                    thread=self.threads[canonical],
+                    status=self.statuses[canonical],
+                    last_seen=self.last_seen[canonical],
+                    owner_generation=self.owners.generations[canonical],
+                    admission_generation=self.admissions.generations[canonical],
+                )
+        return found
+
+    @classmethod
+    def entries_from_wire(cls, raw: dict, names: Iterable[str]) -> dict[str, RegistryEntry]:
+        """Decode the named threads' entries without decoding the other declarations.
+
+        Only these threads' rows go through the document decoder; another
+        thread's declaration is neither decoded nor validated here.
+        """
+        names = tuple(names)
+        try:
+            aliases = {name: raw["aliases"][name] for name in names if name in raw["aliases"]}
+            wanted = {aliases.get(name, name) for name in names} & raw["threads"].keys()
+
+            def rows(table: dict) -> dict:
+                return {name: table[name] for name in wanted if name in table}
+
+            def counter(raw_counter: dict) -> dict:
+                return {**raw_counter, "generations": rows(raw_counter["generations"])}
+
+            restricted = {
+                "threads": rows(raw["threads"]),
+                "statuses": rows(raw["statuses"]),
+                "last_seen": rows(raw["last_seen"]),
+                "aliases": {alias: target for alias, target in aliases.items() if target in wanted},
+                "owners": counter(raw["owners"]),
+                "admissions": counter(raw["admissions"]),
+            }
+        except (AttributeError, KeyError, TypeError) as error:
+            raise RelationViolationError(f"Invalid registry document: {error!r}") from error
+        return cls.from_wire(restricted).entries(names)
+
     @classmethod
     def from_wire(cls, raw: dict) -> RegistryDocument:
         try:
@@ -424,6 +469,25 @@ class RegistryDocument(RegistryPresence):
             status=self.statuses[current.name],
             previous=current, previous_status=self.statuses[current.name],
         )
+
+
+@dataclass(frozen=True, slots=True)
+class RegistryEntry:
+    """Everything the registry records about one thread, and nothing about the others.
+
+    The document-wide generation counters are allocation state, not this
+    thread's entry; only the generations assigned to this thread belong here.
+    """
+
+    thread: Thread
+    status: ThreadStatus
+    last_seen: float
+    owner_generation: int
+    admission_generation: int
+
+    @property
+    def owner_identity(self) -> OwnerIdentity:
+        return OwnerIdentity(self.thread.incarnation, self.owner_generation)
 
 
 @dataclass(frozen=True, slots=True)
