@@ -277,6 +277,33 @@ class SessionLifecycle:
         self, cwd: str, session_id: str, mcp_servers: list[Any] | None = None, **kwargs: Any
     ) -> LoadSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
+        thread = await self._acquire_loaded(cwd, session_id)
+        if thread.pid != os.getpid():
+            return await self.attach_owner(thread, session_id)
+        await self._bind_loaded(thread, session_id)
+        async with self.config.session_options(thread.name) as options:
+            self.effects.inputs.ensure_live_drain(session_id)
+            return LoadSessionResponse(
+                config_options=options,
+                field_meta=await self.metadata(thread.name, session_id=session_id),
+            )
+
+    async def start_owner(self, cwd: str, session_id: str) -> None:
+        """Take a headless owner's session; no ACP consumer awaits a load response.
+
+        Configuration choices and metadata belong to a consumer's load or
+        subscription, which discovers them on demand. The owner process does
+        not launch catalog children only to discard their answer.
+        """
+        thread = await self._acquire_loaded(cwd, session_id)
+        if thread.pid != os.getpid():
+            raise RelationViolationError(
+                f"Headless owner {os.getpid()} did not acquire {thread.name!r}; it belongs to {thread.pid}"
+            )
+        await self._bind_loaded(thread, session_id)
+        self.effects.inputs.ensure_live_drain(session_id)
+
+    async def _acquire_loaded(self, cwd: str, session_id: str) -> Thread:
         await Coordination.run_worker(self.effects._private_nk_marker)
         thread = await Coordination.run_worker(partial(self.validated_thread, cwd, session_id))
         if not (
@@ -287,18 +314,13 @@ class SessionLifecycle:
             thread = await Coordination.run_worker(partial(
                 self.comms.owners.acquire_thread, thread.name, owner_pid=os.getpid(),
             ))
-        if thread.pid != os.getpid():
-            return await self.attach_owner(thread, session_id)
+        return thread
+
+    async def _bind_loaded(self, thread: Thread, session_id: str) -> None:
         await Coordination.run_worker(partial(self.comms.threads.heartbeat, thread.name))
         await self.bind_owned(thread, session_id)
         await self.transcript.replay(session_id, thread.name)
         await self.effects.inputs.replay_unknown_inputs(session_id)
-        async with self.config.session_options(thread.name) as options:
-            self.effects.inputs.ensure_live_drain(session_id)
-            return LoadSessionResponse(
-                config_options=options,
-                field_meta=await self.metadata(thread.name, session_id=session_id),
-            )
 
     async def attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
         async with self._attachment_lock:
