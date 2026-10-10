@@ -129,7 +129,8 @@ async def test_actual_native_retry_and_compaction_excursions(
                 while owner.provider.posts < prior + 2:
                     assert not task.done(), task.result() if task.done() else None
                     await asyncio.sleep(0.01)
-            queue.put_nowait({"type": "abort"})
+            # The owner's cancel path: retire the turn's Pi child mid-summary.
+            await backend.terminate_task_process(task)
         result = await task
     finally:
         if not task.done():
@@ -140,7 +141,10 @@ async def test_actual_native_retry_and_compaction_excursions(
     states = [item for item in result if isinstance(item, events.TurnState)]
     if excursion in {"compaction_failure", "compaction_abort"}:
         assert not result[-1].ok
-        assert any(isinstance(item, events.CompactionEnd) and item.aborted for item in result)
+        assert not any(isinstance(item, events.CompactionEnd) and not item.aborted
+                       for item in result)
+        if excursion == "compaction_failure":
+            assert any(isinstance(item, events.CompactionEnd) and item.aborted for item in result)
         assert not any(
             json.loads(line)["type"] == "compaction"
             for line in owner.session.read_text().splitlines()
