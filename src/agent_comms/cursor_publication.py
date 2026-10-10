@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from functools import partial
 
@@ -29,7 +28,6 @@ from .coordination_errors import CoordinationError
 from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .native_source_cursor import NativeSourceCursor
-from .native_runtime_input import CurrentNativeCursor
 from .runtime import RuntimeServer
 from .thread_identity import AdmissionIdentity
 
@@ -40,6 +38,12 @@ class CursorDelivery:
 
     revision: int = 0
     published: CursorEnvelope | None = None
+    # The last completed observation advanced the durable cursor from the
+    # canonical source. Its answer is a function of the owner's drain
+    # observation revision: repeating it while that revision is unchanged
+    # cannot extend it, and a changed revision reruns the drain, whose own
+    # observation replaces this one.
+    advanced: bool = False
 
     def next_revision(self) -> int:
         self.revision += 1
@@ -54,7 +58,9 @@ class CursorDelivery:
 
     @property
     def needs_refresh(self) -> bool:
-        return self.published is None or self.published.observation.needs_refresh
+        return self.published is None or (
+            not self.advanced and self.published.observation.needs_refresh
+        )
 
 
 class CursorPublication:
@@ -85,7 +91,7 @@ class CursorPublication:
 
     async def observe(
         self, thread_name: str, session_id: str, *, defer_busy: bool = False,
-        read_cursor: Callable[..., Awaitable[CurrentNativeCursor | None]] = NativeSourceCursor.read_async,
+        advance: bool = False,
     ) -> CursorEnvelope:
         if self.root_id is None:
             raise ValueError("Native cursor requires the configured root")
@@ -99,6 +105,7 @@ class CursorPublication:
                 self.comms.root / "bus.jsonl", self.comms.registry,
                 private_response_writes=True,
             )
+            read_cursor = NativeSourceCursor.refresh_async if advance else NativeSourceCursor.read_async
             cursor = await read_cursor(
                 bus, wire_root_id=self.root_id, owner_name=thread_name
             )
@@ -128,12 +135,12 @@ class CursorPublication:
 
     async def publish(
         self, session_id: str, thread_name: str, *, selected_status: str | None = None,
-        read_cursor: Callable[..., Awaitable[CurrentNativeCursor | None]] = NativeSourceCursor.read_async,
+        advance: bool = False,
     ) -> None:
         delivery = self.delivery(session_id)
         try:
             observed = await self.observe(
-                thread_name, session_id, defer_busy=True, read_cursor=read_cursor
+                thread_name, session_id, defer_busy=True, advance=advance
             )
         except BlockingIOError:
             # Busy observation is not a new fact. A settled native operation
@@ -141,6 +148,7 @@ class CursorPublication:
             if selected_status is not None:
                 delivery.published = None
             return
+        delivery.advanced = advance
         if selected_status is None and delivery.already_published(observed):
             return
         try:
@@ -160,6 +168,4 @@ class CursorPublication:
         if self.delivery(session_id).needs_refresh:
             # Resume only the cursor projection. The immutable native receipt
             # supplies its original admission; no claim or input is resumed.
-            await self.publish(
-                session_id, thread_name, read_cursor=NativeSourceCursor.refresh_async
-            )
+            await self.publish(session_id, thread_name, advance=True)

@@ -44,7 +44,6 @@ from agent_comms.coordination_errors import (
     StaleFence,
 )
 from agent_comms.coordinator import Coordination
-from agent_comms.native_source_cursor import NativeSourceCursor
 
 from . import agent_events as events
 from .acp_extension import (
@@ -424,9 +423,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             # N (or absent-audience) rows prove coverage, not an injected
             # input. Extend only an existing current generation or an all-N prefix;
             # old-generation Pi evidence cannot initialize this cursor on reconnect.
-            await self.cursors.publish(
-                session_id, thread_name, read_cursor=NativeSourceCursor.refresh_async
-            )
+            await self.cursors.publish(session_id, thread_name, advance=True)
         else:
             # A disconnected client must not turn a settled claim into an
             # apparent model failure. Reconnect reads the same durable row.
