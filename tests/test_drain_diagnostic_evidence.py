@@ -20,12 +20,11 @@ def test_coverage_refusal_keeps_chain_and_original_storage(comms, continued):  #
     comms.registry.declare(Thread(name="owner", tags=frozenset(), worktree=str(session.parent)))
     owner = comms.registry.snapshot().owner_identity("owner")
 
-    # The original coverage owner refuses this authored fixture's missing
-    # coordinator. No replacement coverage result or native process is supplied.
-    with pytest.raises(CompactionJournalError) as failed:
+    # This fixture has no coordinator. The coverage check reports that as the
+    # missing file itself, not as a coverage gap.
+    with pytest.raises(FileNotFoundError) as failed:
         journal.summaries.reserve(str(session), source)
     error = failed.value
-    assert isinstance(error.__cause__, FileNotFoundError)
     diagnostic = StoppedDrainDiagnostic(owner, type(error).__name__, str(error))
     assert comms.agents.set_drain_diagnostic(
         "owner", owner, diagnostic, source_error=error,
@@ -36,7 +35,6 @@ def test_coverage_refusal_keeps_chain_and_original_storage(comms, continued):  #
     document = json.loads(path.read_text())
     assert "FileNotFoundError" in document["source_error"]
     assert "verify_continued_private_session" in document["source_error"]
-    assert "CompactionJournalError" in document["source_error"]
     assert str(journal.path.parent / "coordination.sqlite3") in document["source_error"]
     assert "source_error" not in FieldCodec.encode(observed)
     assert FieldCodec.decode(DrainDiagnostic, FieldCodec.encode(observed)) == observed
@@ -67,10 +65,10 @@ def test_coverage_refusal_keeps_chain_and_original_storage(comms, continued):  #
     with sqlite3.connect(coordinator):
         pass
     coordinator.chmod(0o644)
-    with pytest.raises(CompactionJournalError) as changed:
+    # An unsafe coordinator is a different defect and keeps its own message.
+    with pytest.raises(ValueError, match="unsafe_node_permissions") as changed:
         journal.summaries.reserve(str(session), source)
-    assert str(changed.value) == str(error)
-    assert isinstance(changed.value.__cause__, ValueError)
+    assert str(changed.value) != str(error)
     assert comms.agents.set_drain_diagnostic(
         "owner", owner, diagnostic, source_error=changed.value,
     )

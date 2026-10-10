@@ -90,13 +90,13 @@ class PrivateInputs(JournalRole):
         admission_generation: int | None,
         native_reader: NativeEvidenceRead | None = None,
     ) -> None:
-        """The original private-input owner covers every selected raw input.
+        """Refuse compaction unless every input sent into this session is accounted for.
 
-        A returned mint covers only its original enrollment. Continued source
-        coverage comes from the original acquired source and corroborated
-        live-recorded ancestry. Input receipts still prove their own deliveries,
-        irrespective of today's routing name or the selected journal directory.
-        No marker, file observation or enrollment row can mint fresh custody.
+        A freshly created session is covered only by its own enrollment. A
+        continued session is covered by its retained history and by inputs whose
+        model context Core recorded when they ran. Each input's recorded context
+        proves its own delivery, whatever the thread is called today. No marker,
+        file observation or enrollment row can stand in for that record.
         """
         canonical = str(session_file)
         enrollment = EnrolledPrivateSession.one(db, session_file=canonical)
@@ -121,15 +121,12 @@ class PrivateInputs(JournalRole):
         if SessionJournalHistory.exists(db, canonical) or self.requires_raw_marker(session_file):
             from .continued_private_session import verify_continued_private_session
 
-            try:
-                verify_continued_private_session(
-                    self.journal.path.parent, session_file, source, raw_ids, inputs,
-                    journal_db=db, native_reader=native_reader,
-                )
-            except (OSError, ValueError, sqlite3.Error, RuntimeError) as error:
-                raise CompactionJournalError(
-                    "Selected session history is not covered by recorded inputs"
-                ) from error
+            # Each refusal keeps its own type and message: a missing recorded
+            # context, a changed file and a locked store are different defects.
+            verify_continued_private_session(
+                self.journal.path.parent, session_file, source, raw_ids, inputs,
+                journal_db=db, native_reader=native_reader,
+            )
 
     def enroll(
         self,
