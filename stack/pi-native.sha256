@@ -15,7 +15,7 @@ e5e62ee12c9267ac10b6708fb62afdb4f4e32cf5d98aa07cd2631263c62ae799  node_modules/@
 46ba1c3418aef6bc171be183ad0032c746a5f08206c92d2c2feadad384175613  node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
 5aa2488a9695a629a5057659161a0fadac9f6dadd6eee3b5dbd73864ddb7a0c5  dist/core/extensions/loader.js
 103067298d031fcc2000962b15ec751746e93add4350befbd4cee91c9fafc42e  dist/core/package-manager.js
-6dde56891c99e156b03128e9421dbd9e076db7be8685fe45b9801b32ee19350d  dist/core/agent-session-services.js
+4af410d793207f0269cf442a799b0f83933b69d728d166e49a3a6134ff7108a6  dist/core/agent-session-services.js
 ee4f52d1dd4f1c18d5d814be4ba260ddf7fe40b7b70c2f0732a30a8b287111ad  dist/core/settings-manager.js
 8c7ffc13edd0618530b3d85b92e9c6a33938f0368e7548064ea0d649cbf8f1eb  dist/core/session-entry-store.js
 1a1dcab01172e65dab4e0d2e8684e7ad123bb027abe66b4ac5daee748576a24d  dist/core/output-guard.js
@@ -55,4 +55,4 @@ b20faeea0427f73d756a5264c1a907631c701a1140d9d716290800ce87e46d86  dist/core/skil
 d64e8c05c7932d377034820b1db0df45612afe64885c0765f8f348a12e1bc955  dist/core/skills.js
 8e8276bbabcd898136d431345611928626fad6b6f03ac572f1d8506e6ece326f  dist/core/system-prompt.d.ts
 0391543cf703a93a0163b37b3ccebe53e0f12bff6f6162b86d56fb017fe49011  dist/core/system-prompt.js
-# agent-comms-native-tree-v1 5fbc21ad366540c823ba0d892e57905537a38e9af6034c2c7dc8bdc6ff8f17f8
+# agent-comms-native-tree-v1 59fa573ea773c636ab9726fec16a5418c3a652ed3ff71f11a2a7625505878057
