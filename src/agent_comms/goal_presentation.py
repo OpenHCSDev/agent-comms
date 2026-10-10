@@ -17,6 +17,7 @@ from .goal_states import (
     PausedGoal,
     UnrecordedBlockGoal,
 )
+from .goals import Goal
 from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
@@ -114,3 +115,20 @@ class GoalExecution:
             tuple(GoalWaitTarget(**target) for target in data.get("inactive_wait_for", ())),
             data.get("block_reason"),
         )
+
+
+@dataclass(frozen=True)
+class GoalSnapshot:
+    """A thread's current goal and its scheduling projection, read together.
+
+    The execution, when present, schedules exactly this goal.
+    """
+
+    goal: Goal | None
+    execution: GoalExecution | None
+
+    def __post_init__(self) -> None:
+        if self.execution is not None and (
+            self.goal is None or self.execution.goal_id != self.goal.id
+        ):
+            raise ValueError("Goal execution identity does not match its declaration")

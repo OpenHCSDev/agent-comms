@@ -28,6 +28,7 @@ from .threads import Thread
 
 if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore
+    from .goal_presentation import GoalSnapshot
     from .goal_management import Goals
 
 
@@ -107,11 +108,11 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
     @classmethod
     async def submit_control(
         cls,
-        observe: Callable[[], Awaitable[tuple[Goal | None, object]]],
+        observe: Callable[[], Awaitable[GoalSnapshot]],
         invoke: Callable[..., Awaitable[dict]],
         text: str = "",
     ) -> dict:
-        goal, _ = await observe()
+        goal = (await observe()).goal
         if goal is None:
             raise ValueError("The goal changed; refresh its state.")
         return await cls.submit_checkpoint(invoke, goal)

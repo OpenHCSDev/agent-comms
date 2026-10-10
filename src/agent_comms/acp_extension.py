@@ -19,8 +19,7 @@ from .declared_family import DeclaredFamily
 from .input_attempt import ACPInputIdText, InputAttempt
 from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
 from .field_codec import FieldCodec
-from .goal_presentation import GoalExecution
-from .goals import Goal
+from .goal_presentation import GoalSnapshot
 from .native_runtime_input import CurrentNativeCursor
 from .pi_payloads import McpLiveReceipt
 from .routing import MessageRoute
@@ -471,15 +470,8 @@ class CoordinationChangedUpdate(AgentCommsUpdate):
 
 
 @dataclass(frozen=True)
-class GoalChangedUpdate(AgentCommsUpdate):
-    goal: Goal | None
-    execution: GoalExecution | None
-
-    def __post_init__(self):
-        if self.execution is not None and (
-            self.goal is None or self.execution.goal_id != self.goal.id
-        ):
-            raise ValueError("Goal execution identity does not match its declaration")
+class GoalChangedUpdate(GoalSnapshot, AgentCommsUpdate):
+    """The goal snapshot after a change, announced to the session."""
 
 
 @dataclass(frozen=True)

@@ -1,12 +1,36 @@
-"""What a goal shows: current, absent or unavailable, as one declared family."""
+"""What a goal shows: current, absent or unavailable, as one declared family.
+
+The owner's goal snapshot reaches the UI already decoded, with the turn
+settlement the owner read alongside it.
+"""
 
 from abc import abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import ClassVar
 
+from agent_comms.acp_extension import AgentCommsUpdate, decode_updates
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
-from agent_comms.goal_presentation import GoalExecution, GoalExecutionState
+from agent_comms.goal_presentation import GoalExecution, GoalExecutionState, GoalSnapshot
+
+
+@dataclass(frozen=True)
+class OwnerGoalSnapshot(GoalSnapshot):
+    """The live owner's answer to a goal read: the snapshot and the turn it read with it."""
+
+    updates: tuple[AgentCommsUpdate, ...]
+
+    @classmethod
+    def from_owner(cls, result: Mapping) -> "OwnerGoalSnapshot":
+        """Decode the owner's ``goal_snapshot`` reply once, at the socket boundary."""
+        raw_goal, raw_execution = result["goal"], result["goalExecution"]
+        return cls(
+            FieldCodec.decode(Goal, raw_goal) if raw_goal is not None else None,
+            GoalExecution.from_wire(raw_execution) if raw_execution is not None else None,
+            decode_updates(result["_meta"]),
+        )
 
 
 class GoalDisplay(DeclaredFamily):
