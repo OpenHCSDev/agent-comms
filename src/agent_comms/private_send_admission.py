@@ -181,7 +181,9 @@ class PrivateSendAdmission:
                 )
             except NativePiTerminalFailure as error:
                 self.verify(store, error.context)
-                self.stage.fail_terminal()
+                self.stage.fail_terminal(
+                    store, self.participant, self.input_id, self.token_digest, error.context
+                )
                 raise
             finally:
                 lease = self.owner.thread.turn_lease

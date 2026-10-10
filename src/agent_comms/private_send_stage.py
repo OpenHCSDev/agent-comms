@@ -62,8 +62,21 @@ class NativeSendStage(ABC):
         """Fence this stage and reject any previous dispatch before inserting an ID."""
 
     @abstractmethod
-    def fail_terminal(self) -> None:
-        """Settle only the stage's proved, reaped failure; never grant replay."""
+    def fail_terminal(
+        self,
+        store: Coordination,
+        owner: ParticipantOwner,
+        input_id: str,
+        token_digest: str,
+        context: NativeContextProof,
+    ):
+        """Record the failed input's verified model context and fail its claims.
+
+        The native child is reaped and ``context`` was verified against the
+        session file. Recording it states which model context the input entered,
+        which compaction requires before it may summarize that history. A
+        failed input is never sent again.
+        """
 
     def fail_unknown(self, bus, owner, witness) -> None:
         owner.require_registry(bus._registry)
@@ -224,8 +237,12 @@ class NativeSendStage(ABC):
 
 
 class TriageNativeSend(NativeSendStage):
-    def reject(self, store, owner, input_id, token_digest, context) -> tuple[WakeAssignment, ...]:
-        """Settle this proved result atomically; never reserve a replacement input."""
+    def fail_terminal(self, store, owner, input_id, token_digest, context) -> tuple[WakeAssignment, ...]:
+        """A provider failure and an unparseable decision both end the triage here.
+
+        The context and the failed claims commit in one transaction; no
+        replacement triage input is reserved.
+        """
         with store.session.transaction() as db:
             row = self.pending_input(store, input_id, owner, token_digest)
             self.require_claim(store)
@@ -248,11 +265,6 @@ class TriageNativeSend(NativeSendStage):
     @property
     def execution(self) -> TriageNativeExecution:
         return TriageNativeExecution()
-
-    def fail_terminal(self) -> None:
-        # Reservation already deferred the triage assignment. A terminal failure
-        # has no execution attempt to settle and must not create a fresh triage.
-        return None
 
     def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
         for captured in self.assignments:
@@ -321,7 +333,13 @@ class FullNativeSend(NativeSendStage):
     def execution(self) -> FullNativeExecution:
         return FullNativeExecution(self.fence.execution_id, self.fence.attempt_ordinal)
 
-    def fail_terminal(self) -> None:
+    def fail_terminal(self, store, owner, input_id, token_digest, context) -> None:
+        # Same order as success: record the context under the live attempt,
+        # then settle the attempt.
+        with store.session.transaction() as db:
+            row = self.pending_input(store, input_id, owner, token_digest)
+            store.attempts.require_fence(self.fence)
+            row.commit_context(db, context)
         self.progress.fail_terminal()
 
     def fail_unknown(self, bus, owner, witness) -> None:

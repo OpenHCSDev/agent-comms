@@ -128,7 +128,7 @@ class PrivateInputs(JournalRole):
                 )
             except (OSError, ValueError, sqlite3.Error, RuntimeError) as error:
                 raise CompactionJournalError(
-                    "Selected source requires reviewed raw-history coverage floor"
+                    "Selected session history is not covered by recorded inputs"
                 ) from error
 
     def enroll(

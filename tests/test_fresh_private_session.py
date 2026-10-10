@@ -337,7 +337,7 @@ def test_returned_enrollment_admits_only_exact_fresh_owner_without_raw_history(
     root = tmp_path
     fresh = create_fresh_private_session(root / "native-sessions" / "alice-lookup", worktree=root)
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
-    with pytest.raises(CompactionJournalError, match="coverage floor"):
+    with pytest.raises(CompactionJournalError, match="not covered by recorded inputs"):
         journal.summaries.reserve(str(fresh.path), _private_source(fresh.path))
     journal.private_inputs.enroll(
         fresh,

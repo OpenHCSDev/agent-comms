@@ -196,7 +196,7 @@ def test_unproven_private_session_cannot_reserve_selected_summary(reserved):
     with sqlite3.connect(journal.path) as db:
         assert db.execute("SELECT count(*) FROM private_raw_inputs").fetchone()[0] == 0
     private_source = manual_summary_record(saved)
-    with pytest.raises(CompactionJournalError, match="coverage floor"):
+    with pytest.raises(CompactionJournalError, match="not covered by recorded inputs"):
         journal.summaries.reserve(str(saved), private_source)
     with (
         pytest.raises(CompactionJournalError, match="prewrite marker"),
@@ -206,7 +206,7 @@ def test_unproven_private_session_cannot_reserve_selected_summary(reserved):
     journal.private_inputs.reserve(saved, "a" * 32)
     with journal.private_inputs.send_fence(saved, private_input_id="a" * 32):
         pass  # Existing ordinary private N/K raw dispatch stays available.
-    with pytest.raises(CompactionJournalError, match="coverage floor"):
+    with pytest.raises(CompactionJournalError, match="not covered by recorded inputs"):
         journal.summaries.reserve(str(saved), private_source)
     assert journal.summaries.reserve(session, source)
 
@@ -217,7 +217,7 @@ def test_private_raw_prewrite_marker_blocks_only_its_saved_session(reserved):
     other.write_text('{"type":"session","id":"other"}\n')
     journal.private_inputs.reserve(Path(session), "a" * 32)
     reopened = CompactionJournal(journal.path)
-    with pytest.raises(CompactionJournalError, match="coverage floor"):
+    with pytest.raises(CompactionJournalError, match="not covered by recorded inputs"):
         reopened.summaries.reserve(session, source)
     with reopened.private_inputs.send_fence(Path(session), private_input_id="a" * 32):
         pass  # The exact prewrite marker permits its own PR94 raw input only.
@@ -237,7 +237,7 @@ def test_private_raw_marker_and_selected_reservation_share_symlink_alias_identit
     alias = Path(session).with_name("alias.jsonl")
     alias.symlink_to(Path(session))
     journal.private_inputs.reserve(alias, "a" * 32)
-    with pytest.raises(CompactionJournalError, match="coverage floor"):
+    with pytest.raises(CompactionJournalError, match="not covered by recorded inputs"):
         journal.summaries.reserve(session, source)
     other = Path(session).with_name("other.jsonl")
     other.write_text("{}\n")
@@ -287,7 +287,7 @@ os._exit(0)
     assert process.returncode == 0, process.stderr
     assert marker.exists() is (moment == "after-write")
     reopened = CompactionJournal(journal.path)
-    with pytest.raises(CompactionJournalError, match="coverage floor"):
+    with pytest.raises(CompactionJournalError, match="not covered by recorded inputs"):
         reopened.summaries.reserve(session, source)
 
 
@@ -300,7 +300,7 @@ def test_private_raw_prewrite_parent_fsync_unknown_never_writes_or_retries(reser
     monkeypatch.setattr(os, "fsync", fsync)
     reopened = CompactionJournal(journal.path)
     # The marker may be visible despite UNKNOWN; raw os.write has not run.
-    with pytest.raises(CompactionJournalError, match="coverage floor"):
+    with pytest.raises(CompactionJournalError, match="not covered by recorded inputs"):
         reopened.summaries.reserve(session, source)
     with pytest.raises(CompactionJournalError, match="already reserved"):
         reopened.private_inputs.reserve(Path(session), "a" * 32)
