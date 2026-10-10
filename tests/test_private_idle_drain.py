@@ -8,11 +8,12 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import acp, cohort_foreground, coordinated_runtime
+from agent_comms import acp, cohort_foreground, coordinated_runtime, native_pi
 from agent_comms import agent_events as events
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_cohort import next_sealed_assignment
+from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.threads import Thread
@@ -181,7 +182,7 @@ async def test_quiescent_private_drain_does_no_package_or_repeated_cursor_work(
     # An empty cursor still requires recovery. A genuine absent-audience
     # initial supplies a coverage-only cursor without a native input.
     counts = {"accept": 0, "cursor": 0}
-    accept, cursor = acp._accept_visible_deliveries, acp.NativeSourceCursor.advance
+    accept, cursor = acp._accept_visible_deliveries, NativeSourceCursor.advance
 
     async def accepted(*args, **kwargs):
         counts["accept"] += 1
@@ -195,9 +196,9 @@ async def test_quiescent_private_drain_does_no_package_or_repeated_cursor_work(
         raise AssertionError("idle observation must not hash the native package")
 
     monkeypatch.setattr(acp, "_accept_visible_deliveries", accepted)
-    monkeypatch.setattr(acp.NativeSourceCursor, "advance", covered)
+    monkeypatch.setattr(NativeSourceCursor, "advance", covered)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", no_package)
-    monkeypatch.setattr(coordinated_runtime, "_trusted_package", no_package)
+    monkeypatch.setattr(native_pi, "_trusted_package", no_package)
     assert await agent.inputs.drain_inbox("beta") == 0
     # Advancing the durable cursor changes the first before/after observation.
     assert await agent.inputs.drain_inbox("beta") == 0
@@ -218,6 +219,35 @@ async def test_quiescent_private_drain_does_no_package_or_repeated_cursor_work(
     comms.registry.register(replace(owner, task="changed task"))
     assert await agent.inputs.drain_inbox("beta") == 0
     assert counts == {"accept": 3, "cursor": 3}
+
+
+@pytest.mark.asyncio
+async def test_settled_empty_cursor_is_not_rescanned_while_nothing_changes(
+    tmp_path, monkeypatch
+):
+    comms, agent, _root_id = _session(tmp_path)
+    # No source proves a cursor for this admission, so every advance settles
+    # as an empty observation. Rescanning it cannot change that answer until
+    # the owner's observation revision changes.
+    calls = []
+    advance = NativeSourceCursor.advance
+
+    def counted(*args, **kwargs):
+        calls.append(args)
+        return advance(*args, **kwargs)
+
+    monkeypatch.setattr(NativeSourceCursor, "advance", counted)
+    assert await agent.inputs.drain_inbox("beta") == 0
+    settled = len(calls)
+    assert settled >= 1
+    for _ in range(20):
+        assert await agent.inputs.drain_inbox("beta") == 0
+    assert len(calls) == settled, "idle observation re-advanced a settled empty cursor"
+    # A real revision of this owner advances once more.
+    owner = comms.registry.require("beta")
+    comms.registry.register(replace(owner, task="changed task"))
+    assert await agent.inputs.drain_inbox("beta") == 0
+    assert len(calls) == settled + 1
 
 
 @pytest.mark.asyncio
