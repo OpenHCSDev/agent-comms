@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 from traceback import TracebackException
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 from .store_files import _atomic_write_text
@@ -198,6 +198,40 @@ def record_terminal_failure(
         document["native_response"] = native_response.rejection_details()
     document.update(_source_error_evidence(source_error))
     return _write_diagnostic_document(root, turn_id, document)
+
+
+@dataclass(frozen=True)
+class NativeTerminalFailureRecord:
+    """The document ``record_terminal_failure`` writes for a native terminal failure.
+
+    Core writes it only after verifying the failed input's live context.
+    """
+
+    version: Literal[1]
+    turn_id: str
+    thread: str
+    reason: FailureReason
+    sequences: tuple[int, ...]
+    measurements: dict[str, int]
+    outcome: str
+    source_error: str
+    native: dict[str, str]
+
+    @classmethod
+    def read(cls, root: Path, input_id: str) -> NativeTerminalFailureRecord:
+        path = root / "diagnostics" / f"{input_id}.json"
+        record = FieldCodec.decode(cls, json.loads(path.read_text()))
+        if record.turn_id != input_id or not record.raised.startswith(
+            "agent_comms.native_pi.NativePiTerminalFailure: "
+        ):
+            raise ValueError("Diagnostic does not record a native terminal failure for this input")
+        return record
+
+    @property
+    def raised(self) -> str:
+        """The first unindented line of the last traceback is the raised exception."""
+        final = self.source_error.rpartition("Traceback (most recent call last):\n")[2]
+        return next((line for line in final.splitlines() if not line.startswith(" ")), "")
 
 
 def record_drain_failure(

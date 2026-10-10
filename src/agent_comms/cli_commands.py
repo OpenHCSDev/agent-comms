@@ -615,6 +615,20 @@ class RepairInputRoutingCliCommand(CliCommand, declared_name="repair-input-routi
 
 
 @dataclass(frozen=True, kw_only=True)
+class RecordFailedInputContextsCliCommand(CliCommand, declared_name="record-failed-input-contexts"):
+    help = "Report, or with --apply record, the model context of failed inputs that lack one"
+    persist: bool = option(
+        "--apply", help="Record contexts proven by all three records", default=False,
+        wire_name="apply",
+    )
+
+    def apply(self, ctx: Comms) -> Any:
+        from .failed_input_contexts import record_failed_input_contexts
+
+        return record_failed_input_contexts(ctx.root, apply=self.persist)
+
+
+@dataclass(frozen=True, kw_only=True)
 class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
     help = "Import an OpenCode/Codex context snapshot"
     format: ImportFormat = option("--format")

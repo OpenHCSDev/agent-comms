@@ -247,20 +247,26 @@ class TriageNativeSend(NativeSendStage):
             row = self.pending_input(store, input_id, owner, token_digest)
             self.require_claim(store)
             row.commit_context(db, context)
-            for captured in self.assignments:
-                current = store.assignments.get(captured.assignment_id)
-                updated = WakeAssignment.update(
-                    db,
-                    where="assignment_id=? AND revision=?",
-                    parameters=(current.assignment_id, current.revision),
-                    lifecycle=current.lifecycle.preengagement(FailedAssignment),
-                    revision=current.revision + 1,
-                    updated_at_ms=store.session.now(current.updated_at_ms),
-                )
-                if updated.rowcount != 1:
-                    raise StaleFence("rejected triage lost an original batch claim")
-            return tuple(store.assignments.get(captured.assignment_id)
-                         for captured in self.assignments)
+            return self.fail_claims(store, db)
+
+    def fail_claims(self, store: Coordination, db: sqlite3.Connection) -> tuple[WakeAssignment, ...]:
+        """Move this triage's deferred claims to Failed inside the caller's transaction."""
+        for captured in self.assignments:
+            current = store.assignments.get(captured.assignment_id)
+            if current.lifecycle != DeferredAssignment.build(current.lifecycle.mode, None, None):
+                raise StaleFence("failed triage claim is no longer deferred")
+            updated = WakeAssignment.update(
+                db,
+                where="assignment_id=? AND revision=?",
+                parameters=(current.assignment_id, current.revision),
+                lifecycle=current.lifecycle.preengagement(FailedAssignment),
+                revision=current.revision + 1,
+                updated_at_ms=store.session.now(current.updated_at_ms),
+            )
+            if updated.rowcount != 1:
+                raise StaleFence("failed triage lost an original batch claim")
+        return tuple(store.assignments.get(captured.assignment_id)
+                     for captured in self.assignments)
 
     @property
     def execution(self) -> TriageNativeExecution:
