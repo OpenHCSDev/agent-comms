@@ -4,11 +4,13 @@ A UI process asks what to observe (the sidebar, the threads its views show)
 and receives finished results only when Core's stores actually change: the
 service watches the store files that ``HistoryViews.revision_paths`` declares,
 reads snapshots and presentations, derives the sidebar rows, and sends them
-over a pipe. The UI also asks it for reads it awaits (transcript pages, their
-currency, message notifications); the service answers each by request id with
-the value or the exception the read raised. The UI thread no longer polls
-revisions, reads stores or derives rows, and no longer competes with those
-reads for its interpreter lock.
+over a pipe. The UI also asks it for reads it awaits: store reads (transcript
+pages, their currency, message notifications), answered in arrival order, and
+reads a thread's live owner answers over its socket (the goal snapshot, input
+delivery), answered as they complete. Each answer carries the request id and
+the decoded value or the exception the read raised. The UI thread no longer
+polls revisions, reads stores, resolves owners, decodes replies or derives
+rows, and no longer competes with that work for its interpreter lock.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.coordination_errors import CoordinationReadUnavailable, StaleRevision
 
@@ -34,8 +36,12 @@ if TYPE_CHECKING:
     from agent_comms.history_views import RetiredViews
     from agent_comms.message_reference import MessageReference
     from agent_comms.presentation import CoordinationSnapshot, WireRevision
+    from agent_comms.runtime import RuntimeConnection
+    from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.thread_presentation import ThreadPresentation
     from agent_comms.transcripts import TranscriptCursor, TranscriptReadIdentity
+    from agent_comms.ui_model.delivery import InputDelivery
+    from agent_comms.ui_model.goal import OwnerGoalSnapshot
     from agent_comms.ui_model.sidebar import ChannelRowModel, ThreadRowModel
 
 # Activity older than this reads as idle; re-derive rows at least this often
@@ -72,7 +78,7 @@ class InterestRequest(ObservationRequest):
 
 
 @dataclass(frozen=True)
-class ReadRequest(ObservationRequest):
+class AwaitedRead(ObservationRequest):
     """A read the UI awaits; the service answers it by ``request_id``.
 
     ``root`` is the Comms root the UI's view belongs to; a read for another
@@ -81,6 +87,19 @@ class ReadRequest(ObservationRequest):
 
     root: str
     request_id: int = field(default=0, kw_only=True)
+
+    def require_root(self, comms: Comms) -> None:
+        if Path(self.root).expanduser().resolve() != comms.root.resolve():
+            raise StaleRevision("The read belongs to another Comms root than the observed one")
+
+    def refused(self, error: Exception) -> ReadRefused:
+        # The read's own exception, re-raised to the UI caller exactly as an
+        # in-process read raised it; the caller's handling decides.
+        return ReadRefused(self.request_id, error, traceback.format_exc())
+
+
+class ReadRequest(AwaitedRead):
+    """A read of Core's stores, served one at a time in arrival order."""
 
     def receive(self, service: ObservationService) -> None:
         service.pending[self.request_id] = self
@@ -91,23 +110,76 @@ class ReadRequest(ObservationRequest):
 
     def answer(self, comms: Comms) -> ReadAnswered | ReadRefused:
         try:
-            if Path(self.root).expanduser().resolve() != comms.root.resolve():
-                raise StaleRevision("The read belongs to another Comms root than the observed one")
+            self.require_root(comms)
             return ReadAnswered(self.request_id, self.read(comms))
         except Exception as error:
-            # The read's own exception, re-raised to the UI caller exactly as an
-            # in-process read raised it; the caller's handling decides.
-            return ReadRefused(self.request_id, error, traceback.format_exc())
+            return self.refused(error)
+
+
+@dataclass(frozen=True)
+class OwnerRead(AwaitedRead):
+    """A read the live owner of thread incarnation ``owner`` answers over its socket.
+
+    Served as it arrives, beside store reads; the owner's reply is decoded
+    here. The owner's refusals and a changed owner identity reach the UI as
+    ValueError, as the UI's owner actions report them.
+    """
+
+    owner: ThreadIncarnation
+    # The owner answers from its own stores; a slower answer is a stalled owner.
+    TIMEOUT: ClassVar[float] = 3
+
+    def receive(self, service: ObservationService) -> None:
+        service.owner_reads[self.request_id] = asyncio.ensure_future(self.serve(service))
+
+    async def serve(self, service: ObservationService) -> None:
+        try:
+            answer = await self.answer(service.comms)
+        finally:
+            service.owner_reads.pop(self.request_id, None)
+        service.connection.send(answer)
+
+    async def answer(self, comms: Comms) -> ReadAnswered | ReadRefused:
+        try:
+            self.require_root(comms)
+            async with asyncio.timeout(self.TIMEOUT):
+                return ReadAnswered(self.request_id, await self.ask(comms))
+        except Exception as error:
+            return self.refused(error)
+
+    def connect(self, comms: Comms) -> RuntimeConnection:
+        from agent_comms.runtime import RuntimeConnection, socket_path
+
+        owner = comms.registry.require(self.owner.name)
+        if owner.incarnation != self.owner:
+            raise ValueError("The owner incarnation changed while preparing the request.")
+        return RuntimeConnection(comms, owner.name, socket_path(comms.root, owner.pid))
+
+    async def ask(self, comms: Comms) -> object:
+        from acp.exceptions import RequestError
+
+        connection = await asyncio.to_thread(self.connect, comms)
+        try:
+            return await self.read(connection)
+        except (RuntimeError, RequestError) as error:
+            raise ValueError(str(error)) from error
+        finally:
+            await connection.close()
+
+    @abstractmethod
+    async def read(self, owner: RuntimeConnection) -> object: ...
 
 
 @dataclass(frozen=True)
 class CancelRead(ObservationRequest):
-    """The UI stopped waiting; a read not yet served is dropped."""
+    """The UI stopped waiting; a read not yet answered is dropped."""
 
     request_id: int
 
     def receive(self, service: ObservationService) -> None:
         service.pending.pop(self.request_id, None)
+        if (asking := service.owner_reads.pop(self.request_id, None)) is not None:
+            asking.cancel()
 
 
 @dataclass(frozen=True)
@@ -167,6 +239,29 @@ class ReadNotifications(ReadRequest):
 
     def read(self, comms: Comms):
         return comms.views.message_notifications_for_references(self.references)
+
+
+@dataclass(frozen=True)
+class ReadOwnerGoal(OwnerRead):
+    """The owner's goal snapshot and the turn it read with it."""
+
+    async def read(self, owner: RuntimeConnection) -> OwnerGoalSnapshot:
+        from agent_comms.ui_model.goal import OwnerGoalSnapshot
+
+        return OwnerGoalSnapshot.from_owner(await owner.request("goal_snapshot"))
+
+
+@dataclass(frozen=True)
+class ReadInputDelivery(OwnerRead):
+    """The owner's delivery notices, checked against its live queue."""
+
+    include_history: bool = False
+
+    async def read(self, owner: RuntimeConnection) -> InputDelivery:
+        from agent_comms.ui_model.delivery import InputDelivery
+
+        return InputDelivery.from_wire(
+            await owner.request("input_dispositions", include_history=self.include_history))
 
 
 @dataclass(frozen=True)
@@ -301,8 +396,10 @@ class ObservationService:
         self.checked_views: tuple[ObserveViews, WireRevision] | None = None
         self.retry_threads = False
         self.observe_due = True
-        # Reads the UI awaits, in arrival order, until served or cancelled.
+        # Store reads the UI awaits, in arrival order, until served or cancelled.
         self.pending: dict[int, ReadRequest] = {}
+        # Owner reads being asked, until answered or cancelled.
+        self.owner_reads: dict[int, asyncio.Future] = {}
         self.closed = False
 
     def receive(self) -> None:
@@ -385,6 +482,8 @@ class ObservationService:
                     self.observe()
         finally:
             watching.cancel()
+            for asking in self.owner_reads.values():
+                asking.cancel()
             loop.remove_reader(self.connection.fileno())
 
 
@@ -426,7 +525,7 @@ class ObservationProcess:
     def request(self, request: ObservationRequest) -> None:
         self.connection.send(request)
 
-    async def read(self, request: ReadRequest):
+    async def read(self, request: AwaitedRead):
         """Send ``request`` and await its answer, delivered by ``results``.
 
         Cancelling the caller cancels the read; an unserved read is dropped.
