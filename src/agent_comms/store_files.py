@@ -75,10 +75,15 @@ class StoreLock:
 
 @contextmanager
 def _store_lock_file(store_path: Path):
-    """Own the original lock inode's descriptor before any acquisition."""
+    """Own the original lock inode's descriptor before any acquisition.
+
+    The lock file is never written, so it is opened read-only: closing a
+    descriptor opened for writing is a close-write event that wakes every
+    owner watching the store directory, once per lock taken.
+    """
     store_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = store_path.with_name(f".{store_path.name}.lock")
-    with open(lock_path, "a+b") as lock_file:
+    with os.fdopen(os.open(lock_path, os.O_RDONLY | os.O_CREAT, 0o666), "rb") as lock_file:
         yield lock_file
 
 

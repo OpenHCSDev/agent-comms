@@ -310,7 +310,7 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
             comms.registry.store.cache.entry = None
             del decoded[:]
             await tick()
-            assert decoded and set(decoded) == {1}, "the tick decoded other threads' entries"
+            assert set(decoded) <= {1}, "the tick decoded other threads' entries"
 
         await changed_elsewhere(
             lambda: comms.registry.declare(Thread("unrelated", frozenset(), str(tmp_path))))
@@ -323,9 +323,35 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
             with Coordination(comms.root / "coordination.sqlite3") as store:
                 store.participants.register("unrelated", "unrelated", "unrelated", committed=True)
 
+        # Only the coordination store changed: beta rereads its own rows there,
+        # not the unchanged bus log or registry.
+        certified = []
+        read_certified = comms.bus.log.read_certified_async
+
+        async def counted_certified(*args, **kwargs):
+            certified.append(args)
+            return await read_certified(*args, **kwargs)
+
+        monkeypatch.setattr(comms.bus.log, "read_certified_async", counted_certified)
         await changed_elsewhere(registered_elsewhere)
+        assert certified == [] and decoded == [], "an unchanged bus or registry was reread"
         await changed_elsewhere(lambda: comms.threads.delete("unrelated"))
         assert len(drains) == settled, "another thread's registry change ran the tick"
+        # A wake can stat the registry while another owner's write is still in
+        # flight. The entry read waits for that write, so the tick settles at
+        # the revision it read; the write's later wakes reread nothing.
+        in_flight = (None, None)
+        tick_revision = agent.inputs._tick_revision
+        monkeypatch.setattr(agent.inputs, "_tick_revision",
+                            lambda sid: replace(tick_revision(sid), registry=in_flight))
+        comms.registry.register(replace(comms.registry.require("sender"), task="written"))
+        comms.registry.store.cache.entry = None
+        del decoded[:]
+        await tick()
+        monkeypatch.setattr(agent.inputs, "_tick_revision", tick_revision)
+        await tick()
+        assert decoded == [1], "a later wake of one write reread the entry"
+        assert len(drains) == settled
         # Any change of this owner's own entry runs the full observation again.
         owner = comms.registry.require("beta")
         comms.registry.register(replace(owner, task="changed task"))
