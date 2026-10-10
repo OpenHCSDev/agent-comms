@@ -384,9 +384,17 @@ class TestRegistration:
         # visible commit bytes are safe; on restart they may also be absent.
         if fail_at == "commit":
             assert Registration(root / "registry.json").require("b").name == "b"
+        elif fail_at in {"pending", "replacement"}:
+            # An abandoned write: the replacement never reached the registry,
+            # so the previous commit stands and the next write proceeds.
+            assert "b" not in json.loads((root / "registry.json").read_text())["threads"]
+            assert cold.require("a").name == "a"
+            assert Registration(root / "registry.json").require("a").name == "a"
+            comms.registry.register(
+                Thread(name="b", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()))
+            )
+            assert Registration(root / "registry.json").require("b").name == "b"
         else:
-            if fail_at in {"pending", "replacement"}:
-                assert "b" not in json.loads((root / "registry.json").read_text())["threads"]
             with pytest.raises(RelationViolationError, match="Private registry guard"):
                 cold.require("a")
             with pytest.raises(RelationViolationError, match="Private registry guard"):
@@ -494,7 +502,9 @@ class TestRegistration:
             cold.require("a")
         with pytest.raises(RelationViolationError, match="Private registry guard"):
             comms.registry.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
-        assert "registry_guard" not in comms.registry.store.cache.document.threads["a"].to_wire()
+        # A refused read leaves no cached document; none may carry guard state.
+        entry = comms.registry.store.cache.entry
+        assert entry is None or "registry_guard" not in entry.document.threads["a"].to_wire()
 
     def test_release_turn_resolves_retained_alias_only_for_exact_lease(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
