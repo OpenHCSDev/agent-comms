@@ -65,6 +65,9 @@ class SessionLifecycle:
         self.comms, self.agent_bin, self.agent_args = comms, agent_bin, agent_args
         self.runtime, self.runtime_enabled, self.effects = runtime, runtime_enabled, effects
         self.bindings: dict[str, str] = {}
+        # A launcher registers this process as the owner before it starts, so
+        # this process owns that registration even if it never binds a session.
+        self.launched_owners: set[str] = set()
         self.client: Any = None
         self.titles: dict[str, str] = {}
         self.display_titles: dict[str, str | None] = {}
@@ -295,6 +298,7 @@ class SessionLifecycle:
         subscription, which discovers them on demand. The owner process does
         not launch catalog children only to discard their answer.
         """
+        self.launched_owners.add(session_id)
         thread = await self._acquire_loaded(cwd, session_id)
         if thread.pid != os.getpid():
             raise RelationViolationError(
@@ -446,12 +450,14 @@ class SessionLifecycle:
     async def release_owned(self) -> None:
         """Release every owned thread, then report each release that failed.
 
-        One failed stop must not keep the others registered as running, and it
-        must not disappear either: the failures surface together after the
-        runtime has closed.
+        This includes a thread this process was launched to own but failed to
+        bind: otherwise a startup failure leaves it registered as running with
+        a dead process. One failed stop must not keep the others registered as
+        running, and it must not disappear either: the failures surface
+        together after the runtime has closed.
         """
         failures: list[Exception] = []
-        for name in set(self.bindings.values()):
+        for name in set(self.bindings.values()) | self.launched_owners:
             try:
                 await Coordination.run_worker(partial(self.release_registered_owner, name))
             except Exception as error:

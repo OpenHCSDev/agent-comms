@@ -274,3 +274,28 @@ def test_changed_owner_after_release_refuses_escalation_and_replacement(releasin
         finally:
             # Disposition precedes fixture teardown; no replacement or stale signal.
             failure.abandon()
+
+
+@pytest.mark.asyncio
+async def test_owner_that_fails_before_binding_releases_its_registration(tmp_path, monkeypatch):
+    """A launcher registers the worker as running before it starts. If the worker
+    fails before binding its session, shutdown still records that it stopped,
+    instead of leaving a running thread whose process is gone."""
+    from agent_comms.acp import CommsAgent
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.comms import Comms
+    from agent_comms.coordination_errors import PublicationActivationBlocked
+    from agent_comms.threads import Thread
+
+    comms = Comms(tmp_path, private_initial_writes=True)
+    comms.messaging.initialize_private_initial_protocol()
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path),
+                                  process_identity=ProcessIdentity.capture(os.getpid())))
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
+    assert comms.registry.status("worker").running
+    agent = CommsAgent(comms, runtime_enabled=True)
+    # The 2026-09-29 startup failure: a private wire without a pinned launch.
+    with pytest.raises(PublicationActivationBlocked):
+        await agent.sessions.start_owner(str(tmp_path), "worker")
+    await agent.shutdown()
+    assert comms.registry.status("worker").stopped

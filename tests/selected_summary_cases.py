@@ -131,3 +131,66 @@ def native_intent(session, *, owner="owner", selected=None, retained=RetainedTas
         "fixture-input-revision", retained, (),
     )
     return intent, attestation, source, selected
+
+
+def recorded_private_session(root, input_id="e" * 32):
+    """A private native session whose one input has a recorded model context.
+
+    Its history is fully covered, so a compaction refusal on it comes from
+    whatever the test adds (a raw-input marker, an unresolved commit), not from
+    the fixture itself.
+    """
+    import json
+    from pathlib import Path
+
+    from native_proof_cases import write_proof_rows
+
+    from agent_comms.assignment_states import TriagePendingAssignment
+    from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+    from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+    from agent_comms.coordinator import Coordination
+    from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    from agent_comms.native_input_record import TriageNativeExecution
+    from agent_comms.native_runtime_input import NativeRuntimeInput
+    from agent_comms.private_sidecar import native_request_digest
+    from agent_comms.selected_triage import IgnoreSelectedTriage
+
+    root = Path(root)
+    sessions = root / "native-sessions"
+    folder = sessions / ("f" * 32)
+    folder.mkdir(parents=True, mode=0o700)
+    sessions.chmod(0o700)
+    session = folder / "session.jsonl"
+    entries = [
+        dict(type="session", version=3, id="session"),
+        dict(type="message", id="user", message=dict(
+            role="user", inputId=input_id, inputDigest=native_request_digest("old"),
+            content=[dict(type="text", text="old")],
+        )),
+    ]
+    session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+    session.chmod(0o600)
+    write_proof_rows(session, [dict(
+        schema=1, type="context_committed", sessionId="session", inputId=input_id,
+        sessionEntryId="user", requestGeneration=1, llmContextDigest="b" * 64,
+    )])
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        store.participants.register("f" * 32, "owner", "owner", committed=True)
+        store.assignments.accept(WakeAssignment(
+            assignment_id="claim", recipient="owner", recipient_lookup="f" * 32,
+            wire_seq=1, message_id="message", audience=MessageAudience.COLLECTIVE,
+            lifecycle=TriagePendingAssignment(), accepted_at_ms=1, updated_at_ms=1,
+        ))
+        install_native_runtime_schema(store)
+        with store.session.transaction() as db:
+            NativeRuntimeInput(
+                input_id=input_id, stage=TriageNativeExecution, execution_id=None,
+                attempt_ordinal=None, owner_lookup="f" * 32, owner_thread="owner",
+                owner_generation=1, owner_token_digest="c" * 64,
+                sent_owner_admission_generation=RecordedNativeAdmission(1),
+                session_id="session", session_file=str(session), session_entry_id="user",
+                request_generation=1, llm_context_digest="b" * 64,
+                verdict=IgnoreSelectedTriage,
+            ).insert(db)
+            TriageNativeExecution().record_sources(db, input_id, (store.assignments.get("claim"),))
+    return session

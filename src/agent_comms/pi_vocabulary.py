@@ -29,10 +29,6 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
         return True
 
     @classmethod
-    def require_failed_terminal(cls, message):
-        raise ValueError("Native recovery requires an unambiguous failed terminal")
-
-    @classmethod
     async def apply(cls, session, message):
         session.output.error_message = None
         tokens = message.measured_tokens
@@ -82,10 +78,6 @@ class ErrorStopReason(PiStopReason):
         return False
 
     @classmethod
-    def require_failed_terminal(cls, message):
-        message.require_failure_shape()
-
-    @classmethod
     async def apply(cls, session, message):
         if session.usage.provisional:
             session.usage.used = session.usage.confirmed
@@ -104,10 +96,6 @@ class ErrorStopReason(PiStopReason):
 
 class AbortedStopReason(ErrorStopReason):
     explicit_abort = True
-
-    @classmethod
-    def require_failed_terminal(cls, message):
-        return PiStopReason.require_failed_terminal(message)
 
 
 class DeferredStopReason(PiStopReason):

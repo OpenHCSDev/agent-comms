@@ -111,17 +111,18 @@ class SelectedSummaries(JournalRole):
                         if future_queue is not None
                         else inputs
                     )
-                    self.journal.private_inputs.require_source_coverage(
-                        db, Path(canonical), envelope.source, covered_inputs,
-                        fresh=fresh_session, admission_generation=admission_generation,
-                        native_reader=native_reader,
-                    )
+                    # The cheap journal refusals come before the full history read.
                     if CompactionOperation.unresolved_in(db, canonical):
                         raise CompactionJournalError(
                             "Unresolved native commit; no selected summary"
                         )
                     if SelectedSummaryAttempt.blocking_in(db, canonical, inputs):
                         raise CompactionJournalError("Blocked selected summary; never replay")
+                    self.journal.private_inputs.require_source_coverage(
+                        db, Path(canonical), envelope.source, covered_inputs,
+                        fresh=fresh_session, admission_generation=admission_generation,
+                        native_reader=native_reader,
+                    )
                     SelectedSummaryAttempt(
                         operation_id, canonical, payload, envelope, ReservedSummary()
                     ).insert(db)

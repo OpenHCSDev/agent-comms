@@ -353,7 +353,7 @@ def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
     refusals = {
         "missing-operation": (ValueError, "lacks unique tracked input"),
         "untracked-suffix": (ValueError, "lacks unique tracked input"),
-        "unknown-operation": (CompactionJournalError, "is unknown"),
+        "unknown-operation": (CompactionJournalError, "Unresolved native commit"),
         "summary": (CompactionJournalError, "Original committed source cut differs"),
         "cut": (CompactionJournalError, "Original committed source cut differs"),
         "parent": (CompactionJournalError, "Original committed source cut differs"),

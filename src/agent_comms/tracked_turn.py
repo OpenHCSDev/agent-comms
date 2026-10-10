@@ -98,6 +98,9 @@ class TrackedTerminal(ABC):
     def raise_failure(self, proof, provider, model) -> None:
         pass
 
+    def require_failed(self) -> None:
+        raise ValueError("Saved assistant message did not end its turn as a failure")
+
     @abstractmethod
     def require_response(self, parts: list[str]) -> str: ...
 
@@ -138,8 +141,39 @@ class FailedTrackedTerminal(TrackedTerminal):
     def raise_failure(self, proof, provider, model):
         raise NativePiTerminalFailure(self.text, proof, provider, model)
 
+    def require_failed(self) -> None:
+        return None
+
     def require_response(self, parts):
         raise NativePiUnavailable("Native Pi has no unique authoritative completed response")
+
+
+class SavedTurnEnd:
+    """Apply the live turn-end decision to a saved assistant message.
+
+    A live turn and recovery share one definition of a failed turn: the stop
+    reason's ``tracked`` decision. A saved tool round cannot show whether the
+    live owner accepted it, so it never proves a failure.
+    """
+
+    def __init__(self) -> None:
+        self.terminal: TrackedTerminal = PendingTrackedTerminal()
+
+    def fail_terminal(self, text: str) -> None:
+        self.terminal = self.terminal.fail(text)
+
+    def accept_final_message(self, message) -> None:
+        self.terminal = self.terminal.append(message.authoritative_text)
+
+    def accept_tool_round(self, message) -> bool:
+        self.terminal = self.terminal.tool_round()
+        return True
+
+    @classmethod
+    def require_failed(cls, message) -> None:
+        ended = cls()
+        message.tracked_end(ended)
+        ended.terminal.require_failed()
 
 
 class TrackedTurnSession(TurnSession, MroDispatch):
