@@ -267,6 +267,14 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
                 raise NativePiUnavailable("Native proof indexed evidence is unavailable") from error
 
     @classmethod
+    def first_generation(cls, db: sqlite3.Connection, input_id: str) -> int | None:
+        """The request an input was sent with; later requests only retain it."""
+        return db.execute(
+            f"SELECT MIN(request_generation) FROM {cls.declared_name} WHERE input_id=?",
+            (input_id,),
+        ).fetchone()[0]
+
+    @classmethod
     def for_input(
         cls, db: sqlite3.Connection, input_id: str, generation: int | None = None
     ) -> NativeContextJournal | None:
