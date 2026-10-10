@@ -288,6 +288,6 @@ Each has a recommended default that I will use unless you say otherwise.
 
 - **Send now:** Pi Durable threads without Send-now are acceptable for now; upstream is expected to add it. The `Interrupts` role stays unimplemented for `PiDurableBackend` until upstream adds it.
 - **Fallback for Send now:** if upstream is still missing it when durable threads are in daily use, temporarily fork `pi-durable` (a real fork we own, not build-time patches).
-  - Add one public "place queued input now" call and open the same change as an upstream PR.
-  - Pin the fork exactly and drop it when the upstream change is released.
+  - Add one public "place queued input now" call. An upstream PR is optional.
+  - Pin the fork exactly, and drop it once upstream ships an equivalent.
 - **Other open questions:** the defaults in section 6 stand unless Tristan says otherwise.
