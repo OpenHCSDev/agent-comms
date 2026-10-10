@@ -188,16 +188,15 @@ async def test_actual_saved_terminal_failure_allows_only_new_input(journey, tria
         failed_input = NativeRuntimeInput.one(
             store.session._connection, input_id=caught.value.context.input_id
         )
+        assert failed_input.reference.recorded
         assignment = store.assignments.get(failed_input.assignment_id)
+        assert type(assignment.lifecycle) is FailedAssignment
         if journey.direct or triage_pass:
-            assert type(assignment.lifecycle) is FailedAssignment
             snapshot = store.snapshots.get(failed_input.execution_id)
             assert not snapshot.is_current and not snapshot.can_retry
             assert (
                 snapshot.attempt.lifecycle.backend_done and snapshot.attempt.lifecycle.process_dead
             )
-        else:
-            assert assignment.lifecycle.deferred
     before = journey.records()
     received = len(journey.received)
     assert await journey.execution().run() is None

@@ -260,7 +260,7 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
         reserved_revision=SessionRevision.observe(str(session)).require_available()))
     if damage in {"context", "unsettled", "foreign", "historical-tail", "historical-sidecar",
                   "historical-raw", "historical-generation", "historical-started", "historical-cycle"}:
-        with pytest.raises(CompactionJournalError, match="coverage floor"):
+        with pytest.raises(CompactionJournalError, match="not covered by recorded inputs"):
             journal.summaries.reserve(str(session), source)
     else:
         journal.summaries.reserve(str(session), source)
@@ -329,7 +329,7 @@ def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
     if damage in {None, "marker-only"}:
         journal.summaries.reserve(str(session), source)
     else:
-        with pytest.raises(CompactionJournalError, match="coverage floor"):
+        with pytest.raises(CompactionJournalError, match="not covered by recorded inputs"):
             journal.summaries.reserve(str(session), source)
         assert journal.summaries.unresolved(str(session)) == ()
     assert originals == (session.read_bytes(), inputs.path.read_bytes())
@@ -389,6 +389,6 @@ def test_native_fork_creation_covers_only_its_original_prefix(continued, damage)
     if damage in {None, 'inherited-marker'}:
         journal.summaries.reserve(str(session), source)
     else:
-        with pytest.raises(CompactionJournalError, match='coverage floor'):
+        with pytest.raises(CompactionJournalError, match='not covered by recorded inputs'):
             journal.summaries.reserve(str(session), source)
     assert originals == (session.read_bytes(), inputs.path.read_bytes())

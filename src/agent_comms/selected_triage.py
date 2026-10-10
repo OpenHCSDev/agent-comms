@@ -142,8 +142,8 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
     def settle(self, participant, stage, admission, context):
         from .selected_result import publish_native_failure
 
-        settled = stage.reject(participant.store, participant.identity, admission.input_id,
-                               admission.token_digest, context)
+        settled = stage.fail_terminal(participant.store, participant.identity,
+                                      admission.input_id, admission.token_digest, context)
         publish_native_failure(participant, admission.input_id,
                                "The selected model returned an invalid triage decision.",
                                source_error=self.error)

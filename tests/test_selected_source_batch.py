@@ -95,3 +95,53 @@ async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay
             assert tuple(row.wire_seq for row in pending) == (late.seq,)
             with TestCase().assertRaises(IdentityConflict):
                 stage.reserve(store, selected.identity, token_digest)
+
+
+@pytest.mark.asyncio
+async def test_terminal_triage_failure_records_context_and_fails_its_claims(tmp_path):
+    """A failed native triage leaves no input without a recorded context.
+
+    Compaction requires a recorded context for every input sent into a session;
+    an unrecorded failed input would block that session's compaction forever.
+    """
+    from agent_comms.assignment_states import FailedAssignment
+    from agent_comms.coordination_errors import StaleFence
+    from agent_comms.native_pi import NativeContextProof
+    from agent_comms.native_session_reopen import NativeSessionIdentity
+
+    root = tmp_path / "wire"
+    root.mkdir(mode=0o700)
+    comms = Comms(root, private_initial_writes=True)
+    for name in ("sender", "receiver"):
+        comms.registry.declare(Thread(
+            name, frozenset({"team"}), str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+            model="openai-codex/gpt-6-sol",
+        ))
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    lookup = stable_thread_lookup(comms.registry.require("receiver").created_at)
+    session = NativeSessionIdentity("native-session", str(tmp_path / "session.jsonl"))
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        store.participants.register(lookup, "receiver", "receiver", committed=True)
+        message = comms.messaging.send_initial_cohort("sender", "#team", "Question")
+        accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+        async with SelectedParticipant.select(comms, store, root_id, "receiver", 0) as selected:
+            stage = TriageNativeSend(selected.batch.assignments)
+            token_digest = "b" * 64
+            input_id = stage.reserve(store, selected.identity, token_digest)
+            with store.session.transaction() as db:
+                reserved = NativeRuntimeInput.one(db, input_id=input_id)
+                reserved.sent_owner_admission_generation.record(reserved, db, 1, session)
+            context = NativeContextProof(
+                input_id, session.session_id, "entry", 7, "c" * 64, session.path
+            )
+            settled = stage.fail_terminal(store, selected.identity, input_id, token_digest, context)
+            assert all(type(row.lifecycle) is FailedAssignment for row in settled)
+            with store.session.read():
+                db = store.session._connection
+                row = NativeRuntimeInput.one(db, input_id=input_id)
+                assert row.reference.recorded and row.verdict is None
+                assert NativeRuntimeInput.recorded_contexts(db, session) == {input_id: context}
+            # The failed input is settled once; it is never sent or settled again.
+            with TestCase().assertRaises(StaleFence):
+                stage.fail_terminal(store, selected.identity, input_id, token_digest, context)

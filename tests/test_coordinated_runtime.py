@@ -659,7 +659,7 @@ async def test_fresh_creation_fsync_unknown_never_enters_fake_model(
     visible = list(expected_dir.glob("enrolled-*.jsonl"))
     assert len(visible) == 1
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
-    with pytest.raises(CompactionJournalError, match="coverage floor"):
+    with pytest.raises(CompactionJournalError, match="not covered by recorded inputs"):
         journal.summaries.reserve(
             str(visible[0]),
             {
@@ -1044,7 +1044,7 @@ async def test_private_raw_prewrite_fsync_unknown_never_dispatches_or_retries(
             ).fetchone()[0]
             == 1
         )
-    with pytest.raises(CompactionJournalError, match="coverage floor"):
+    with pytest.raises(CompactionJournalError, match="not covered by recorded inputs"):
         journal.summaries.reserve(
             str(saved),
             {
