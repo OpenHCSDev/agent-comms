@@ -290,11 +290,64 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
             await tick()
         assert len(drains) == settled, "an unchanged tick re-read the stores"
         assert len(syncs) == settled
-        # Any store change runs the full observation again.
+        # Another thread's declaration, change, stop, coordination row and removal
+        # rewrite the shared stores but not beta's part: the tick decodes only
+        # beta's registry entry and runs nothing else.
+        from agent_comms.registry_document import RegistryDocument
+
+        decoded = []
+        decode = RegistryDocument.from_wire.__func__
+
+        def counted_decode(cls, raw):
+            decoded.append(len(raw["threads"]))
+            return decode(cls, raw)
+
+        monkeypatch.setattr(RegistryDocument, "from_wire", classmethod(counted_decode))
+
+        async def changed_elsewhere(change):
+            change()
+            # Another process wrote it: this process holds no decoded revision.
+            comms.registry.store.cache.entry = None
+            del decoded[:]
+            await tick()
+            assert decoded and set(decoded) == {1}, "the tick decoded other threads' entries"
+
+        await changed_elsewhere(
+            lambda: comms.registry.declare(Thread("unrelated", frozenset(), str(tmp_path))))
+        other = comms.registry.require("sender")
+        await changed_elsewhere(
+            lambda: comms.registry.register(replace(other, task="other owner changed")))
+        await changed_elsewhere(lambda: comms.owners.stop("unrelated"))
+
+        def registered_elsewhere():
+            with Coordination(comms.root / "coordination.sqlite3") as store:
+                store.participants.register("unrelated", "unrelated", "unrelated", committed=True)
+
+        await changed_elsewhere(registered_elsewhere)
+        await changed_elsewhere(lambda: comms.threads.delete("unrelated"))
+        assert len(drains) == settled, "another thread's registry change ran the tick"
+        # Any change of this owner's own entry runs the full observation again.
         owner = comms.registry.require("beta")
         comms.registry.register(replace(owner, task="changed task"))
         await tick()
         assert len(drains) == settled + 1
+        # A goal waiting on another thread projects that thread's turn, so its
+        # entry concerns this owner: once settled with it, its change is observed.
+        from agent_comms.goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget
+
+        sender = comms.registry.require("sender")
+        agent.inputs.effects.turns.goals.goal_execution_signatures["beta"] = (None, GoalExecution(
+            GoalExecutionState.STANDBY, "goal", (GoalWaitTarget("sender", sender.created_at),),
+        ))
+        comms.registry.declare(Thread("unrelated", frozenset(), str(tmp_path)))
+        await tick()
+        assert len(drains) == settled + 2
+        comms.registry.register(replace(comms.registry.require("unrelated"), task="again"))
+        await tick()
+        assert len(drains) == settled + 2
+        comms.registry.register(replace(sender, task="the waited-on thread changed"))
+        await tick()
+        assert len(drains) == settled + 3
         # Process-local work waiting on the next tick is never skipped.
         for _ in range(2):
             await tick()

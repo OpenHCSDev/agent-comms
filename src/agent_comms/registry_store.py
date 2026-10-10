@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 import threading
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,7 +16,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .locked_store import LockedStore
 from .private_registry_guard import PrivateRegistryGuard
-from .registry_document import RegistryDocument
+from .registry_document import RegistryDocument, RegistryEntry
 from .store_files import file_revision
 
 
@@ -93,6 +93,21 @@ class RegistryStore(LockedStore[RegistryDocument]):
             document = self._decode(json.loads(self.path.read_text()))
             self.cache.entry = RegistryRevision(revision, document)
             return document
+
+    def read_entries(self, names: Iterable[str]) -> dict[str, RegistryEntry]:
+        """The named threads' entries from the current file, without decoding the others.
+
+        A decoded revision already in this process's cache answers directly.
+        """
+        with self.locked(shared=True):
+            self.private_guard_unlocked()
+            revision = file_revision(self.path)
+            if revision is None:
+                return {}
+            entry = self.cache.entry
+            if entry is not None and entry.revision == revision:
+                return entry.document.entries(names)
+            return RegistryDocument.entries_from_wire(json.loads(self.path.read_text()), names)
 
     def _encode(self, value: RegistryDocument) -> dict:
         return FieldCodec.encode(value)

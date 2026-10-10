@@ -7,11 +7,12 @@ from dataclasses import replace
 from pathlib import Path
 
 from .catalog_store import ChannelCatalog
+from .errors import UnregisteredThreadError
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
 from .registration_change import RegistrationChange
-from .registry_document import RegistrySnapshot
+from .registry_document import RegistryEntry, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryStore
 from .routing import TurnRouting
 from .store_files import _store_lock
@@ -308,6 +309,17 @@ class Registration:
     def all_threads(self) -> Mapping[str, Thread]:
         with self.store.reading() as document:
             return dict(document.threads)
+
+    def entry(self, name: str) -> RegistryEntry:
+        """This thread's registry entry; other threads' declarations are not decoded."""
+        try:
+            return self.store.read_entries((name,))[name]
+        except KeyError as error:
+            raise UnregisteredThreadError(f"Thread {name!r} is not registered.") from error
+
+    def entries(self, names: Sequence[str]) -> dict[str, RegistryEntry]:
+        """The named threads' registry entries; unregistered names are absent."""
+        return self.store.read_entries(names)
 
     def snapshot(self) -> RegistrySnapshot:
         """Read related declarations and statuses from exactly one store revision."""
