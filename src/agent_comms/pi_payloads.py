@@ -533,11 +533,9 @@ class AssistantMessage(PiMessage):
         return self.stop_reason.permits_progress()
 
     def require_failed_terminal(self):
-        self.stop_reason.require_failed_terminal(self)
+        from .tracked_turn import SavedTurnEnd
 
-    def require_failure_shape(self):
-        if not self.error_message or self.content != ():
-            raise ValueError("Native recovery requires an unambiguous failed terminal")
+        SavedTurnEnd.require_failed(self)
 
     async def apply_end(self, session):
         from .agent_events import CommittedProgress

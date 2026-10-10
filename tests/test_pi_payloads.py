@@ -384,3 +384,34 @@ def test_final_content_owns_native_text_admission(content, expected):
             _ = event.message.authoritative_text
     else:
         assert event.message.authoritative_text == expected
+
+
+@pytest.mark.parametrize(
+    "stop, content, error, failed",
+    [
+        ("error", [], "Estimated input leaves no admissible generation budget", True),
+        # A transport failure after partial output is still a failed turn.
+        ("error", [{"type": "text", "text": '{"decision":"FULL"}'}], "WebSocket error", True),
+        ("aborted", [], "aborted", True),
+        ("length", [{"type": "text", "text": "cut"}], None, True),
+        ("stop", [{"type": "text", "text": "done"}], None, False),
+        # A saved tool round cannot show whether the live owner accepted it.
+        ("toolUse", [], None, False),
+    ],
+)
+def test_saved_failed_turn_uses_the_live_turn_end_decision(stop, content, error, failed):
+    from agent_comms.native_entries import NativeEntry
+
+    message = dict(role="assistant", content=content, stopReason=stop,
+                   api="api", provider="provider", model="model")
+    if error is not None:
+        message["errorMessage"] = error
+    entry = NativeEntry.from_evidence(dict(
+        type="message", id="assistant", parentId="user",
+        timestamp="2026-10-10T00:00:00Z", message=message,
+    ))
+    if failed:
+        entry.require_failed_terminal("user")
+    else:
+        with pytest.raises(ValueError, match="did not end its turn as a failure"):
+            entry.require_failed_terminal("user")
