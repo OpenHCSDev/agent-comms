@@ -32,7 +32,7 @@ from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
 from .transcript_receipts import AssignedSourceCursor, AssignedSourceIdentity
 from .transcript_outcomes import CompactionOutcomeCursor
 from .store_files import file_revision
-from .coordination_errors import StaleRevision
+from .coordination_errors import StaleRevision, TranscriptChanged
 
 _LOG = logging.getLogger(__name__)
 
@@ -262,7 +262,7 @@ class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
         thread = source.provenance.require(name)
         session_file = thread.session_file or ""
         if source_file is not None and source_file != session_file:
-            raise ValueError("Transcript changed; reload the latest page.")
+            raise TranscriptChanged()
         root = Path(source.root)
         return (source.provenance, thread, session_file, False,
                 root, WireLog(root / "bus.jsonl"), TranscriptRoutes(root), partial(cls, source=source))
@@ -453,7 +453,7 @@ class Transcripts:
             ):
                 return thread, ancestor.session_file, True
         if source_file:
-            raise ValueError("Transcript changed; reload the latest page.")
+            raise TranscriptChanged()
         return thread, "", bool(thread.parent)
 
     @staticmethod
@@ -492,14 +492,14 @@ class Transcripts:
         )
         cursor = before or after
         if cursor and (cursor.session_file != session_file or cursor.offset < 0):
-            raise ValueError("Transcript changed; reload the latest page.")
+            raise TranscriptChanged()
         path = Path(session_file)
         size = path.stat().st_size if session_file and path.is_file() else 0
         if cursor and cursor.offset > size:
-            raise ValueError("Transcript changed; reload the latest page.")
+            raise TranscriptChanged()
         if through is not None:
             if through.session_file != session_file or not 0 <= through.offset <= size:
-                raise ValueError("Transcript changed; reload the latest page.")
+                raise TranscriptChanged()
             size = through.offset
             if cursor and cursor.offset > size:
                 raise ValueError("Cursor is outside the transcript window.")
