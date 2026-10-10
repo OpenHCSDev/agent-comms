@@ -234,9 +234,12 @@ class MessageBus:
                 counts[actor][conversation] = counts[actor].get(conversation, 0) + count
 
         indexed = False
-        from functools import partial
 
-        decode = partial(DeliveryMessage.from_wire, root_id=source.metadata.root_id)
+        def decode(record):
+            # The root id is the marker's: a bus never written has no marker
+            # and no records, so it is read only to decode one.
+            return DeliveryMessage.from_wire(record, root_id=source.metadata.root_id)
+
         try:
             with BusRouteCounts(self.log.path) as index:
                 if index.sync(source.stream, source.revision, decode):
