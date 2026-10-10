@@ -26,6 +26,14 @@ class RegistryRevision:
     document: RegistryDocument
 
 
+@dataclass(frozen=True, slots=True)
+class RegistryEntryRevision:
+    """One thread's entry and the registry revision it was read from, under one lock."""
+
+    revision: tuple
+    entry: RegistryEntry
+
+
 @dataclass(slots=True)
 class RegistryCache:
     """The decoded registry belongs to its file, not to one store object.
@@ -94,20 +102,31 @@ class RegistryStore(LockedStore[RegistryDocument]):
             self.cache.entry = RegistryRevision(revision, document)
             return document
 
-    def read_entry(self, name: str) -> RegistryEntry:
+    @property
+    def guard_path(self) -> Path:
+        return self.path.parent / ".registry-owner-guard"
+
+    def revision_unlocked(self) -> tuple:
+        """The registry file and its owner guard, which every write replaces together."""
+        return file_revision(self.path), file_revision(self.guard_path)
+
+    def read_entry(self, name: str) -> RegistryEntryRevision:
         """One thread's entry from the current file, without decoding the other threads.
 
+        The revision is taken under the same lock, so it is the one the entry
+        was read from, not an earlier stat taken while a write was in flight.
         A decoded revision already in this process's cache answers directly.
         """
         with self.locked(shared=True):
             self.private_guard_unlocked()
-            revision = file_revision(self.path)
-            if revision is None:
-                return self.empty().entry(name)
+            revision = self.revision_unlocked()
+            if revision[0] is None:
+                return RegistryEntryRevision(revision, self.empty().entry(name))
             entry = self.cache.entry
-            if entry is not None and entry.revision == revision:
-                return entry.document.entry(name)
-            return RegistryDocument.entry_from_wire(json.loads(self.path.read_text()), name)
+            if entry is not None and entry.revision == revision[0]:
+                return RegistryEntryRevision(revision, entry.document.entry(name))
+            raw = json.loads(self.path.read_text())
+            return RegistryEntryRevision(revision, RegistryDocument.entry_from_wire(raw, name))
 
     def _encode(self, value: RegistryDocument) -> dict:
         return FieldCodec.encode(value)
@@ -152,7 +171,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
         from .private_registry_guard import PrivateRegistryGuard
 
         marker_path = self.path.parent / "bus_meta.json"
-        guard_path = self.path.parent / ".registry-owner-guard"
+        guard_path = self.guard_path
         key = (_link_revision(self.path.parent), _link_revision(marker_path), file_revision(marker_path),
                _link_revision(guard_path), _link_revision(self.path))
         if (checked := self.cache.guard) is not None and checked[0] == key:

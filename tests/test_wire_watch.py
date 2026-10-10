@@ -202,3 +202,24 @@ async def test_observation_cancellation_releases_actual_descriptor(tmp_path, mon
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_taking_a_store_lock_does_not_wake_directory_watchers(tmp_path):
+    from agent_comms.store_files import _store_lock
+
+    store = tmp_path / "registry.json"
+    with _store_lock(store):  # the lock file exists before watching
+        pass
+    # Watch the lock file itself: any close-write of it would be a wake.
+    watcher = open_wire_watcher(tmp_path, frozenset({b".registry.json.lock"}))
+    if not isinstance(watcher, WireChangeWatch):
+        pytest.skip("Native file notifications are unavailable")
+    try:
+        for shared in (True, False) * 5:
+            with _store_lock(store, shared=shared):
+                pass
+        await asyncio.sleep(0.05)
+        assert not watcher.changed.is_set(), "a store lock woke every directory watcher"
+    finally:
+        watcher.close()

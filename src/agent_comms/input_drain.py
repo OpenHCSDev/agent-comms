@@ -39,6 +39,7 @@ from .input_disposition import InputDispositions, InputDocument
 from .input_effects import InputEffects
 from .queued_input import QueuedInput, InputHandoffRefused
 from .registry_document import RegistryEntry
+from .registry_store import RegistryEntryRevision
 from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
 from .schedule_rules import WakeScheduleCheck
@@ -69,6 +70,15 @@ class TickRevision:
     registry: tuple
     coordination: tuple
     other: tuple
+
+
+@dataclass(frozen=True, slots=True)
+class PrivateObservation:
+    """One drain's observation: its message cut, registry entry and own coordination work."""
+
+    wire: tuple
+    entry: RegistryEntry
+    work: tuple
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,7 +117,7 @@ class InputDrain:
         self.wake_tasks: dict[str, asyncio.Task[None]] = {}
         # Only a completed, quiescent observation can suppress another scan.
         # These revisions never authorize delivery, acceptance or a native send.
-        self._idle_private_revisions: dict[str, tuple] = {}
+        self._idle_private_revisions: dict[str, PrivateObservation] = {}
 
     async def clear_queued_inputs(self, session_id: str) -> None:
         """Drop prompts queued against the backend for this session.
@@ -244,9 +254,8 @@ class InputDrain:
         changes what a settled tick would do.
         """
         root = self.comms.root
-        registry = self.comms.registry.store.path
         return TickRevision(
-            registry=(file_revision(registry), file_revision(registry.parent / ".registry-owner-guard")),
+            registry=self.comms.registry.store.revision_unlocked(),
             coordination=(
                 file_revision(root / "coordination.sqlite3"),
                 file_revision(root / "coordination.sqlite3-wal"),
@@ -279,7 +288,7 @@ class InputDrain:
         )
         return execution is not None and execution.state is GoalExecutionState.STANDBY
 
-    async def _own_entry(self, session_id: str) -> RegistryEntry:
+    async def _own_entry(self, session_id: str) -> RegistryEntryRevision:
         return await Coordination.run_worker(partial(
             self.comms.registry.entry, self.sessions.require(session_id),
         ))
@@ -318,7 +327,11 @@ class InputDrain:
                     # A standby's wait graph reads other threads' entries.
                     idle = not self._in_standby(session_id)
                     if idle:
-                        entry, entry_current = await self._own_entry(session_id), True
+                        read = await self._own_entry(session_id)
+                        # Settle at the revision the entry was read from, not
+                        # at the stat taken while the write was in flight.
+                        revision = replace(revision, registry=read.revision)
+                        entry, entry_current = read.entry, True
                         idle = entry == settled.entry
                 if idle and revision.coordination == settled.revision.coordination:
                     settled = SettledTick(revision, entry)
@@ -327,11 +340,13 @@ class InputDrain:
                 thread = self.sessions.require(session_id)
                 if not entry_current:
                     # Read after the revision: the tick observes at least this entry.
-                    entry = await self._own_entry(session_id)
+                    read = await self._own_entry(session_id)
+                    revision = replace(revision, registry=read.revision)
+                    entry = read.entry
                 owner = entry.owner_identity
                 try:
                     # Only the coordination store changed; this owner's rows decide.
-                    if idle and await self._own_observation_unchanged(session_id):
+                    if idle and await self._own_coordination_unchanged(session_id, entry):
                         settled = SettledTick(revision, entry)
                         continue
                     await self.drain_inbox(session_id)
@@ -387,8 +402,9 @@ class InputDrain:
             return await self.drain_owned_inbox(session_id)
 
     def _private_observation_revision(
-        self, session_id: str, root_id: str, wire: tuple, store: Coordination,
-    ) -> tuple:
+        self, session_id: str, root_id: str, wire: tuple, entry: RegistryEntry,
+        store: Coordination,
+    ) -> PrivateObservation:
         """Original owner/work observations, never delivery or replay authority.
 
         Other owners' registry phases and SQL writes cannot change this owner's
@@ -396,7 +412,6 @@ class InputDrain:
         physical replacement still can. Silent context records consume bytes,
         not the message cut used to select delivery.
         """
-        entry = self.comms.registry.entry(self.sessions.require(session_id))
         owner = RegistryOwner(thread=entry.thread, admission_generation=entry.admission_generation)
         with store.session.read():
             participant = store.participants.get(stable_thread_lookup(owner.thread.created_at))
@@ -408,7 +423,7 @@ class InputDrain:
                 wire_root_id=root_id, generation=participant.participant_generation,
             ).cursor(store.session._connection)
             original = store.session.path.stat()
-        return (
+        return PrivateObservation(wire, entry, (
             root_id,
             self.effects._private_nk_native_package,
             self.auto_wake,
@@ -416,15 +431,13 @@ class InputDrain:
             self.sessions.bindings.get(session_id),
             session_id in self.backend_inboxes,
             session_id in self.effects.turns.turn_tasks,
-            wire,
-            entry,  # including the owner's registry turn state
             participant,
             pending,
             cursor,
             (original.st_dev, original.st_ino),
-        )
+        ))
 
-    async def _observe_private_revision(self, session_id: str, root_id: str) -> tuple:
+    async def _observe_private_revision(self, session_id: str, root_id: str) -> PrivateObservation:
         # Pending acquisition is not an inbox failure or a completed read.
         # Cancellation retires only this observation's waiting descriptor.
         def wire_revision(source):
@@ -436,20 +449,33 @@ class InputDrain:
                 source.marker.admission_after_seq,
             )
         wire = await self.comms.bus.log.read_certified_async(wire_revision)
+        entry = (await self._own_entry(session_id)).entry
+        return await self._observe_coordination(session_id, root_id, wire, entry)
+
+    async def _observe_coordination(
+        self, session_id: str, root_id: str, wire: tuple, entry: RegistryEntry,
+    ) -> PrivateObservation:
         # No physical bus custody survives into registry/SQL consumer work.
         # The original coordinator owns its bounded read acquisition policy;
         # the observation must not replace it with a zero-wait failure.
         return await Coordination.run_async(
             self.comms.root / "coordination.sqlite3",
-            partial(self._private_observation_revision, session_id, root_id, wire),
+            partial(self._private_observation_revision, session_id, root_id, wire, entry),
         )
 
-    async def _own_observation_unchanged(self, session_id: str) -> bool:
-        """This owner's entry, work and messages are as its last idle drain left them."""
+    async def _own_coordination_unchanged(self, session_id: str, entry: RegistryEntry) -> bool:
+        """Only the coordination store changed since this owner's last idle drain: are its rows?
+
+        The caller's tick found the bus log, its marker and checkpoint unchanged
+        and holds the current registry entry, so the settled message cut and
+        this entry still stand; only this owner's coordination rows are read.
+        """
         async with self.drain_locks.setdefault(session_id, asyncio.Lock()):
             settled = self._idle_private_revisions.get(session_id)
-            observed = await self._observe_private_revision(
-                session_id, self.effects._configured_root_id(),
+            if settled is None:
+                return False
+            observed = await self._observe_coordination(
+                session_id, self.effects._configured_root_id(), settled.wire, entry,
             )
             return observed == settled
 

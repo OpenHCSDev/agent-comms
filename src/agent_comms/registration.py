@@ -11,8 +11,8 @@ from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
 from .registration_change import RegistrationChange
-from .registry_document import RegistryEntry, RegistrySnapshot
-from .registry_store import RegistryEdit, RegistryStore
+from .registry_document import RegistrySnapshot
+from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .store_files import _store_lock
 from .thread_identity import GenerationCounter, TurnId
@@ -309,8 +309,11 @@ class Registration:
         with self.store.reading() as document:
             return dict(document.threads)
 
-    def entry(self, name: str) -> RegistryEntry:
-        """This thread's registry entry; other threads' declarations are not decoded."""
+    def entry(self, name: str) -> RegistryEntryRevision:
+        """This thread's registry entry and the revision it was read from.
+
+        Other threads' declarations are not decoded.
+        """
         return self.store.read_entry(name)
 
     def snapshot(self) -> RegistrySnapshot:
