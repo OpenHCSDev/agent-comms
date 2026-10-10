@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 import threading
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -94,8 +94,8 @@ class RegistryStore(LockedStore[RegistryDocument]):
             self.cache.entry = RegistryRevision(revision, document)
             return document
 
-    def read_entries(self, names: Iterable[str]) -> dict[str, RegistryEntry]:
-        """The named threads' entries from the current file, without decoding the others.
+    def read_entry(self, name: str) -> RegistryEntry:
+        """One thread's entry from the current file, without decoding the other threads.
 
         A decoded revision already in this process's cache answers directly.
         """
@@ -103,11 +103,11 @@ class RegistryStore(LockedStore[RegistryDocument]):
             self.private_guard_unlocked()
             revision = file_revision(self.path)
             if revision is None:
-                return {}
+                return self.empty().entry(name)
             entry = self.cache.entry
             if entry is not None and entry.revision == revision:
-                return entry.document.entries(names)
-            return RegistryDocument.entries_from_wire(json.loads(self.path.read_text()), names)
+                return entry.document.entry(name)
+            return RegistryDocument.entry_from_wire(json.loads(self.path.read_text()), name)
 
     def _encode(self, value: RegistryDocument) -> dict:
         return FieldCodec.encode(value)
