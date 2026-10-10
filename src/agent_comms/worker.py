@@ -14,6 +14,8 @@ from .private_nk_entrypoint import PrivateNkLaunch, private_nk_from_environment
 
 
 async def run() -> None:
+    # Both entry points (python -m agent_comms.worker, agent-comms-agent) run here.
+    lower_priority()
     private_nk = PrivateNkLaunch.current()
     # Fail before wire creation/attach; the check verifies the native package once.
     verified_cli = private_nk.validate() if private_nk is not None else None
@@ -109,7 +111,6 @@ def main() -> int:
     thread = comms.registry.require(name)
     if thread.process_identity is not None and thread.process_identity.alive():
         raise ValueError(f"Thread {thread.name!r} already has a live owner")
-    lower_priority()
     with suppress(KeyboardInterrupt):
         asyncio.run(run())
     return 0
