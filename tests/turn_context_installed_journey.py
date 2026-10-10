@@ -132,7 +132,7 @@ async def read_actual_context_publication(owner, thread, child, original_input, 
         original_acp_usage_updates=len(usage), final_HTTP_evaluated=False)
 
 
-async def run(root, receiving_only=False, authored_operations_only=False):
+async def run(root, receiving_only=False):
     from pytest import MonkeyPatch
     from test_backend_native_lifecycle import native_backend
     from test_native_context_inspection import test_context_manifest_native_acp_and_cli_continuous
@@ -148,8 +148,7 @@ async def run(root, receiving_only=False, authored_operations_only=False):
         original = await anext(fixture)
         async with asyncio.timeout(90):
             await test_context_manifest_native_acp_and_cli_continuous(
-                original, receiving_only=receiving_only,
-                authored_operations_only=authored_operations_only)
+                original, receiving_only=receiving_only)
         receipt["state"] = "SCOPED_PASS"
     except BaseException as error:
         receipt["state"] = "FAILED_NO_REPLAY"
@@ -175,7 +174,7 @@ async def run_configured(options):
     from agent_comms.comms import Comms
     from agent_comms.field_codec import FieldCodec
     from agent_comms.input_disposition import InputDispositions
-    from agent_comms.native_fork import ForkSessionRequest
+    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
     from agent_comms.native_entries import NativeEntry
     from agent_comms.native_package import verify_native_package
     from agent_comms.threads import Thread
@@ -208,8 +207,7 @@ async def run_configured(options):
         project.mkdir(mode=0o700)
         environment = dict(captured.retained.environment)
         service = Comms(root / 'wire')
-        from agent_comms.compaction_journal import CompactionJournal
-        identity = await CompactionJournal(service.root / 'compaction-commits.sqlite3').private_inputs.fork(ForkSessionRequest(str(package),
+        identity = await ForkSessionHelper.run(ForkSessionRequest(str(package),
             str(original_file), str(project), str(root / 'native-forks')), cwd=project, env=environment)
         assert Path(identity.session_file).is_relative_to(root)
         captured.require_current()
@@ -445,7 +443,7 @@ def complete_history_controls(root):
     from agent_comms.field_codec import FieldCodec
     from agent_comms.thread_identity import TurnId, TurnIdentity
     from agent_comms.threads import Thread
-    from agent_comms.turn_context import RecordedContextTurn, TurnContext
+    from agent_comms.turn_context import ContextManifest, RecordedContextTurn, TurnContext
 
     root.mkdir(mode=0o700)
     wire = root / 'wire'
@@ -460,8 +458,8 @@ def complete_history_controls(root):
         turn = RecordedContextTurn(TurnId(f'original-history-{generation}'),
                                    TurnIdentity(owner.incarnation, generation))
         context = TurnContext.for_owner(owner, turn, f'Original private source {generation} π', ())
-        observation = context.manifest(tuple(0 for _ in context.segments),
-                                       counter='fixture-original-estimate')
+        observation = ContextManifest(context.thread, context.turn,
+            tuple(segment.manifest(0) for segment in context.segments), 'fixture-original-estimate')
         service.bus.log.record_context(observation)
         originals.append(observation)
     service.registry.rename(owner.name, 'history-renamed')
@@ -474,8 +472,8 @@ def complete_history_controls(root):
     future_context = TurnContext.for_owner(renamed,
         RecordedContextTurn(TurnId('original-history-3'), TurnIdentity(renamed.incarnation, 3)),
         'Later original private source', ())
-    future = future_context.manifest(tuple(0 for _ in future_context.segments),
-                                    counter='fixture-original-estimate')
+    future = ContextManifest(future_context.thread, future_context.turn,
+        tuple(segment.manifest(0) for segment in future_context.segments), 'fixture-original-estimate')
     service.bus.log.record_context(future)
     expected = (*originals, continuation, future)
     before = hashlib.sha256(service.bus.log.path.read_bytes()).hexdigest()
@@ -529,16 +527,12 @@ if __name__ == "__main__":
     parser.add_argument('--terminal-marker', default='597_CONFIGURED_ORIGINAL_TERMINAL_ONCE')
     parser.add_argument('--complete-goal-controls', action='store_true')
     parser.add_argument('--complete-history-controls', action='store_true')
-    journey = parser.add_mutually_exclusive_group()
-    journey.add_argument('--receiving-only', action='store_true')
-    journey.add_argument('--authored-operations-only', action='store_true')
+    parser.add_argument('--receiving-only', action='store_true')
     options = parser.parse_args()
     if options.context_only and not options.configured_source_root:
         parser.error('Context-only requires the original configured saved source')
     if (options.terminal_only or options.recorded_publication) and (not options.configured_source_root or options.context_only):
         parser.error('Terminal-only requires a distinct configured saved fork')
-    if options.authored_operations_only and (options.configured_source_root or options.complete_goal_controls):
-        parser.error('Authored operations use only the original private localhost fixture')
     if "site-packages" not in Path(agent_comms.__file__).parts:
         raise RuntimeError("This acceptance requires the paired installed Core wheel")
     # Only pytest's fixture decorator/MonkeyPatch is borrowed. Import installed
@@ -555,5 +549,4 @@ if __name__ == "__main__":
         complete_goal_controls(options.root)
     else:
         asyncio.run(run_configured(options) if options.configured_source_root
-                    else run(options.root, receiving_only=options.receiving_only,
-                             authored_operations_only=options.authored_operations_only))
+                    else run(options.root, receiving_only=options.receiving_only))

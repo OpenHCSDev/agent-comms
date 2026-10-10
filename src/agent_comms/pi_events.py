@@ -9,13 +9,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from . import agent_events as events
-from . import turn_failure as failures
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
-from .compaction_progress import CompactionSourceProgress
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .request_progress import RequestProgress
-from .turn_phase import CompactionPhase, ModelWaitPhase
+from .turn_phase import ModelWaitPhase
 from .native_turn_context import NativeContextManifestData
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from .pi_payloads import (
@@ -101,9 +99,6 @@ class PiEvent(PiPayload, DeclaredFamily):
     def observe_request(self, observer: Callable[[RequestProgress], None] | None) -> bool:
         """A transport measurement is independent of turn-phase publication."""
         return False
-
-    def require_request(self, request: PiCommand) -> PiResponseData:
-        raise ValueError("Native event is not a request response")
 
     def responds_to(self, request: PiCommand) -> bool:
         return False
@@ -321,19 +316,10 @@ class CompactionEnd(ReasonedCompaction):
             context_used=None,
             will_retry=self.will_retry is True,
         )
-        if not completed and (not session.admission.started):
-            session.output.record_failure(
-                failures.PrestartCompactionFailed(
-                    "Context compaction failed before this input started; inspect ACP diagnostics."
-                )
-            )
-            yield session.watchdog.state(
-                "failed", "prestart_compaction_failed", 0, phase=CompactionPhase()
-            )
-            await session.native.proc.stop()
-            session.finished = True
-            return
+        # A failed compaction is Pi's to handle: before a prompt Pi still sends it,
+        # and an overflow is answered by Pi's own overflow path.
         if self.will_retry:
+            session.request_retried()
             session.output.final_assistant_stop = False
             session.watchdog.retry_recovery_pending = True
             session.watchdog.retry_recovery_reason = "overflow_retry_progress"
@@ -343,39 +329,12 @@ class CompactionEnd(ReasonedCompaction):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CompactionProgress(PiEvent):
-    operation_id: str = field(metadata={"wire_name": "operationId"})
-    chunk_index: int = field(metadata={"wire_name": "chunkIndex"})
-    reason: type[CompactionReason] = field(default=UnknownCompactionReason)
-    text: str = ""
-    source: CompactionSourceProgress | None = None
-    usage: PiUsage | None = field(default=None, metadata={"wire_name": "usage"})
-
-    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        session.watchdog.progress()
-        if self.usage is not None:
-            session.usage.response_index += 1
-            session.usage.compaction_recorded = True
-            yield events.ProviderUsage(
-                response_id=str(session.usage.response_index), usage=self.usage
-            )
-        yield events.CompactionProgress(
-            reason=self.reason,
-            operation_id=self.operation_id,
-            text=self.text,
-            chunk_index=self.chunk_index,
-            source=self.source,
-        )
-
-
-@dataclass(frozen=True, kw_only=True)
 class CompactionStart(ReasonedCompaction):
     reason: type[CompactionReason] = field(
         default=UnknownCompactionReason, metadata={"wire_name": "reason"}
     )
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        session.usage.compaction_recorded = False
         session.watchdog.progress()
         session.usage.invalidate()
         yield session.context_info()
@@ -701,15 +660,6 @@ class Response(PiEvent):
     def responds_to(self, request: PiCommand) -> bool:
         return self.id == request.id and self.command is type(request)
 
-    def require_request(self, request: PiCommand) -> PiResponseData:
-        """Correlate this original response; correlation grants no input authority."""
-        if not self.responds_to(request):
-            raise ValueError("Native response does not match the original request")
-        if self.success is not True:
-            detail = self.error if self.error is not None else "no native error was reported"
-            raise ValueError(f"Native request did not succeed: {detail}")
-        return self.data.require_payload()
-
     async def consume(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if self.command.invalidates_identity(self, session):
             async for event in session.invalidate_identity():
@@ -855,21 +805,6 @@ class ToolExecutionUpdate(PiEvent):
             name=self.tool_name or "tool",
             output=self.partial_result.text(),
         )
-
-
-@dataclass(frozen=True, kw_only=True)
-class AgentCommsCompactionProgress(PiEvent):
-    """Actual selected compaction progress, scoped to exactly one RPC attempt."""
-
-    id: str
-    operation_id: str = field(metadata={"wire_name": "operationId"})
-    sequence: int
-    text: str
-    source: CompactionSourceProgress | None
-
-    def __post_init__(self):
-        if type(self.sequence) is not int or self.sequence < 1:
-            raise ValueError("Positive selected compaction progress sequence required")
 
 
 from .pi_native_backend import PiNativeBackend  # noqa: E402

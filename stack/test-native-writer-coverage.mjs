@@ -340,11 +340,6 @@ if (process.env.AC_CAPACITY_SESSION) {
         assert.ok(side.includes('SIDE_SUMMARY_ONLY') && side.includes('SIDE_BRANCH_ONLY'));
         assert.ok(!side.includes('MAIN_RETAINED_SUMMARY') && !side.includes('ACTIVE_BRANCH_MARKER'));
         manager.branch(mainLeaf);
-        const witness = manager.captureCompactionWitness('seed-user');
-        assert.throws(() => manager.appendCompactionIfCurrent(witness, proof.old_summary, 2001,
-            { agentCommsCommit: proof.old_commit }), /already present|duplicate/i,
-        'old commit outside retained context must still prohibit replay');
-        assert.equal(fingerprint(), before, 'replay refusal preserves all history');
         // Late malformed data exercises the full incremental scan, with no
         // second large copy and no permission to silently drop the bad record.
         for (const tail of [Buffer.from('{"incomplete":'), Buffer.from('{broken}\n'),
@@ -362,7 +357,7 @@ if (process.env.AC_CAPACITY_SESSION) {
         assert.equal(fingerprint(), before, 'restored owned fixture retains exact source bytes');
         assert.equal(opened(file).getLeafId(), mainLeaf);
         console.log(JSON.stringify({ large_history_bytes: size, branches: 2,
-            old_commit_replay_refused: true, malformed_late_records: 4,
+            malformed_late_records: 4,
             peak_rss_kib: process.resourceUsage().maxRSS }));
     };
 }

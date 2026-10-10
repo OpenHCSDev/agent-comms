@@ -3,21 +3,19 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
 from .child_process import ChildResult, SignaledOutcome, TimedOutOutcome
 from .native_session_reopen import NativeSessionIdentity
 from .pi_helper import PiHelper, PiHelperFailed, SessionHelperRequest
-from .compaction_records import NativeForkCreation
 
 
 @dataclass(frozen=True)
 class ForkSessionRequest(SessionHelperRequest):
     cwd: str
     directory: str | None = None
-    creation_kind: type[NativeForkCreation] = field(default=NativeForkCreation, kw_only=True)
 
 
 class ForkSessionHelper(PiHelper):
@@ -32,7 +30,7 @@ class ForkSessionHelper(PiHelper):
 
     script = Path(__file__).with_name("_pi_helpers") / "fork_session.mjs"
     request = ForkSessionRequest
-    result = NativeForkCreation
+    result = NativeSessionIdentity
     copy_bytes_per_second: ClassVar[float] = 4 * 1024 * 1024
 
     @classmethod
@@ -56,8 +54,8 @@ class ForkSessionHelper(PiHelper):
         )
 
 
-def fork_native_session(file: str, worktree: str, launcher: str, *, private_inputs) -> NativeSessionIdentity:
-    """Capture once under the native writer's source lock, before any wire lock.
+def fork_native_session(file: str, worktree: str, launcher: str) -> NativeSessionIdentity:
+    """Copy the parent's history once under the native writer locks, before any wire lock.
 
     The native owner fsyncs the new history. An uncertain helper outcome is not
     retried or inferred from an orphan file, and no input is sent.
@@ -65,9 +63,6 @@ def fork_native_session(file: str, worktree: str, launcher: str, *, private_inpu
     from .native_pi import NativePiRpcLaunch
 
     package = NativePiRpcLaunch.package_for_command(launcher)
-    return asyncio.run(
-        private_inputs.fork(
-            ForkSessionRequest(str(package), file, worktree),
-            cwd=Path(worktree),
-        )
-    )
+    return asyncio.run(ForkSessionHelper.run(
+        ForkSessionRequest(str(package), file, worktree), cwd=Path(worktree),
+    ))

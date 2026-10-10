@@ -26,7 +26,7 @@ async def test_acquisition_retirement_measurement_preserves_cleanup_and_failure(
         await asyncio.sleep(0)
 
     async def acquire(self, custody, *, reuse):
-        assert self is turn and reuse is False
+        assert self is turn and reuse is True
         custody.push_async_callback(cleanup, "first")
         custody.push_async_callback(cleanup, "last")
         acquired.set()

@@ -8,7 +8,6 @@ from agent_comms.acp_extension import (
     AvailableQueueProjection,
     CompactionChangedUpdate,
     CompactionCommittedUpdate,
-    CompactionPublishedUpdate,
     CoordinationChangedUpdate,
     ContextAnnotatedUpdate,
     CursorAdvancedUpdate,
@@ -35,13 +34,11 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.acp_failure import BackendDeliveryFailure
 from agent_comms.agent_events import CompactionStart
-from agent_comms.compaction_states import CompactionPublishedMetadata
 from agent_comms.pi_payloads import McpLiveReceipt
 from agent_comms.thread_identity import AdmissionIdentity, ThreadIncarnation
 from agent_comms.transcripts import TranscriptCursor, TranscriptPage
 from agent_comms.turn_lease import ActiveTurn, TurnState
 from agent_comms.turn_context import ContextManifest, NextContextTurn
-from agent_comms.private_path import FileRevision
 
 
 def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
@@ -52,8 +49,6 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     read = comms.transcripts.capture_page_read("pilot")
     owner = AdmissionIdentity(ThreadIncarnation("pilot", 1.0), 1)
     queue_scope = QueueScope("pilot", owner, 123)
-    native = tmp_path / "authored-revision.jsonl"
-    native.write_text("")
     samples = (
         ContextAnnotatedUpdate(
             ContextManifest(
@@ -82,15 +77,11 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         ),
         GoalChangedUpdate(None, None),
         CompactionChangedUpdate(CompactionStart()),
-        CompactionCommittedUpdate("commit", "summary"),
+        CompactionCommittedUpdate("summary", "first-kept"),
         TranscriptSnapshotUpdate(
             read.read(), read.identity
         ),
         InputDeliveryChangedUpdate("input"),
-        CompactionPublishedUpdate(
-            CompactionPublishedMetadata(commit_id="commit", entry_id="entry",
-                                        revision=FileRevision.from_stat(native.stat()), leaf_id="leaf")
-        ),
         McpClientReceiptUpdate(
             "turn", McpLiveReceipt(1, "pi-mcp-client", "a" * 32, "running", "turn", ())
         ),

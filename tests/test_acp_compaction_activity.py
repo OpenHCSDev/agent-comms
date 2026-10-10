@@ -32,8 +32,6 @@ async def test_compaction_activity_survives_tool_updates_and_restores_latest_sta
         activity(ActivityState.WORKING, "Read project")
         yield ae.CompactionStart(reason=ThresholdCompactionReason)
         activity(ActivityState.WORKING, "Compacting context")
-        yield ae.CompactionProgress(chunk_index=2)
-        activity(ActivityState.WORKING, "Compacting context")
         yield ae.ToolEnd(id="old-tool", name="read", ok=True)
         activity(ActivityState.WORKING, "Compacting context")
         yield ae.ToolStart(id="next-tool", name="read", title="Read next file")

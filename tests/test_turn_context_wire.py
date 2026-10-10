@@ -409,5 +409,4 @@ def test_current_relevance_resource_is_frozen_with_coordination_provenance(tmp_p
 
     monkeypatch.setattr(InstructionFile, 'read', classmethod(changed_instruction))
     assert original.content in captured.text()
-    assert original.content in captured.summary_instructions(None)
     assert captured.response_instruction.source == original.source

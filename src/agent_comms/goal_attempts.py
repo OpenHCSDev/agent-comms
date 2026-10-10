@@ -26,7 +26,6 @@ from pathlib import Path
 from typing import Literal, TypeVar
 from uuid import uuid4
 
-from .compaction_states import sql_names
 from .goal_attempt_identity import GoalAttemptIdentity
 from .goal_attempt_phase import (
     ClaimedAttempt,
@@ -84,7 +83,7 @@ class Generation(GoalLedgerTable, TypedTable):
         "AND attempt_id IS NULL AND length(ready_digest)=64) OR "
         f"(json_extract(lifecycle,'$.kind')!='{ReadyGeneration.declared_name}' "
         "AND ready_digest='')",
-        f"json_extract(lifecycle,'$.kind') IN {sql_names(GenerationState)}",
+        f"json_extract(lifecycle,'$.kind') IN {GenerationState.sql_choices()}",
     )
 
     def failure_identity(self) -> GoalAttemptIdentity:
@@ -241,7 +240,7 @@ class AttemptRecord(GoalLedgerTable, TypedTable):
         metadata={"sql": Column(generated="json_extract(reservation,'$.generation')")},
     )
     unique = (("goal_id", "generation"),)
-    checks = (f"json_extract(phase,'$.kind') IN {sql_names(GoalAttemptPhase)}",)
+    checks = (f"json_extract(phase,'$.kind') IN {GoalAttemptPhase.sql_choices()}",)
 
     @classmethod
     def read_in(cls, conn: sqlite3.Connection, attempt_id: str) -> AttemptRecord | None:

@@ -130,6 +130,11 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
         return tuple(member.declared_name for member in cls.members_with(cls))
 
     @classmethod
+    def sql_choices(cls) -> str:
+        """The members' names as an SQL ``IN`` list, derived from the declarations."""
+        return "(" + ",".join("'" + name.replace("'", "''") + "'" for name in cls.names()) + ")"
+
+    @classmethod
     def members_with(cls, capability: type) -> tuple[type[Self], ...]:
         return tuple(
             cast(type[Self], member)

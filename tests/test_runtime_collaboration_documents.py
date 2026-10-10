@@ -39,10 +39,10 @@ async def test_installed_native_observation_producers_preserve_dates_without_inp
             thread = agent._comms.registry.require(name)
             # The original preparation/publication owner initializes a fresh
             # native journal, then reobserves that same retained saved source.
-            await agent.turns.prepare_selected_session(name, thread)
+            await agent.turns.backend_for(name, thread).prepare(thread)
             history = native.session.read_bytes()
             before = time.time()
-            prepared = await agent.turns.prepare_selected_session(name, thread)
+            prepared = await agent.turns.backend_for(name, thread).prepare(thread)
             assert prepared.model.display_name == "response-local/fixture"
             child = agent.turns.persistent_backends[name].custody.child.proc
             assert child.alive()

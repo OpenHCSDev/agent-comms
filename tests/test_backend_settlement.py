@@ -8,6 +8,7 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
+from agent_comms.pi_native_backend import PersistentPiSession
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="executes a POSIX script")
 
@@ -71,7 +72,7 @@ for line in sys.stdin:
     stub.chmod(0o755)
     queue = asyncio.Queue()
     finish_event = asyncio.Event()
-    persistent = backend.PersistentPiSession()
+    persistent = PersistentPiSession()
     starts = []
     events = []
     injected = False

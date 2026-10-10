@@ -59,7 +59,7 @@ def test_raw_registry_writer_cannot_cross_captured_claim_identity(tmp_path, muta
     assert registry.store.path.read_bytes() == before
 
 
-def test_both_live_reads_reject_raw_stale_turn_witness(tmp_path):
+def test_live_owner_read_rejects_raw_stale_turn_witness(tmp_path):
     registry = registered(tmp_path)
     leased, _ = registry.lease_local_turn('owner', 'turn')
     with registry.store.editing() as edit:
@@ -67,6 +67,5 @@ def test_both_live_reads_reject_raw_stale_turn_witness(tmp_path):
             leased, active_turn=replace(leased.active_turn, admission_generation=99),
         )
         edit.commit()
-    for read in (registry.live_owner_with_generation, registry.live_owner_with_admission):
-        with pytest.raises(RelationViolationError, match='turn admission'):
-            read('owner')
+    with pytest.raises(RelationViolationError, match='turn admission'):
+        registry.live_owner_with_admission('owner')

@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Annotated, Callable, ClassVar
 from .agent_backend import InputId, SendNow
 from .acp_failure import ACPFailure, BackendDeliveryFailure, DeliveryFailure
 from .agent_events import CompactionEvent
-from .compaction_states import CompactionPublishedMetadata
 from .declared_family import DeclaredFamily
 from .input_attempt import ACPInputIdText, InputAttempt
 from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
@@ -482,8 +481,10 @@ class CompactionChangedUpdate(AgentCommsUpdate):
 
 @dataclass(frozen=True)
 class CompactionCommittedUpdate(AgentCommsUpdate):
-    commit_id: str
+    """The /compact reply: the runtime placed this summary before ``first_kept``."""
+
     summary: str
+    first_kept: str | None
 
 
 @dataclass(frozen=True)
@@ -501,11 +502,6 @@ class TranscriptSnapshotUpdate(AgentCommsUpdate):
 @dataclass(frozen=True)
 class InputDeliveryChangedUpdate(AgentCommsUpdate):
     input_id: str | None = None
-
-
-@dataclass(frozen=True)
-class CompactionPublishedUpdate(AgentCommsUpdate):
-    publication: CompactionPublishedMetadata
 
 
 @dataclass(frozen=True)

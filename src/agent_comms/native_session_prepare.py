@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import aclosing
 from pathlib import Path
 from functools import partial
+from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import backend
@@ -15,6 +16,9 @@ from .coordinator import Coordination
 from .pi_payloads import StateData
 from .session_fence import session_writer_fence
 from .turn_admission import UnwrittenPrompt
+
+if TYPE_CHECKING:
+    from .pi_native_backend import PersistentPiSession
 
 
 class PreparedSession(UnwrittenPrompt):
@@ -58,7 +62,7 @@ class NativeSessionPreparation(backend.TurnSession):
     @classmethod
     async def open(
         cls,
-        persistent: backend.PersistentPiSession,
+        persistent: PersistentPiSession,
         agent_bin: str,
         agent_args: Sequence[str],
         *,
@@ -73,7 +77,7 @@ class NativeSessionPreparation(backend.TurnSession):
 
     @classmethod
     async def open_acquired(
-        cls, persistent: backend.PersistentPiSession, agent_bin: str, agent_args: Sequence[str], *,
+        cls, persistent: PersistentPiSession, agent_bin: str, agent_args: Sequence[str], *,
         worktree: str, environment: dict[str, str], session_file: str,
         observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
     ) -> StateData:

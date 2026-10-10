@@ -197,39 +197,6 @@ def test_missing_or_malformed_commitment_is_not_a_success_marker(package, pin):
         verify_native_package(package)
 
 
-def test_failed_tree_verification_precedes_journal_creation(package, tmp_path, monkeypatch):
-    from agent_comms import native_compaction_writer as writer
-    from agent_comms import owner_compaction_commit as commit
-
-    manager = package / "dist/core/session-manager.js"
-    manager.parent.mkdir(parents=True)
-    manager.write_text("// matching manager alone is insufficient\n")
-    native_package.MANIFEST.write_text(
-        native_package.TREE_PREFIX + package_tree_digest(package) + "\n"
-    )
-    (package / "node_modules/dependency/index.js").write_text("// drift outside manager\n")
-    monkeypatch.setattr(writer.shutil, "which", lambda executable: f"/fixture/{executable}")
-    with pytest.raises(NativePackageError, match="differs from pinned"):
-        commit.OwnerCompactionCommit(tmp_path / "registry.json", package)
-    assert not (tmp_path / "compaction-commits.sqlite3").exists()
-
-
-def test_copied_helper_must_match_packaged_resource_before_journal(package, tmp_path, monkeypatch):
-    from agent_comms import native_compaction_writer as writer
-    from agent_comms import owner_compaction_commit as commit
-
-    helper = package / "dist/agent-comms-compaction-commit-child.mjs"
-    helper.parent.mkdir()
-    helper.write_text("// inconsistent SDK/helper release")
-    native_package.MANIFEST.write_text(
-        native_package.TREE_PREFIX + package_tree_digest(package) + "\n"
-    )
-    monkeypatch.setattr(writer.shutil, "which", lambda executable: f"/fixture/{executable}")
-    with pytest.raises(ValueError, match="differs from packaged resource"):
-        commit.OwnerCompactionCommit(tmp_path / "registry.json", package)
-    assert not (tmp_path / "compaction-commits.sqlite3").exists()
-
-
 @pytest.mark.parametrize("include_resources", [False, True])
 def test_installed_resource_lookup_never_guesses_adjacent_stack(tmp_path, include_resources):
     installed = tmp_path / "site-packages/agent_comms"
@@ -243,10 +210,8 @@ def test_installed_resource_lookup_never_guesses_adjacent_stack(tmp_path, includ
     resources = installed / "_native"
     resources.mkdir()
     (resources / "pi-native.sha256").write_text("packaged pin")
-    (resources / "native-compaction-commit-child.mjs").write_text("// packaged helper")
     namespace = runpy.run_path(str(module))
     assert namespace["MANIFEST"] == resources / "pi-native.sha256"
-    assert namespace["COMPACTION_HELPER"] == resources / "native-compaction-commit-child.mjs"
 
 
 @pytest.fixture

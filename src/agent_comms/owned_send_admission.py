@@ -15,7 +15,6 @@ from .ordinary_admission_rules import (
     MissingTurnOwnerCheck,
     OrdinaryContextCheck,
     OrdinaryGoalGrantCheck,
-    OrdinaryJournalCheck,
     OrdinaryOwnerCheck,
     UnboundOrdinaryInputRule,
     UnconsumedDependencyRule,
@@ -23,7 +22,6 @@ from .ordinary_admission_rules import (
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .routing import TurnRouting
 from .thread_identity import TurnId
-from .turn_input_binding import OrdinaryTurnBinding, SelectedOriginalBinding, TurnInputBinding
 from .turn_input_source import (
     OriginalTurnInput,
     RoutedFollowingInput,
@@ -100,28 +98,12 @@ class OwnedSendAdmission:
             ),
         ).require_valid()
 
-    def _binding(self, source: TurnInputSource) -> TurnInputBinding:
-        selected = source.selected_admission(self.inputs, self.session_id)
-        if selected is None:
-            return OrdinaryTurnBinding(root=self.comms.root, dispositions=self.inputs.dispositions)
-        return SelectedOriginalBinding(
-            root=self.comms.root,
-            dispositions=self.inputs.dispositions,
-            selected=selected,
-            inputs=self.inputs,
-        )
-
     def _require_context(
-        self,
-        source: TurnInputSource,
-        current: Thread,
-        wait: GoalWait | None,
-        binding: TurnInputBinding,
+        self, source: TurnInputSource, current: Thread, wait: GoalWait | None,
     ) -> None:
         OrdinaryContextCheck(
             source=source, goal=current.goal, wait=wait, comms=self.comms
         ).require_valid()
-        OrdinaryJournalCheck(binding=binding, current=current).require_valid()
         if not source.bypasses_goal_permit and self.goal_permit is not None:
             assert self.goal_store is not None
             OrdinaryGoalGrantCheck(permit=self.goal_permit, store=self.goal_store).require_valid()
@@ -144,27 +126,23 @@ class OwnedSendAdmission:
         current = snapshot.threads.get(canonical)
         wait = self.comms.goals.goal_wait(canonical) if current is not None else None
         source = self.source(public_id)
-        binding = self._binding(source)
         try:
             self._check_owner(current, snapshot, canonical, source, sent_text)
         except ReservationViolationError as error:
-            binding.invalidate()
             yield self._refusal(error.rule, False)
             return
         defer = source.defers_for_goal(self.thread.goal, current.goal)
         try:
-            self._require_context(source, current, wait, binding)
+            self._require_context(source, current, wait)
         except ReservationViolationError as error:
-            binding.invalidate()
             yield self._refusal(error.rule, defer)
             return
-        # Binding/journal failures may be uncertain. Exceptions here still propagate;
+        # Binding failures may be uncertain. Exceptions here still propagate;
         # never reinterpret a failed durable operation as a retryable policy refusal.
-        if not binding.bind(
-            current=current,
-            keys=source.keys,
+        if not self.inputs.dispositions.bind_turn_input(
+            source.keys,
             admission=self.admission,
-            turn=self.turn,
+            turn_id=self.turn.value,
             native_id=native_id,
             text=sent_text,
             already_bound=already_bound,

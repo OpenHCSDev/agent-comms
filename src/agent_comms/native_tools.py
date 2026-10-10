@@ -55,10 +55,6 @@ class NativeTool(DeclaredFamily, affix="Tool"):
         """Unknown tool metadata remains opaque; it cannot invent edit evidence."""
         return None
 
-    @classmethod
-    def result_artifacts(cls, result, ok):
-        return ()
-
 
 class PathTool:
     @classmethod
@@ -110,13 +106,7 @@ class BashTool(CodingTool):
         return None
 
 
-class FileMutationTool:
-    @classmethod
-    def result_artifacts(cls, result, ok):
-        return result.artifacts(ok)
-
-
-class EditTool(FileMutationTool, PathTool, CodingTool):
+class EditTool(PathTool, CodingTool):
     acp_kind = "edit"
 
     @classmethod
@@ -127,7 +117,7 @@ class EditTool(FileMutationTool, PathTool, CodingTool):
         return ExistingFileClaim(Path(self.arguments["path"]))
 
 
-class WriteTool(FileMutationTool, PathTool, CodingTool):
+class WriteTool(PathTool, CodingTool):
     acp_kind = "edit"
 
     def _parse_resource(self) -> FileClaimPath:

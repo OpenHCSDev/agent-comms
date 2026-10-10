@@ -1,4 +1,4 @@
-/** Same actual adapter/local HTTP contract as native_context_budget_contract.
+/** Actual provider adapters against a local HTTP fixture: request progress stages.
  * Diagnostic producer proof only; no installed ACP/owner or live provider claim.
  */
 import assert from 'node:assert/strict';
@@ -26,10 +26,6 @@ const server = createServer(async (req, res) => {
     if (mode === 'transient' && responses === 1) {
         res.writeHead(503, {'content-type':'application/json','retry-after':'0'});
         res.end(JSON.stringify({error:{message:'Service unavailable'}})); return;
-    }
-    if (mode === 'budget' && responses === 1) {
-        res.writeHead(400, {'content-type':'application/json'});
-        res.end(JSON.stringify({error:{message:`maximum context length of 1000 tokens. You requested a total of ${100+payload.max_tokens} tokens: 100 tokens from the input messages and ${payload.max_tokens} tokens for the completion`}})); return;
     }
     await sleep(30);
     res.writeHead(200, {'content-type':'text/event-stream'}); res.flushHeaders();
@@ -95,12 +91,6 @@ async function run(label, adapter, selectedModel, config = {}) {
     assert.equal(points.filter(p=>p.stage==='first_event').length,1,label);
     assert.equal(new Set(points.map(p=>p.requestId)).size,1);
     assert(points.every(p=>p.inputId==='private-control' && p.sessionId==='private-control'));
-    const budgets = points.filter(p=>p.stage==='budget_admission');
-    assert(budgets.length, label);
-    assert(budgets.every(p=>p.model.id===selectedModel.id
-        && p.model.contextWindow===selectedModel.contextWindow
-        && p.model.maxTokens===selectedModel.maxTokens
-        && p.availableTokens===selectedModel.contextWindow-p.estimatedInputTokens));
     if(label==='ordinary') {
         const headers = points.find(p=>p.stage==='headers');
         const first = points.find(p=>p.stage==='first_event');
@@ -108,20 +98,12 @@ async function run(label, adapter, selectedModel, config = {}) {
         assert(first.callbackMs>=110);
         assert.deepEqual(selected.map(p=>p.stage),['dispatch','headers','first_event','stream_end']);
     }
-    if(label==='budget') {
-        assert.equal(record.posts,2); assert.deepEqual(selected.filter(p=>p.stage==='dispatch').map(p=>p.attempt),[0,0]);
-        const sends = requests.slice(start); assert.equal(sends[0].messages,sends[1].messages);
-        assert(sends[1].requested<sends[0].requested);
-        assert.deepEqual(budgets.map(p=>p.admittedOutputTokens),sends.map(p=>p.requested));
-        assert.equal(budgets[1].requestedOutputTokens,budgets[0].admittedOutputTokens);
-    }
     if(label==='transient') assert.deepEqual(selected.filter(p=>p.stage==='dispatch').map(p=>p.attempt),[0,1]);
     controls.push(record);
 }
 try {
     await run('ordinary',chat,model);
     await run('anthropic',anthropic,{...model,api:'anthropic-messages',baseUrl});
-    await run('budget',chat,{...model,contextWindow:1000,maxTokens:1000},{maxTokens:1000});
     await run('transient',chat,model,{maxRetries:1});
     await run('throwing',chat,model);
     const signalOwner = new AbortController();

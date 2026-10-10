@@ -11,9 +11,7 @@ from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, ClassVar
 
-from .child_process import ProcessIdentity
 from .errors import RelationViolationError
-from .thread_execution import ThreadExecution, NativeThreadExecution
 
 if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
@@ -180,19 +178,3 @@ class ThreadRole(StrEnum):
             raise RelationViolationError("A user correction requires the original human sender")
 
 
-@dataclass(frozen=True, slots=True)
-class ThreadPublicationIdentity:
-    """Registration facts protected during canonical compaction publication.
-
-    Metadata, channel scope and goal changes are not session identity changes.
-    Owner/admission generations independently fence execution and are not this
-    identity: changing a saved session alone does not allocate a new executor.
-    """
-
-    incarnation: ThreadIncarnation
-    process: ProcessIdentity | None
-    role: ThreadRole
-    session_file: str | None
-    worktree: str
-    execution: type[ThreadExecution] = field(default=NativeThreadExecution,
-                                            metadata={"wire_omit_default": True})

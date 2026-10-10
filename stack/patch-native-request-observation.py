@@ -59,19 +59,22 @@ def main(package):
         'import { NativeRequestObservation } from "../../../node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js";\n'
         + summary.read_text()
     )
-    replace_once(summary, """    const produce = async () => {
-        const stream = await (streamFn ?? streamSimple)(model, context, requestOptions);
-        for await (const event of stream) {""", """    const request = new NativeRequestObservation({ ...requestOptions,
+    replace_once(summary, 'import { completeSimple } from "@earendil-works/pi-ai/compat";',
+                 'import { streamSimple } from "@earendil-works/pi-ai/compat";')
+    replace_once(summary, """    const produce = async () => streamFn
+        ? (await streamFn(model, context, requestOptions)).result()
+        : completeSimple(model, context, requestOptions);
+    return retryAssistantCall(produce, retry, requestOptions.signal, callbacks);
+}""", """    const request = new NativeRequestObservation({ ...requestOptions,
         onRequestProgress: callbacks?.onRequestProgress }, context);
     request.observe({ stage: "preparing", detail: "Preparing compaction request" });
     try {
-    const produce = async () => {
-        const stream = await (streamFn ?? streamSimple)(model, context, request.options(requestOptions));
-        for await (const event of request.events(stream)) {""")
-    replace_once(summary, """    if (response.stopReason === 'stop' && !contentText(response.content).trim()) throw new Error('Compaction returned an empty summary');
-    return response;
-}""", """    if (response.stopReason === 'stop' && !contentText(response.content).trim()) throw new Error('Compaction returned an empty summary');
-    return response;
+        const produce = async () => {
+            const stream = await (streamFn ?? streamSimple)(model, context, request.options(requestOptions));
+            for await (const _event of request.events(stream));
+            return stream.result();
+        };
+        return await retryAssistantCall(produce, retry, requestOptions.signal, callbacks);
     } finally { request.observe({ stage: "finished", detail: "Compaction request finished" }); }
 }""")
     helper = package / "node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js"

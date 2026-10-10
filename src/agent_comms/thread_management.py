@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -584,15 +585,11 @@ class ThreadManagement:
         so a large parent no longer blocks every owner on the root. The locked
         declaration re-checks the parent and name against the captured source.
         """
-        from .compaction_journal import CompactionJournal
-        from .native_fork import fork_native_session
-
         resolved_bin = pi_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", "pi")
         parent = self._fork_parent(spec)
-        session = fork_native_session(parent.session_file, parent.worktree, resolved_bin,
-            private_inputs=CompactionJournal(self.root / "compaction-commits.sqlite3").private_inputs)
+        location = asyncio.run(parent.backend.fork(parent, resolved_bin))
         with _store_lock(self._wire_lock_path):
-            return self._fork_unlocked(spec, resolved_bin, session)
+            return self._fork_unlocked(spec, resolved_bin, parent.session_file, location)
 
     def _fork_parent(self, spec: ForkSpec) -> Thread:
         parent = self.registry.require(spec.parent)
@@ -607,7 +604,7 @@ class ThreadManagement:
             )
         return parent
 
-    def _fork_unlocked(self, spec: ForkSpec, pi_bin: str, session) -> Thread:
+    def _fork_unlocked(self, spec: ForkSpec, pi_bin: str, forked_from: str, location) -> Thread:
         """Declare and launch the forked child under the wire lock.
 
         Proves the parent is still registered with the forked source and the
@@ -616,20 +613,18 @@ class ThreadManagement:
         back. A lost race leaves the already-created fork unregistered.
         """
         parent = self._fork_parent(spec)
-        try:
-            session.source.require_session(parent.session_file)
-        except ValueError as error:
+        if parent.session_file != forked_from:
             raise RelationViolationError(
                 f"Parent thread {spec.parent!r} changed its saved session during the fork; "
-                f"the created fork {session.session_file} was not registered."
-            ) from error
+                f"the created fork {location.path} was not registered."
+            )
         child = Thread(
             name=spec.name,
             tags=parent.tags if spec.tags is None else spec.tags,
             worktree=parent.worktree,
             parent=spec.parent,
             task=spec.task,
-            session_file=session.session_file,
+            session_file=location.path,
             process_identity=None,
             model=parent.model,
             thinking_level=parent.thinking_level,

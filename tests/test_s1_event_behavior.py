@@ -12,7 +12,7 @@ from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.compaction_result import CommittedCompactionResult, RefusedCompactionResult
+from agent_comms.agent_backend import PlacedCompaction
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
 from agent_comms.owned_turn import OwnedTurn
@@ -56,7 +56,6 @@ class CompactionCase(EffectCase):
     def body(self):
         return (
             ae.CompactionStart(),
-            ae.CompactionProgress(chunk_index=1),
             ae.ToolStart("tool", "read", "Read after summary"),
             ae.CompactionEnd(summary="summary"),
             ae.AgentInfo(model="model", session_name="saved", context_used=20, context_size=1000),
@@ -325,25 +324,20 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
         await owner.shutdown()
 
 
-@pytest.mark.parametrize("enabled", [False, True])
-async def test_manual_bridge_real_native_terminal_releases_dependency(
-    native_backend, monkeypatch, enabled
-):
+async def test_manual_bridge_real_native_terminal_releases_dependency(native_backend, monkeypatch):
     import json
 
     from agent_comms.manual_compaction_bridge import compact_context
+    from agent_comms.pi_vocabulary import ManualCompactionReason
 
     native = native_backend
-    await native.run(
-        "History to compact\n" + "retained history material\n" * (10000 if enabled else 1000)
-    )
-    if enabled:
-        await native.run("Second large completed exchange\n" + "history material\n" * 10000)
+    await native.run("History to compact\n" + "retained history material\n" * 10000)
+    await native.run("Second large completed exchange\n" + "history material\n" * 10000)
     await native.run("Recent final exchange")
     await native.persistent.close()
     config = Path(os.environ["AGENT_COMMS_NATIVE_CONFIG_DIR"])
     settings = json.loads((config / "settings.json").read_text())
-    settings["compaction"] = {"enabled": enabled, "reserveTokens": 128, "keepRecentTokens": 32}
+    settings["compaction"] = {"enabled": True, "reserveTokens": 128, "keepRecentTokens": 32}
     (config / "settings.json").write_text(json.dumps(settings))
     comms = Comms(native.root)
     owner = CommsAgent(
@@ -355,7 +349,7 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
     comms.threads.set_thread_configuration(comms.registry.require(name), model='response-local/fixture')
-    comms.threads.attach_session(name, str(native.session))
+    comms.threads.attach_session(comms.registry.require(name), str(native.session))
     observed = []
     emit = owner._emit_event
 
@@ -376,35 +370,26 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(
                 "waiting",
                 StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(name,)),
             )
-        if isinstance(event, ae.ManualCompactionEnd):
+        if isinstance(event, ae.CompactionEnd) and event.reason is ManualCompactionReason:
             assert comms.goals.goal_wait("waiting") is not None
 
     monkeypatch.setattr(owner, "_emit_event", observe)
     try:
         async with asyncio.timeout(40):
             result = await compact_context(owner.turns, session.session_id)
-        print(
-            "manual_bridge_result",
-            enabled,
-            result,
-            native.provider.posts,
-        )
-        assert isinstance(result, CommittedCompactionResult if enabled else RefusedCompactionResult)
-        assert native.provider.posts == (4 if enabled else 2)
-        if enabled:
-            rows = [json.loads(line) for line in native.session.read_text().splitlines()]
-            assert len([row for row in rows if row.get("type") == "compaction"]) == 1
-        else:
-            assert result.error == "Selected native history has no complete safe compaction cut"
+        assert isinstance(result, PlacedCompaction), result
+        assert native.provider.posts > 3  # Pi asked the provider for the summary.
+        rows = [json.loads(line) for line in native.session.read_text().splitlines()]
+        assert len([row for row in rows if row.get("type") == "compaction"]) == 1
         assert comms.registry.require(name).active_turn is None
         assert comms.goals.goal_wait("waiting") is None
         assert comms.registry.require("waiting").goal.state.active
         terminal = next(i for i, event in enumerate(observed)
             if isinstance(event, TurnTranscriptUpdate) and not event.state.busy)
         compaction_end = next(i for i, event in enumerate(observed)
-            if isinstance(event, ae.ManualCompactionEnd))
+            if isinstance(event, ae.CompactionEnd) and event.reason is ManualCompactionReason)
         assert compaction_end < terminal
-        assert len(native.saved_inputs()) == (3 if enabled else 2)  # No input replay.
+        assert len(native.saved_inputs()) == 3  # No input replay.
     finally:
         await owner.shutdown()
 

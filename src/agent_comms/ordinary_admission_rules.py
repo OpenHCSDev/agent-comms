@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from .queued_input import QueuedInput
     from .registry_document import RegistrySnapshot
     from .threads import Thread
-    from .turn_input_binding import TurnInputBinding
     from .turn_input_source import TurnInputSource
 
 
@@ -190,20 +189,6 @@ class OrdinaryGoalInputRule(ReservationRule):
 
     def violated(self, check: OrdinaryContextCheck) -> bool:
         return not check.source.allows_goal_input(check.goal)
-
-
-@dataclass(frozen=True, kw_only=True)
-class OrdinaryJournalCheck(RuleCheck):
-    binding: TurnInputBinding
-    current: Thread
-
-
-class OrdinaryJournalRule(ReservationRule):
-    check_type = OrdinaryJournalCheck
-    explanation = "The exact saved session has an unresolved compaction barrier."
-
-    def violated(self, check: OrdinaryJournalCheck) -> bool:
-        return not check.binding.available(check.current)
 
 
 @dataclass(frozen=True, kw_only=True)

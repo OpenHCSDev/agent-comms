@@ -7,25 +7,22 @@ captured read; the wire, registry and input document remain the only authorities
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, projected
+from .field_codec import FieldCodec
 from .goals import Goal
 from .input_attempt import StoredInput
 from .messages import Message
 from .message_reference import MessageReference
 from .thread_identity import ThreadRole
-from .native_file_artifact import NativeFileArtifact
 from .text_digest import TextDigest
-from .turn_context import JournalProvenance
 
 if TYPE_CHECKING:
     from .input_disposition import InputDocument
-    from .input_origin import InputProvenance
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
@@ -50,11 +47,6 @@ class ExactTaskFact(DeclaredFamily, affix="TaskFact"):
 
     def for_owner(self, owner: Thread, registry: RegistrySnapshot) -> ExactTaskFact:
         return self
-
-    def compaction_record(self):
-        """Required task wording, distinct from original delivery evidence."""
-        return FieldCodec.encode(self)
-
 
 @dataclass(frozen=True)
 class UserSourceTaskFact(ExactTaskFact):
@@ -195,32 +187,7 @@ class GoalTaskFact(ExactTaskFact):
 
 @dataclass(frozen=True)
 class InputTaskFact(ExactTaskFact):
-    source: StoredInput = field(metadata={"compaction_exclude": True})
-
-    @projected(view="compaction", name="original")
-    def original(self):
-        return FieldCodec.encode(self.source.context_provenance())
-
-    @projected(view="compaction", name="kind")
-    def compaction_kind(self):
-        return self.declared_name
-
-    @projected(view="compaction", name="content_digest")
-    def content_digest(self):
-        return self.source.digest
-
-    @projected(view="compaction", name="disposition")
-    def disposition(self):
-        return self.source.public_status
-
-    def compaction_record(self):
-        """Keep delivery identity without making its rendered prompt mandatory.
-
-        Native history supplies delivered conversation to the summarizer. The
-        complete frozen row stays in the journal and all admission/coverage
-        checks; this one-way context view never supplies original input text.
-        """
-        return FieldCodec.project(self, "compaction")
+    source: StoredInput
 
     def input_sources(self) -> tuple[StoredInput, ...]:
         return (self.source,)
@@ -230,28 +197,11 @@ class InputTaskFact(ExactTaskFact):
 
 
 @dataclass(frozen=True)
-class NativeArtifactTaskFact(ExactTaskFact):
-    """Exact original result evidence with its existing journal pair coordinates."""
-
-    source: JournalProvenance
-    artifact: NativeFileArtifact
-
-    def __post_init__(self):
-        if len(self.source.entries) != 2 or len(set(self.source.entries)) != 2:
-            raise ValueError("Retained file operation requires distinct original request/result entries")
-
-
-@dataclass(frozen=True)
 class HumanInputTaskFact(InputTaskFact, declared_name="historical_human_input"):
     """Exact human input with recorded scope; no inferred prose constraint kind."""
 
     def __post_init__(self):
         self.source.origin.require_human()
-
-    def compaction_record(self):
-        # Historical scope does not revoke the human's original instructions.
-        # Pins also resolve their exact wording from these unchanged originals.
-        return FieldCodec.encode(self)
 
     def for_owner(self, owner, registry):
         if self.source.origin.require_human().applies(owner, registry):
@@ -270,12 +220,10 @@ class RetainedTaskFacts:
 
     facts: tuple[ExactTaskFact, ...]
 
-    journal_control_bytes: ClassVar[int] = 65536
-
     @property
     def source_digest(self) -> TextDigest:
         """Describe this exact captured payload, never unrelated bus activity."""
-        return TextDigest.of(self.canonical_journal_bytes(FieldCodec.encode(self)).decode())
+        return TextDigest.of(self.canonical_bytes(FieldCodec.encode(self)).decode())
 
     def original_input_facts(self, inputs: InputDocument) -> tuple[ExactTaskFact, ...]:
         """Resolve pins through their original declarations and input owner.
@@ -288,69 +236,10 @@ class RetainedTaskFacts:
                      for original in message.task.original_input_sources(inputs)}
         return tuple(original.origin.retained_fact(original) for original in originals.values())
 
-    def changed_from(self, previous: RetainedTaskFacts) -> dict[str, object]:
-        """Compare original captured facts, including multiplicity and disposition.
-
-        These are source differences, not inferred summary correctness or a
-        current native capture. The original declarations own serialization.
-        """
-        from collections import Counter
-
-        before = Counter(self.canonical_journal_bytes(FieldCodec.encode(fact))
-                         for fact in previous.facts)
-        after = Counter(self.canonical_journal_bytes(FieldCodec.encode(fact))
-                        for fact in self.facts)
-        return dict(added=[json.loads(raw) for raw in (after - before).elements()],
-                    removed=[json.loads(raw) for raw in (before - after).elements()])
-
-    def original_inputs(self, references: tuple[InputProvenance, ...]) -> tuple[StoredInput, ...]:
-        """Resolve exact ordered originals in this already captured payload.
-
-        Identity comes from the durable reference; content belongs to the
-        original InputTaskFact. Neither a current ledger read nor equal text
-        supplies a missing or ambiguous captured original.
-        """
-        sources: dict[str, list[StoredInput]] = {}
-        for fact in self.facts:
-            for source in fact.input_sources():
-                sources.setdefault(source.key, []).append(source)
-        originals = []
-        for reference in references:
-            candidates = tuple(
-                source for source in sources.get(reference.key, ())
-                if source.matches_original_provenance(reference)
-            )
-            if len(candidates) != 1:
-                raise RelationViolationError("Retained payload lacks a unique original input")
-            originals.append(candidates[0])
-        return tuple(originals)
-
     @staticmethod
-    def canonical_journal_bytes(record: object) -> bytes:
+    def canonical_bytes(record: object) -> bytes:
         return json.dumps(record, sort_keys=True, separators=(",", ":"),
                           allow_nan=False).encode()
-
-    @classmethod
-    def frame_journal(
-        cls, record: dict[str, Any], *, retained_payload: bytes = b"null"
-    ) -> str:
-        """Bound journal controls independently of the exact retained payload.
-
-        The containing owner supplies its exact canonical retained bytes. Native
-        CompactionPolicy admits that content against the actual selected model;
-        a journal control limit is not another model/context budget. The frozen
-        payload remains in the same record, byte-for-byte under the existing
-        canonical serialization. No content is shortened or stored elsewhere.
-
-        An outcome supplies no retained payload: its entire observation,
-        including an UNKNOWN reason, is control metadata. Read-only source
-        projections are measured here without promoting them to fact authority.
-        """
-        payload = cls.canonical_journal_bytes(record)
-        control_bytes = len(payload) - len(retained_payload) + len(b"null")
-        if control_bytes > cls.journal_control_bytes:
-            raise ValueError("Compaction journal control metadata exceeds bound")
-        return payload.decode()
 
     def original_text_source(self, message: Message) -> Message | StoredInput:
         originals = {reference: source for fact in self.facts
@@ -382,22 +271,6 @@ class RetainedTaskFacts:
         return tuple(selected for _, message in self.current_authored_lineages(owner, registry)
                      for selected in message.task.selected_sources(message))
 
-    def optional_boundary(self, owner: Thread, registry: RegistrySnapshot) -> tuple[MessageReference, ...]:
-        """Latest scoped observation wins, including unfinished or human drop.
-
-        Original wire sequence orders events; correction lineage and owner scope
-        come from the same projection used by every retained-source consumer.
-        """
-        observations = tuple(message for root, message in self.current_authored_lineages(owner, registry)
-                             if root.task.observes_subtask)
-        if not observations:
-            return ()
-        latest = max(observations, key=lambda message: message.seq)
-        return latest.task.optional_boundary(latest)
-
-    def contains_source(self, reference: MessageReference) -> bool:
-        return any(source.reference == reference for fact in self.facts for source in fact.wire_sources())
-
     def for_owner(self, owner: Thread, registry: RegistrySnapshot) -> RetainedTaskFacts:
         """Classify the same original facts at the existing frozen source cut."""
         selected = self.current_authored_sources(owner, registry)
@@ -415,23 +288,3 @@ class RetainedTaskFacts:
             + "\n</exact-task-source>"
         )
 
-    @property
-    def compaction_text(self) -> str:
-        """Native mandatory context; the full source remains journal evidence.
-
-        Every human source, declared task, goal and native artifact remains
-        exact. Neutral delivery rows retain provenance, content witness and
-        disposition rather than copying prior rendered conversation into each
-        result. This projection neither changes source membership nor admits
-        an input; native policy still allocates and validates the whole result.
-        """
-        return (
-            "<exact-task-source>\n"
-            + json.dumps({"facts": [fact.compaction_record() for fact in self.facts]},
-                         ensure_ascii=False, sort_keys=True)
-            + "\n</exact-task-source>"
-        )
-
-    def require_summary(self, summary: str) -> None:
-        if not summary.startswith(self.compaction_text + "\n\n"):
-            raise RelationViolationError("Native summary omitted its exact task source")

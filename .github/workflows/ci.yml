@@ -40,9 +40,10 @@ jobs:
         run: |
           npm install -g --prefix "$HOME/.local/pi-npm" --ignore-scripts --no-audit --no-fund @earendil-works/pi-coding-agent@0.85.1
           stack/bin/prepare-pi-native
-          node stack/test-native-compaction.mjs
-          node stack/test-native-parallel-compaction.mjs
-          node stack/test-native-auto-compaction.mjs
+          package=$(ls -d stack/.pi-native-*/node_modules/@earendil-works/pi-coding-agent)
+          for mode in threshold overflow manual; do
+            PI_COMPACTION_TEST_PACKAGE="$PWD/$package" node stack/test-native-pi-compaction.mjs "$mode"
+          done
 
       - name: Check native RPC compaction against localhost provider
         run: |

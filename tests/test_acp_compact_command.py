@@ -9,13 +9,25 @@ from __future__ import annotations
 import pytest
 from acp import RequestError
 from acp.agent.router import build_agent_router
-from acp.schema import TextContentBlock
+from acp.schema import PromptResponse, TextContentBlock
 
-from agent_comms.acp_extension import CompactRequest, encode_request
+from agent_comms.acp_extension import (
+    CompactionCommittedUpdate,
+    CompactRequest,
+    encode_request,
+    encode_updates,
+)
+from agent_comms.agent_backend import FailedCompaction, PlacedCompaction
 from agent_comms.comms import wire
-from agent_comms.compaction_result import CommittedCompactionResult, RefusedCompactionResult
 from agent_comms.field_codec import FieldCodec
 from delivery_owner_fixture import canonical_agent
+
+
+PLACED = PlacedCompaction("summary", "first-kept", 1200)
+PLACED_REPLY = PromptResponse(
+    stop_reason="end_turn",
+    field_meta=encode_updates(CompactionCommittedUpdate("summary", "first-kept")),
+)
 
 
 def block(text: str) -> TextContentBlock:
@@ -30,7 +42,7 @@ async def test_compact_is_exclusive_bridge_command_not_model_prompt(tmp_path, mo
 
     async def compact_context(owner, session_id, instructions):
         calls.append((owner, session_id, instructions))
-        return CommittedCompactionResult("summary", "commit")
+        return PLACED
 
     async def forbidden_model(*args, **kwargs):
         raise AssertionError("/compact must not become a model prompt")
@@ -40,7 +52,7 @@ async def test_compact_is_exclusive_bridge_command_not_model_prompt(tmp_path, mo
     try:
         response = await agent.prompt(session, [block("/compact   focus on safety ")])
         assert response.stop_reason == "end_turn"
-        assert response == CommittedCompactionResult("summary", "commit").prompt_response()
+        assert response == PLACED_REPLY
         assert calls == [(agent.turns, session, "focus on safety")]
     finally:
         await agent.shutdown()
@@ -54,7 +66,7 @@ async def test_toad_blank_prompt_metadata_compacts_without_model(tmp_path, monke
 
     async def compact_context(owner, session_id, instructions):
         calls.append((owner, session_id, instructions))
-        return CommittedCompactionResult("summary", "commit")
+        return PLACED
 
     async def forbidden_model(*args, **kwargs):
         raise AssertionError("Toad's compact metadata must not be a model prompt")
@@ -66,7 +78,7 @@ async def test_toad_blank_prompt_metadata_compacts_without_model(tmp_path, monke
             session, [block(" ")], _meta=encode_request(CompactRequest("focus on safety"))
         )
         assert response.stop_reason == "end_turn"
-        assert response == CommittedCompactionResult("summary", "commit").prompt_response()
+        assert response == PLACED_REPLY
         assert calls == [(agent.turns, session, "focus on safety")]
         with pytest.raises(RequestError) as invalid:
             await agent.prompt(session, [block("nonblank")], _meta=encode_request(CompactRequest()))
@@ -83,7 +95,7 @@ async def test_sdk_router_preserves_toad_wire_metadata(tmp_path, monkeypatch):
 
     async def compact_context(owner, session_id, instructions):
         calls.append((owner, session_id, instructions))
-        return CommittedCompactionResult("summary", "commit")
+        return PLACED
 
     monkeypatch.setattr("agent_comms.manual_compaction_bridge.compact_context", compact_context)
     try:
@@ -96,7 +108,7 @@ async def test_sdk_router_preserves_toad_wire_metadata(tmp_path, monkeypatch):
             },
             False,
         )
-        assert response == CommittedCompactionResult("summary", "commit").prompt_response()
+        assert response == PLACED_REPLY
         assert calls == [(agent.turns, session, "focus")]
     finally:
         await agent.shutdown()
@@ -108,7 +120,7 @@ async def test_compact_failure_is_not_end_turn_success(tmp_path, monkeypatch):
     session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
 
     async def compact_context(*args):
-        return RefusedCompactionResult("uncertain compaction")
+        return FailedCompaction("uncertain compaction")
 
     monkeypatch.setattr("agent_comms.manual_compaction_bridge.compact_context", compact_context)
     try:
@@ -128,12 +140,12 @@ async def test_attached_compact_routes_to_owner_not_attached_model(tmp_path):
     class Proxy:
         async def request(self, action, **kwargs):
             calls.append((action, kwargs))
-            return FieldCodec.encode(CommittedCompactionResult("summary", "commit"))
+            return FieldCodec.encode(PLACED)
 
     agent.sessions.proxies["attached"] = Proxy()
     response = await agent.prompt("attached", [block(" ")], _meta=encode_request(CompactRequest()))
     assert response.stop_reason == "end_turn"
-    assert response == CommittedCompactionResult("summary", "commit").prompt_response()
+    assert response == PLACED_REPLY
     assert calls == [("compact", {"instructions": None})]
 
 

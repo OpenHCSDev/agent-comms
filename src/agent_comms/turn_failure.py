@@ -20,6 +20,8 @@ class TurnFailure(DeclaredFamily):
     code: ClassVar[str | None] = None
     precedence: ClassVar[int] = 0
     input_uncertain: ClassVar[bool] = False
+    # A failure of the model request itself; Pi re-sending that request ends it.
+    ends_with_request_retry: ClassVar[bool] = False
 
     def with_startup_diagnostics(self, stderr: str) -> TurnFailure:
         return self
@@ -34,12 +36,6 @@ class InputIdUnavailable(TurnFailure):
 
     code = FailureReason.INPUT_ID_UNAVAILABLE
     precedence = 100
-
-
-class PrestartCompactionFailed(TurnFailure):
-    code = FailureReason.COMPACTION_FAILED
-    precedence = 90
-    input_uncertain = True
 
 
 class IdentityUncertain(TurnFailure):
@@ -107,6 +103,7 @@ class ModelRequestFailed(TurnFailure):
 
     code = FailureReason.MODEL_REQUEST_FAILED
     precedence = 45
+    ends_with_request_retry = True
 
 
 class QueuedInputMissing(TerminalFailure):

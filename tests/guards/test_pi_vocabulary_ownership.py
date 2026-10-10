@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.pi_summary_payloads import SelectedSummaryData
 from agent_comms.pi_vocabulary import CompactionReason, PiStopReason, ThinkingLevel
 
 pytestmark = pytest.mark.refactor_guard
@@ -47,22 +46,6 @@ def test_tracked_receipt_and_terminal_data_do_not_restore_nullable_slots():
         for node in ast.walk(source)
         if isinstance(node, ast.Attribute) and node.attr in replaced
     ]
-
-
-def test_summary_members_own_the_response_contract():
-    assert SelectedSummaryData.__abstractmethods__ == frozenset({"response"})
-    members = SelectedSummaryData.members_with(SelectedSummaryData)
-    assert members and all("response" in vars(member) for member in members)
-    assert all(not hasattr(member, name) for member in members for name in ("summary", "decline_reason"))
-    source = ast.parse((SOURCE / "selected_pi_summary_rpc.py").read_text())
-    decoder = next(
-        node
-        for node in source.body
-        if isinstance(node, ast.FunctionDef) and node.name == "_summary_response"
-    )
-    assert not any(
-        isinstance(node, ast.Name) and node.id.startswith("Summary") for body in decoder.body for node in ast.walk(body)
-    )
 
 
 def test_vocabularies_derive_names_from_their_declarations():

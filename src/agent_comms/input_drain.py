@@ -36,13 +36,12 @@ from .cursor_owner import CursorOwner
 from .child_process import join_retirement
 from .native_input_owner import RegistryOwner
 from .input_attempt import InputAttempt
-from .input_disposition import FutureInputQueue, InputDispositions, InputDocument
+from .input_disposition import InputDispositions, InputDocument
 from .input_effects import InputEffects
 from .queued_input import QueuedInput, InputHandoffRefused
 from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
 from .schedule_rules import WakeScheduleCheck
-from .selected_summary_admission import SelectedSummaryAdmission
 from .session_lifecycle import SessionLifecycle
 from .store_files import _async_store_lock, _store_lock, file_revision
 from .thread_identity import AdmissionIdentity
@@ -56,7 +55,7 @@ AGENT_PREFIX = "!agent "
 GOAL_WAIT_RECHECK_INTERVAL = 60.0
 
 
-class InputDrain(FutureInputQueue):
+class InputDrain:
     def __init__(
         self,
         comms: Comms,
@@ -76,7 +75,6 @@ class InputDrain(FutureInputQueue):
         self.queue_revisions: dict[str, int] = {}
         self.following_sources: dict[str, dict[str, AcceptedFollowingInput]] = {}
         self.original_sources: dict[str, OriginalTurnInput] = {}
-        self.selected_summary_admissions: dict[str, SelectedSummaryAdmission] = {}
         self.dispositions = InputDispositions(comms.root / InputDispositions.filename)
         self.auto_wake = auto_wake
         self.pending_turns: dict[str, list[ScheduledTurn]] = {}
@@ -464,32 +462,6 @@ class InputDrain(FutureInputQueue):
             )
         return inbox
 
-    def future_inputs(
-        self, owner: Thread, pending_input_keys: tuple[str, ...]
-    ) -> dict[str, InputAttempt]:
-        """Live queued receipts only; durable UNKNOWN alone never grants this exception.
-
-        The bridge holds the wire lock while reading this owner. Acceptance,
-        clear and promotion use that same lock, including their in-memory edits.
-        No receipt survives a process restart or an owner/turn change.
-        """
-        if not pending_input_keys:
-            return {}
-        if owner.pid != os.getpid() or owner.active_turn is None or self.closing:
-            return {}
-        result = {}
-        for session_id, original in self.original_sources.items():
-            if (
-                original.compaction_keys(owner.session_file) != pending_input_keys
-                or self.sessions.bindings.get(session_id) != owner.name
-            ):
-                continue
-            for input_id, item in self.queued_inputs.get(session_id, {}).items():
-                receipt = item.future_receipt(owner)
-                if receipt is not None:
-                    result[item.key] = receipt
-        return result
-
     async def send_now(self, session_id: str) -> None:
         async with _async_store_lock(self.comms._wire_lock_path):
             inbox = self.backend_inboxes.get(session_id)
@@ -585,9 +557,6 @@ class InputDrain(FutureInputQueue):
             # capabilities. No callback delivery is required to burn a grant or
             # retain accepted queued input for the next distinct turn.
             self.following_sources.pop(session_id, None)
-            admission = self.selected_summary_admissions.pop(session_id, None)
-            if admission is not None:
-                admission.invalidate()
             remaining = self.queued_inputs.pop(session_id, {})
             if remaining:
                 self.restored_inputs.setdefault(session_id, {}).update(

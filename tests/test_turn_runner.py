@@ -186,59 +186,6 @@ async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, mo
     assert not owner.inputs.backend_inboxes
 
 
-async def test_compaction_fault_reaches_acp_client_without_original_send(
-    prepared_owner, monkeypatch
-):
-    from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown
-
-    owner, session, native = prepared_owner
-    updates = []
-
-    class Client:
-        async def session_update(self, **kwargs):
-            updates.append(kwargs["update"])
-
-    owner.on_connect(Client())
-    before = native.session.read_bytes()
-    source = OSError("402: insufficient credits on this model")
-    failure = SelectedChildUnknown(str(source))
-    attempts = []
-
-    async def compact(*args, **kwargs):
-        assert args[2].model.id == "fixture"
-        assert args[4].custody.child.proc.alive()
-        attempts.extend(args[3])
-        raise failure from source
-
-    async def forbidden_stream(*args, **kwargs):
-        pytest.fail("original input must not reach native after uncertain compaction")
-        yield
-
-    monkeypatch.setattr("agent_comms.owner_compaction_adaptive.maybe_compact_owner_turn", compact)
-    monkeypatch.setattr(backend, "stream_agent_events", forbidden_stream)
-    with pytest.raises(RequestError) as caught:
-        await owner.prompt(session, [{"type": "text", "text": "Original stays unknown"}])
-    assert caught.value.__cause__ is failure and failure.__cause__ is source
-    receipt = PromptFailureReceipt.from_error(caught.value.code, str(caught.value), caught.value.data)
-    assert len(attempts) == 1
-    errors = failure_facts(updates, RequestFailedUpdate)
-    assert len(errors) == 1 and receipt.failure == errors[0].failure
-    assert receipt.notification_published and "Open diagnostic" in errors[0].failure.detail
-    failed_inputs = failure_facts(updates, InputFailedUpdate)
-    assert len(failed_inputs) == 1
-    assert failed_inputs[0].text == "Original stays unknown"
-    assert failed_inputs[0].failure == errors[0].failure
-    from agent_comms.input_attempt import NotSentInput
-
-    assert errors[0].failure.input_state is NotSentInput
-    assert "Not sent" in errors[0].failure.feedback
-    assert owner.inputs.dispositions.read().rows[attempts[0]].declared_name == "not_sent"
-    assert native.provider.posts == 0
-    assert native.session.read_bytes() == before
-    assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).busy
-    assert not owner.inputs.backend_inboxes
-
-
 async def test_actual_provider_failure_reports_started_input_once_without_retry(prepared_owner):
     owner, session, native = prepared_owner
     updates = []

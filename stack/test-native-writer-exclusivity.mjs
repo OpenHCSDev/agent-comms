@@ -12,7 +12,7 @@ import { pathToFileURL } from 'node:url';
 
 const packageDir = process.env.PI_NATIVE_PACKAGE_DIR;
 if (!packageDir) throw new Error('Explicit disposable PI_NATIVE_PACKAGE_DIR required');
-const probePath = new URL('./probe-native-adaptive-writer.mjs', import.meta.url).pathname;
+const probePath = new URL('./probe-native-session-writer.mjs', import.meta.url).pathname;
 const { SessionManager } = await import(pathToFileURL(join(packageDir, 'dist/index.js')).href);
 
 const root = mkdtempSync(join(tmpdir(), 'pr48-writer-exclusivity-'));

@@ -34,6 +34,11 @@ async def test_actual_native_new_terminal_failure_refuses_success_and_retention(
 
 async def test_actual_native_cold_preparation_retains_without_admitting_input(native_backend):
     owner = native_backend
+    observed = []
+
+    async def observe(state, info):
+        observed.append((state, info))
+
     state = await NativeSessionPreparation.open(
         owner.persistent,
         "pi",
@@ -49,7 +54,9 @@ async def test_actual_native_cold_preparation_retains_without_admitting_input(na
         worktree=str(owner.project),
         environment=dict(os.environ),
         session_file=str(owner.session),
+        observe=observe,
     )
+    assert observed == [(state, observed[0][1])]
     assert state.session_file == str(owner.session) and state.session_id
     assert state.is_streaming is False and state.is_compacting is False
     assert owner.persistent.available and owner.persistent.custody.child.proc.alive()

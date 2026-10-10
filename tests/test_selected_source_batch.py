@@ -53,12 +53,11 @@ async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay
             published.append(event)
         async with SelectedParticipant.select(comms, store, root_id, "receiver", 0,
                                               on_compaction=publish_compaction) as selected:
-            from agent_comms.agent_events import CompactionStart, CompactionSummaryProgress, CompactionEnd
-            observations = (CompactionStart(), CompactionSummaryProgress(text="Partial original summary"),
-                            CompactionEnd(summary="Committed original summary"))
+            from agent_comms.agent_events import CompactionStart, CompactionEnd
+            observations = (CompactionStart(), CompactionEnd(summary="Committed original summary"))
             for observation in observations:
                 await selected.dispatch(observation)
-            assert len(published) == 3
+            assert len(published) == 2
             assert all(actual is original for actual, original in zip(published, observations, strict=True))
             assert selected.batch.assignments == snapshot
             prompt = SelectedPrompt(selected).triage().text
@@ -141,7 +140,6 @@ async def test_terminal_triage_failure_records_context_and_fails_its_claims(tmp_
                 db = store.session._connection
                 row = NativeRuntimeInput.one(db, input_id=input_id)
                 assert row.reference.recorded and row.verdict is None
-                assert NativeRuntimeInput.recorded_contexts(db, session) == {input_id: context}
             # The failed input is settled once; it is never sent or settled again.
             with TestCase().assertRaises(StaleFence):
                 stage.fail_terminal(store, selected.identity, input_id, token_digest, context)

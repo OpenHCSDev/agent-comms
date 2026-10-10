@@ -97,7 +97,6 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
         comms,
         agent_bin="pi",
         auto_wake=False,
-        adaptive_compaction_enabled=False,
         private_nk_wire_root_id=root_id,
         private_nk_native_package=Path(package),
     )

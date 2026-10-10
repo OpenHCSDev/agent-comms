@@ -1,30 +1,23 @@
-"""Native child custody: empty, borrowed, retained, retiring and strict reopen."""
+"""The session's Pi child: empty, borrowed by a turn, retained idle, or retiring."""
 
 from __future__ import annotations
 
 import asyncio
-import json
 from abc import ABC, abstractmethod
 from contextlib import ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
 from .child_process import AttachedChild
-from .native_attestation import NativeAttestation, PendingAttestation, SavedSessionReopenError
+from .native_attestation import NativeAttestation, PendingAttestation
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
-from .native_arguments import NativeArguments
 from .native_session_reopen import NativeSessionIdentity
 from .pi_rpc import PiRpcChannel
 from .private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
-    from .compaction_records import CompactionOperation
-    from .pi_vocabulary import CompactionReason
-    from .selected_source import SessionRevision
-    from .owner_compaction_prepare import NativeWitness
-    from .thread_presentation import LiveThreadOwnerBinding
+    from .session_revision import SessionRevision
 
 
 @dataclass
@@ -36,22 +29,6 @@ class PiSessionChild:
     attestation: NativeAttestation
     sensitive_diagnostics: bool = False
     resources: ExitStack = field(default_factory=ExitStack, repr=False)
-
-    def require_source_owner(self, identity: NativeSessionIdentity, binding: LiveThreadOwnerBinding,
-                             arguments: NativeArguments, worktree: Path) -> None:
-        """Retirement consumes this actual child's original launch provenance."""
-        from .runtime_requests import ProjectRuntimeRequest
-
-        launch, _ = self.key
-        launch.session.attest(identity)
-        request = ProjectRuntimeRequest.from_wire(json.loads(launch.env["AGENT_COMMS_PROJECT_REQUEST"]))
-        if request.binding != binding:
-            raise NativePiUnavailable("Native child belongs to another original owner binding")
-        actual = NativeArguments.parse(launch.argv)
-        if (actual.model, actual.thinking, launch.cwd) != (
-            arguments.model, arguments.thinking, worktree.resolve(strict=True)
-        ):
-            raise NativePiUnavailable("Native child belongs to another selected configuration")
 
     async def reply_ui(self, response) -> None:
         await asyncio.wait_for(self.proc.write(self.reader.encode(response)), timeout=2)
@@ -126,28 +103,14 @@ class NativeCustody(ABC):
         """Inspect through this custody's legal acquisition/receiver capability."""
         raise NativePiUnavailable("Native context requires an acquired native child")
 
-    async def expected(self, launch, require_input_id) -> NativeAttestation:
-        return launch.session.attestation()
-
     def retire(self, successor: NativeCustody | None = None) -> NativeCustody:
         return successor if successor is not None else self
-
-    def retire_owned(self, identity: NativeSessionIdentity, binding: LiveThreadOwnerBinding,
-                     arguments: NativeArguments, worktree: Path) -> NativeCustody:
-        raise NativePiUnavailable("Native custody cannot retire the original selected child")
 
     async def closed(self) -> NativeCustody:
         return self
 
-    def reopen(self, identity: NativeSessionIdentity) -> ReopenNative:
-        return ReopenNative(identity)
-
-
 class EmptyNative(NativeCustody):
     available = False
-
-    def retire_owned(self, identity, binding, arguments, worktree):
-        return self
 
     async def inspect(self, persistent, prepare, request):
         # The runtime owner supplies its existing selected-session preparation:
@@ -168,38 +131,11 @@ class NativeCleanupFailed(RuntimeError):
 
 
 @dataclass
-class ReopenNative(NativeCustody):
-    available = False
-    identity: NativeSessionIdentity
-
-    async def expected(self, launch, require_input_id):
-        if not require_input_id:
-            raise SavedSessionReopenError(
-                "Saved native session requires explicit validated reopen."
-            )
-        try:
-            launch.session.attest(self.identity)
-        except ValueError as error:
-            raise SavedSessionReopenError(
-                "Saved native session failed strict reopen validation."
-            ) from error
-        return PendingAttestation(self.identity)
-
-    def reopen(self, identity: NativeSessionIdentity) -> ReopenNative:
-        self.identity.require_same_session(identity)
-        return self
-
-
-@dataclass
 class RetiringNative(NativeCustody):
     available = False
     task: asyncio.Task[None]
     successor: NativeCustody
     child: PiSessionChild
-
-    def retire_owned(self, identity, binding, arguments, worktree):
-        self.child.require_source_owner(identity, binding, arguments, worktree)
-        return self
 
     def retire(self, successor=None):
         if successor is not None:
@@ -215,19 +151,11 @@ class RetiringNative(NativeCustody):
             raise
         return self.successor
 
-    def reopen(self, identity):
-        return self.successor.reopen(identity)
-
-
 @dataclass
 class BorrowedNative(NativeCustody):
     child: PiSessionChild
     successor: NativeCustody
     available = True
-
-    def retire_owned(self, identity, binding, arguments, worktree):
-        self.child.require_source_owner(identity, binding, arguments, worktree)
-        return self.retire()
 
     async def inspect(self, persistent, prepare, request):
         # The active TurnSession owns receive/correlation. Borrow its original
@@ -244,12 +172,6 @@ class BorrowedNative(NativeCustody):
             self.child,
         )
 
-    def reopen(self, identity):
-        observed = self.child.attestation.require_identity()
-        observed.require_same_session(identity)
-        return ReopenNative(observed)
-
-
 @dataclass
 class RetainedNative(NativeCustody):
     retained = True
@@ -257,10 +179,6 @@ class RetainedNative(NativeCustody):
     identity: NativeSessionIdentity
     revision: SessionRevision
     available = True
-
-    def retire_owned(self, identity, binding, arguments, worktree):
-        self.identity.require_same_session(identity)
-        return BorrowedNative(self.child, EmptyNative()).retire_owned(identity, binding, arguments, worktree)
 
     @property
     def current(self) -> bool:
@@ -270,50 +188,6 @@ class RetainedNative(NativeCustody):
         if not self.current:
             return super().idle()
         return self
-
-    def selected(self, identity: NativeSessionIdentity, package: Path) -> RetainedNative:
-        if not self.identity.same_session(identity) or self.child.key[0].package != package:
-            raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
-        return self.idle()
-
-    async def reload(self, witness: NativeWitness, operation: CompactionOperation,
-                     reason: type[CompactionReason]) -> None:
-        """Install this exact known commit through the acquired compaction owner.
-
-        The caller owns PersistentPiSession.external_write and its borrow lock.
-        The original manager opens and reconciles the real disk source, closes
-        its old entry store, and installs context through the native compaction
-        hook. Its SDK runtime, services and extension bindings remain acquired.
-        """
-        from .owner_compaction_prepare import PrepareCompactionHelper
-        from .pi_commands import AgentCommsRestoreCompaction
-        from .native_compaction_request import NativeIntent
-        from .selected_source import SessionRevision
-        from .session_fence import session_writer_fence
-
-        witness.require_same_session(self.identity)
-        # Use the existing whole-history preparation budget, not the cheap
-        # settings-query deadline. A refusal never authorizes another attempt.
-        async with asyncio.timeout(PrepareCompactionHelper.timeout_seconds):
-            # The commit's global resource has closed. Reload needs only the
-            # original per-session writer scope, in the same borrow->writer
-            # order used for normal execution, not another global BUS grant.
-            async with session_writer_fence(self.identity.session_file):
-                witness.require_current_file(self.identity.path)
-                request = AgentCommsRestoreCompaction(
-                    reconciliation=NativeIntent.read(operation).reconciliation(operation.commit_id),
-                    expected=operation.committed_outcome(), reason=reason, id=uuid4().hex,
-                )
-                response = await request.exchange(self.child.reader, self.child.proc.stdin, strict=True)
-                response.require_request(request)
-                attestation = PendingAttestation(self.identity)
-                response = await attestation.request.exchange(
-                    self.child.reader, self.child.proc.stdin, strict=True,
-                )
-                observed = attestation.accept(response)
-                witness.require_current_file(self.identity.path)
-                self.revision = SessionRevision.observe(self.identity.session_file).require_available()
-                self.child.attestation = observed
 
     async def inspect(self, persistent, prepare, request):
         # Reobserve this retained child through the same preparation/AgentInfo
@@ -330,6 +204,13 @@ class RetainedNative(NativeCustody):
             )
             if response.success is not True:
                 raise ValueError(f"Native request did not succeed: {response.error}")
+            if request.writes_session:
+                # This child wrote the file itself; its loaded context is the new revision.
+                from .session_revision import SessionRevision
+
+                current.revision = SessionRevision.observe(
+                    current.identity.session_file
+                ).require_available()
             return response.data.require_payload()
 
     def reuse(self, key):
@@ -357,6 +238,3 @@ class RetainedNative(NativeCustody):
             self.child,
         )
 
-    def reopen(self, identity):
-        self.identity.require_same_session(identity)
-        return ReopenNative(self.identity)

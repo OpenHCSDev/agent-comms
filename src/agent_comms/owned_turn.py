@@ -25,7 +25,6 @@ from .native_input_owner import RegistryOwner
 from .coordinator import Coordination
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
 from .runtime import UNBOUND_CONTROLLER
-from .selected_summary_admission import SelectedSummaryAdmission
 from .store_files import _store_lock
 from .thread_identity import TurnId
 from .turn_goal_account import TurnGoalAccount
@@ -369,55 +368,11 @@ class OwnedTurn:
         # Private delivery sees the registry lease and cannot start another turn.
         await self.runner.inputs.drain_owned_inbox(self.session_id)
 
-        # Existing local ACP owner session only. If delivery is uncertain,
-        # the keyed metadata remains pending; never invent a bus recipient.
-        await self.runner.effects.publish_pending_compaction(self.session_id, self.thread_name)
         awareness = await Coordination.run_worker(partial(
             self.runner.comms.bus.awareness_segments, self.thread,
         ))
         for segment in awareness:
             self.context = self.context.append(segment)
-        pending_keys = self.original.compaction_keys(self.thread.session_file)
-        if pending_keys:
-            from .owner_compaction_adaptive import maybe_compact_owner_turn
-
-            def admit_original(admission: SelectedSummaryAdmission) -> None:
-                self.runner.inputs.selected_summary_admissions[self.session_id] = admission
-
-            try:
-                prepared = await self.runner.prepare_selected_session(self.session_id, self.thread)
-                self.committed = await maybe_compact_owner_turn(
-                    self.runner.comms.registry,
-                    self.registry_owner,
-                    prepared,
-                    pending_keys,
-                    self.backend,
-                    input_text=self.context.render().text,
-                    on_admission=admit_original,
-                    future_queue=self.runner.inputs,
-                    on_event=self.progress.consume,
-                )
-            except Exception:
-                # A selected adaptive operation may already have paid or
-                # written. Preserve the failed original input outcome.
-                if self.goal_permit is not None:
-                    await Coordination.run_worker(partial(
-                        self.runner.comms.goals.block_goal_after_failed_turn,
-                        self.thread_name,
-                        started_goal=self.thread.goal,
-                        expected_worktree=self.thread.worktree,
-                        diagnostic=(
-                            "Adaptive native compaction did not establish a "
-                            "safe outcome; inspect the exact commit journal."
-                        ),
-                    ))
-                raise
-            if self.committed:
-                # Local metadata-only outbox; uncertain subscriber delivery
-                # leaves its exact row pending, never broadcasts a summary.
-                await self.runner.effects.publish_pending_compaction(
-                    self.session_id, self.thread_name
-                )
 
     async def stream(self):
         await self.runner.transition_turn(self.session_id, self.turn_lease, PromptAcceptancePhase())

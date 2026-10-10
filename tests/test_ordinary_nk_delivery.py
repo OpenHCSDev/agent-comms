@@ -69,7 +69,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
             stable_thread_lookup(alpha.created_at), "alpha", "alpha", committed=True
         )
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, calls = _fake_model(decision=decision)
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     original = []

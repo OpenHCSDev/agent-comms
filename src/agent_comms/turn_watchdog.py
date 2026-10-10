@@ -92,7 +92,8 @@ class ProgressWatchdog:
             timeout: float | None = max(0.0, self.preflight_deadline - self.clock())
         elif session.stats.requested:
             timeout = 5.0
-        elif session.active_tools or self.model_wait_timeout is None:
+        elif (session.active_tools or self.model_wait_timeout is None
+              or not self.phase.bounded_by_core):
             timeout = None
         else:
             timeout = max(0.0, self.last_model_progress + self.model_wait_timeout - self.clock())

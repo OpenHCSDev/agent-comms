@@ -40,7 +40,6 @@ async def retained_native_acp_owner(native_backend, monkeypatch):
         agent_bin="pi",
         runtime_enabled=True,
         auto_wake=False,
-        adaptive_compaction_enabled=False,
         agent_args=[
             "--provider=response-local",
             "--model=fixture",

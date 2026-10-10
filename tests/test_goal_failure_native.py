@@ -12,16 +12,9 @@ from acp.agent.router import build_agent_router
 from agent_comms.comms import Comms
 from agent_comms.acp_extension import (
     CompactionChangedUpdate,
-    CompactionPublishedUpdate,
-    InputDeliveryChangedUpdate,
-    QueuePromptRequest,
     decode_updates,
-    encode_request,
 )
 from agent_comms.agent_events import CompactionStart, CompactionEnd
-from agent_comms.compaction_journal import CompactionJournal
-from agent_comms.compaction_records import SelectedSummaryAttempt
-from agent_comms.compaction_states import LinkedSummary, CommittedOperation
 from agent_comms.acp_failure import PromptFailureReceipt
 from agent_comms.diagnostics import FailureReason
 from agent_comms.goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction, SetGoalAction
@@ -33,15 +26,14 @@ from delivery_owner_fixture import canonical_agent
 from test_backend_native_lifecycle import native_backend as native_backend
 
 
-@pytest.mark.parametrize("queue_during_prepare", [False, True])
 async def test_saved_native_autonomous_goal_compacts_before_original_input(
-    native_backend, monkeypatch, queue_during_prepare
+    native_backend, monkeypatch
 ):
-    """Cold saved history -> ordinary scheduler -> selected journal -> one real input.
+    """Cold saved history -> ordinary scheduler -> Pi threshold compaction -> one real input.
 
     Only the localhost provider response is controlled. The goal grant, wake
-    runner, ACP updates, input reservation, Pi context decision and native writer
-    are production owners, including the hard stored-context admission backstop.
+    runner, ACP updates, input reservation and Pi's own compaction engine are
+    production owners.
     """
     native = native_backend
     native.provider.text = "Retained history for the compaction boundary.\n" * 1000
@@ -100,7 +92,7 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
             drain.cancel()
             await asyncio.gather(drain, return_exceptions=True)
             comms.registry.register(replace(comms.registry.require(sid), auto_title_pending=False))
-            comms.threads.attach_session(sid, str(native.session))
+            comms.threads.attach_session(comms.registry.require(sid), str(native.session))
             await route(
                 "session/load",
                 {"cwd": str(native.project), "sessionId": sid, "mcpServers": []},
@@ -127,35 +119,12 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
             unknown = agent.inputs.dispositions.read().lookup(preserved)
             before_posts = native.provider.posts
             native.provider.text = "Journaled local summary and successful goal continuation."
-            queued_ids = []
-            if queue_during_prepare:
-                from agent_comms.turn_runner import TurnRunner
-
-                prepare = TurnRunner.prepare_selected_session
-
-                async def queue_before_prepare(runner, session_id, thread):
-                    if not queued_ids and session_id == sid:
-                        response = await route("session/prompt", {
-                            "sessionId": sid,
-                            "prompt": [{"type": "text", "text": "Fresh queued input during scheduled preparation"}],
-                            **encode_request(QueuePromptRequest(
-                                user_text="Fresh queued input during scheduled preparation",
-                                defer_display=True,
-                            )),
-                        }, False)
-                        queued_ids.append(next(
-                            update.input_id for update in decode_updates(response.field_meta)
-                            if isinstance(update, InputDeliveryChangedUpdate)
-                        ))
-                    return await prepare(runner, session_id, thread)
-
-                monkeypatch.setattr(TurnRunner, "prepare_selected_session", queue_before_prepare)
             agent.inputs.auto_wake = True
             await agent.turns.goals.schedule_goal(sid)
             await agent.inputs.wake_tasks[sid]
             agent.inputs.auto_wake = False
             assert store.snapshot(goal.id).lifecycle == ReadyGeneration()
-            assert len(native.saved_inputs()) == 3 + len(queued_ids)
+            assert len(native.saved_inputs()) == 3
             assert native.saved_inputs()[2]["content"][0]["text"].endswith(
                 "Continue working toward the active goal."
             )
@@ -168,29 +137,17 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
             assert len(originals) == 1 and originals[0].has_started
             assert originals[0].source_text == originals[0].sent_text
             assert rows.lookup(preserved) == unknown
-            for input_id in queued_ids:
-                queued = rows.lookup("acp:" + input_id)
-                assert queued.has_started and queued.has_native_binding
-                assert queued.native_id != originals[0].native_id
             entries = [json.loads(line) for line in native.session.read_text().splitlines()]
             compact = [index for index, row in enumerate(entries) if row["type"] == "compaction"]
-            assert len(compact) == 1
+            # Pi may compact again after the answer under the same small window;
+            # its first compaction precedes the one original input.
+            assert compact
             started = next(
                 index
                 for index, row in enumerate(entries)
                 if row.get("message", {}).get("inputId") == originals[0].native_id
             )
             assert compact[0] < started
-            journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
-            assert not journal.summaries.blocking(str(native.session))
-            with journal.transaction() as db:
-                summaries = SelectedSummaryAttempt.select(
-                    db, where="session_file=?", parameters=(str(native.session),)
-                )
-            assert len(summaries) == 1 and isinstance(summaries[0].state, LinkedSummary)
-            assert isinstance(
-                journal.operations.get(summaries[0].state.commit_id).state, CommittedOperation
-            )
             decoded = [item for update in updates for item in decode_updates(update.field_meta)]
             compact_events = [
                 update.event for update in decoded if isinstance(update, CompactionChangedUpdate)
@@ -199,9 +156,8 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
             assert any(
                 isinstance(event, CompactionEnd) and not event.aborted for event in compact_events
             )
-            assert any(isinstance(update, CompactionPublishedUpdate) for update in decoded)
             print(
-                f"autonomous_goal_originals=1 queued_originals={len(queued_ids)} journaled_compactions=1 provider_posts={native.provider.posts-before_posts} original_after_commit=yes"
+                f"autonomous_goal_originals=1 pi_compactions={len(compact)} provider_posts={native.provider.posts-before_posts} original_after_compaction=yes"
             )
     finally:
         await agent.shutdown()
@@ -229,7 +185,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             created = await route("session/new", {"cwd": str(native.project), "mcpServers": []}, False)
             sid = created.session_id
             comms.registry.register(replace(comms.registry.require(sid), auto_title_pending=False))
-            comms.threads.attach_session(sid, str(native.session))
+            comms.threads.attach_session(comms.registry.require(sid), str(native.session))
             await route("session/load", {"cwd": str(native.project), "sessionId": sid, "mcpServers": []}, False)
             response = await route("session/prompt", {
                 "sessionId": sid,

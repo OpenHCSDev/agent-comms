@@ -189,7 +189,6 @@ def main(package: Path, dependency_package: Path | None = None) -> None:
     for source, target in (
         ("native-import-fence.mjs", "agent-comms-import-fence.mjs"),
         ("native-import-manifest.json", "agent-comms-imports.json"),
-        ("native-compaction-commit-child.mjs", "agent-comms-compaction-commit-child.mjs"),
     ):
         shutil.copyfile(stack / source, package / "dist" / target)
     for name in ("selected_claimed_write.mjs", "channel_coding_tools.mjs"):

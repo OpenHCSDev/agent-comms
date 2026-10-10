@@ -4,20 +4,12 @@ import json
 import os
 import pickle
 import subprocess
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from agent_comms.compaction_errors import CompactionJournalError, CompactionJournalUnknownError
-from agent_comms.compaction_journal import CompactionJournal
-from agent_comms.compaction_records import SelectedSummarySource
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.native_pi import NativePiUnavailable, _read_private_file, _trusted_package
-from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.owner_compaction_settings import PiCompactionSettings
-from agent_comms.pi_summary_payloads import SelectedModel
-from selected_summary_cases import manual_summary_record
 
 
 def test_explicit_fresh_session_has_durable_prewrite_inode(tmp_path: Path) -> None:
@@ -322,129 +314,6 @@ def test_uncertain_parent_fsync_does_not_return_enrollment(
         )
     # A visible header after uncertain fsync is NOT returned or enrolled.
     assert len(list((tmp_path / "native-sessions" / "a").glob("enrolled-*.jsonl"))) == 1
-
-
-def _private_source(session) -> SelectedSummarySource:
-    return manual_summary_record(
-        session, "alice", selected=SelectedModel("openrouter", "z-ai/glm-5.3-flash", 1000),
-        settings=PiCompactionSettings(100, 2000),
-    )
-
-
-def test_returned_enrollment_admits_only_exact_fresh_owner_without_raw_history(
-    tmp_path: Path,
-) -> None:
-    root = tmp_path
-    fresh = create_fresh_private_session(root / "native-sessions" / "alice-lookup", worktree=root)
-    journal = CompactionJournal(root / "compaction-commits.sqlite3")
-    with pytest.raises(ValueError, match="has no covered history"):
-        journal.summaries.reserve(str(fresh.path), _private_source(fresh.path))
-    journal.private_inputs.enroll(
-        fresh,
-        incarnation=ThreadIncarnation("alice", 1.0),
-        owner_lookup="alice-lookup",
-        owner_generation=2,
-        admission_generation=3,
-    )
-    with pytest.raises(CompactionJournalError, match="coverage differs"):
-        journal.summaries.reserve(
-            str(fresh.path),
-            _private_source(fresh.path),
-            fresh_session=fresh,
-            admission_generation=4,
-        )
-    changed_owner = _private_source(fresh.path)
-    changed_owner = replace(
-        changed_owner, source=replace(
-            changed_owner.source, incarnation=ThreadIncarnation("alice", 1.5)
-        )
-    )
-    with pytest.raises(CompactionJournalError, match="coverage differs"):
-        journal.summaries.reserve(
-            str(fresh.path), changed_owner, fresh_session=fresh, admission_generation=3
-        )
-    next_turn = _private_source(fresh.path)
-    attempt = journal.summaries.reserve(
-        str(fresh.path), next_turn, fresh_session=fresh, admission_generation=3
-    )
-    assert journal.summaries.get(attempt).state.declared_name == "reserved"
-    with pytest.raises(CompactionJournalError, match="blocks native input"):
-        journal.private_inputs.reserve(fresh.path, "a" * 32)
-
-
-def test_outward_hardlink_cannot_evade_private_floor(tmp_path: Path) -> None:
-    fresh = create_fresh_private_session(
-        tmp_path / "native-sessions" / "alice-lookup", worktree=tmp_path
-    )
-    outward = tmp_path / "outward.jsonl"
-    os.link(fresh.path, outward)
-    journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-    with pytest.raises(CompactionJournalError, match="one private inode link"):
-        journal.summaries.reserve(str(outward), _private_source(fresh.path))
-
-
-def test_raw_unknown_even_on_returned_fresh_coverage_remains_selected_blocker(
-    tmp_path: Path,
-) -> None:
-    fresh = create_fresh_private_session(
-        tmp_path / "native-sessions" / "alice-lookup", worktree=tmp_path
-    )
-    journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-    journal.private_inputs.enroll(
-        fresh,
-        incarnation=ThreadIncarnation("alice", 1.0),
-        owner_lookup="alice-lookup",
-        owner_generation=2,
-        admission_generation=3,
-    )
-    journal.private_inputs.reserve(fresh.path, "b" * 32)
-    with pytest.raises(CompactionJournalError, match="never replay"):
-        journal.summaries.reserve(
-            str(fresh.path),
-            _private_source(fresh.path),
-            fresh_session=fresh,
-            admission_generation=3,
-        )
-
-
-def test_visible_enrollment_after_parent_fsync_unknown_does_not_authorize_selected(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from agent_comms import compaction_journal as module
-
-    fresh = create_fresh_private_session(
-        tmp_path / "native-sessions" / "alice-lookup", worktree=tmp_path
-    )
-    journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-    original_fsync = module.os.fsync
-    fail = True
-
-    def uncertain_fsync(fd: int) -> None:
-        nonlocal fail
-        if fail and os.fstat(fd).st_ino == tmp_path.stat().st_ino:
-            fail = False
-            raise OSError("injected post-COMMIT directory fsync")
-        original_fsync(fd)
-
-    monkeypatch.setattr(module.os, "fsync", uncertain_fsync)
-    with pytest.raises(CompactionJournalUnknownError, match="durability UNKNOWN"):
-        journal.private_inputs.enroll(
-            fresh,
-            incarnation=ThreadIncarnation("alice", 1.0),
-            owner_lookup="alice-lookup",
-            owner_generation=2,
-            admission_generation=3,
-        )
-    # The SQL row is visible on reopen, but no returned enrollment ACK exists.
-    monkeypatch.setattr(module.os, "fsync", original_fsync)
-    assert CompactionJournal(journal.path).path.exists()
-    with pytest.raises(CompactionJournalError, match="coverage differs"):
-        journal.summaries.reserve(
-            str(fresh.path),
-            _private_source(fresh.path),
-            fresh_session=fresh,
-            admission_generation=3,
-        )
 
 
 @pytest.mark.parametrize(

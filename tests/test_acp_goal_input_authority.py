@@ -20,7 +20,6 @@ from agent_comms.acp_extension import (
     encode_request,
 )
 from agent_comms.comms import wire
-from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration, ReservedGeneration
 from agent_comms.input_disposition import InputDispositions
@@ -177,12 +176,6 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
         observed["public_id"] = public_id
         original = agent.inputs.original_sources["project"]
         assert original.notice_keys == ()  # Internal continuation is not a user echo.
-        pending_keys = original.compaction_keys(str(session))
-        assert len(pending_keys) == 1 and pending_keys[0].startswith("turn:")
-        owner = comms.registry.require("project")
-        future = agent.inputs.future_inputs(owner, pending_keys)
-        assert tuple(future) == ("acp:" + public_id,)
-        agent.inputs.dispositions.read().compaction_rows(owner, pending_keys, agent.inputs)
         with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
             assert allowed is True
         persist_user(session, "a" * 32, args[2])
@@ -227,45 +220,5 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
         else:
             assert current.state.active and current.id == observed["replacement"].id
             assert store.snapshot(current.id).lifecycle == ReadyGeneration()
-    finally:
-        await agent.shutdown()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("activate_goal", [False, True])
-async def test_unresolved_journal_reports_named_refusal_or_goal_deferral(
-    tmp_path, monkeypatch, caplog, activate_goal
-):
-    caplog.set_level(logging.INFO, logger="agent_comms.owned_send_admission")
-    agent, comms, session, _ = await owner(tmp_path, monkeypatch)
-    observed = []
-
-    async def events(*args, **kwargs):
-        with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
-            assert allowed is True
-        persist_user(session, "a" * 32, args[2])
-        assert kwargs["native_start"](None, "a" * 32, args[2])
-        yield ae.InputStarted(id=None)
-        if activate_goal:
-            comms.goals.update_goal("project", SetGoalAction(text="Continue until stopped"))
-        public_id, command = await queue_followup(agent, kwargs)
-        journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
-        commit_id = journal.operations.begin(
-            str(session), {"source": "before-summary"}, inputs=agent.inputs.dispositions.read()
-        )
-        with kwargs["send_boundary"](public_id, "b" * 32, command["message"]) as allowed:
-            observed.append(allowed)
-        row = agent.inputs.dispositions.read().lookup("acp:" + public_id)
-        assert not row.has_native_binding
-        assert journal.operations.get(commit_id).state.declared_name == "intent"
-        yield ae.StreamSettled()
-        yield ae.Done(ok=True, text="No follow-up was sent")
-
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    try:
-        await agent.turns.run_agent_turn("project", "project", "Original owner input")
-        assert observed == [None if activate_goal else False]
-        assert "ordinary_journal:" in caplog.text
-        assert ("deferred" if activate_goal else "refused") in caplog.text
     finally:
         await agent.shutdown()

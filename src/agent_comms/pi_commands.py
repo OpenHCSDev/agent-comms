@@ -8,24 +8,19 @@ from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from uuid import uuid4
 
 from .turn_phase import ShutdownPhase
 
 from .native_turn_context import NativeContextData
-from .native_compaction_request import ReconcileNativeRequest
-from .compaction_states import CommittedNativeOutcome
-from .pi_vocabulary import ThinkingLevel, CompactionReason, ThresholdCompactionReason
-from .message_reference import MessageReference
+from .pi_vocabulary import ThinkingLevel
 from . import agent_events as events
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .image_inputs import ImageInput
 from .turn_context import InputContributionCoordinates, SegmentManifest
 from .native_session_reopen import NativeSessionIdentity
-from .owner_compaction_prepare import NativeWitness, PrepareCompactionHelper
-from .owner_compaction_settings import PiCompactionSettings
 from .pi_payloads import (
     CompactionData,
     EmptyData,
@@ -36,12 +31,6 @@ from .pi_payloads import (
     SessionSwitchData,
     ThinkingLevelsData,
     UnknownData,
-)
-from .pi_summary_payloads import (
-    CompactionPreparationData,
-    CompactionSettingsData,
-    SelectedModel,
-    SelectedSummaryData,
 )
 
 if TYPE_CHECKING:
@@ -73,6 +62,8 @@ class MutatesSession:
 class PiCommand(DeclaredFamily):
     response_payload: ClassVar[type[PiResponseData]] = EmptyData
     strict_response: ClassVar[bool] = False
+    # The answering child appends to its own session file (a retained child stays current).
+    writes_session: ClassVar[bool] = False
     id: str | None = field(default=None, metadata={"wire_omit_default": True})
 
     @classmethod
@@ -150,22 +141,6 @@ class Prompt(PiCommand):
     streaming_behavior: Literal[None, "steer", "followUp"] = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "streamingBehavior"}
     )
-
-    @classmethod
-    def matches_recorded_digest(cls, text: str, digest: str | None) -> bool:
-        """Corroborate a plain-text start against its original request envelope.
-
-        The native digest includes queue behavior; a STARTED row stores the exact
-        sent text and input ID, not another copy of the command. Its digest must
-        match one declared prompt request, including that behavior. This does
-        not accept changed text, images or a different request configuration.
-        """
-        from .private_sidecar import native_request_digest
-
-        return any(
-            digest == native_request_digest(text, streaming_behavior=behavior)
-            for behavior in get_args(FieldCodec._types(cls)["streaming_behavior"])
-        )
 
     def to_rpc(self):
         data = super().to_rpc()
@@ -417,7 +392,10 @@ class SetThinkingLevel(SettingCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class Compact(NativeQuery):
+    """Pi's own compaction engine, run now; Pi adds Core's task brief to the instructions."""
+
     response_payload = CompactionData
+    writes_session = True
     custom_instructions: str | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "customInstructions"}
     )
@@ -453,51 +431,6 @@ class Clone(MutatesSession, PiCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AgentCommsSummarizeCompaction(PiCommand):
-    response_payload = SelectedSummaryData
-    strict_response = True
-    version: int
-    operation_id: str = field(metadata={"wire_name": "operationId"})
-    witness: NativeWitness
-    selected: SelectedModel
-    settings: PiCompactionSettings
-    retained_text: str = field(metadata={"wire_name": "retainedText"})
-
-    custom_instructions: str | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_name": "customInstructions"}
-    )
-
-
-@dataclass(frozen=True, kw_only=True)
-class AgentCommsCompactionSettings(NativeQuery):
-    response_payload = CompactionSettingsData
-    strict_response = True
-    observation_timeout_seconds: ClassVar[float] = 5
-    default_observation_timeout_seconds: ClassVar[float] = 3
-    version: int = 2
-    session_id: str = field(metadata={"wire_name": "sessionId"})
-    session_file: str = field(metadata={"wire_name": "sessionFile"})
-    selected: SelectedModel
-    purpose: type[CompactionReason] = ThresholdCompactionReason
-    boundary: tuple[MessageReference, ...] = ()
-
-
-@dataclass(frozen=True, kw_only=True)
-class AgentCommsPrepareCompaction(NativeQuery):
-    response_payload = CompactionPreparationData
-    strict_response = True
-    # Preparing the whole history retains the original preparation operation's
-    # budget. It is not the inexpensive selected-settings observation.
-    observation_timeout_seconds: ClassVar[float] = PrepareCompactionHelper.timeout_seconds
-    version: int = 1
-    session_id: str = field(metadata={"wire_name": "sessionId"})
-    session_file: str = field(metadata={"wire_name": "sessionFile"})
-    selected: SelectedModel
-    settings: PiCompactionSettings
-    retained_text: str = field(default="", metadata={"wire_name": "retainedText"})
-
-
-@dataclass(frozen=True, kw_only=True)
 class AgentCommsInspectContext(NativeQuery):
     response_payload = NativeContextData
 
@@ -514,13 +447,3 @@ class AgentCommsInspectContextSegment(NativeQuery):
     def for_manifest(cls, expected: SegmentManifest):
         return cls(identity=expected.native_identity(), entries=expected.journal_entries(),
                    expected=expected, parts=expected.requested_parts())
-
-
-@dataclass(frozen=True, kw_only=True)
-class AgentCommsRestoreCompaction(MutatesSession, NativeQuery):
-    """Install an already committed source, retaining its acquired SDK runtime."""
-    response_payload = EmptyData
-    strict_response = True
-    reconciliation: ReconcileNativeRequest
-    expected: CommittedNativeOutcome
-    reason: type[CompactionReason]

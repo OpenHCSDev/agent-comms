@@ -556,8 +556,6 @@ def test_native_configuration_retains_original_home_across_writable_fork(tmp_pat
         "AGENT_COMMS_NATIVE_CONFIG_DIR": str(canonical),
         "PI_CODING_AGENT_DIR": str(tmp_path / "fork-policy"),
     }
-    assert str(canonical / "models.json") in fork.settings_paths(tmp_path)
-    assert str(tmp_path / "fork-policy/settings.json") in fork.settings_paths(tmp_path)
     assert auth.read_text() == "original credentials"
 
 

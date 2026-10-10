@@ -74,8 +74,7 @@ class NativeSendStage(ABC):
 
         The native child is reaped and ``context`` was verified against the
         session file. Recording it states which model context the input entered,
-        which compaction requires before it may summarize that history. A
-        failed input is never sent again.
+        as a successful input records it. A failed input is never sent again.
         """
 
     def fail_unknown(self, bus, owner, witness) -> None:

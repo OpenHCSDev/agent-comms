@@ -187,7 +187,7 @@ class RuntimeServer:
     ) -> bool:
         """Return whether any local transport accepted the update.
 
-        Compaction passes a private bound client/thread snapshot. Recheck at
+        A publisher may pass a bound client/thread snapshot. Recheck at
         the transport entry and before each socket handoff; ACP-only binding
         changes do not take the registry's kernel identity fence. A post-send
         change cannot undo delivery and is checked by the outbox observer.

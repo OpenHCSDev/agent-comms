@@ -73,16 +73,7 @@ class TranscriptTraversal(ABC):
     @abstractmethod
     def bounds(self, initial, consumed): ...
 
-    @abstractmethod
-    def chooses_outcome(self, record, outcome): ...
-
-    @abstractmethod
-    def outcome_position(self, outcome): ...
-
-    @abstractmethod
-    def outcome_rows(self, rows, sequence, through): ...
-
-    def read_records(self, reader, project_native, receipts, outcomes, initial, frontier,
+    def read_records(self, reader, project_native, receipts, initial, frontier,
                      *, max_messages, max_bytes):
         """Consume each original source coordinate only when its record is read."""
         consumed, records, used = initial, [], 0
@@ -98,11 +89,7 @@ class TranscriptTraversal(ABC):
                 )
             )
             message = next(source_rows, None)
-            outcome_rows = iter(self.outcome_rows(
-                outcomes, initial.outcome_seq, frontier,
-            ))
-            outcome = next(outcome_rows, None)
-            while record is not None or message is not None or outcome is not None:
+            while record is not None or message is not None:
                 if record is not None and not events:
                     if self.ascending and record.incomplete_tail(frontier.offset):
                         break
@@ -110,26 +97,18 @@ class TranscriptTraversal(ABC):
                     record, events = next(projected, (None, ()))
                     continue
                 # NativeEntry owns one clock for all parts of a record.
-                choose_outcome = outcome is not None and self.chooses_outcome(record, outcome)
-                source_events = (outcome.event(),) if choose_outcome else events
-                native_time = source_events[0].timestamp if source_events else None
+                native_time = events[0].timestamp if events else None
                 choose_native = record is not None and (
                     message is None
                     or self.chooses_native(native_time, message.message.timestamp)
                 )
-                choose_source = choose_outcome or choose_native
-                batch = source_events if choose_source else receipts.events(message)
-                cost = sum(event.text_size for event in batch)
-                if choose_native and not choose_outcome:
-                    cost = record.size
+                batch = events if choose_native else receipts.events(message)
+                cost = record.size if choose_native else sum(event.text_size for event in batch)
                 if records and (len(records) >= max_messages or used + cost > max_bytes):
                     break
                 records.append(batch)
                 used += cost
-                if choose_outcome:
-                    consumed = consumed.at_outcome(self.outcome_position(outcome))
-                    outcome = next(outcome_rows, None)
-                elif choose_native:
+                if choose_native:
                     consumed = consumed.at_offset(self.native_position(record))
                     record, events = next(projected, (None, ()))
                 else:
@@ -139,8 +118,6 @@ class TranscriptTraversal(ABC):
                 consumed = consumed.at_offset(frontier.offset if self.ascending else 0)
             if message is None:
                 consumed = consumed.at_sequence(frontier.wire_seq if self.ascending else 0)
-            if outcome is None:
-                consumed = consumed.at_outcome(frontier.outcome_seq if self.ascending else 0)
             return consumed, records
         finally:
             projected.close()
@@ -150,15 +127,6 @@ class TranscriptTraversal(ABC):
 
 
 class EarlierTranscript(TranscriptTraversal):
-    def chooses_outcome(self, record, outcome):
-        return record is None or record.end <= outcome.native_offset
-
-    def outcome_position(self, outcome):
-        return outcome.sequence - 1
-
-    def outcome_rows(self, rows, sequence, through):
-        return (row for row in reversed(rows) if row.sequence <= sequence)
-
     def native(self, reader, cursor, through):
         return reader.reverse(cursor.offset)
 
@@ -183,15 +151,6 @@ class EarlierTranscript(TranscriptTraversal):
 
 class LaterTranscript(TranscriptTraversal):
     ascending = True
-
-    def chooses_outcome(self, record, outcome):
-        return record is None or record.start >= outcome.native_offset
-
-    def outcome_position(self, outcome):
-        return outcome.sequence
-
-    def outcome_rows(self, rows, sequence, through):
-        return (row for row in rows if sequence < row.sequence <= through.outcome_seq)
 
     def native(self, reader, cursor, through):
         return reader.forward(cursor.offset, through.offset)

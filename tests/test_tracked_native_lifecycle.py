@@ -10,8 +10,6 @@ from pathlib import Path
 import pytest
 
 from agent_comms.child_process import AttachedChild
-from agent_comms.compaction_journal import CompactionJournal
-from agent_comms.compaction_records import PrivateRawInput
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.coordinator import Coordination
@@ -187,9 +185,6 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
             assert len(rows) == 1
             if outcome != "complete":
                 assert rows[0].session_id is None
-        journal = CompactionJournal(root / "compaction-commits.sqlite3")
-        with journal.transaction() as db:
-            assert len(PrivateRawInput.select(db)) == 1
         before = provider.posts
         try:
             replay = await SelectedExecution(

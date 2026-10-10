@@ -2,7 +2,6 @@
 import { createHash } from 'node:crypto';
 import { estimateTokens } from './compaction/compaction.js';
 import { sessionEntryToContextMessages } from './session-manager.js';
-import { SessionContext } from './session-context.js';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 const kind = declaration => declaration.name.replace(/Segment$/, '').replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
@@ -267,7 +266,7 @@ export class TurnContext {
     }
     static async next(session) {
         return this.capture(session,{systemPrompt:session.systemPrompt,
-            messages:await session.agent.convertToLlm(Array.from(session.storedContext.messages(session.agent))),
+            messages:await session.agent.convertToLlm(session.messages.slice()),
             tools:session.agent.state.tools});
     }
     static async project(session, entryIds) {
@@ -277,14 +276,12 @@ export class TurnContext {
         const store=session.sessionManager.entryStore;
         store.assertCurrent();
         const selected = Array.from(entryIds, id=>store.get(id));
-        const context = await SessionContext.entryContext(session, selected.values());
+        const context = {systemPrompt:session.systemPrompt,
+            messages:await session.agent.convertToLlm(selected.flatMap(sessionEntryToContextMessages)),
+            tools:session.agent.state.tools};
         const projected = await this.capture(session, context, undefined, selected);
         store.assertCurrent();
         return projected;
-    }
-    static async fullSource(session) {
-        const manager=session.sessionManager;
-        return this.project(session, manager.entryStore.uncompactedMetadata(manager.getLeafId()).map(meta=>meta.id));
     }
     static async recordedSegment(session, identity, entries, expected, parts) {
         if (session.sessionId!==identity.sessionId || session.sessionFile!==identity.sessionFile)
@@ -314,10 +311,6 @@ export class TurnContext {
         if (!parts.length)
             throw new Error('Original recorded SDK value is unavailable: projected bytes differ');
         return new this(projected.identity,parts.map(resolve));
-    }
-    static async recentSource(session) {
-        const manager=session.sessionManager;
-        return this.project(session, manager.entryStore.keptMetadata(manager.getLeafId()).map(meta=>meta.id));
     }
     render() {
         const provider={messages:[]};

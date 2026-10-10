@@ -142,7 +142,7 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
                 False,
             )
             thread = owner._comms.registry.require(sid)
-            state = await owner.turns.prepare_selected_session(sid, thread)
+            state = await owner.turns.backend_for(sid, thread).prepare(thread)
             assert state.model.display_name == "response-local/fixture"
             assert (
                 native.session.read_bytes() == history and read_proof_rows(native.session) == proof

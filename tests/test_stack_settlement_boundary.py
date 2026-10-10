@@ -13,6 +13,7 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
+from agent_comms.pi_native_backend import PersistentPiSession
 
 
 @pytest.mark.asyncio
@@ -134,7 +135,7 @@ async def test_native_late_followup_outlives_previous_settlement(monkeypatch, de
         }
         queue = asyncio.Queue()
         finish_event = asyncio.Event()
-        persistent = backend.PersistentPiSession()
+        persistent = PersistentPiSession()
         events = []
         injected = False
         release_task = None

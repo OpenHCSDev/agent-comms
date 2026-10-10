@@ -43,8 +43,7 @@ completed this migration; see [checkpoint-live acceptance](../evidence/checkpoin
 and the [installation procedure](private-checkpoint-install.md).
 
 `prepare-pi-native` verifies the installed Pi 0.85.1 bytes, builds a pinned
-local copy with native input IDs, bounded compaction and writer-fenced session
-storage. Preparation and launch verify a complete-package content commitment,
+local copy with native input IDs and writer-fenced session storage. Preparation and launch verify a complete-package content commitment,
 including dependencies and resolution metadata (see
 [`native-package-provenance.md`](native-package-provenance.md)). Each
 manifest gets its own copy, so preparing an update leaves running workers on
@@ -54,14 +53,8 @@ Pi or make a provider call. Set `PI_STOCK_DIR` if Pi is installed elsewhere.
 Ambient `NODE_OPTIONS`/`NODE_PATH` are removed; the managed-project bootstrap is
 copied into and loaded from the verified package. Native v3 files with complete,
 valid ancestry are required; legacy or damaged files are refused without repair.
-Adaptive compaction is enabled by default in the prepared native package.
 Preparing a package does not replace processes already using an older copy;
-update the managed route and restart idle owners to load that package. The
-current managed installation has completed this activation, including repeated
-compaction retention and queued-input acceptance. Operator failure handling and
-exact-ID no-replay rules are documented in
-[`compaction-operator-recovery.md`](compaction-operator-recovery.md); that
-runbook is not an activation procedure.
+update the managed route and restart idle owners to load that package.
 The `toad-comms` launcher uses this copy so a direct prompt can produce the
 required native user-start receipt. Existing Pi session directories and files
 must be private (0700 directory, 0600 file) before a tracked prompt; the native
@@ -98,40 +91,15 @@ the index. If that file is removed or damaged, the next read rebuilds it from th
 native transcripts. Remove superseded cache files after their UI processes exit;
 native transcripts and `read_ledger.json` retain the history and read positions.
 
-## Compaction strategy
+## Compaction
 
-Pi settings remain the authority for `compaction.enabled`, `reserveTokens`,
-`keepRecentTokens`, and the selected model's context window. The native
-`CompactionPolicy` declaration in `native-compaction-policy.mjs` owns adapter
-strategy, concurrency, input packing, and summary output limits. The prepared
-native copy imports that module; its bytes are pinned in `pi-native.sha256`.
-
-To select a strategy for newly launched owners, set the configuration in their
-environment, for example:
-
-```sh
-export AGENT_COMMS_COMPACTION_POLICY='{"strategy":"parallel","concurrency":2}'
-```
-
-Unspecified fields use declaration defaults. Unknown fields, unsupported
-strategies, or invalid values fail before a summary request. `serial` runs the
-same bounded algorithm with one worker. `parallel` runs independent source
-segments concurrently and synthesizes their results in chronological order.
-Large intermediate summaries are reduced through additional bounded levels;
-no segment is silently truncated. The declaration-owned strategy `plan(segments, policy)` supplies the ordered
-segments and worker limit to one executor. This is a scheduling seam, not an
-adaptive trigger or general plugin engine. Provider-native summarization is
-not implemented.
-
-This adapter has no authoritative local tokenizer. It conservatively bounds
-serialized UTF-8 input against the selected model's token budget, including
-headroom, and checks each completed prompt before sending. Parallel work
-reduces serial latency; it does not claim lossless summaries or constant-time
-processing of arbitrarily long active context. Previously compacted history is
-represented by its saved summary and retained recent window.
-
-No-replay is unconditional: a failed or uncertain request is never retried.
-Failure aborts other in-flight map requests and prevents new maps or synthesis;
-no partial compaction is committed. Provider usage is recorded per response.
-Progress counts completed source bytes once, then reports a separate synthesis
-phase. Stop/abort applies to all work within the compaction.
+Pi's own compaction engine is the only one. Threshold compaction (before a
+prompt, between tool rounds and after a response) and overflow recovery
+(compact once, then continue the same context) run for Core's tracked inputs
+as for any Pi session. Pi settings own `compaction.enabled`, `reserveTokens`
+and `keepRecentTokens`; context size is Pi's estimate, reported through
+`get_session_stats`. A manual compaction is Pi's `compact` RPC. The thread's
+task brief (`PI_TASK`) is passed to every summary as custom instructions,
+ahead of any instructions given to `/compact`. Tracked inputs are never
+re-sent by Pi's provider retry; the only resend is overflow recovery after the
+provider refused the request as too long.

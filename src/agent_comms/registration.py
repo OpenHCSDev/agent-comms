@@ -2,32 +2,24 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import contextmanager, nullcontext
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from .catalog_store import ChannelCatalog
-from .compaction_publication_lease import publication_identity_fence
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
-from .owner_compaction_gate import OwnerCompactionAttestation
 from .registration_change import RegistrationChange
 from .registry_document import RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryStore
 from .routing import TurnRouting
-from .session_fence import idle_session_writer_fence
-from .store_files import _store_lock, file_revision
+from .store_files import _store_lock
 from .thread_identity import GenerationCounter, TurnId
 from .thread_status import RunningThreadStatus, ThreadStatus
 from .threads import Thread
 from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
 from .turn_phase import TurnPhase
-
-if TYPE_CHECKING:
-    from .compaction_records import NativeForkCreation
 
 _RUNNING_STATUS = RunningThreadStatus()
 
@@ -67,48 +59,6 @@ class Registration:
                 thinking_level=original.thread.thinking_level)
             return replace(original, thread=observed)
 
-    def selected_native_fork(self, original: RegistryOwner, creation: NativeForkCreation, *,
-                             retain: Callable[[RegistryOwner], None]) -> RegistryOwner:
-        """Publish SDK history after enrolling its exact original cleanup.
-
-        The runtime caller retires its child before entering/exiting this
-        resource. No writer, wire or registry lock survives either publication.
-        A later completed turn's records stay current; replaced authority or
-        changed scope refuses restoration without overwriting the successor.
-        """
-        creation.source.require_session(original.thread.require_saved_session())
-        with self._idle_fork_edit(creation) as edit:
-            change = edit.document.prepare_idle_native_source(original, creation.session_file)
-            selected = replace(original, thread=change.installed_thread)
-            retain(selected)
-            self._commit_registration(edit, change)
-        return selected
-
-    def restore_native_fork(self, selected: RegistryOwner, creation: NativeForkCreation) -> RegistryOwner:
-        """Restore only after the runtime joined this selection's owned child.
-
-        No deferred generator exit can publish after native retirement refused.
-        The acquired document still owns every source/admission/scope check.
-        """
-        with self._idle_fork_edit(creation) as edit:
-            change = edit.document.prepare_idle_native_source(selected, creation.source.session_file)
-            self._commit_registration(edit, change)
-            return replace(selected, thread=change.installed_thread)
-
-    @contextmanager
-    def _idle_fork_edit(self, creation: NativeForkCreation) -> Iterator[RegistryEdit]:
-        """Acquire native writer exclusion before the shared wire/registry cut."""
-        with (
-            idle_session_writer_fence(creation.source.session_file),
-            idle_session_writer_fence(creation.session_file),
-            _store_lock(self.store.path.parent / "wire", shared=True),
-            self.store.editing() as edit,
-        ):
-            creation.require_recorded_selection(
-                self.store.path.parent / "compaction-commits.sqlite3", creation.source.session_file,
-            )
-            yield edit
-
     def declare(self, thread: Thread, status: ThreadStatus = _RUNNING_STATUS) -> Thread:
         """Operational declaration and channel provenance use one locked current owner.
 
@@ -144,21 +94,16 @@ class Registration:
     def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> None:
         if change.needs_maintenance_admission:
             MaintenanceBarrier(self.store.path).assert_open_unlocked()
-        with (
-            publication_identity_fence(self.store.path.parent, nonblocking=True)
-            if change.changes_identity
-            else nullcontext()
-        ):
-            before = change.prior_goal
-            history = None
-            intent = None
-            if before != change.thread.goal:
-                history = GoalHistoryStore(self.store.path)
-                intent = history.begin(change.thread.created_at, before, change.thread.goal)
-            change.apply(edit.document)
-            edit.commit()
-            if history is not None and intent is not None:
-                history.commit(intent)
+        before = change.prior_goal
+        history = None
+        intent = None
+        if before != change.thread.goal:
+            history = GoalHistoryStore(self.store.path)
+            intent = history.begin(change.thread.created_at, before, change.thread.goal)
+        change.apply(edit.document)
+        edit.commit()
+        if history is not None and intent is not None:
+            history.commit(intent)
 
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
         with self.store.editing() as edit:
@@ -167,10 +112,7 @@ class Registration:
             return result
 
     def rename(self, name: str, new_name: str) -> tuple[str, str]:
-        with (
-            publication_identity_fence(self.store.path.parent, nonblocking=True),
-            self.store.editing() as edit,
-        ):
+        with self.store.editing() as edit:
             result = edit.document.rename(name, new_name)
             edit.commit()
             return result
@@ -190,44 +132,35 @@ class Registration:
             return fenced
 
     def unregister(self, name: str) -> None:
-        with (
-            publication_identity_fence(self.store.path.parent, nonblocking=True),
-            self.store.editing() as edit,
-        ):
+        with self.store.editing() as edit:
             result = edit.document.unregister(name)
             edit.commit()
             return result
 
     def archive(self, name: str) -> None:
-        with (
-            publication_identity_fence(self.store.path.parent, nonblocking=True),
-            self.store.editing() as edit,
-        ):
+        with self.store.editing() as edit:
             result = edit.document.archive(name)
             edit.commit()
             return result
 
     def begin_delete(self, name: str) -> None:
-        with (
-            publication_identity_fence(self.store.path.parent, nonblocking=True),
-            self.store.editing() as edit,
-        ):
+        with self.store.editing() as edit:
             result = edit.document.begin_delete(name)
             edit.commit()
             return result
 
     def archive_originals(self, originals: Sequence[Thread]) -> None:
-        with publication_identity_fence(self.store.path.parent, nonblocking=True), self.store.editing() as edit:
+        with self.store.editing() as edit:
             edit.document.archive_originals(originals)
             edit.commit()
 
     def begin_delete_originals(self, originals: Sequence[Thread]) -> None:
-        with publication_identity_fence(self.store.path.parent, nonblocking=True), self.store.editing() as edit:
+        with self.store.editing() as edit:
             edit.document.begin_delete_originals(originals)
             edit.commit()
 
     def remove_originals(self, originals: Sequence[Thread]) -> dict[str, tuple[str, ...]]:
-        with publication_identity_fence(self.store.path.parent, nonblocking=True), self.store.editing() as edit:
+        with self.store.editing() as edit:
             detached = edit.document.remove_originals(originals)
             edit.commit()
             return detached
@@ -238,10 +171,7 @@ class Registration:
             edit.commit()
 
     def remove(self, name: str) -> tuple[str, ...]:
-        with (
-            publication_identity_fence(self.store.path.parent, nonblocking=True),
-            self.store.editing() as edit,
-        ):
+        with self.store.editing() as edit:
             result = edit.document.remove(name)
             edit.commit()
             return result
@@ -270,18 +200,6 @@ class Registration:
             effects = edit.document.observe_native_phase(lease, phase)
             edit.commit()
             return effects
-
-    def live_owner_with_generation(self, name: str) -> tuple[Thread, int]:
-        """Capture an active owner and its persistent incarnation under one lock.
-
-        Unlike a global file revision, an unrelated recipient's claim cannot
-        invalidate this owner's attempt. A stop then heartbeat changes its generation
-        even if the declaration, PID, and status return to their earlier values.
-        """
-        with self.store.reading() as document:
-            snapshot = document.snapshot()
-            owner = RegistryOwner.capture_local(snapshot, name)
-            return owner.thread, snapshot.owner_identity(owner.thread.name).generation
 
     def live_owner_with_admission(self, name: str) -> tuple[Thread, int]:
         """Read the durable process admission, independent of metadata revisions."""
@@ -325,32 +243,6 @@ class Registration:
             result = edit.document.lease_turn(owner.thread, turn.value, routing)
             edit.commit()
             return result
-
-    @contextmanager
-    def guard_owner_compaction(
-        self, expected: Thread, receipt: OwnerCompactionAttestation,
-    ) -> Iterator[tuple[OwnerCompactionAttestation, int]]:
-        """Hold canonical authority through the caller's native mutation.
-
-        Lock order: registry, then native session writer. No registry method
-        may be called inside this scope (the lock is not reentrant). A native
-        child MUST inherit the yielded descriptor and keep it until exit;
-        the caller must bound, terminate and reap it before leaving normally.
-        This scope does not validate correction or native session evidence.
-
-        This is NOT a bearer token: the same check must run again at commit
-        time under this lock. Anything that moved since the caller captured
-        its expectations — owner generation, active turn, goal id/revision/status,
-        or liveness — fails closed here. The native session fence (file, leaf,
-        disk revision) is echoed unverified; the native writer CAS is the only
-        authority for those values.
-        """
-        Thread.require_declaration(expected)
-        with self.store.locked() as authority_fd:
-            snapshot = self.store._read_unlocked().snapshot()
-            owner = RegistryOwner.capture_local(snapshot, expected.name)
-            receipt.require_current(owner, snapshot, expected)
-            yield replace(receipt, registry_revision=file_revision(self.store.path)), authority_fd
 
     def _assert_maintenance_open_unlocked(self) -> None:
         from .maintenance_barrier import MaintenanceBarrier

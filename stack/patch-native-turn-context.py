@@ -263,11 +263,6 @@ def main(package):
                 return outputArray(id, command.type, "segments", context.segments, {identity:context.identity,counter:context.counter});
             }
             case "get_state": {''')
-    # Inspection neither consumes a mutation generation nor disturbs summary custody.
-    source=rpc.read_text()
-    before='"get_state"]'
-    if source.count(before)!=2: raise ValueError('Original read-only RPC admission sets changed')
-    rpc.write_text(source.replace(before,'"get_state", "agent_comms_inspect_context", "agent_comms_inspect_context_segment"]'))
     replace_once(core/'agent-session.d.ts', '    type: "context_committed";',
         '''    type: "turn_context_observed";
     context: import("./turn-context.js").NativeContextManifest;

@@ -28,7 +28,7 @@ tmp_path = private_root_fixture
 
 async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_path, monkeypatch):
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     async with canonical_delivery_owner(tmp_path) as (comms, owner, first, root_id):
         alpha, alpha_calls = native_model(decision="IGNORE")
         monkeypatch.setattr(TrackedTurnSession, "execute", alpha)
@@ -77,7 +77,7 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
 
 async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_path, monkeypatch):
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     model, calls = native_model(fail_on=1)
     monkeypatch.setattr(TrackedTurnSession, "execute", model)
     async with canonical_delivery_owner(tmp_path) as (comms, owner, message, root_id):
@@ -114,7 +114,7 @@ async def test_selected_owner_revocation_before_send_never_creates_receipt(
     tmp_path, monkeypatch, revocation
 ):
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     model, calls = native_model()
     entered, release = asyncio.Event(), asyncio.Event()
 
@@ -157,7 +157,7 @@ async def test_selected_owner_revocation_before_send_never_creates_receipt(
 
 async def test_notification_busy_requires_matching_live_process_identity(tmp_path, monkeypatch):
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     model, calls = native_model()
     entered, release = asyncio.Event(), asyncio.Event()
 

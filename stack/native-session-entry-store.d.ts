@@ -25,7 +25,6 @@ export declare class EntryMetadata {
     role: string | null;
     inputId: string | null;
     inputDigest: string | null;
-    commitId: string | null;
     firstKeptEntryId: string | null;
     contextMessageCount: number;
     usage: Usage | undefined;
@@ -68,7 +67,6 @@ export declare abstract class EntryStore {
     trackedInputMetadata(inputId: string): EntryMetadata | undefined;
     trackedInputs(): IterableIterator<SessionEntry>;
     trackedInput(inputId: string): SessionEntry | undefined;
-    commits(commitId: string): IterableIterator<SessionEntry>;
     children(parentId: string | null): IterableIterator<SessionEntry>;
     label(id: string): EntryMetadata['label'] | undefined;
 }

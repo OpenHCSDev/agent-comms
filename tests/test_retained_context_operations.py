@@ -10,21 +10,12 @@ from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.threads import Thread
 
 
-def test_original_retained_source_inspection_diff_and_narrow_export(comms, tmp_path, capsys, monkeypatch):
-    """One original-store journey; inspection must neither admit nor export facts."""
-    from agent_comms.compaction_journal import CompactionJournal
-    from agent_comms.compaction_records import CompactionOperation, JournalTable, SelectedSummaryAttempt
-    from agent_comms.compaction_states import RefusedSummary, UnknownSummary, UnknownOperation
+def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
+    """Export carries only the pinned human constraint; it neither admits nor rewrites facts."""
     from agent_comms.goals import Goal
     from agent_comms.input_disposition import InputDispositions
-    from agent_comms.native_file_artifact import Utf8FileWriteArtifact
-    from agent_comms.retained_task_facts import GoalTaskFact, NativeArtifactTaskFact, RetainedTaskFacts
-    from agent_comms.text_digest import TextDigest
-    from agent_comms.turn_context import JournalProvenance
-    from selected_summary_cases import manual_summary_record
     from test_task_decisions import saved_source
     import hashlib
-    import sqlite3
 
     comms.messaging.initialize_private_initial_protocol()
     saved = tmp_path / "original.jsonl"
@@ -38,84 +29,19 @@ def test_original_retained_source_inspection_diff_and_narrow_export(comms, tmp_p
     inputs = InputDispositions(comms.root / InputDispositions.filename)
     inputs.record("acp:original-unknown", seq=None, owner=owner.name, admission=1,
                   target=owner.name, text="Unpinned original UNKNOWN input; never export/replay")
-    captured = inputs.read()
-    input_facts = captured.retained_task_facts(captured.owner_originals(owner))
-    # Representative persisted artifact facts test the reader, not native production.
-    artifact = NativeArtifactTaskFact(
-        JournalProvenance(str(saved), ("original-request", "original-result")),
-        Utf8FileWriteArtifact(str(tmp_path / "original-artifact.py"), TextDigest.of("λ"), 2))
-    before = RetainedTaskFacts((GoalTaskFact(goal), *input_facts))
-    after = RetainedTaskFacts((*before.facts, artifact, artifact))
-    frozen = FieldCodec.encode(before)
-    original_row, = captured.originals(captured.owner_originals(owner))
-    assert original_row.source_text in before.text
-    assert original_row.source_text not in before.compaction_text
-    assert original_row.key in before.compaction_text
-    assert original_row.digest.value in before.compaction_text
-    assert original_row.public_status in before.compaction_text
-    assert goal.text in before.compaction_text
-    before.require_summary(before.compaction_text + "\n\nNative history narrative")
-    assert FieldCodec.encode(before) == frozen
 
     def command(*args):
         code = main(["--root", str(comms.root), *args])
         return code, json.loads(capsys.readouterr().out)
 
-    path = comms.root / "compaction-commits.sqlite3"
-    code, current = command("retained-context", owner.name)
-    assert code == 0 and not path.exists(), "Inspection initialized the missing journal"
-    assert current["observations"]["facts"] == FieldCodec.encode(RetainedTaskFacts((
-        *comms.bus.log.retained_context(owner.name, comms.registry).retained.facts,
-        *owner.retained_task_facts(), *input_facts)).for_owner(owner, comms.registry.snapshot()))
-    journal = CompactionJournal(path)
-    first = manual_summary_record(saved, incarnation=owner.incarnation, retained=before)
-    second = manual_summary_record(saved, incarnation=owner.incarnation, retained=after)
-    intent = '{"source":{"original":"one-way view"},"unresolved":"UNKNOWN"}'
-    with journal.transaction() as db:
-        SelectedSummaryAttempt("a" * 32, str(saved), first.journal_json(), first,
-                               RefusedSummary("Original refusal")).insert(db)
-        SelectedSummaryAttempt("b" * 32, str(saved), second.journal_json(), second,
-                               UnknownSummary()).insert(db)
-        CompactionOperation("c" * 32, str(saved), intent, UnknownOperation(), None).insert(db)
-    inspection = JournalTable.inspection
-    changed_from = RetainedTaskFacts.changed_from
-
-    def require_released_read():
-        with sqlite3.connect(path, isolation_level=None, timeout=0) as writer:
-            writer.execute("BEGIN EXCLUSIVE")
-            writer.execute("ROLLBACK")
-
-    def inspect_captured(row):
-        require_released_read()
-        return inspection(row)
-
-    def compare_captured(current, previous):
-        require_released_read()
-        return changed_from(current, previous)
-
-    monkeypatch.setattr(JournalTable, "inspection", inspect_captured)
-    monkeypatch.setattr(RetainedTaskFacts, "changed_from", compare_captured)
-    protected = (saved, path, inputs.path, comms.registry.store.path, comms.root / "bus.jsonl")
+    protected = (saved, inputs.path, comms.registry.store.path, comms.root / "bus.jsonl")
     hashes = {file: hashlib.sha256(file.read_bytes()).hexdigest() for file in protected}
-    code, inspected = command("retained-context", owner.name)
-    assert code == 0 and inspected["input_supplied"] is False
-    tables = inspected["compaction"]["tables"]
-    attempts = tables[SelectedSummaryAttempt.declared_name]
-    assert attempts[0]["request"]["retained"] == FieldCodec.encode(before)
-    assert attempts[1]["request"]["retained"] == FieldCodec.encode(after)
-    assert attempts[1]["state"] == FieldCodec.encode(UnknownSummary())
-    operation, = tables[CompactionOperation.declared_name]
-    assert operation["intent_json"] == intent and operation["intent"] == json.loads(intent)
-    code, diff = command("retained-context", owner.name, "--diff")
-    assert code == 0 and diff["added"] == [FieldCodec.encode(artifact)] * 2 and diff["removed"] == []
-    code, status = command("compaction-status", "--thread", owner.name)
-    assert code == 0 and len(status["attempts"]) == 2
     destination = tmp_path / "authored-export.md"
     code, exported = command("export-retained", owner.name, "--output", str(destination))
     assert code == 0 and exported["exported_messages"] == 1
     text = destination.read_text()
     assert wording in text and goal.text not in text
-    assert "Unpinned original UNKNOWN input" not in text and artifact.artifact.operation_path not in text
+    assert "Unpinned original UNKNOWN input" not in text
     assert all(hashlib.sha256(file.read_bytes()).hexdigest() == digest for file, digest in hashes.items())
 
 
@@ -194,6 +120,7 @@ def original_input_consumer_journey(tmp_path, command):
     from test_acp_queue_contract import _owner
     from test_current_input_origin import Client, capture
     from agent_comms.queued_input import QueuedInput
+    from agent_comms.retained_task_facts import InputTaskFact
     from agent_comms.store_files import _store_lock
 
     comms, agent, _, _ = _owner(tmp_path)
@@ -236,14 +163,11 @@ def original_input_consumer_journey(tmp_path, command):
     assert FieldCodec.decode(RetainedSegment, FieldCodec.encode(snapshot)) == snapshot
     # Distinct original human inputs retain equal wording twice; neutral
     # delivery evidence cannot decide that they are one human instruction.
-    escaped_wording = wording.replace("\n", "\\n")
-    assert snapshot.retained.compaction_text.count(escaped_wording) == 2
-    assert all(row.key in snapshot.retained.compaction_text for row in originals)
+    retained_inputs = [fact.source for fact in snapshot.retained.facts
+                       if isinstance(fact, InputTaskFact)]
+    assert sorted(row.key for row in retained_inputs if row.source_text == wording) == sorted(
+        row.key for row in originals)
     assert all(row.context_provenance() in snapshot.provenance for row in originals)
-    code, inspected = invoke("retained-context", "beta")
-    assert code == 0 and inspected["input_supplied"] is False
-    assert all(FieldCodec.encode(row.context_provenance()) in inspected["provenance"]
-               for row in originals)
 
     destination = comms.root / "original-input-context.md"
     code, result = invoke("export-retained", "beta", "--output", str(destination))
@@ -293,10 +217,8 @@ def original_input_consumer_journey(tmp_path, command):
         comms.registry.require("renamed-beta"), comms.registry.snapshot())[0]) == originals[0]
     from agent_comms.comms import Comms
     reopened = Comms(comms.root)
-    code, inspected = renamed("retained-context", "renamed-beta")
-    assert code == 0
-    assert inspected["text"] == reopened.bus.log.retained_context(
-        "renamed-beta", reopened.registry).text()
+    assert reopened.bus.log.retained_context("renamed-beta", reopened.registry).text() == (
+        comms.bus.log.retained_context("renamed-beta", comms.registry).text())
     assert all(inputs.read().lookup(row.key) == row and row.unresolved for row in originals)
     return {"original_inputs": 2, "distinct_equal_wording": True, "pins": 3,
             "refusals": 4, "rename_correction_drop_reopen": True,

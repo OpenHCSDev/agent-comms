@@ -22,7 +22,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from contextlib import ExitStack, asynccontextmanager, contextmanager, nullcontext, suppress
+from contextlib import asynccontextmanager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -1061,108 +1061,7 @@ class ParentLifeline:
         threading.Thread(target=parent_watchdog, daemon=True).start()
 
 
-class InheritedDeadline:
-    """Pidfd watchdog custody; preserves the direct parent's authority FDs."""
-
-    def __init__(self, platform: PidfdHandles, child: ParentedProcess, deadline: float):
-        self.platform, self.child, self.deadline = platform, child, deadline
-        self.custody = ExitStack()
-
-    def __enter__(self):
-        try:
-            descriptor = self.platform.open_pidfd(self.child.pid)
-            self.custody.callback(os.close, descriptor)
-            # Only the pidfd crosses to the watchdog, never authority FDs.
-            with Platform.current().launch(
-                WatchDeadlineCommand(descriptor, self.deadline).argv(), (descriptor,)
-            ) as launch:
-                watcher = self.custody.enter_context(launch.spawn(stdout=subprocess.PIPE))
-                launch.release(watcher.identity)
-                launch.verify()
-            self.custody.callback(self.child.stop_sync)
-            assert watcher.process.stdout is not None
-            with selectors.DefaultSelector() as selector:
-                selector.register(watcher.process.stdout, selectors.EVENT_READ)
-                if not selector.select(max(0, self.deadline - time.monotonic())):
-                    raise TimeoutError("Inherited child watchdog did not arm before deadline")
-            if watcher.process.stdout.readline() != b"armed\n":
-                raise RuntimeError("Inherited child watchdog failed to arm")
-            if time.monotonic() >= self.deadline:
-                raise TimeoutError("Inherited child deadline elapsed before exec")
-            return self
-        except BaseException:
-            self.custody.close()
-            raise
-
-    def __exit__(self, *_):
-        self.custody.close()
-
-
 class BoundedRun:
-    @staticmethod
-    def require_inherited_deadline() -> PidfdHandles:
-        """Probe the existing exact-process capability before committing intent."""
-        platform = Platform.current()
-        if not isinstance(platform, PidfdHandles):
-            raise NotImplementedError("Inherited deadline requires Linux pidfd capability")
-        try:
-            descriptor = platform.open_pidfd(os.getpid())
-            try:
-                platform.signal_pidfd(descriptor, 0)
-            finally:
-                os.close(descriptor)
-        except OSError as error:
-            raise NotImplementedError("Kernel pidfd deadline support unavailable") from error
-        return platform
-
-    @classmethod
-    def run_inherited(
-        cls,
-        command: tuple[str, ...],
-        *,
-        deadline: float,
-        pass_fds: tuple[int, ...],
-        input: bytes | None = None,
-        cwd: str | Path | None = None,
-        env: dict[str, str] | None = None,
-    ) -> ChildResult:
-        """Bounded direct-parent execution retaining the caller's authority FDs.
-
-        The trusted non-forking executable keeps the owner as its real parent.
-        A sibling pidfd watchdog inherits only its pidfd, arms before exec, and
-        survives owner death. The namespace shape is a distinct stronger tree
-        capability and cannot preserve this external parent-PID proof.
-        """
-        platform = cls.require_inherited_deadline()
-        if not command or not math.isfinite(deadline) or deadline <= time.monotonic():
-            raise ValueError("A command and future finite absolute deadline are required")
-        for descriptor in pass_fds:
-            os.fstat(descriptor)
-        with ExitStack() as custody, platform.launch(command, pass_fds) as launch:
-            child = custody.enter_context(
-                launch.spawn(
-                    cwd=cwd,
-                    env=env,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                )
-            )
-            try:
-                # Watchdog lifetime is outside child retirement, even on
-                # exceptions: the authority-bearing child retires first.
-                with InheritedDeadline(platform, child, deadline):
-                    launch.release(child.identity)
-                    launch.verify()
-                    stdout, stderr = child.process.communicate(
-                        input, timeout=max(0, deadline - time.monotonic())
-                    )
-                    if time.monotonic() >= deadline:
-                        return ChildResult(TimedOutOutcome(child.stop_sync()), stdout, stderr)
-                    return ChildResult(child.reap(), stdout, stderr)
-            except (TimeoutError, subprocess.TimeoutExpired):
-                return ChildResult(TimedOutOutcome(child.stop_sync()))
-
     @classmethod
     @asynccontextmanager
     async def session(cls, command: tuple[str, ...], *, timeout: float, **options):

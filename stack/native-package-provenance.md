@@ -21,7 +21,7 @@ gates. The original import-boundary candidate superseded `3585b0f`'s `7d16eb01�
 changing manager bytes; see `native-import-boundary-integration.md`. That writer
 correction superseded the `8cf666c` checkpoint's `4a688172…` tree /
 `41a94b37…` manager and require fresh review. See
-`compaction-writer-failure-state-corrections.md`; narrow prior packaging CLEAN is
+the writer-failure correction record (deleted with the compaction writer); narrow prior packaging CLEAN is
 not independent clearance of the new artifact or of import-resolution closure.
 
 `src/agent_comms/native_package.py` hashes a deterministic preorder of sorted

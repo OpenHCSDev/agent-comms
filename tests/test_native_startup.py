@@ -7,6 +7,7 @@ import sys
 import pytest
 
 from agent_comms.native_startup import NativeStartupPolicy
+from pi_session_turn import one_turn_events
 
 pytestmark = pytest.mark.usefixtures("native_rpc_fixture")
 
@@ -53,7 +54,7 @@ async def test_cancel_during_extended_preflight_reaps_child(
     async def consume():
         return [
             event
-            async for event in backend.stream_agent_events(
+            async for event in one_turn_events(
                 str(executable),
                 [],
                 "no prompt",

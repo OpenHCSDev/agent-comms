@@ -326,7 +326,7 @@ class WireLog:
         """Authored retained context; also the source of instruction export.
 
         This deliberately excludes unpinned inputs, goals and native artifacts.
-        CompactionBoundary inspection owns those separate observation scopes.
+        Their own owners present those separately.
         """
         from .context_segments.retained import RetainedSegment
         from .retained_task_facts import RetainedTaskFacts

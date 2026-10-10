@@ -23,7 +23,6 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
@@ -392,7 +391,7 @@ class Forks(ABC):
 
     @classmethod
     @abstractmethod
-    async def fork(cls, parent: Thread, root: Path, launcher: str) -> RuntimeLocation:
+    async def fork(cls, parent: Thread, launcher: str) -> RuntimeLocation:
         """Copy ``parent``'s history into a new location for a child thread.
 
         ``launcher`` is the runtime command the caller would start the child with.

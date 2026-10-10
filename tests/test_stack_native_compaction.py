@@ -1,4 +1,4 @@
-"""Opt-in integration of the pinned Pi RPC, backend, and localhost provider."""
+"""Pi's own compaction engine, seen through Core's turn path: pinned Pi + localhost provider."""
 
 from __future__ import annotations
 
@@ -23,92 +23,61 @@ from agent_comms.acp_extension import CompactionChangedUpdate, decode_updates
 from agent_comms.activity import ActivityState
 from agent_comms.comms import wire
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.pi_native_backend import PersistentPiSession
+from agent_comms.pi_vocabulary import OverflowCompactionReason, ThresholdCompactionReason
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="native Pi uses POSIX fsync")
 
+SUMMARY = "PI_ENGINE_SUMMARY"
+OVERFLOW_ERROR = (
+    "This endpoint's maximum context length is 128000 tokens. However, you requested "
+    "about 300000 tokens (299000 of text input, 1000 in the output)."
+)
 
-def _saved_history(path: Path, cwd: Path, *, short: bool = False) -> None:
-    """Create a real Pi branch whose last usage exceeds a 128K model window."""
+
+def _saved_history(path: Path, cwd: Path, *, used: int) -> None:
+    """A real Pi branch; ``used`` is the last measured context of every assistant."""
     timestamp = "2026-09-24T00:00:00.000Z"
-    rows: list[dict] = [
-        {
-            "type": "session",
-            "version": 3,
-            "id": str(uuid4()),
-            "timestamp": timestamp,
-            "cwd": str(cwd),
-            "parentSession": None,
-        }
-    ]
+    rows: list[dict] = [{
+        "type": "session", "version": 3, "id": str(uuid4()), "timestamp": timestamp,
+        "cwd": str(cwd), "parentSession": None,
+    }]
     parent = None
     for index in range(100):
         user_id, assistant_id = f"{2 * index + 1:08x}", f"{2 * index + 2:08x}"
-        rows.append(
-            {
-                "type": "message",
-                "id": user_id,
-                "parentId": parent,
-                "timestamp": timestamp,
-                "message": {
-                    "role": "user",
-                    "content": [{"type": "text", "text": "x" * (1000 if short else 6000)}],
-                    "timestamp": 1790290000000 + 2 * index,
-                },
-            }
-        )
-        rows.append(
-            {
-                "type": "message",
-                "id": assistant_id,
-                "parentId": user_id,
-                "timestamp": timestamp,
-                "message": {
-                    "role": "assistant",
-                    "content": [{"type": "text", "text": "ack"}],
-                    "api": "openai-completions",
-                    "provider": "openrouter",
-                    "model": "z-ai/glm-5.3-flash",
-                    "stopReason": "stop",
-                    "rawStopReason": "stop",
-                    "timestamp": 1790290000001 + 2 * index,
-                    "usage": {
-                        "input": 200000,
-                        "output": 1,
-                        "cacheRead": 0,
-                        "cacheWrite": 0,
-                        "reasoning": 0,
-                        "totalTokens": 200001,
-                        "cost": {
-                            "input": 0,
-                            "output": 0,
-                            "cacheRead": 0,
-                            "cacheWrite": 0,
-                            "total": 0,
-                        },
-                    },
-                },
-            }
-        )
+        text = ("LEGACY_DISCARDED_HISTORY " if index == 0 else "") + "x" * 6000
+        rows.append({
+            "type": "message", "id": user_id, "parentId": parent, "timestamp": timestamp,
+            "message": {"role": "user", "content": [{"type": "text", "text": text}],
+                        "timestamp": 1790290000000 + 2 * index},
+        })
+        rows.append({
+            "type": "message", "id": assistant_id, "parentId": user_id, "timestamp": timestamp,
+            "message": {
+                "role": "assistant", "content": [{"type": "text", "text": "ack"}],
+                "api": "openai-completions", "provider": "openrouter",
+                "model": "z-ai/glm-5.3-flash", "stopReason": "stop", "rawStopReason": "stop",
+                "timestamp": 1790290000001 + 2 * index,
+                "usage": {"input": used, "output": 1, "cacheRead": 0, "cacheWrite": 0,
+                          "reasoning": 0, "totalTokens": used + 1,
+                          "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0,
+                                   "total": 0}},
+            },
+        })
         parent = assistant_id
     path.write_text("".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows))
     path.chmod(0o600)
 
 
-@pytest.mark.parametrize(
-    "case",
-    [
-        "success",
-        "acp_success",
-        "tool_outputs",
-        "post_compaction_tool_rounds",
-        "summary_failure",
-        "oversized_current",
-        "oversized_summary",
-        "compacted_resume",
-        "compacted_large",
-    ],
-)
-async def test_saved_history_compacts_after_native_user_start(case: str, monkeypatch) -> None:
+def _is_summary(request: dict) -> bool:
+    return "context summarization assistant" in json.dumps(request["messages"][:1])
+
+
+@pytest.mark.parametrize("case", [
+    "threshold", "acp_threshold", "overflow", "compacted_resume", "summary_failure",
+    "post_compaction_tool_rounds",
+])
+async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> None:
     native_bin = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native_bin:
         pytest.skip("Set AC_NATIVE_STACK_BIN to the prepared pinned Pi launcher")
@@ -116,166 +85,74 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
         root = Path(raw)
         project = root / "project"
         (project / ".pi").mkdir(parents=True, mode=0o700)
-        (project / ".pi" / "settings.json").write_text(
-            json.dumps(
-                {
-                    "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
-                    "compaction": {"enabled": True},
-                }
-            )
-        )
+        (project / ".pi" / "settings.json").write_text(json.dumps({
+            "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
+            "compaction": {"enabled": True},
+        }))
         session = root / "saved.jsonl"
-        summary_entered = threading.Event()
-        release_summary = threading.Event()
-        _saved_history(session, project, short=case in {"oversized_current", "oversized_summary"})
-        if case == "post_compaction_tool_rounds":
+        # Above the threshold (128000 - 16384) and below the window, except for overflow.
+        _saved_history(session, project, used=1000 if case == "overflow" else 120000)
+        if case == "compacted_resume":
             rows = [json.loads(line) for line in session.read_text().splitlines()]
-            rows[1]["message"]["content"][0]["text"] = "LEGACY_DISCARDED_HISTORY " + "x" * 6000
-            session.write_text("".join(json.dumps(row) + "\n" for row in rows))
-            for index in range(3):
-                (project / f"read-{index}.txt").write_text(f"TOOL_ROUND_{index}\n")
-        if case == "tool_outputs":
-            rows = [json.loads(line) for line in session.read_text().splitlines()]
-            for row in rows:
-                if row.get("message", {}).get("role") == "assistant":
-                    row["message"]["usage"].update(input=90000, totalTokens=90001)
-            session.write_text("".join(json.dumps(row) + "\n" for row in rows))
-            for index in range(3):
-                (project / f"read-{index}.txt").write_text("abcdefghijklmno\n" * 2000)
-        if case.startswith("compacted_"):
-            rows = [json.loads(line) for line in session.read_text().splitlines()]
-            # Real saved compaction retains recent assistant messages, including
-            # usage measured against the old full context. Reopen that branch.
             boundary = datetime.fromtimestamp(1790290000.200, UTC).isoformat()
             with session.open("a") as stream:
-                stream.write(
-                    json.dumps(
-                        {
-                            "type": "compaction",
-                            "id": "compact1",
-                            "parentId": rows[-1]["id"],
-                            "timestamp": boundary,
-                            "summary": "Earlier work completed.",
-                            "firstKeptEntryId": rows[-2 if case == "compacted_resume" else 1]["id"],
-                            "tokensBefore": 200001,
-                        }
-                    )
-                    + "\n"
-                )
+                stream.write(json.dumps({
+                    "type": "compaction", "id": "compact1", "parentId": rows[-1]["id"],
+                    "timestamp": boundary, "summary": "Earlier work completed.",
+                    "firstKeptEntryId": rows[-2]["id"], "tokensBefore": 200001,
+                }) + "\n")
+        if case == "post_compaction_tool_rounds":
+            for index in range(3):
+                (project / f"read-{index}.txt").write_text(f"TOOL_ROUND_{index}\n")
         agent = root / "agent"
         agent.mkdir(mode=0o700)
-        calls: list[str] = []
-        reasoning_efforts: list[str | None] = []
-        request_messages: list[list[dict]] = []
-        normal_requests: list[list[dict]] = []
+        summaries: list[dict] = []
+        prompts: list[dict] = []
+        summary_entered = threading.Event()
+        release_summary = threading.Event()
 
         class Handler(BaseHTTPRequestHandler):
-            def do_POST(self):
-                request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
-                calls.append(self.path)
-                request_messages.append(request["messages"])
-                reasoning_efforts.append(request.get("reasoning", {}).get("effort"))
-                if case == "acp_success" and request.get("reasoning", {}).get("effort") == "low":
-                    summary_entered.set()
-                    assert release_summary.wait(timeout=15), "Test did not release compaction"
-                if case == "summary_failure":
-                    body = b'{"error":{"message":"429 rate limit","type":"rate_limit_error"}}'
-                    self.send_response(429)
-                    self.send_header("Content-Type", "application/json")
-                    self.send_header("Content-Length", str(len(body)))
-                    self.end_headers()
-                    self.wfile.write(body)
-                    return
-                normal_round = 0
-                if case == "post_compaction_tool_rounds" and reasoning_efforts[-1] == "high":
-                    normal_requests.append(request["messages"])
-                    normal_round = len(normal_requests)
-                chunk = {
-                    "id": f"fixture-{len(calls)}",
-                    "object": "chat.completion.chunk",
-                    "created": 12345,
-                    "model": "z-ai/glm-5.3-flash",
-                    "choices": [
-                        {
-                            "index": 0,
-                            "delta": {
-                                "role": "assistant",
-                                "content": (
-                                    "y" * 600000
-                                    if case == "oversized_summary"
-                                    else (
-                                        "FINAL_OWNER_REPLY"
-                                        if case == "acp_success" and reasoning_efforts[-1] == "high"
-                                        else (
-                                            "PR401_COMMITTED_SUMMARY"
-                                            if case == "acp_success"
-                                            else "summary"
-                                        )
-                                    )
-                                ),
-                            },
-                            "finish_reason": None,
-                        }
-                    ],
-                }
-                if case == "tool_outputs" and len(calls) == 1:
-                    chunk["choices"][0]["delta"] = {
-                        "role": "assistant",
-                        "tool_calls": [
-                            {
-                                "index": index,
-                                "id": f"read_{index}",
-                                "type": "function",
-                                "function": {
-                                    "name": "read",
-                                    "arguments": json.dumps(
-                                        {"path": str(project / f"read-{index}.txt")}
-                                    ),
-                                },
-                            }
-                            for index in range(3)
-                        ],
-                    }
-                if 1 <= normal_round <= 3:
-                    chunk["choices"][0]["delta"] = {
-                        "role": "assistant",
-                        "tool_calls": [
-                            {
-                                "index": 0,
-                                "id": f"post_compact_{normal_round}",
-                                "type": "function",
-                                "function": {
-                                    "name": "read",
-                                    "arguments": json.dumps(
-                                        {"path": str(project / f"read-{normal_round - 1}.txt")}
-                                    ),
-                                },
-                            }
-                        ],
-                    }
-                terminal = {
-                    **chunk,
-                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-                    "usage": {"prompt_tokens": 100, "completion_tokens": 3, "total_tokens": 103},
-                }
-                if 1 <= normal_round <= 3:
-                    terminal["choices"][0]["finish_reason"] = "tool_calls"
-                if case == "tool_outputs" and len(calls) == 1:
-                    terminal["choices"][0]["finish_reason"] = "tool_calls"
-                    terminal["usage"] = {
-                        "prompt_tokens": 91349,
-                        "completion_tokens": 3,
-                        "total_tokens": 91352,
-                    }
-                body = (
-                    "".join(f"data: {json.dumps(row)}\n\n" for row in (chunk, terminal))
-                    + "data: [DONE]\n\n"
-                ).encode()
-                self.send_response(200)
-                self.send_header("Content-Type", "text/event-stream")
+            def reply(self, status: int, body: bytes, kind: str) -> None:
+                self.send_response(status)
+                self.send_header("Content-Type", kind)
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
+
+            def do_POST(self):
+                request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+                summary = _is_summary(request)
+                (summaries if summary else prompts).append(request)
+                if summary and case == "acp_threshold":
+                    summary_entered.set()
+                    assert release_summary.wait(timeout=15), "Test did not release compaction"
+                if summary and case == "summary_failure":
+                    self.reply(429, b'{"error":{"message":"429 rate limit","type":"rate_limit_error"}}',
+                               "application/json")
+                    return
+                if not summary and case == "overflow" and len(prompts) == 1:
+                    body = json.dumps({"error": {"message": OVERFLOW_ERROR, "code": 400}}).encode()
+                    self.reply(400, body, "application/json")
+                    return
+                delta: dict = {"role": "assistant", "content": SUMMARY if summary else "OK_REPLY"}
+                finish = "stop"
+                if not summary and case == "post_compaction_tool_rounds" and len(prompts) <= 3:
+                    delta = {"role": "assistant", "tool_calls": [{
+                        "index": 0, "id": f"post_compact_{len(prompts)}", "type": "function",
+                        "function": {"name": "read", "arguments": json.dumps(
+                            {"path": str(project / f"read-{len(prompts) - 1}.txt")})},
+                    }]}
+                    finish = "tool_calls"
+                chunk = {"id": f"fixture-{len(summaries) + len(prompts)}",
+                         "object": "chat.completion.chunk", "created": 12345,
+                         "model": "z-ai/glm-5.3-flash",
+                         "choices": [{"index": 0, "delta": delta, "finish_reason": None}]}
+                terminal = {**chunk, "choices": [{"index": 0, "delta": {}, "finish_reason": finish}],
+                            "usage": {"prompt_tokens": 100, "completion_tokens": 3,
+                                      "total_tokens": 103}}
+                body = ("".join(f"data: {json.dumps(row)}\n\n" for row in (chunk, terminal))
+                        + "data: [DONE]\n\n").encode()
+                self.reply(200, body, "text/event-stream")
 
             def log_message(self, *_args):
                 pass
@@ -283,24 +160,13 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         worker = threading.Thread(target=server.serve_forever, daemon=True)
         worker.start()
+        events: list[ae.AgentEvent] = []
         try:
-            (agent / "models.json").write_text(
-                json.dumps(
-                    {
-                        "providers": {
-                            "openrouter": {
-                                "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
-                                "modelOverrides": {
-                                    "z-ai/glm-5.3-flash": {
-                                        "contextWindow": 128000,
-                                        "maxTokens": 4096,
-                                    }
-                                },
-                            }
-                        },
-                    }
-                )
-            )
+            (agent / "models.json").write_text(json.dumps({"providers": {"openrouter": {
+                "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
+                "modelOverrides": {"z-ai/glm-5.3-flash": {"contextWindow": 128000,
+                                                          "maxTokens": 4096}},
+            }}}))
             (agent / "models.json").chmod(0o600)
             preload = root / "local-only.cjs"
             preload.write_text(
@@ -311,22 +177,12 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                 "throw new Error('BLOCKED_NONLOCAL_NETWORK');"
                 "return original(url,...rest);};"
             )
-            events = []
             native_args = [
-                "--offline",
-                "--no-extensions",
-                "--no-skills",
-                "--no-prompt-templates",
-                "--no-context-files",
-                "--no-tools",
-                "--provider",
-                "openrouter",
-                "--model",
-                "z-ai/glm-5.3-flash",
-                "--thinking",
-                "high",
+                "--offline", "--no-extensions", "--no-skills", "--no-prompt-templates",
+                "--no-context-files", "--no-tools", "--provider", "openrouter",
+                "--model", "z-ai/glm-5.3-flash", "--thinking", "high",
             ]
-            if case in {"tool_outputs", "post_compaction_tool_rounds"}:
+            if case == "post_compaction_tool_rounds":
                 native_args.remove("--no-tools")
                 native_args.extend(["--tools", "read"])
             child_env = {
@@ -334,268 +190,146 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                 "OPENROUTER_API_KEY": "offline-fixture-no-real-key",
                 "NODE_OPTIONS": f"--require={preload}",
                 "PI_OFFLINE": "1",
+                "PI_TASK": "TASK_BRIEF_SENTINEL",
             }
-
-            async def collect():
-                async for event in backend.stream_agent_events(
-                    native_bin,
-                    native_args,
-                    "x" * 600000 if case == "oversized_current" else "Reply OK.",
-                    str(project),
-                    env_extra=child_env,
-                    session_file=str(session),
-                    require_input_id=True,
-                    native_start=lambda *_: True,
-                ):
-                    events.append(event)
-
-            if case == "acp_success":
-                for key, value in child_env.items():
-                    monkeypatch.setenv(key, value)
-                comms = wire(root / "wire")
-                root_id = comms.messaging.initialize_private_initial_protocol()
-                package_path = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
-                assert package_path, "Set PI_COMPACTION_TEST_PACKAGE to the verified native package"
-                package = Path(package_path)
-                monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
-                monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
-                monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(package))
-                owner = CommsAgent(
-                    comms,
-                    agent_bin=native_bin,
-                    agent_args=native_args,
-                    runtime_enabled=False,
-                    auto_wake=False,
-                    private_nk_native_package=package,
-                    private_nk_wire_root_id=root_id,
-                )
-                updates = []
-                resumed_activity = []
-
-                class Client:
-                    async def session_update(self, session_id, update):
-                        updates.append(update)
-                        if any(
-                            isinstance(field, CompactionChangedUpdate)
-                            and isinstance(field.event, ae.CompactionEnd)
-                            for field in decode_updates(update.field_meta or {})
-                        ):
-                            resumed_activity.append(comms.agents.activity_of("project"))
-
-                owner.on_connect(Client())
-                await owner.new_session(str(project))
-                owner.inputs.drain_tasks["project"].cancel()
-                await asyncio.gather(owner.inputs.drain_tasks["project"], return_exceptions=True)
-                comms.threads.attach_session("project", str(session))
-                turn = asyncio.create_task(
-                    InitialInput.run(owner.inputs, "project", "project", "Reply OK.")
-                )
-                try:
-                    assert await asyncio.to_thread(summary_entered.wait, 10)
-                    activity = comms.agents.activity_of("project")
-                    assert activity.state is ActivityState.WORKING
-                    assert activity.detail == "Compacting context"
-                    view = next(
-                        item for item in comms.views.thread_views() if item.thread.name == "project"
-                    )
-                    assert view.presentation.summary == "Working · Compacting context"
-                    release_summary.set()
-                    await asyncio.wait_for(turn, timeout=30)
-                    assert resumed_activity and resumed_activity[-1].state is ActivityState.THINKING
-                    assert "Compacting" not in resumed_activity[-1].detail
-                    assert comms.agents.activity_of("project").state is ActivityState.IDLE
-                finally:
-                    release_summary.set()
-                    if not turn.done():
-                        turn.cancel()
-                    await asyncio.gather(turn, return_exceptions=True)
-                    await owner.shutdown()
-            else:
-                await asyncio.wait_for(collect(), timeout=30)
+            if case == "acp_threshold":
+                await _acp_threshold(root, project, session, native_bin, native_args, child_env,
+                                     summary_entered, release_summary, monkeypatch)
+                assert len(summaries) == 1 and len(prompts) == 1
+                assert "TASK_BRIEF_SENTINEL" in json.dumps(summaries[0]["messages"])
+                return
+            pi_session = PersistentPiSession()
+            try:
+                async with asyncio.timeout(30):
+                    async for event in backend.stream_agent_events(
+                        native_bin, native_args, "Reply OK.", str(project),
+                        env_extra=child_env, session_file=str(session),
+                        require_input_id=True, native_start=lambda *_: True,
+                        persistent_session=pi_session,
+                    ):
+                        events.append(event)
+            finally:
+                await pi_session.close()
         finally:
+            release_summary.set()
             server.shutdown()
             server.server_close()
             worker.join(timeout=2)
-        kinds = [type(event) for event in events]
-        if case == "acp_success":
-            rows = InputDispositions(comms.root / InputDispositions.filename).read().rows
-            assert len(rows) == 1
-            assert not next(iter(rows.values())).unresolved
-            assert len(calls) > 1
-            assert reasoning_efforts[:-1] == ["low"] * (len(calls) - 1)
-            assert reasoning_efforts[-1] == "high"
-            assert updates
-            compaction_events = [
-                field.event
-                for update in updates
-                for field in decode_updates(update.field_meta or {})
-                if isinstance(field, CompactionChangedUpdate)
-            ]
-            assert isinstance(compaction_events[0], ae.CompactionStart)
-            assert isinstance(compaction_events[-1], ae.CompactionEnd)
-            texts = [
-                getattr(getattr(update, "content", None), "text", "")
-                for update in updates
-                if getattr(update, "session_update", None) == "agent_message_chunk"
-            ]
-            assert any("FINAL_OWNER_REPLY" in text for text in texts)
-            assert not any("[agent error]" in text for text in texts)
-            saved_entries = [json.loads(line) for line in session.read_text().splitlines()]
-            committed = [entry["summary"] for entry in saved_entries if entry.get("type") == "compaction"]
-            assert len(committed) == 1
-            assert "PR401_COMMITTED_SUMMARY" in committed[0]
-            completion_updates = [
-                update
-                for update in updates
-                for field in decode_updates(update.field_meta or {})
-                if isinstance(field, CompactionChangedUpdate)
-                and isinstance(field.event, ae.CompactionEnd)
-            ]
-            assert len(completion_updates) == 1
-            completion = completion_updates[0]
-            event = next(
-                field.event
-                for field in decode_updates(completion.field_meta)
-                if isinstance(field, CompactionChangedUpdate)
-            )
-            assert event.publication_summary == committed[0]
-            if capture := os.environ.get("AC_PR401_CAPTURE_PACKET"):
-                publication_updates = [
-                    update
-                    for update in updates
-                    if any(
-                        isinstance(field, CompactionChangedUpdate)
-                        and isinstance(field.event, (ae.CompactionStart, ae.CompactionEnd))
-                        for field in decode_updates(update.field_meta or {})
-                    )
-                ]
-                assert len(publication_updates) == 2
-                Path(capture).write_text(
-                    json.dumps(
-                        [
-                            {
-                                "sessionUpdate": update.session_update,
-                                "content": update.content.model_dump(by_alias=True),
-                                "_meta": update.field_meta,
-                            }
-                            for update in publication_updates
-                        ]
-                    )
-                )
-            return
-        assert ae.InputStarted in kinds, [(type(event).__name__, getattr(event, "text", None)) for event in events]
-        assert isinstance(events[-1], ae.Done)
-        if case == "post_compaction_tool_rounds":
-            assert events[-1].ok is True
-            assert len(normal_requests) == 4
-            assert sum(isinstance(event, ae.CompactionEnd) for event in events) == 1
-            for index, messages in enumerate(normal_requests):
-                serialized = json.dumps(messages)
-                resurrected = "LEGACY_DISCARDED_HISTORY" in serialized
-                assert not resurrected, f"Old history resurrected in round {index}"
-                assert len(serialized) < 100000, f"Compacted context regrew in round {index}"
-                assert "summary" in serialized
-                tool_calls = [
-                    call["id"] for message in messages for call in message.get("tool_calls", [])
-                ]
-                tool_results = [
-                    message["tool_call_id"] for message in messages if message["role"] == "tool"
-                ]
-                assert (
-                    tool_calls == tool_results == [f"post_compact_{n}" for n in range(1, index + 1)]
-                )
-                for n in range(index):
-                    assert f"TOOL_ROUND_{n}" in serialized
-            assert len([event for event in events if isinstance(event, ae.ProviderUsage)]) == len(
-                calls
-            )
-            return
+
+        saved = [json.loads(line) for line in session.read_text().splitlines()]
+        compactions = [row for row in saved if row.get("type") == "compaction"]
+        ends = [event for event in events if isinstance(event, ae.CompactionEnd)]
+        done = events[-1]
+        assert isinstance(done, ae.Done)
         if case == "compacted_resume":
-            assert events[-1].ok is True
-            assert ae.CompactionStart not in kinds
-            assert reasoning_efforts == ["high"]
-            assert len(calls) == 1
-            assert (
-                sum(
-                    json.loads(line).get("type") == "compaction"
-                    for line in session.read_text().splitlines()
-                )
-                == 1
-            )
+            # The saved compaction already bounds the context; its stale usage triggers nothing.
+            assert done.ok is True and not ends and not summaries and len(prompts) == 1
+            assert len(compactions) == 1
             return
         if case == "summary_failure":
-            assert events[-1].ok is False
-            assert "compaction" in str(events[-1].text).lower()
-            # Independent map requests may already be in flight. Failure must
-            # neither retry one nor schedule a replacement or final synthesis.
-            assert 1 <= len(calls) <= 4
-            assert len(
-                {json.dumps(messages, sort_keys=True) for messages in request_messages}
-            ) == len(calls)
-            assert not any(
-                "Combine these chronological segment summaries" in json.dumps(messages)
-                for messages in request_messages
-            )
-            assert not any(
-                json.loads(line).get("type") == "compaction"
-                for line in session.read_text().splitlines()
-            )
+            # Pi's engine decides: its failed pre-prompt compaction is reported, the
+            # prompt is still sent once, and nothing is written as a compaction.
+            assert summaries and len(prompts) == 1 and compactions == []
+            assert len(ends) == 1 and ends[0].aborted
+            assert done.ok is True
             return
-        if case == "oversized_current":
-            assert events[-1].ok is False
-            assert "oversized" in str(events[-1].text).lower()
-            assert calls == []  # A single uncompactable user input costs no summary call.
+        assert done.ok is True, done
+        assert len(ends) == 1 and not ends[0].aborted
+        assert len(compactions) == 1 and SUMMARY in compactions[0]["summary"]
+        assert len(summaries) == 1
+        assert "TASK_BRIEF_SENTINEL" in json.dumps(summaries[0]["messages"])
+        assert "LEGACY_DISCARDED_HISTORY" in json.dumps(summaries[0]["messages"])
+        final = json.dumps(prompts[-1]["messages"])
+        assert SUMMARY in final and "LEGACY_DISCARDED_HISTORY" not in final
+        if case == "threshold":
+            # Pi compacts before the prompt; the input is sent once, after the summary.
+            assert ends[0].reason is ThresholdCompactionReason
+            assert len(prompts) == 1
+            kinds = [type(event) for event in events]
+            assert kinds.index(ae.CompactionEnd) < kinds.index(ae.InputStarted)
             return
-        if case == "oversized_summary":
-            assert events[-1].ok is False
-            assert "oversized" in str(events[-1].text).lower()
-            assert len(calls) == 1  # Committed summary, then refusal before the user prompt.
+        if case == "overflow":
+            # The refused request is resent once after Pi's overflow compaction; the turn succeeds.
+            assert ends[0].reason is OverflowCompactionReason and ends[0].will_retry
+            assert len(prompts) == 2
+            assert "LEGACY_DISCARDED_HISTORY" in json.dumps(prompts[0]["messages"])
             return
-        assert kinds.index(ae.InputStarted) < kinds.index(ae.CompactionStart)
-        assert kinds.index(ae.CompactionStart) < kinds.index(ae.CompactionEnd)
-        compaction = next(event for event in events if isinstance(event, ae.CompactionEnd))
-        assert compaction.publication_summary == "summary"
-        assert events[-1].ok is True
-        assert len(calls) > 1
-        summary_efforts = (
-            reasoning_efforts[1:-1] if case == "tool_outputs" else reasoning_efforts[:-1]
-        )
-        assert summary_efforts == ["low"] * len(summary_efforts)
-        if case == "tool_outputs":
-            assert reasoning_efforts[0] == "high"
-            retained = request_messages[-1]
-            tool_calls = [
-                call["id"] for message in retained for call in message.get("tool_calls", [])
-            ]
-            tool_results_ids = [
-                message["tool_call_id"] for message in retained if message["role"] == "tool"
-            ]
-            assert sorted(tool_calls) == sorted(tool_results_ids) == ["read_0", "read_1", "read_2"]
-            saved = [json.loads(line) for line in session.read_text().splitlines()]
-            tool_results = [
-                row for row in saved if row.get("message", {}).get("role") == "toolResult"
-            ]
-            assert len(tool_results) == 3
-            assert all(not row["message"].get("isError") for row in tool_results)
-            assert all(len(row["message"]["content"][0]["text"]) > 30000 for row in tool_results)
-        assert reasoning_efforts[-1] == "high"
-        # Phase-start notifications repeat the last completed response counter;
-        # they must not be mistaken for an additional provider summary.
-        completed_indices = [
-            event.chunk_index
-            for event in events
-            if isinstance(event, ae.CompactionProgress) and event.chunk_index > 0
-        ]
-        assert completed_indices == sorted(completed_indices)
-        assert sorted(set(completed_indices)) == list(range(1, len(summary_efforts) + 1))
-        assert len([event for event in events if isinstance(event, ae.ProviderUsage)]) == len(calls)
-        source_progress = [event for event in events if isinstance(event, ae.CompactionProgress)]
-        assert source_progress[0].chunk_index == 0
-        assert source_progress[0].source.source_bytes_done == 0
-        assert source_progress[-1].source.source_bytes_done == source_progress[-1].source.source_bytes_total
-        assert all(
-            event.source.source_bytes_total == source_progress[0].source.source_bytes_total
-            and event.source.source_bytes_done
-            >= (source_progress[index - 1].source.source_bytes_done if index else 0)
-            for index, event in enumerate(source_progress)
-        )
+        assert case == "post_compaction_tool_rounds"
+        assert len(prompts) == 4
+        for index, request in enumerate(prompts):
+            serialized = json.dumps(request["messages"])
+            assert "LEGACY_DISCARDED_HISTORY" not in serialized, f"history resurrected in {index}"
+            tool_calls = [call["id"] for message in request["messages"]
+                          for call in message.get("tool_calls", [])]
+            tool_results = [message["tool_call_id"] for message in request["messages"]
+                            if message["role"] == "tool"]
+            assert tool_calls == tool_results == [f"post_compact_{n}" for n in range(1, index + 1)]
+            for n in range(index):
+                assert f"TOOL_ROUND_{n}" in serialized
+
+
+async def _acp_threshold(root, project, session, native_bin, native_args, child_env,
+                         summary_entered, release_summary, monkeypatch) -> None:
+    """The owner's turn shows 'Compacting context' while Pi summarizes, then replies."""
+    for key, value in child_env.items():
+        monkeypatch.setenv(key, value)
+    comms = wire(root / "wire")
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    package_path = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
+    assert package_path, "Set PI_COMPACTION_TEST_PACKAGE to the verified native package"
+    package = Path(package_path)
+    monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
+    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
+    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(package))
+    owner = CommsAgent(
+        comms, agent_bin=native_bin, agent_args=native_args, runtime_enabled=True,
+        auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=root_id,
+    )
+    updates = []
+    resumed_activity = []
+
+    class Client:
+        async def session_update(self, session_id, update):
+            updates.append(update)
+            if any(isinstance(field, CompactionChangedUpdate)
+                   and isinstance(field.event, ae.CompactionEnd)
+                   for field in decode_updates(update.field_meta or {})):
+                resumed_activity.append(comms.agents.activity_of("project"))
+
+    owner.on_connect(Client())
+    await owner.new_session(str(project))
+    owner.inputs.drain_tasks["project"].cancel()
+    await asyncio.gather(owner.inputs.drain_tasks["project"], return_exceptions=True)
+    comms.threads.attach_session(comms.registry.require("project"), str(session))
+    turn = asyncio.create_task(InitialInput.run(owner.inputs, "project", "project", "Reply OK."))
+    try:
+        entered = await asyncio.to_thread(summary_entered.wait, 10)
+        assert entered
+        # Pi announced compaction_start before its summary request; Core publishes it.
+        async with asyncio.timeout(5):
+            while (activity := comms.agents.activity_of("project")).state is not ActivityState.WORKING:
+                await asyncio.sleep(0.02)
+        assert activity.detail == "Compacting context"
+        release_summary.set()
+        await asyncio.wait_for(turn, timeout=30)
+        assert resumed_activity and "Compacting" not in resumed_activity[-1].detail
+        assert comms.agents.activity_of("project").state is ActivityState.IDLE
+    finally:
+        release_summary.set()
+        if not turn.done():
+            turn.cancel()
+        await asyncio.gather(turn, return_exceptions=True)
+        await owner.shutdown()
+    rows = InputDispositions(comms.root / InputDispositions.filename).read().rows
+    assert len(rows) == 1 and not next(iter(rows.values())).unresolved
+    compaction_events = [field.event for update in updates
+                         for field in decode_updates(update.field_meta or {})
+                         if isinstance(field, CompactionChangedUpdate)]
+    assert [type(event) for event in compaction_events] == [ae.CompactionStart, ae.CompactionEnd]
+    assert compaction_events[-1].reason is ThresholdCompactionReason
+    texts = [getattr(getattr(update, "content", None), "text", "") for update in updates
+             if getattr(update, "session_update", None) == "agent_message_chunk"]
+    assert any("OK_REPLY" in text for text in texts)
+    assert not any("[agent error]" in text for text in texts)
+    saved = [json.loads(line) for line in session.read_text().splitlines()]
+    assert [row["summary"] for row in saved if row.get("type") == "compaction"] == [SUMMARY]

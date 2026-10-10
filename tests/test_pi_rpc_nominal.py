@@ -16,6 +16,7 @@ from agent_comms import pi_events as pi
 from agent_comms import turn_failure as failures
 from agent_comms.backend import TurnSession
 from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.turn_phase import (
     CompactionPhase,
@@ -80,7 +81,6 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
         itertools.combinations(
             [
                 failures.InputIdUnavailable,
-                failures.PrestartCompactionFailed,
                 failures.IdentityUncertain,
                 failures.AuthorityChanged,
                 failures.FollowupUnrecognized,
@@ -95,7 +95,8 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
 )
 def test_failure_precedence_text_and_uncertainty_have_one_owner(left, right):
     session = TurnSession(
-        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), configuration=RestartEnvironment.inherit({})), "unused"
+        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), configuration=RestartEnvironment.inherit({})), "unused",
+        native_session=PersistentPiSession(),
     )
     for cls in (left, right, left):
         session.output.record_failure(cls(cls.__name__))

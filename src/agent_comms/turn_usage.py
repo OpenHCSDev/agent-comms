@@ -15,14 +15,13 @@ class UsageAccount:
     confirmed: int | None = None
     provisional: bool = False
     response_index: int = 0
-    compaction_recorded: bool = False
 
     def invalidate(self) -> None:
         self.used = self.confirmed = None
         self.provisional = False
 
     def charge_compaction(self, usage):
-        if usage is not None and not self.compaction_recorded:
+        if usage is not None:
             yield self.charge(usage)
 
     def charge(self, usage: PiUsage) -> events.ProviderUsage:

@@ -418,11 +418,6 @@ class RegistryDocument(RegistryPresence):
         current = original.require_source_snapshot(self.snapshot())
         return self._native_source_publication(current, session_file)
 
-    def prepare_idle_native_source(self, original: RegistryOwner, session_file: str) -> NativeSourcePublication:
-        """Retain the idle owner's current turn/task records during selection."""
-        current = original.require_idle_source_snapshot(self.snapshot())
-        return self._native_source_publication(current, session_file)
-
     def _native_source_publication(self, current: Thread, session_file: str) -> NativeSourcePublication:
         return NativeSourcePublication(
             thread=replace(current, session_file=session_file),

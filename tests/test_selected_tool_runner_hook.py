@@ -109,7 +109,7 @@ async def test_operator_plan_and_tool_intent_are_exclusive(
     root, root_id, _comms, _initial, _ = _root(private_root, direct=True)
     path = private_root / "existing.py"
     path.write_text("before")
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     with pytest.raises(IdentityConflict, match="cannot share an operator file plan"):
         await runtime.SelectedExecution(
             root=root,
@@ -129,7 +129,7 @@ async def test_default_full_has_normal_coding_tools_and_cooperative_claim_instru
     private_root, monkeypatch
 ):
     root, root_id, _comms, _initial, _ = _root(private_root, direct=True)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, calls = _fake_model()
     kwargs_seen = []
 
@@ -156,7 +156,7 @@ async def test_real_owner_selected_tool_writes_existing_file_once(private_root, 
     root, root_id, comms, _initial, _people = _root(private_root, direct=True, claims=True)
     path = private_root / "notes.txt"
     path.write_text("before", encoding="utf-8")
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, calls = _fake_model()
 
     async def selected_model(*args, **kwargs):
@@ -186,7 +186,7 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
 ):
     intent_type, mode_type, bound = nominal_broker_stub
     root, root_id, comms, initial, people = _root(private_root, direct=True)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, calls = _fake_model()
     kwargs_seen = []
 
@@ -227,7 +227,7 @@ async def test_wrong_intent_or_observer_cannot_create_tool_mode(
 ):
     intent_type, _mode_type, bound = nominal_broker_stub
     root, root_id, _comms, _initial, _ = _root(private_root, mentioned=True)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     with pytest.raises(TypeError, match="nominal owner intent"):
         await runtime.SelectedExecution(
             root=root,
@@ -253,7 +253,7 @@ async def test_wrong_intent_or_observer_cannot_create_tool_mode(
 async def test_opted_in_triage_remains_no_tools(private_root, monkeypatch, nominal_broker_stub):
     intent_type, _mode_type, bound = nominal_broker_stub
     root, root_id, _comms, _initial, _ = _root(private_root)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     kwargs_seen = []
 
@@ -282,7 +282,7 @@ async def test_selected_full_failure_never_reissues_or_forges_response(
 ):
     intent_type, _mode_type, bound = nominal_broker_stub
     root, root_id, comms, _initial, _people = _root(private_root, direct=True)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, calls = _fake_model(fail_on=1 if failure == "unknown" else None)
 
     async def failed(*args, **kwargs):
