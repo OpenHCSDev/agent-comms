@@ -1,9 +1,17 @@
 """Default-off private registry durability gate; never a public wire receipt.
 
 This two-slot file must be created and directory-fsynced before the private
-marker. It is read only while the registry's process lock is held. A pending or
-corrupt slot is deliberately NOT repaired or skipped: an atomic replacement
-may already be visible even when its directory fsync failed.
+marker. It is read only while the registry's process lock is held. A corrupt
+slot, or a pending slot whose replacement may be visible, is deliberately NOT
+repaired or skipped: an atomic replacement may already be visible even when
+its directory fsync failed.
+
+One pending state is decided rather than refused: an abandoned write. Its
+writer died or failed before renaming its replacement into place, so the
+registry still holds exactly the previous commit's bytes. A rename that
+happened shows the pending digest instead (fsynced or not), and one that never
+happened cannot appear later; the previous commit is the authority, and the
+next write reuses the abandoned slot.
 """
 
 from __future__ import annotations
@@ -161,11 +169,22 @@ class PrivateRegistryGuard:
             _reject("initial slots disagree")
         return first, second
 
-    def _latest(self, fd: int) -> tuple[int, int, bytes, int]:
-        first, second = self._slots(fd)
-        index = 0 if first[0] > second[0] else 1
-        seq, phase, digest = (first, second)[index]
-        return seq, phase, digest, index
+    def _authority(self, fd: int) -> tuple[int, bytes, int]:
+        """The committed sequence and digest, and the slot the next write uses."""
+        slots = self._slots(fd)
+        latest = 0 if slots[0][0] > slots[1][0] else 1
+        seq, phase, digest = slots[latest]
+        current = registry_digest(self.registry_path)
+        if phase == _COMMITTED and seq != 0:
+            if digest != current:
+                _reject("does not match the registry snapshot")
+            return seq, digest, 1 - latest
+        previous_seq, previous_phase, previous_digest = slots[1 - latest]
+        if (phase == _PENDING and digest != current and previous_phase == _COMMITTED
+                and previous_seq != 0 and previous_digest == current):
+            # An abandoned write: its replacement never reached the registry.
+            return previous_seq, current, latest
+        _reject("is pending, not committed")
 
     @staticmethod
     def _write(fd: int, index: int, value: bytes) -> None:
@@ -179,11 +198,7 @@ class PrivateRegistryGuard:
         # watcher again; private ACP drains verify this guard on every wake.
         fd = self._open(writable=False)
         try:
-            seq, phase, digest, _ = self._latest(fd)
-            if phase != _COMMITTED or seq == 0:
-                _reject("is pending, not committed")
-            if digest != registry_digest(self.registry_path):
-                _reject("does not match the registry snapshot")
+            seq, digest, _ = self._authority(fd)
             return seq, digest
         finally:
             os.close(fd)
@@ -191,12 +206,9 @@ class PrivateRegistryGuard:
     def prepare(self, new_digest: bytes) -> tuple[int, int]:
         fd = self._open()
         try:
-            seq, phase, digest, latest_index = self._latest(fd)
-            if phase != _COMMITTED or seq == 0 or digest != registry_digest(self.registry_path):
-                _reject("cannot prepare from an uncommitted snapshot")
+            seq, _, index = self._authority(fd)
             if seq >= _MAX_SEQ:
                 _reject("sequence is exhausted")
-            index = 1 - latest_index
             self._write(fd, index, _record(self.root_id, seq + 1, _PENDING, new_digest))
             return seq + 1, index
         finally:
