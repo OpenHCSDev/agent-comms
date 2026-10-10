@@ -75,6 +75,18 @@ async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
         )
 
 
+# An owner is background work: under CPU contention it yields to interactive
+# clients (Toad's UI thread) and it still uses all idle CPU. The native Pi
+# processes it launches inherit this priority.
+OWNER_NICENESS = 10
+
+
+def lower_priority() -> None:
+    """Run this owner at background priority; never raise a lower one it inherited."""
+    current = os.getpriority(os.PRIO_PROCESS, 0)
+    os.setpriority(os.PRIO_PROCESS, 0, max(current, OWNER_NICENESS))
+
+
 def main() -> int:
     """Run the explicitly selected, already declared persistent owner.
 
@@ -97,6 +109,7 @@ def main() -> int:
     thread = comms.registry.require(name)
     if thread.process_identity is not None and thread.process_identity.alive():
         raise ValueError(f"Thread {thread.name!r} already has a live owner")
+    lower_priority()
     with suppress(KeyboardInterrupt):
         asyncio.run(run())
     return 0
