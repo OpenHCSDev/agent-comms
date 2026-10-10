@@ -30,9 +30,6 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     detail: str = ""
     stall_reason: ClassVar[str] = "model_no_progress"
     pauses_input_clock: ClassVar[bool] = False
-    # Core's no-event backstop applies; False where Pi itself bounds the phase
-    # and ends it with its own event.
-    bounded_by_core: ClassVar[bool] = True
     busy: ClassVar[bool] = True
     accepts_prompt: ClassVar[bool] = False
     accepts_followup: ClassVar[bool] = True
@@ -44,6 +41,10 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     @property
     def summary(self) -> str:
         return self.detail or self.label
+
+    def model_wait(self, backstop: float | None) -> float | None:
+        """Core's no-event backstop for this phase; None where nothing bounds it here."""
+        return backstop
 
     def described(self, detail: str) -> TurnPhase:
         return replace(self, detail=detail[:200])
@@ -177,14 +178,16 @@ class CompactionPhase(StallExempt, Excursion):
         from . import pi_events as pi
         return isinstance(event, pi.CompactionEnd)
     pauses_input_clock = True
-    # Pi streams the summary without RPC events; its provider idle timeout
-    # bounds the request and compaction_end reports the outcome.
-    bounded_by_core = False
     activity_state = ActivityState.WORKING
     label = "Compacting context"
 
     def compacting(self) -> TurnPhase:
         return self
+
+    def model_wait(self, backstop: float | None) -> float | None:
+        # Pi streams the summary without RPC events; its provider idle timeout
+        # bounds the request and compaction_end reports the outcome.
+        return None
 
     def input_started(self) -> TurnPhase:
         return replace(self, resume=self.resume.input_started())
