@@ -105,6 +105,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         private_nk_native_package: Path | None = None,
         private_nk_wire_root_id: str | None = None,
         private_selected_tool_intent: SelectedToolIntent | None = None,
+        private_nk_verified_cli: Path | None = None,
     ):
         if (private_nk_native_package is None) != (private_nk_wire_root_id is None):
             raise ValueError("private N/K ACP requires both reviewed Pi package and exact root")
@@ -117,7 +118,14 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 raise ValueError("private selected tool requires exact N/K root and native package")
         self._private_selected_tool_intent = private_selected_tool_intent
         self._private_nk_native_package = private_nk_native_package
+        # A worker's startup check already verified its package; reuse it.
         self._verified_native_launcher = None
+        if private_nk_verified_cli is not None:
+            from .native_pi import NativePiRpcLaunch
+
+            self._verified_native_launcher = NativePiRpcLaunch.verified_launcher(
+                private_nk_native_package, private_nk_verified_cli
+            )
         self._private_nk_wire_root_id = private_nk_wire_root_id
         self._comms = comms
         self.use_unstable_protocol = use_unstable_protocol

@@ -574,8 +574,12 @@ class NativePiRpcLaunch:
         it grants no child readiness, input admission or prior context proof.
         """
         package = Path(package).absolute()
-        cli = _trusted_package(package)
-        return partial(cls._tracked, package, cli)
+        return cls.verified_launcher(package, _trusted_package(package))
+
+    @classmethod
+    def verified_launcher(cls, package: Path, cli: Path) -> Callable[..., NativePiRpcLaunch]:
+        """Launcher for a package whose CLI _trusted_package already returned."""
+        return partial(cls._tracked, Path(package).absolute(), cli)
 
     @classmethod
     def tracked(cls, package: Path, **options) -> NativePiRpcLaunch:

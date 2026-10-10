@@ -10,11 +10,13 @@ from contextlib import suppress
 
 from .acp import CommsAgent
 from .comms import wire
-from .private_nk_entrypoint import private_nk_from_environment
+from .private_nk_entrypoint import PrivateNkLaunch, private_nk_from_environment
 
 
 async def run() -> None:
-    private_nk = private_nk_from_environment()  # fail before wire creation/attach
+    private_nk = PrivateNkLaunch.current()
+    # Fail before wire creation/attach; the check verifies the native package once.
+    verified_cli = private_nk.validate() if private_nk is not None else None
     comms = wire(private_nk.validated_root) if private_nk is not None else wire()
     if private_nk is not None:
         comms.owners.pin_private_nk_launch(
@@ -28,6 +30,7 @@ async def run() -> None:
         private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None,
         private_nk_native_package=private_nk.native_package if private_nk else None,
         private_selected_tool_intent=private_nk.selected_tool_intent if private_nk else None,
+        private_nk_verified_cli=verified_cli,
     )
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -36,9 +39,6 @@ async def run() -> None:
     initial: asyncio.Task | None = None
     try:
         await agent.sessions.start_owner(thread.worktree, name)
-        if private_nk is not None:
-            # Verify the native package at startup, before the first message.
-            await Coordination.run_worker(agent._verify_native_package_once)
         if key := os.environ.pop("AGENT_COMMS_STARTUP_INPUT_KEY", None):
             initial = asyncio.create_task(run_startup_input(agent, name, key))
         await stopped.wait()
