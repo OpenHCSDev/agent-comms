@@ -4,8 +4,8 @@ requires-python = ">=3.14"
 
 [manifest]
 overrides = [
-    { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=c1d2849b90023acf5206c35b7da4664407d6dce5" },
-    { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?rev=412b5a2b5da8875dc2f3dc5be2365abddce0537b" },
+    { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=88f4e6ee115ba817118ffcc0b52e5579eb7763e5" },
+    { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?rev=b69cc8e34eeb7d84f9b4d33afd3c18538ac74ae9" },
 ]
 
 [[package]]
@@ -23,9 +23,10 @@ wheels = [
 [[package]]
 name = "agent-comms"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/agent-comms.git?rev=c1d2849b90023acf5206c35b7da4664407d6dce5#c1d2849b90023acf5206c35b7da4664407d6dce5" }
+source = { git = "https://github.com/OpenHCSDev/agent-comms.git?rev=88f4e6ee115ba817118ffcc0b52e5579eb7763e5#88f4e6ee115ba817118ffcc0b52e5579eb7763e5" }
 dependencies = [
     { name = "metaclass-registry" },
+    { name = "nominal-refactor-audit" },
 ]
 
 [package.optional-dependencies]
@@ -45,9 +46,9 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=c1d2849b90023acf5206c35b7da4664407d6dce5" },
-    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?rev=8616aee5f91f8e200c982e02f0ee56d0f49d6c48" },
-    { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?rev=412b5a2b5da8875dc2f3dc5be2365abddce0537b" },
+    { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=88f4e6ee115ba817118ffcc0b52e5579eb7763e5" },
+    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?rev=bfff71108694ad756ab39930fb12f70d019793c0" },
+    { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?rev=b69cc8e34eeb7d84f9b4d33afd3c18538ac74ae9" },
 ]
 
 [[package]]
@@ -193,8 +194,9 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?rev=8616aee5f91f8e200c982e02f0ee56d0f49d6c48#8616aee5f91f8e200c982e02f0ee56d0f49d6c48" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?rev=bfff71108694ad756ab39930fb12f70d019793c0#bfff71108694ad756ab39930fb12f70d019793c0" }
 dependencies = [
+    { name = "agent-client-protocol" },
     { name = "agent-comms", extra = ["acp"] },
     { name = "aiosqlite" },
     { name = "bashlex" },
@@ -215,6 +217,7 @@ dependencies = [
     { name = "textual-speedups" },
     { name = "typeguard" },
     { name = "typing-extensions" },
+    { name = "ui-theme" },
     { name = "watchdog" },
     { name = "xdg-base-dirs" },
 ]
@@ -561,6 +564,11 @@ wheels = [
 ]
 
 [[package]]
+name = "nominal-refactor-audit"
+version = "0.1.0"
+source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor.git?subdirectory=skills%2Frefactor-audit&rev=9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10#9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10" }
+
+[[package]]
 name = "notify-py"
 version = "0.3.43"
 source = { registry = "https://pypi.org/simple" }
@@ -815,9 +823,18 @@ wheels = [
 ]
 
 [[package]]
+name = "terminaltexteffects"
+version = "0.15.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3c/df/4fa04990d75cc27215159bf9edec7d56546fd72e1927c5753d0de0414e7b/terminaltexteffects-0.15.0.tar.gz", hash = "sha256:f4b31c86bfa943d5bf3b2c5ecbfaea0de65ed4a951028c40f8e4cb54efd06439", size = 261994, upload-time = "2026-05-10T01:46:27.179Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ba/e8/89035cd56a3ef4fe1c2dbf790e1a2c78d4e922d3dbfc048e314e40c22b1a/terminaltexteffects-0.15.0-py3-none-any.whl", hash = "sha256:5503250dacae9a3c17e22b0010b2f5fa10332124019f485d517e0c9ebc51aa47", size = 224704, upload-time = "2026-05-10T01:46:28.48Z" },
+]
+
+[[package]]
 name = "textual"
 version = "8.2.8"
-source = { git = "https://github.com/OpenHCSDev/textual.git?rev=412b5a2b5da8875dc2f3dc5be2365abddce0537b#412b5a2b5da8875dc2f3dc5be2365abddce0537b" }
+source = { git = "https://github.com/OpenHCSDev/textual.git?rev=b69cc8e34eeb7d84f9b4d33afd3c18538ac74ae9#b69cc8e34eeb7d84f9b4d33afd3c18538ac74ae9" }
 dependencies = [
     { name = "markdown-it-py", extra = ["linkify"] },
     { name = "mdit-py-plugins" },
@@ -850,13 +867,9 @@ syntax = [
 [[package]]
 name = "textual-diff-view"
 version = "0.1.5"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/OpenHCSDev/textual-diff-view.git?rev=8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9#8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9" }
 dependencies = [
     { name = "textual", extra = ["syntax"] },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/76/55/bb5d51487b195bee04c71d42bc5b3e6bca0ba9477cf9b6f12c7f498a0bd7/textual_diff_view-0.1.5.tar.gz", hash = "sha256:e28151c45d4207fb7b50b57fce2bc249e880c2a496b21bf7d8560a92e59caecb", size = 38405, upload-time = "2026-04-30T08:43:12.809Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/2d/b3/891eb302e7bb037b308cd2960ba0f762fa1e95f574c1ed810b23c86326a1/textual_diff_view-0.1.5-py3-none-any.whl", hash = "sha256:2e9c7c7f37d195688d0df56f7056e9580e4f40c3583834b12366199b77798f35", size = 25542, upload-time = "2026-04-30T08:43:15.455Z" },
 ]
 
 [[package]]
@@ -1186,6 +1199,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a3/26/b09b8010994eccc3c09092e6b34058f36a460eea2d4c3e8b910c695975a0/typing_inspection-0.4.4.tar.gz", hash = "sha256:547274fa6b0a561ccf549cc9524b999a578e737d015d8709d021f9d0d13bea47", size = 76928, upload-time = "2026-08-12T12:37:25.997Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/67/81/4add07e5172b7ac40d8ed5ff580409a7801a4fe26d529bdd915401dabfbe/typing_inspection-0.4.4-py3-none-any.whl", hash = "sha256:65b8397ba37ccbce054456aaccddfc91e6e3083c92824df348d96ca832f3f147", size = 14750, upload-time = "2026-08-12T12:37:24.648Z" },
+]
+
+[[package]]
+name = "ui-theme"
+version = "0.1.0"
+source = { git = "https://github.com/OpenHCSDev/ui-theme.git?rev=71d088ec78a0e6c88c1fa725160a2da563170eef#71d088ec78a0e6c88c1fa725160a2da563170eef" }
+dependencies = [
+    { name = "metaclass-registry" },
+    { name = "terminaltexteffects" },
 ]
 
 [[package]]
