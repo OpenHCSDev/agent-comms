@@ -1,7 +1,0 @@
-{
-  "base": "1f8bf0ef9a23ae75c2b00ea97310ecbfaae37770",
-  "head": "153e999e55498e54c3dd73f94e3775a6973be6c6",
-  "positive_deltas": {},
-  "raw_receipt_sha256": "b5bcdd7b8bc0396ae1f02f9e8acb9d20abf483bfc29e038d0610c28ef7de20d0",
-  "raw_receipt": "evidence/retained-context-framing-20261001/required-ratchet-final.json"
-}

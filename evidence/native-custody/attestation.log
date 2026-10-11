@@ -1,3 +1,0 @@
-native_attestation_refusal Done(text='Pi session identity changed during this turn.', ok=False, reason_code=<FailureReason.IDENTITY_UNCERTAIN: 'session_identity_uncertain'>, diagnostic={'exit_code': 143})
-..
-2 passed in 7.08s

@@ -1,4 +1,0 @@
-.artifacts/s7-wire-log: removed 48583733 bytes of owned exited fixture/cache outputs
-.pytest_cache: removed 51547 bytes of owned exited fixture/cache outputs
-.ruff_cache: removed 24882 bytes of owned exited fixture/cache outputs
-Source worktree, evidence, live roots and unproven /var/tmp ownership left intact.

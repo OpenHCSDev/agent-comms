@@ -1,9 +1,0 @@
-{
-  "installed-focus": "96 passed in 2.78s",
-  "native-corrective": "19 passed in 162.61s (0:02:42)",
-  "typed-callers": "1 failed, 25 passed, 76 deselected in 14.13s",
-  "manual-native": "1 passed in 13.54s",
-  "fake-goal-main-baseline": "1 failed in 1.20s",
-  "current-main-provider-free": "127 passed in 3.00s",
-  "current-main-ratchet": "zero increased measures"
-}

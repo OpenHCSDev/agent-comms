@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "/home/ts/wt/comms-acp-saved-session-startup-20260928/evidence/d22-quiet-stop/exercise_idle_worker.py", line 96, in <module>
-    assert stop['stopped'] == ['fixture'], stop
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AssertionError: {'root': '/home/ts/wt/comms-acp-saved-session-startup-20260928/.artifacts/owned-d22-quiet-xdx2gwx4/root', 'wire_root_id': '3d5cd48812674d29a5b4d8c9c6c0bf2c', 'runtime': '/home/ts/.local/share/agent-comms/runtime-peer-close-20260928', 'owners': {}, 'stopped': [], 'phase': 'stopped', 'input_outcomes': {'rows': {'retained-unknown': {'admission': 2, 'key': 'retained-unknown', 'native_id': None, 'owner': 'fixture', 'sent_text': None, 'sequence': None, 'source_text': 'Never replay', 'status': 'unknown', 'target': 'fixture', 'turn_id': None}}, 'version': 1}, 'native_sessions': {}, 'maintenance': {'generation': 1, 'nonce': 'a38a912a802342458c9b8ec695653eea'}, 'source_highwater': 0}

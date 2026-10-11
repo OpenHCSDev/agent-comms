@@ -1,7 +1,0 @@
-Resolved 28 packages in 391ms
-   Building agent-comms @ file:///home/ts/wt/comms-coordination-owners-20260928
-      Built agent-comms @ file:///home/ts/wt/comms-coordination-owners-20260928
-Prepared 1 package in 206ms
-Uninstalled 1 package in 2ms
-Installed 1 package in 5ms
- ~ agent-comms==0.1.0 (from file:///home/ts/wt/comms-coordination-owners-20260928)

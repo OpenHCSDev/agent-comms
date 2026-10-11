@@ -1,5 +1,0 @@
-command: ['/home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python', '-m', 'pytest', '-q', '-o', 'addopts=', 'tests/test_fresh_private_session.py', '-k', 'optional_reviewed']
-..                                                                       [100%]
-2 passed, 20 deselected in 2.16s
-
-exit: 0

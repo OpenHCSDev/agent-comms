@@ -1,3 +1,0 @@
-child: /home/ts/wt/comms-process-custody-closure-20260929/.installed/lib/python3.14/site-packages/agent_comms/child_process.py
-owner: /home/ts/wt/comms-process-custody-closure-20260929/.installed/lib/python3.14/site-packages/agent_comms/owner_lifecycle.py
-verified complete native package: /home/ts/.local/share/agent-comms/native-current-9213ee71479d1b20/node_modules/@earendil-works/pi-coding-agent

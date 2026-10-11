@@ -1,4 +1,0 @@
-installed: /home/ts/.local/share/agent-comms/runtime-compaction-policy-b3a9c06/lib/python3.14/site-packages/agent_comms/__init__.py
-{"source_bytes": 143686055, "tokens_before": 312227, "provider_calls": 7, "transport": "loopback only", "native_commit": true, "strict_reopen": true, "read_files": 601, "modified_files": 211, "owner_idle": true, "new_user_inputs": 0}
-......
-6 passed in 31.00s

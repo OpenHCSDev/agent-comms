@@ -1,9 +1,0 @@
-{
-  "removed": [
-    "/home/ts/wt/comms-remaining-plan-closure-20260929/.venv",
-    "/home/ts/wt/comms-remaining-plan-closure-20260929/.pytest_cache",
-    "/home/ts/wt/comms-remaining-plan-closure-20260929/.ruff_cache"
-  ],
-  "process_references": [],
-  "retained": "source, receipts, original RED outputs; no shared/live tree changes"
-}

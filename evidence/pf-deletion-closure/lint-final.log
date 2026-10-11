@@ -1,9 +1,0 @@
-src/agent_comms/claim_admission.py:47:101: E501 Line too long (101 > 100)
-src/agent_comms/coordination_store.py:1191:37: F841 Local variable `db` is assigned to but never used
-src/agent_comms/coordination_store.py:1252:37: F841 Local variable `db` is assigned to but never used
-src/agent_comms/coordination_store.py:1290:101: E501 Line too long (113 > 100)
-src/agent_comms/coordination_store.py:1322:101: E501 Line too long (103 > 100)
-tests/test_envelope_bus_integration.py:791:101: E501 Line too long (133 > 100)
-tests/test_envelope_bus_integration.py:796:101: E501 Line too long (140 > 100)
-Found 7 errors.
-No fixes available (2 hidden fixes can be enabled with the `--unsafe-fixes` option).

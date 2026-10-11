@@ -1,5 +1,0 @@
-command: ['/home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python', '-m', 'pytest', '-q', '-o', 'addopts=', 'tests/test_selected_owner_compaction_integration.py']
-..s.s.....s.s........                                                    [100%]
-17 passed, 4 skipped in 83.24s (0:01:23)
-
-exit: 0

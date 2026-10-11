@@ -1,4 +1,0 @@
-py-spy> Sampling process 50 times a second for 42 seconds. Press Control-C to exit.
-
-py-spy> Wrote speedscope file to '/home/ts/.cache/agent-scratch/comms-live-repro-20260929-original-read/actual-ui.speedscope.json'. Samples: 1207 Errors: 0
-py-spy> Visit https://www.speedscope.app/ to view

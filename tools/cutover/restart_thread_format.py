@@ -9,8 +9,7 @@ launchers and gracefully retire ALL original UI/ACP registry writers. Keep
 original-client ingress excluded until this operation returns. Maintenance
 admission fences executable owners; it does not revoke already imported client
 code or prevent its metadata/history calls from rewriting retired Thread fields.
-This operator does not discover or retire that external client audience. See
-docs/checkpoints/old-thread-client-exclusion-20260930.md and its actual writer
+This operator does not discover or retire that external client audience. See its actual writer
 proof. An executable-owner batch alone is not sufficient release admission.
 """
 import argparse

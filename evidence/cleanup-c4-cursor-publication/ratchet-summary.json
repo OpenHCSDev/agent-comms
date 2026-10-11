@@ -1,8 +1,0 @@
-{
-  "base": "7995bc5a54b511c3904def7adfc154ff1e9ccf7c",
-  "head": "deda0dec32132de46c3f4ce9e5e129b0755c6317",
-  "delta": {
-    "GodClassExcess:src/agent_comms/acp.py::CommsAgent": -49
-  },
-  "increased": false
-}

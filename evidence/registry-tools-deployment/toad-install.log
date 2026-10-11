@@ -1,9 +1,0 @@
-Using Python 3.14.2 environment at: /home/ts/.local/share/agent-comms/runtime-registry-tools-20260928
-Resolved 1 package in 2ms
-   Building batrachian-toad @ file:///home/ts/wt/toad-nominal-tool-callers-20260928
-      Built batrachian-toad @ file:///home/ts/wt/toad-nominal-tool-callers-20260928
-Prepared 1 package in 473ms
-Uninstalled 1 package in 8ms
-Installed 1 package in 4ms
- - batrachian-toad==0.6.20 (from git+https://github.com/OpenHCSDev/toad.git@b472e487d69c600490609fec7163376e30b1b5d1)
- + batrachian-toad==0.6.20 (from file:///home/ts/wt/toad-nominal-tool-callers-20260928)

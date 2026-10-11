@@ -1,6 +1,0 @@
-{
-  "_read_native_context_evidence": "no production definition/import/caller; retired name retained only in deletion guard denylist",
-  "_require_live_registry_owner": "no production definition/import/caller; retired name retained only in deletion guard denylist",
-  "normalize_existing_file": "no production definition/import/caller; retired name retained only in deletion guard denylist",
-  "normalize_claim_file": "no production definition/import/caller; retired name retained only in deletion guard denylist"
-}

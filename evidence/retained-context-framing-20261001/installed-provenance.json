@@ -1,7 +1,0 @@
-{
-  "installed": "/home/ts/wt/comms-retained-context-framing-20261001/.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms",
-  "source_byte_equality": true,
-  "native_full_trust": true,
-  "native_package": "/home/ts/wt/comms-combined474-global491-native-20261001/stack/.pi-native-53b8c413d90aa6b1/node_modules/@earendil-works/pi-coding-agent",
-  "manifest": "53b8c413d90aa6b1b8fe17fad35d2261cb7fe8c53eaa852f6ac4a073016fd9f6"
-}

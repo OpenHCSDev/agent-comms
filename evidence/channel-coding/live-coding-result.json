@@ -1,9 +1,0 @@
-{
-  "root": "/var/tmp/agent-comms-coding-check-ji9m4f_p",
-  "worktree": "/home/ts/wt/comms-channel-coding-tools-20260927/.artifacts/live-coding-work",
-  "package": "/home/ts/wt/comms-channel-coding-tools-20260927/stack/.pi-native-0a9aa7712c9c4f70/node_modules/@earendil-works/pi-coding-agent",
-  "source_seq": 1,
-  "started_at": 1790553013.8160522,
-  "error": "NativePiUnavailable('Pinned disposable native Pi package is required')",
-  "finished_at": 1790553013.8162284
-}

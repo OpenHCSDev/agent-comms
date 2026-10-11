@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "/home/ts/wt/comms-acp-saved-session-startup-20260928/tools/cutover/activate-channel-participants.py", line 42, in <module>
-    ready = {name: w.registry.require(name).process_alive and w.owners._is_local_participant(w.registry.require(name)) for name in names}
-                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'OwnerLifecycle' object has no attribute '_is_local_participant'

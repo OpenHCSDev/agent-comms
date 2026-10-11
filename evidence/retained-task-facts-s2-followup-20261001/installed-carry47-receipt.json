@@ -1,8 +1,0 @@
-{
-  "state": "CORRUPT_ORIGINAL_REFUSED_BEFORE_CARRY",
-  "original_files_unchanged": true,
-  "preimages_created": false,
-  "provider_calls": 0,
-  "input_replays": 0,
-  "public_changes": []
-}

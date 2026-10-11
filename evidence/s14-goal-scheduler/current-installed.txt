@@ -1,3 +1,0 @@
-native_failed_goal_projection={'schema': 1, 'state': 'backend_suspended', 'reason': 'assistant_final_stop_missing'} provider_posts=4 retry_generation=2 next_ready_generation=3 saved_inputs=4
-........
-8 passed in 21.75s

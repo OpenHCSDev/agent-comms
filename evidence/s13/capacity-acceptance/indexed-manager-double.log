@@ -1,6 +1,0 @@
-{"large_history_bytes":604009725,"branches":2,"old_commit_replay_refused":true,"malformed_late_records":4,"peak_rss_kib":185168}
-{"ok":true,"cases":["large-history-branch-replay"],"root":"/home/ts/wt/comms-refactor2-s13-20260928/.artifacts/s13-capacity/indexed-manager-double/pr48-writer-coverage-sPUhmg"}
-
-
-CAPACITY_MEMORY {"rss_limit_mib": 240, "v8_old_space_mib": 128, "processes": [{"pid": 449735, "phase": "indexed-manager-double", "peak_rss_kib": 186416, "rusage_peak_rss_kib": 185168, "memory": {"rss": 189612032, "heapTotal": 87953408, "heapUsed": 18332160, "external": 6919611, "arrayBuffers": 4459499}}], "sampled_peak_rss_kib": {"449735": 186416}, "python_peak_rss_kib": 72892, "exceeded": [], "monitor_errors": []}
-GENERATED_HISTORY_REMOVED True

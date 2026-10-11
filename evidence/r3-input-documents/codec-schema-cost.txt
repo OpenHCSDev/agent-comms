@@ -1,3 +1,0 @@
-1000 records: 0.041 seconds; annotation resolutions: 1
-{'content': 'hello', 'usage': None, 'role': 'user'}
-{'content': [{'kind': 'text', 'text': 'file'}], 'details': None}

@@ -1,9 +1,0 @@
-Using Python 3.14.2 environment at: /home/ts/.local/share/agent-comms/runtime-acp-extensions-20260928
-Resolved 1 package in 8ms
-Uninstalled 1 package in 5ms
-Installed 1 package in 10ms
- - batrachian-toad==0.6.20 (from git+https://github.com/OpenHCSDev/toad.git@a27814f8a8cc257ded4ce267dd473c5913398918)
- + batrachian-toad==0.6.20 (from git+https://github.com/OpenHCSDev/toad.git@7a279b0880a58c1b7e76a84b67eb028b6c758d56)
-Using Python 3.14.2 environment at: /home/ts/.local/share/agent-comms/runtime-acp-extensions-20260928
-Checked 68 packages in 1ms
-All installed packages are compatible

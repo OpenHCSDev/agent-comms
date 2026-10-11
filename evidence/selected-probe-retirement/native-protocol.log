@@ -1,9 +1,0 @@
-<anonymous_script>:1
-file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/stack/.pi-native-d3967e8b6ee0cf28/node_modules/@earendil-works/pi-coding-agent/dist/core/session-context.js:17
- ^
-
-SyntaxError: Unexpected token 'i', "file:///hom"... is not valid JSON
-    at JSON.parse (<anonymous>)
-    at file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/stack/test-native-selected-compaction-summary.mjs:137:54
-
-Node.js v26.5.0

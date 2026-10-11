@@ -1,6 +1,0 @@
-{
-  "owned_installed_processes_remaining": [],
-  "owned_scratch_removed": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts",
-  "native_fixture_cleanup": "Actual final native test asserts both owners not process_alive; its private temporary root is context-managed",
-  "shared_or_live_changes": false
-}

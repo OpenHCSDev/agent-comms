@@ -1,8 +1,0 @@
-{
-  "state": "import-preflight-pass",
-  "agent_comms": "/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930/lib/python3.14/site-packages/agent_comms/__init__.py",
-  "toad": "/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930/lib/python3.14/site-packages/toad/__init__.py",
-  "driver": "/home/ts/wt/comms-bus-projection-ownership-s14-20260930/evidence/s14-bus-projection/installed-bus-gate/tests/canonical_wire_conversation_installed_pilot.py",
-  "inputs": 0,
-  "providers": 0
-}

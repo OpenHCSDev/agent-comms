@@ -1,2 +1,0 @@
-CAPACITY_MEMORY {"rss_limit_mib": 240, "v8_old_space_mib": 128, "processes": [{"pid": 552581, "phase": "cli-selected-identity-contract", "peak_rss_kib": 161748, "rusage_peak_rss_kib": 160860, "memory": {"rss": 164720640, "heapTotal": 69746688, "heapUsed": 52397008, "external": 4915610, "arrayBuffers": 896690}}], "sampled_peak_rss_kib": {"552581": 161572}, "python_peak_rss_kib": 73016, "exceeded": [], "monitor_errors": []}
-{"result": "PASS", "scope": "small actual CLI selected identity and capability; not combined capacity acceptance", "provider_calls": 0}

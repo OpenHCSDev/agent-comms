@@ -1,6 +1,0 @@
-command: ['/home/ts/wt/comms-historical-views-20260927/.test-venv/bin/python', '-m', 'pytest', '-q', '-o', 'addopts=', 'tests/test_native_evidence_boundary.py', 'tests/test_continued_private_session.py', 'tests/test_fresh_private_session.py', 'tests/test_native_pi.py', 'tests/test_native_transcript.py', 'tests/test_pi_payloads.py']
-..................................................ss.................... [ 52%]
-................s...........s...ssss.............................        [100%]
-129 passed, 8 skipped in 3.95s
-
-exit: 0

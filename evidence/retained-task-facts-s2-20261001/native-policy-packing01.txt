@@ -1,1 +1,0 @@
-PASS: three policy packing rounds, exact source retained, native envelope fits, tool pair unchanged, mandatory overflow refused. Not native checkpoint or recall acceptance.

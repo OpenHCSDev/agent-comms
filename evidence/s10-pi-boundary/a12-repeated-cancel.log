@@ -1,2 +1,0 @@
-caller finished while child alive: True
-after retained cleanup child alive: False

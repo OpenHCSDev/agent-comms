@@ -1,8 +1,0 @@
-{
-  "parent": "c3e7252aa7d11468370f29ced79bfe42636fabb9",
-  "selected_broker_expected_extension_sha256": "361bce4704c6830b4212894b005d9a191262e37c49e15b396afb2936ffd1a845",
-  "staged_extension_sha256": "722dcd9f79359528c9183f52fb9c04a93fed852e590981534f79a5a99c593896",
-  "matches": false,
-  "package": "/home/ts/.local/share/agent-comms/native-entry-store-0d7ebb4f4b5aa1ec/node_modules/@earendil-works/pi-coding-agent",
-  "method": "read-only digest comparison against actual selected_extension guard; no launch or mutation"
-}

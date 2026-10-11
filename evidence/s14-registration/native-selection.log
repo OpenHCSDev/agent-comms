@@ -1,4 +1,0 @@
-tests/test_selected_owner_compaction_integration.py::test_acp_selected_summary_handoff_uses_final_prompt_once[summary-unchanged-private]
-tests/test_selected_owner_compaction_integration.py::test_acp_selected_summary_handoff_uses_final_prompt_once[decline-unchanged-private]
-
-2/26 tests collected (24 deselected) in 0.20s

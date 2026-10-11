@@ -1,2 +1,0 @@
-Pre-PR176 collection (no test execution):
-2814 tests collected in 5.82s

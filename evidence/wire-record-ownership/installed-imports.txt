@@ -1,5 +1,0 @@
-/home/ts/wt/comms-wire-record-ownership-20260929/.installed/lib/python3.14/site-packages/agent_comms/wire_log.py
-/home/ts/wt/comms-wire-record-ownership-20260929/.installed/lib/python3.14/site-packages/agent_comms/wire_record.py
-/home/ts/wt/comms-wire-record-ownership-20260929/.installed/lib/python3.14/site-packages/agent_comms/bus_publication.py
-/home/ts/wt/comms-wire-record-ownership-20260929/.installed/lib/python3.14/site-packages/agent_comms/private_bus_checkpoint.py
-complete native manifest verified /home/ts/.local/share/agent-comms/native-current-9213ee71479d1b20/node_modules/@earendil-works/pi-coding-agent

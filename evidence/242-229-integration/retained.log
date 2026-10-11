@@ -1,3 +1,0 @@
-{"source_bytes": 143686055, "tokens_before": 312227, "provider_calls": 7, "transport": "loopback only", "native_commit": true, "strict_reopen": true, "read_files": 601, "modified_files": 211, "owner_idle": true, "new_user_inputs": 0}
-.
-1 passed in 16.63s

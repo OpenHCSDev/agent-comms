@@ -1,7 +1,0 @@
-Using CPython 3.14.2 interpreter at: /home/ts/.local/share/agent-comms/runtime-watcher-20260928/bin/python
-Resolved 1 package in 413ms
-   Building agent-comms @ file:///home/ts/wt/comms-main-read-index-20260928
-      Built agent-comms @ file:///home/ts/wt/comms-main-read-index-20260928
-Prepared 1 package in 236ms
-Installed 1 package in 8ms
- + agent-comms==0.1.0 (from file:///home/ts/wt/comms-main-read-index-20260928)

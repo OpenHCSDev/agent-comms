@@ -1,7 +1,0 @@
-B actual native request provider_calls 3
-B published actual reply provider_calls 3
-A automatically observed native reply provider_calls 4
-A ACP feedback proves exact reply injection provider_calls 4
-Both native turns released before guarded restart provider_calls 4
-.
-1 passed in 26.34s

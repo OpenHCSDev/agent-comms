@@ -1,7 +1,0 @@
-ordinary_native_response_bytes=2097409
-...native_attestation_refusal Done(text='Pi session identity changed during this turn.', ok=False, reason_code=<FailureReason.IDENTITY_UNCERTAIN: 'session_identity_uncertain'>, diagnostic={'exit_code': 143})
-.native_revision_retirement session Done(text='Native response lifecycle.', ok=True, reason_code=None, diagnostic={})
-.native_revision_retirement credentials Done(text='Native response lifecycle.', ok=True, reason_code=None, diagnostic={})
-.native_strict_reopen Done(text='Saved native session failed strict reopen validation.', ok=False, reason_code='compaction_reopen_invalid', diagnostic=None) Done(text='Native response lifecycle.', ok=True, reason_code=None, diagnostic={})
-.
-7 passed in 37.47s
