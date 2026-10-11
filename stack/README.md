@@ -27,19 +27,19 @@ Saved stopped owners remain stopped until explicitly started, and uncertain old
 inputs are never replayed to prove installation.
 
 Current installed bus/compaction ownership and paired Toad acceptance is recorded in
-[`current-functional/HANDOFF.md`](../evidence/current-functional/HANDOFF.md) and
-[`bus-compaction-integration/HANDOFF.md`](../evidence/bus-compaction-integration/HANDOFF.md).
-Earlier C0 acceptance is in [`c0-live/HANDOFF.md`](../evidence/c0-live/HANDOFF.md). Earlier installed acceptance is recorded in
-[`presence-integration/HANDOFF.md`](../evidence/presence-integration/HANDOFF.md) and the preceding
-[`relationship-integration/HANDOFF.md`](../evidence/relationship-integration/HANDOFF.md).
+`current-functional/HANDOFF.md` and
+`bus-compaction-integration/HANDOFF.md`.
+Earlier C0 acceptance is in `c0-live/HANDOFF.md`. Earlier installed acceptance is recorded in
+`presence-integration/HANDOFF.md` and the preceding
+`relationship-integration/HANDOFF.md`.
 That checkpoint includes the lossless saved-relationship migration, real channel
 coding, installed sidebar and saved-history checks. Repeated compaction and
 queued-input acceptance are recorded in
-[`s7-integration`](../evidence/s7-integration/) and
-[`input-drain`](../evidence/input-drain/). These are specific measured paths, not
+`s7-integration` and
+`input-drain`. These are specific measured paths, not
 a claim that every historical issue or performance limit is resolved. PR176 adds lossless existing-root installation of PR94's scalable private
 checkpoint and enables it for fresh managed roots. The current live bus has
-completed this migration; see [checkpoint-live acceptance](../evidence/checkpoint-live/HANDOFF.md)
+completed this migration; see checkpoint-live acceptance
 and the [installation procedure](private-checkpoint-install.md).
 
 `prepare-pi-native` verifies the installed Pi 0.85.1 bytes, builds a pinned
