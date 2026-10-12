@@ -19,7 +19,11 @@ from .errors import RelationViolationError
 from .private_path import PrivateFileRole
 
 if TYPE_CHECKING:
+    from .envelope_claim_transitions import ClaimTransition
+    from .messages import Message
     from .private_bus_checkpoint import CertifiedSourceRead
+    from .wire_log import WireLog
+    from .wire_metadata import WireMetadata
     from .child_process import Platform
 
 
@@ -71,6 +75,33 @@ class StoreLock:
         if self.source is None:
             raise RelationViolationError("Store has no certified original wire source.")
         return self.source
+
+    def claim_transitions(
+        self, log: WireLog, metadata: WireMetadata
+    ) -> tuple[tuple[ClaimTransition, ...], int]:
+        """Every claim envelope in bus order, and the verified bus high-water.
+
+        Taking this bus lock already checked the checkpoint against the bus,
+        so only the message rows are read: context rows carry no claim and
+        are nearly all of a long-lived bus. A claim bus without a checkpoint
+        has nothing but its rows to check, so it is read whole.
+        """
+        if self.source is None:
+            verified_sequence = 0
+            messages: list[Message] = []
+            for record in log.verified_records_unlocked(metadata):
+                verified_sequence = record.sequence_after(verified_sequence)
+                messages.extend(record.messages())
+        else:
+            self.source.require_marker(metadata)
+            messages = list(self.source.messages())
+            verified_sequence = self.source.committed_sequence()
+        return (
+            tuple(
+                transition for message in messages for transition in message.claim_transitions
+            ),
+            verified_sequence,
+        )
 
 
 @contextmanager

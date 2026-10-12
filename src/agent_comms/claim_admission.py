@@ -28,12 +28,13 @@ from .envelope_claim_transitions import (
     ExistingFileClaim,
     FileClaimPath,
     WakeAdmission,
+    project_verified_transitions,
 )
 from .errors import RelationViolationError
 from .messages import Message, MessageType
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
-from .store_files import _store_lock
+from .store_files import StoreLock, _store_lock
 from .threads import Thread
 
 
@@ -116,6 +117,16 @@ def _verify_selected_wake_state(
 
 
 
+def _committed_source(
+    bus_lock: StoreLock, admission: WakeAdmission, absent: str
+) -> CommittedDelivery:
+    """The message a selected turn answers, read through the held bus lock's checkpoint."""
+    try:
+        return bus_lock.certified_read().delivery(admission.source_seq)
+    except RelationViolationError as error:
+        raise IdentityConflict(absent) from error
+
+
 @contextmanager
 def _selected_claim_boundary(
     comms: Comms, store: Coordination, admission: WakeAdmission, owner_name: str
@@ -130,7 +141,7 @@ def _selected_claim_boundary(
     bus = comms.bus
     with (
         _store_lock(comms._wire_lock_path),
-        bus.log.locked(),
+        bus.log.locked() as bus_lock,
         _store_lock(comms.registry.store.path),
     ):
         registry = comms.registry.store._read_unlocked().snapshot()
@@ -147,20 +158,10 @@ def _selected_claim_boundary(
             raise IdentityConflict("Selected wake belongs to another wire root")
         if admission.source_seq <= metadata.admission_after_seq:
             raise IdentityConflict("Selected wake precedes the current admission floor")
-        initial = next(
-            (
-                row
-                for record in bus.log.verified_records_unlocked(metadata)
-                for row in record.deliveries()
-                if row.message.seq == admission.source_seq
-            ),
-            None,
-        )
-        if initial is None:
-            raise IdentityConflict("Selected wake has no committed initial row")
+        initial = _committed_source(bus_lock, admission, "Selected wake has no committed initial row")
         with store.session.read():
             _verify_selected_wake_state(initial, owner, generation, store, admission)
-            yield bus, metadata, registry, owner, initial
+            yield bus, bus_lock, metadata, registry, owner, initial
 
 
 def publish_selected_resource_claim(
@@ -178,14 +179,15 @@ def publish_selected_resource_claim(
     """
     with _selected_claim_boundary(comms, store, admission, owner_name) as (
         bus,
+        bus_lock,
         metadata,
         registry,
         owner,
         initial,
     ):
         resource = resource_path.normalized(Path(owner.worktree))
-        projection, _ = bus.log._claim_projection_unlocked(metadata)
-        existing = projection.get(resource)
+        transitions, _ = bus_lock.claim_transitions(bus.log, metadata)
+        existing = project_verified_transitions(transitions).get(resource)
         if existing is not None:
             if (
                 existing.admission == admission
@@ -194,14 +196,12 @@ def publish_selected_resource_claim(
             ):
                 return existing
             raise ClaimConflict(existing)
-        for message in bus.log._iter_log_unlocked():
-            transition = message.claim_transition
-            if (
-                transition is not None
-                and transition.admission is not None
-                and transition.admission.operation_id == admission.operation_id
-            ):
-                raise IdentityConflict("Wake claim operation was already consumed")
+        if any(
+            transition.admission is not None
+            and transition.admission.operation_id == admission.operation_id
+            for transition in transitions
+        ):
+            raise IdentityConflict("Wake claim operation was already consumed")
         target = initial.message.sender
         if target == owner.name:
             target = BuiltinChannel.ALL.value
@@ -211,7 +211,7 @@ def publish_selected_resource_claim(
             incarnation=str(owner.created_at),
             claims=[resource_path],
             _locked_registry_snapshot=registry,
-            _bus_locked=True,
+            _bus_lock=bus_lock,
             _admission=admission,
         )
         transition = committed.claim_transition
@@ -241,12 +241,14 @@ def release_selected_resources(
         return
     with _selected_claim_boundary(comms, store, admission, owner_name) as (
         bus,
+        bus_lock,
         metadata,
         registry,
         owner,
         initial,
     ):
-        projection, _ = bus.log._claim_projection_unlocked(metadata)
+        transitions, _ = bus_lock.claim_transitions(bus.log, metadata)
+        projection = project_verified_transitions(transitions)
         if any(projection.get(assignment.resource) != assignment for assignment in claims):
             raise IdentityConflict("Coding claim changed before release")
         target = (
@@ -266,7 +268,7 @@ def release_selected_resources(
             incarnation=str(owner.created_at),
             releases=tuple(assignment.resource for assignment in claims),
             _locked_registry_snapshot=registry,
-            _bus_locked=True,
+            _bus_lock=bus_lock,
         )
 
 
@@ -364,7 +366,7 @@ def write_selected_claimed_file(
     bus = comms.bus
     with (
         _store_lock(comms._wire_lock_path),
-        bus.log.locked(),
+        bus.log.locked() as bus_lock,
         _store_lock(comms.registry.store.path),
     ):
         registry = comms.registry.store._read_unlocked().snapshot()
@@ -379,24 +381,15 @@ def write_selected_claimed_file(
         marker = bus.log._private_marker_unlocked()
         if marker.root_id != admission.wire_root_id:
             raise IdentityConflict("Selected write belongs to another private root")
-        initial = next(
-            (
-                row
-                for record in bus.log.verified_records_unlocked(marker)
-                for row in record.deliveries()
-                if row.message.seq == admission.source_seq
-            ),
-            None,
-        )
-        if initial is None:
-            raise IdentityConflict("Selected write source is not committed")
+        initial = _committed_source(bus_lock, admission, "Selected write source is not committed")
         # A separate fail-fast coordinator connection holds the transaction
         # through fsync. A concurrently settling attempt must not slip between
         # verification and irreversible file mutation.
         with Coordination(str(store.session.path), lock_timeout=0) as scoped, scoped.session.transaction():
             _verify_selected_wake_state(initial, owner, generation, scoped, admission)
             normalized = ExistingFileClaim(Path(claimed.resource)).normalized(Path(owner.worktree))
-            projection, _ = bus.log._claim_projection_unlocked(marker)
+            transitions, _ = bus_lock.claim_transitions(bus.log, marker)
+            projection = project_verified_transitions(transitions)
             if claimed.admission != admission or projection.get(normalized) != claimed:
                 raise IdentityConflict("Selected write has no current exact resource claim")
             with _opened_selected_file(Path(owner.worktree), normalized) as (fd, stable):

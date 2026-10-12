@@ -27,7 +27,7 @@ from .bus_source_page import AddressedPage
 from .bus_projection import BusFileRevision
 from .envelope_claim_transitions import (
     ClaimProjection,
-    apply_transition,
+    project_verified_transitions,
 )
 from .errors import (
     RelationViolationError,
@@ -352,30 +352,19 @@ class WireLog:
                 break
             path = path.parent
 
-    def _claim_projection_unlocked(self, metadata: WireMetadata) -> tuple[ClaimProjection, int]:
-        """Project claims and return the verified bus high-water in one scan."""
-        return self._claim_projection(self.verified_records_unlocked(metadata))
-
-    @staticmethod
-    def _claim_projection(records) -> tuple[ClaimProjection, int]:
-        projection = ClaimProjection()
-        verified_sequence = 0
-        for record in records:
-            verified_sequence = record.sequence_after(verified_sequence)
-            for previous in record.messages():
-                if previous.claim_transition is not None:
-                    projection = apply_transition(projection, previous.claim_transition)
-        return projection, verified_sequence
-
     def claim_projection(self) -> ClaimProjection:
         """Derive ownership exclusively from guarded, verified bus envelopes."""
         with self._opened_wire_snapshot(need_sequence=False) as opened:
             if not opened.metadata.claims:
                 raise RelationViolationError("Claim read barrier is unavailable.")
-            projection, _verified_sequence = self._claim_projection(
-                self._snapshot_records(opened.metadata, opened.stream, opened.boundary)
+            return project_verified_transitions(
+                transition
+                for record in self._snapshot_records(
+                    opened.metadata, opened.stream, opened.boundary
+                )
+                for message in record.messages()
+                for transition in message.claim_transitions
             )
-            return projection
 
     def _private_marker_unlocked(self) -> WireMetadata:
         self._assert_private_directory()

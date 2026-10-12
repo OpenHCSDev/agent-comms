@@ -30,6 +30,7 @@ from .envelope_claim_transitions import (
     WakeAdmission,
     _release_resource,
     apply_transition,
+    project_verified_transitions,
 )
 from .errors import (
     ClaimEnvelopeUnknownError,
@@ -224,7 +225,7 @@ class Publisher:
         claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path] = (),
         _locked_registry_snapshot: RegistrySnapshot | None = None,
-        _bus_locked: bool = False,
+        _bus_lock: StoreLock | None = None,
         _admission: WakeAdmission | None = None,
     ) -> Message:
         """One guarded message and whole-set claim transition in ONE bus row.
@@ -250,10 +251,10 @@ class Publisher:
         if len(claims) + len(releases) > 32:
             raise RelationViolationError("Claim envelope exceeds the bounded resource set.")
         if _admission is not None and (
-            not claims or releases or not _bus_locked or _locked_registry_snapshot is None
+            not claims or releases or _bus_lock is None or _locked_registry_snapshot is None
         ):
             raise RelationViolationError("Bound claims require the selected wake boundary.")
-        with nullcontext() if _bus_locked else self.log.locked():
+        with nullcontext(_bus_lock) if _bus_lock is not None else self.log.locked() as bus_lock:
             metadata = self.log._private_marker_unlocked()
             if not metadata.claims:
                 raise RelationViolationError("Claim read barrier is unavailable.")
@@ -264,7 +265,8 @@ class Publisher:
             )
             snapshot.require_unambiguous_ownership()
             sender, target = self._validate_publish_request(message, registry_snapshot=snapshot)
-            projection, verified_sequence = self.log._claim_projection_unlocked(metadata)
+            transitions, verified_sequence = bus_lock.claim_transitions(self.log, metadata)
+            projection = project_verified_transitions(transitions)
             # The verified bus high-water also covers rows left by an earlier
             # uncertain append. Reserve and sync the next sequence before use.
             last_sequence = max(metadata.last_seq, verified_sequence)

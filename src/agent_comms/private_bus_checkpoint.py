@@ -136,20 +136,17 @@ class CertifiedSourceRead:
         self.require_open_prefix()
         return self.witness.through_seq
 
-    def public_message_references(self) -> Iterator[tuple[str, MessageReference]]:
-        """Read original sender/identity from the certified complete prefix.
+    def message_rows(self) -> Iterator[Mapping]:
+        """Every certified row that is not a context manifest, in bus order.
 
-        Certification has validated private envelopes, keys and the entire
-        original stream. Public consumers borrow that result rather than
-        reconstructing message bodies/tasks or delivery policies a second time.
-        Retained public rows remain present even when they have no SQL pointer.
-        The checkpoint already records the byte ranges of context-manifest
-        rows, which carry no message, so only the rows between them are read
-        (kilobytes instead of the whole bus). Every message row is still
-        parsed from the bus bytes.
+        The checkpoint records the byte ranges of context-manifest rows, which
+        carry no message and are nearly all of the bus, so only the rows
+        between them are read (kilobytes instead of the whole bus). Appending
+        validated each row; a reader borrows that result instead of checking
+        the whole stream again. Rows are read through this source's one
+        stream, so finish the iteration before using the source again.
         """
         from .store_files import _iter_jsonl_stream
-        from .wire_record import WireRecord
 
         self.require_open_prefix()
         try:
@@ -167,11 +164,24 @@ class CertifiedSourceRead:
             if offset > position:
                 self.stream.seek(position)
                 for row, _ in _iter_jsonl_stream(self.stream, boundary=offset):
-                    yield from WireRecord.certified_public_references(row)
+                    yield row
                 if self.stream.tell() != offset:
                     raise RelationViolationError("Checkpoint context row is not at a row boundary.")
             position = offset + length
         self.require_open_prefix()
+
+    def public_message_references(self) -> Iterator[tuple[str, MessageReference]]:
+        """Original sender and identity of every message row, without its body.
+
+        Retained public rows remain present even when they have no SQL pointer.
+        """
+        for row in self.message_rows():
+            yield from WireRecord.certified_public_references(row)
+
+    def messages(self) -> Iterator[Message]:
+        """Every committed message; its certified row is not checked a second time."""
+        for row in self.message_rows():
+            yield from WireRecord.certified_public_messages(row)
 
     def capture_sources(self, rows: tuple[WireSourcePointer[OriginalSource], ...]) -> Iterator[OriginalSource]:
         """Lend bounded original bytes, not this lock/connection, to decoding.
