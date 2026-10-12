@@ -214,12 +214,13 @@ class OwnedTurn:
             RecordedContextTurn,
         )
 
+        self.relations = self.runner.comms.relationships.peer_relations(self.thread.name)
         self.context = TurnContext.for_owner(
             self.thread,
             RecordedContextTurn(TurnId(self.turn_id), self.turn_lease.identity),
             self.task,
             self.runner.comms.views.thread_views(),
-            self.runner.comms.relationships.peer_relations(self.thread.name),
+            self.relations,
             tuple(origin.reference for origin in self.origins),
             batch.originals,
         )
@@ -369,11 +370,9 @@ class OwnedTurn:
         # Private delivery sees the registry lease and cannot start another turn.
         await self.runner.inputs.drain_owned_inbox(self.session_id)
 
-        awareness = await Coordination.run_worker(partial(
-            self.runner.comms.bus.awareness_segments, self.thread,
+        self.context = await Coordination.run_worker(partial(
+            self.context.with_awareness, self.runner.comms, self.thread, self.relations,
         ))
-        for segment in awareness:
-            self.context = self.context.append(segment)
 
     async def stream(self):
         await self.runner.transition_turn(self.session_id, self.turn_lease, PromptAcceptancePhase())

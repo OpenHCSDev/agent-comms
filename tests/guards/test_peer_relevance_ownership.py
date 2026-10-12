@@ -82,3 +82,23 @@ def test_peers_are_never_selected_or_ordered_by_thread_name_alone():
             assert called != "sorted" and not called.endswith(".sort"), (
                 f"turn_context.py:{node.lineno} {ast.unparse(node)}"
             )
+
+
+def test_partner_activity_only_reads():
+    """A partner's goal change is shown at the next turn; it never sends, publishes or wakes."""
+    tree = ast.parse((PACKAGE / "context_segments" / "partner_activity.py").read_text())
+    imported = {
+        alias.name for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+    }
+    assert imported <= {
+        "dataclass", "ClassVar", "FieldCodec", "GoalHistoryEntry", "GoalRevision", "GoalState",
+        "Informed", "InstructionFile", "InstructionSegment", "OwnerProvenance",
+    }
+    called = {
+        node.func.attr for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    }
+    assert called <= {
+        "grants", "goal_history", "latest", "read", "sha256", "hexdigest", "dumps", "encode",
+    }

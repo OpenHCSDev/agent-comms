@@ -951,13 +951,23 @@ class TurnContext:
         This is a preview through the same contributor declarations used by
         preparation. It is never a recorded SDK request or an input grant.
         """
-        context = cls.for_owner(
-            owner, NextContextTurn(), "", comms.views.thread_views(),
-            comms.relationships.peer_relations(owner.name),
-        )
+        relations = comms.relationships.peer_relations(owner.name)
+        context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations)
         for segment in owner.context_goal_segments():
             context = context.prepend(segment)
-        for segment in comms.bus.awareness_segments(owner, blocking=True):
+        return context.with_awareness(comms, owner, relations, blocking=True)
+
+    def with_awareness(
+        self, comms, owner: Thread, relations: tuple[PeerRelation, ...], *, blocking: bool = False
+    ) -> TurnContext:
+        """Append what the owner should know without being asked: addressed messages and partner activity."""
+        from .context_segments.partner_activity import PartnerActivitySegment
+
+        context = self
+        for segment in (
+            *comms.bus.awareness_segments(owner, blocking=blocking),
+            *PartnerActivitySegment.capture(owner, relations, comms.goals),
+        ):
             context = context.append(segment)
         return context
 

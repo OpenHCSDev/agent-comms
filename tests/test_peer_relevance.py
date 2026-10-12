@@ -5,7 +5,9 @@ import json
 import pytest
 
 from agent_comms.comms import Comms
-from agent_comms.goal_actions import SetGoalAction
+from agent_comms.context_segments.partner_activity import PartnerActivitySegment
+from agent_comms.goal_actions import CompletedGoalAction, GoalPrecondition, SetGoalAction
+from agent_comms.goal_states import ActiveGoal, CompletedGoal
 from agent_comms.peer_relevance import (
     AlwaysListed,
     ChannelmateRelevance,
@@ -107,3 +109,32 @@ def _coordination_text(comms, name):
     return CoordinationSegment.capture(
         owner, comms.views.thread_views(), comms.relationships.peer_relations(name)
     ).text()
+
+
+def _partner_activity(comms, name):
+    context = TurnContext.for_inspection(comms, comms.registry.require(name))
+    return tuple(s for s in context.segments if isinstance(s, PartnerActivitySegment))
+
+
+def test_a_collaborators_goal_change_reaches_its_partner_as_a_typed_item_without_a_wake(tmp_path):
+    comms = _wire(tmp_path, ("owner", {"team"}), ("partner", ()), ("mate", {"team"}))
+    comms.relationships.edit("owner", RelationshipEdit.decode("add"), "partner", "Shared review")
+    assert _partner_activity(comms, "owner") == ()
+    comms.goals.update_goal("mate", SetGoalAction(text="Unrelated work."))
+    goal = comms.goals.update_goal("partner", SetGoalAction(text="Review the parser."))
+    (segment,) = _partner_activity(comms, "owner")
+    (change,) = segment.changes
+    assert (change.peer, change.goal, change.state) == ("partner", goal.checkpoint, ActiveGoal)
+    comms.goals.update_goal(
+        "partner", CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="Done.")
+    )
+    (settled,) = _partner_activity(comms, "owner")[0].changes
+    assert (settled.state, settled.progress) == (CompletedGoal, "Done.")
+    shown = json.loads(_partner_activity(comms, "owner")[0].text().splitlines()[-1])
+    assert shown[0]["peer"] == "partner" and shown[0]["state"] == "completed"
+    # The change is read at the partner's next turn: nothing was sent and nobody was woken.
+    assert comms.views.full_history() == []
+    assert comms.bus.pending_counts_all(["owner", "partner", "mate"]) == dict.fromkeys(
+        ("owner", "partner", "mate"), 0
+    )
+    assert _partner_activity(comms, "mate") == ()
