@@ -463,3 +463,13 @@ def test_new_channel_during_boundary_is_not_falsely_unknown(tmp_path):
     with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=register_before_open):
         assert bodies(comms.views.channel_display_page("#new")) == []
     assert added
+
+
+def test_views_answer_how_far_the_bus_has_grown(tmp_path):
+    comms = populated(tmp_path)
+    assert comms.views.latest_sequence() == 0
+    comms.messaging.send("outsider", "#api", "to a channel")
+    comms.messaging.send("alice", "bob", "to someone else")
+    # Every message counts, not only those one conversation shows.
+    newest_in_channel = comms.views.channel_display_page("#api").messages[-1].seq
+    assert comms.views.latest_sequence() == comms.bus.log.latest_sequence() > newest_in_channel

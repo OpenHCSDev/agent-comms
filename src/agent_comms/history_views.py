@@ -469,6 +469,10 @@ class HistoryViews:
             "notifications": tuple(NotificationAssignment.source_paths(self.root)),
         }
 
+    def latest_sequence(self) -> int:
+        """The sequence number of the newest message on the bus, whoever it was sent to."""
+        return self.bus.log.latest_sequence()
+
     def revision(self) -> WireRevision:
         """A cheap observer token; activity expiry is checked without rescanning idle logs."""
         parts = {name: (tuple(file_revision(item) for item in path) if isinstance(path, tuple)
