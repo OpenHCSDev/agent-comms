@@ -22,8 +22,14 @@ from .store_files import file_revision
 
 @dataclass(frozen=True, slots=True)
 class RegistryRevision:
+    """A registry file revision: its document and the raw rows it was decoded from.
+
+    The raw rows let the next revision decode only the threads that changed.
+    """
+
     revision: tuple[int, int, int, int]
     document: RegistryDocument
+    raw: dict
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,8 +104,10 @@ class RegistryStore(LockedStore[RegistryDocument]):
             entry = self.cache.entry
             if entry is not None and entry.revision == revision:
                 return entry.document
-            document = self._decode(json.loads(self.path.read_text()))
-            self.cache.entry = RegistryRevision(revision, document)
+            raw = json.loads(self.path.read_text())
+            document = RegistryDocument.from_wire(
+                raw, None if entry is None else (entry.raw, entry.document))
+            self.cache.entry = RegistryRevision(revision, document, raw)
             return document
 
     @property
@@ -141,10 +149,11 @@ class RegistryStore(LockedStore[RegistryDocument]):
             yield RegistryEdit(self, original.copy(), original)
 
     def save_unlocked(self, document: RegistryDocument) -> None:
-        self._write_unlocked(json.dumps(self._encode(document), indent=2))
+        raw = self._encode(document)
+        self._write_unlocked(json.dumps(raw, indent=2))
         # Still under the exclusive lock: the written file is this document.
         if (revision := file_revision(self.path)) is not None:
-            self.cache.entry = RegistryRevision(revision, document.copy())
+            self.cache.entry = RegistryRevision(revision, document.copy(), raw)
 
     def _write_unlocked(self, text: str) -> None:
         # The two-file private guard protocol cannot use A8's rollback writer:

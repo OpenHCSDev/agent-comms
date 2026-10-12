@@ -131,10 +131,46 @@ class RegistryDocument(RegistryPresence):
             raise RelationViolationError(f"Invalid registry document: {error!r}") from error
         return cls.from_wire(restricted).entry(name)
 
+    # The sections that hold one row per thread name.
+    THREAD_ROWS = ("threads", "statuses", "last_seen")
+
     @classmethod
-    def from_wire(cls, raw: dict) -> RegistryDocument:
+    def from_wire(cls, raw: dict, earlier: tuple[dict, RegistryDocument] | None = None
+                  ) -> RegistryDocument:
+        """Decode a registry revision.
+
+        ``earlier`` is another revision's raw rows with the document decoded
+        from them. A thread row equal to its earlier raw row keeps the earlier
+        decoded value (declarations and statuses are immutable), so a revision
+        that changed one thread decodes one thread. Every row still comes from
+        the one codec, and the whole document is checked as before.
+        """
         try:
-            document = FieldCodec.decode(cls, raw)
+            if earlier is None:
+                document = FieldCodec.decode(cls, raw)
+            else:
+                earlier_raw, decoded = earlier
+                kept = {
+                    section: {
+                        name for name, row in raw[section].items()
+                        if name in getattr(decoded, section)
+                        and name in earlier_raw[section] and earlier_raw[section][name] == row
+                    }
+                    for section in cls.THREAD_ROWS
+                }
+                changed = FieldCodec.decode(cls, {**raw, **{
+                    section: {name: row for name, row in raw[section].items()
+                              if name not in kept[section]}
+                    for section in cls.THREAD_ROWS
+                }})
+                document = replace(changed, **{
+                    section: {
+                        name: (getattr(decoded, section) if name in kept[section]
+                               else getattr(changed, section))[name]
+                        for name in raw[section]
+                    }
+                    for section in cls.THREAD_ROWS
+                })
             names = set(document.threads)
             if names != set(document.statuses) or names != set(document.last_seen):
                 raise ValueError("thread presence does not match declarations")
@@ -149,7 +185,7 @@ class RegistryDocument(RegistryPresence):
             ):
                 raise ValueError("alias has no exclusive retained owner")
             return document
-        except (ValueError, TypeError, KeyError) as error:
+        except (ValueError, TypeError, KeyError, AttributeError) as error:
             raise RelationViolationError(f"Invalid registry document: {error}") from error
 
     def claim_name(self, base_name: str) -> str:
