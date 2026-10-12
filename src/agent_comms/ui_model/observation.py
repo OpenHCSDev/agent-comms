@@ -5,7 +5,8 @@ and receives finished results only when Core's stores actually change: the
 service watches the store files that ``HistoryViews.revision_paths`` declares,
 reads snapshots and presentations, derives the sidebar rows, and sends them
 over a pipe. The UI also asks it for reads it awaits: store reads (transcript
-pages, their currency, message notifications), answered in arrival order, and
+pages, their currency, message notifications, a thread's presentation, the
+operations that apply to a target), answered in arrival order, and
 reads a thread's live owner answers over its socket (the goal snapshot, input
 delivery), answered as they complete. Each answer carries the request id and
 the decoded value or the exception the read raised. The UI thread no longer
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
     from multiprocessing.connection import Connection
 
     from agent_comms.acp_extension import TranscriptSnapshotUpdate
+    from agent_comms.cli_commands import TargetAction
     from agent_comms.comms import Comms
     from agent_comms.history_views import RetiredViews
     from agent_comms.message_reference import MessageReference
@@ -239,6 +241,40 @@ class ReadNotifications(ReadRequest):
 
     def read(self, comms: Comms):
         return comms.views.message_notifications_for_references(self.references)
+
+
+@dataclass(frozen=True)
+class ReadThreadPresentation(ReadRequest):
+    """One current thread's presentation, read now; None when it is not a shown thread.
+
+    The observed threads' presentations arrive whenever the stores change; a
+    view awaits this one when it needs a read made after its own request
+    (a turn that has just ended).
+    """
+
+    thread: str
+
+    def read(self, comms: Comms) -> ThreadPresentation | None:
+        return comms.views.thread_presentation(self.thread)
+
+
+@dataclass(frozen=True)
+class ReadTargetActions(ReadRequest):
+    """The operations that apply to a thread, a channel or a selection, under one route selection."""
+
+    target: str | tuple[str, ...]
+    channel: str | Mapping[str, tuple[str, ...]] | None
+    project: str
+
+    def read(self, comms: Comms) -> tuple[TargetAction, ...]:
+        from agent_comms.cli_commands import CliCommand
+        from agent_comms.route_selection import RouteChanged, RouteSelection
+
+        selected = RouteSelection.capture(comms.root)
+        actions = CliCommand.target_catalog(comms, self.target, self.channel, project=self.project)
+        if RouteSelection.capture(comms.root) != selected:
+            raise RouteChanged("Comms route changed during command discovery")
+        return actions
 
 
 @dataclass(frozen=True)
