@@ -138,3 +138,21 @@ def test_a_collaborators_goal_change_reaches_its_partner_as_a_typed_item_without
         ("owner", "partner", "mate"), 0
     )
     assert _partner_activity(comms, "mate") == ()
+
+
+def test_awareness_shows_a_related_peers_messages_first_within_the_same_window(tmp_path):
+    from test_private_bus_checkpoint import _root
+
+    comms, _ = _root(tmp_path)
+    earlier = comms.messaging.send_initial_cohort("outsider", "Alice", "From a stranger")
+    later = comms.messaging.send_initial_cohort("Bob", "Alice", "From a partner")
+    owner = comms.registry.require("Alice")
+
+    def shown():
+        relations = comms.relationships.peer_relations("Alice")
+        (segment,) = comms.bus.awareness_segments(owner, relations)
+        return [row.seq for row in segment.sources]
+
+    assert shown() == [earlier.seq, later.seq]
+    comms.relationships.edit("Alice", RelationshipEdit.decode("add"), "Bob", "Shared review")
+    assert shown() == [later.seq, earlier.seq]

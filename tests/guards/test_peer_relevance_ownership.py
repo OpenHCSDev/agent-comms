@@ -121,4 +121,6 @@ def test_relevance_reaches_only_what_a_thread_sees_and_hears():
         }
         if "peer_relevance" in imports or names & (RELEVANCE | {"grants", "peer_relations"}):
             readers.add(path.relative_to(PACKAGE).as_posix())
-    assert readers == {"turn_context.py", "owned_turn.py", "context_segments/partner_activity.py"}
+    assert readers == {
+        "turn_context.py", "owned_turn.py", "context_segments/partner_activity.py", "message_bus.py",
+    }

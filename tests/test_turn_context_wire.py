@@ -31,19 +31,19 @@ def test_awareness_inspection_waits_for_original_source_without_input_delay(tmp_
     comms, _ = _root(tmp_path)
     comms.messaging.send_initial_cohort('sender', '#team', '@Alice original question')
     owner = comms.registry.require('Alice')
-    original = comms.bus.awareness_segments(owner)
+    original = comms.bus.awareness_segments(owner, ())
     assert len(original) == 1 and isinstance(original[0], AwarenessSegment)
     before = comms.bus.log.path.read_bytes()
     entered = Event()
 
     def read():
         entered.set()
-        return comms.bus.awareness_segments(owner, blocking=True)
+        return comms.bus.awareness_segments(owner, (), blocking=True)
 
     with ThreadPoolExecutor(max_workers=1) as worker:
         with comms.bus.log.locked():
             # Ordinary input still omits optional awareness immediately.
-            omitted = comms.bus.awareness_segments(owner)
+            omitted = comms.bus.awareness_segments(owner, ())
             assert len(omitted) == 1 and isinstance(omitted[0], UnavailableAwarenessSegment)
             pending = worker.submit(read)
             assert entered.wait(1)
@@ -249,7 +249,7 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     raw=comms.bus.log.path.read_bytes()
     activity=comms.bus.channel_activity()
     pending=comms.bus.pending_counts_all(['Alice','Bob'])
-    awareness=comms.bus.awareness_segments(comms.registry.require('Alice'))
+    awareness=comms.bus.awareness_segments(comms.registry.require('Alice'), ())
     comms.bus.log.record_context(manifest(comms.registry.require('Alice')))
     assert comms.bus.log.path.read_bytes().startswith(raw)
     assert b'PRIVATE INPUT' not in comms.bus.log.path.read_bytes()[len(raw):]
@@ -259,7 +259,7 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     assert _page(comms,lookup)[1:]==prior[1:]
     assert comms.bus.channel_activity()==activity
     assert comms.bus.pending_counts_all(['Alice','Bob'])==pending
-    assert comms.bus.awareness_segments(comms.registry.require('Alice'))==awareness
+    assert comms.bus.awareness_segments(comms.registry.require('Alice'), ())==awareness
     assert comms.bus.log.full_history()==[first]
     with comms.bus.log.full_history_snapshot() as (_, messages):
         assert list(messages)==[first]

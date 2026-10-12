@@ -965,7 +965,7 @@ class TurnContext:
 
         context = self
         for segment in (
-            *comms.bus.awareness_segments(owner, blocking=blocking),
+            *comms.bus.awareness_segments(owner, relations, blocking=blocking),
             *PartnerActivitySegment.capture(owner, relations, comms.goals),
         ):
             context = context.append(segment)

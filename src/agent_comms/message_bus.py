@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from .threads import Thread
     from .presentation import DisplaySelection
     from .catalog_store import CatalogDocument
+    from .relationships import PeerRelation
 
 from .publisher import Publisher
 from .wire_log import OpenedWireSnapshot, WireLog
@@ -356,8 +357,13 @@ class MessageBus:
         scope = ChannelDisplayScope(target, self._channels.read().history_targets(target))
         return [message for message in self.log.full_history() if scope.includes(message)]
 
-    def awareness_segments(self, owner: Thread, *, blocking: bool = False):
+    def awareness_segments(
+        self, owner: Thread, relations: Sequence[PeerRelation], *, blocking: bool = False
+    ):
         """Bounded pointers to addressed sources, independent of UI read state.
+
+        Pointers from peers whose relevance grants ``Prioritized`` come first;
+        which messages are in the window does not depend on relevance.
 
         Current canonical checkpoint rows own the pointers. Repeated reminders
         are intentional: neither displaying nor composing them proves model read.
@@ -368,6 +374,7 @@ class MessageBus:
         from .errors import RelationViolationError
         from .private_bus_checkpoint import addressed_source_pointers_unlocked
         from .context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
+        from .peer_relevance import Prioritized
 
         try:
             with self.log.locked(blocking=blocking):
@@ -381,6 +388,12 @@ class MessageBus:
             return (UnavailableAwarenessSegment.capture(),)
         if not rows:
             return ()
+        first = {
+            stable_thread_lookup(relation.peer.created_at)
+            for relation in relations
+            if relation.relevance.grants(Prioritized)
+        }
+        rows = tuple(sorted(rows, key=lambda row: row.sender_lookup not in first))
         return (AwarenessSegment.capture(self.log.path, marker.root_id, rows),)
 
     def incoming_page(self, name: str, *, after: int, limit: int = 100) -> MessagePage:
