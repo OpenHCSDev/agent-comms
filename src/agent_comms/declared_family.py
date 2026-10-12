@@ -66,28 +66,6 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
         cls._family_root = cls if is_root else root
         return cast(_FamilyMeta, cls)
 
-    @staticmethod
-    def _register_class(cls: Any, key: str, config: RegistryConfig) -> None:
-        # Registration writes the declared member; it must not start discovery
-        # while the family's defining module is still being initialized.
-        previous = dict.get(config.registry_dict, key)
-        if previous is not None:
-            # dataclass(slots=True) creates a replacement class, not a new member.
-            slot_replacement = (
-                "__slots__" in cls.__dict__
-                and "__slots__" not in previous.__dict__
-                and "__dataclass_fields__" in cls.__dict__
-                and cls.__dict__["__dataclass_fields__"]
-                is previous.__dict__.get("__dataclass_fields__")
-                and (cls.__module__, cls.__qualname__)
-                == (previous.__module__, previous.__qualname__)
-            )
-            if not slot_replacement:
-                raise TypeError(
-                    f"Duplicate family name {key!r}: {previous.__name__}, {cls.__name__}"
-                )
-        AutoRegisterMeta._register_class(cls, key, config)
-
 
 class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     """A family root owns one registry; names and capability views derive from members.
