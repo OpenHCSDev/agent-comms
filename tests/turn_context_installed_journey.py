@@ -457,7 +457,7 @@ def complete_history_controls(root):
     for generation in (1, 2):
         turn = RecordedContextTurn(TurnId(f'original-history-{generation}'),
                                    TurnIdentity(owner.incarnation, generation))
-        context = TurnContext.for_owner(owner, turn, f'Original private source {generation} π', ())
+        context = TurnContext.for_owner(owner, turn, f'Original private source {generation} π', (), ())
         observation = ContextManifest(context.thread, context.turn,
             tuple(segment.manifest(0) for segment in context.segments), 'fixture-original-estimate')
         service.bus.log.record_context(observation)
@@ -471,7 +471,7 @@ def complete_history_controls(root):
     service.bus.log.record_context(continuation)
     future_context = TurnContext.for_owner(renamed,
         RecordedContextTurn(TurnId('original-history-3'), TurnIdentity(renamed.incarnation, 3)),
-        'Later original private source', ())
+        'Later original private source', (), ())
     future = ContextManifest(future_context.thread, future_context.turn,
         tuple(segment.manifest(0) for segment in future_context.segments), 'fixture-original-estimate')
     service.bus.log.record_context(future)

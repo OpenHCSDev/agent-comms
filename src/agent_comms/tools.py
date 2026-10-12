@@ -614,9 +614,9 @@ class CommsCollaborationsTool(ToolRequest):
 
     def apply(self, comms: Comms) -> JsonObject:
         owner = _executing_thread()
-        projection = comms.relationships.contact_projection(owner)
-        result: JsonObject = {"collaborations": [asdict(edge) for edge in projection.explicit]}
-        if any(entry.goal_contacts for entry in projection.visible):
+        contacts = comms.relationships.contacts(owner)
+        result: JsonObject = {"collaborations": [asdict(edge) for edge in contacts.explicit]}
+        if any(entry.goal_contacts for entry in contacts.visible):
             result["visible_collaborators"] = [
                 {
                     "peer": entry.target,
@@ -625,10 +625,10 @@ class CommsCollaborationsTool(ToolRequest):
                     "detail": entry.detail,
                     "goal_contacts": [asdict(contact) for contact in entry.goal_contacts],
                 }
-                for entry in projection.visible
+                for entry in contacts.visible
             ]
-        if projection.diagnostics:
-            result["unresolved_goal_mentions"] = [asdict(row) for row in projection.diagnostics]
+        if contacts.diagnostics:
+            result["unresolved_goal_mentions"] = [asdict(row) for row in contacts.diagnostics]
         return result
 
 

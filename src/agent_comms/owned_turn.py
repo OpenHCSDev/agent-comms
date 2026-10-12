@@ -219,6 +219,7 @@ class OwnedTurn:
             RecordedContextTurn(TurnId(self.turn_id), self.turn_lease.identity),
             self.task,
             self.runner.comms.views.thread_views(),
+            self.runner.comms.relationships.peer_relations(self.thread.name),
             tuple(origin.reference for origin in self.origins),
             batch.originals,
         )

@@ -87,7 +87,7 @@ def test_exact_goal_mentions_are_mutual_read_only_awareness_with_provenance(
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     tool = invoke_tool(comms, "comms_collaborations", {})
     assert tool["collaborations"] == []
-    assert tool["visible_collaborators"][0]["sources"] == ("goal_mention",)
+    assert tool["visible_collaborators"][0]["sources"] == ["goal_mention"]
     assert {item["token"] for item in tool["unresolved_goal_mentions"]} == {"owner", "unknown"}
     reopened = Comms(comms.root)
     assert _rows(reopened, "peer")[0][0].goal_contacts == (contact,)
@@ -245,11 +245,11 @@ def test_collaboration_tool_ignores_unrelated_malformed_bus_history(
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     assert comms.relationships.collaborations("owner") == (manual,)
     result = invoke_tool(comms, "comms_collaborations", {})
-    assert result["collaborations"] == [asdict(manual)]
+    assert result["collaborations"] == json.loads(json.dumps([asdict(manual)]))
     if goal_mention:
-        assert result["visible_collaborators"][0]["sources"] == ("explicit", "goal_mention")
+        assert result["visible_collaborators"][0]["sources"] == ["explicit", "goal_mention"]
     else:
-        assert result == {"collaborations": [asdict(manual)]}
+        assert result == {"collaborations": json.loads(json.dumps([asdict(manual)]))}
     assert bus.read_bytes() == original_bus
     assert comms.relationships.store.path.read_bytes() == original_relationships
 

@@ -12,9 +12,10 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field, fields, replace
+from functools import cmp_to_key
 from pathlib import Path
 from threading import RLock
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from .channel_targets import is_channel_target
 from .command import Command
@@ -23,6 +24,13 @@ from .display_order import ThreadSort
 from .errors import UnregisteredThreadError
 from .goals import GoalMentionBinding
 from .locked_store import LockedStore
+from .peer_relevance import (
+    ChannelmateRelevance,
+    CollaboratorRelevance,
+    GoalContactRelevance,
+    PeerRelevance,
+    StrangerRelevance,
+)
 from .wire_record import WireRecord
 from .messages import Message
 from .presentation import ThreadView, WireRevision
@@ -40,6 +48,11 @@ if TYPE_CHECKING:
 
 class MutualThreadRelation(ABC):
     """Shared identity behavior for explicit and goal-derived mutual visibility."""
+
+    # Each relation owns the relevance its two threads have toward each other.
+    relevance: ClassVar[type[PeerRelevance]]
+    # Why the two threads are related, in words an agent can read.
+    note: str
 
     @property
     @abstractmethod
@@ -109,7 +122,8 @@ class CollaborationRevision(MutualThreadRelation):
 
 @dataclass(frozen=True, slots=True)
 class Collaboration(CollaborationRevision):
-    # Previous records are immutable provenance, never active parallel edges.
+    relevance: ClassVar[type[PeerRelevance]] = CollaboratorRelevance
+    # Earlier revisions are kept as history, never as parallel active edges.
     history: tuple[CollaborationRevision, ...] = ()
 
     def revision(self) -> CollaborationRevision:
@@ -131,6 +145,14 @@ class GoalDerivedContact(MutualThreadRelation):
     peer_created_at: float
     goal_id: str
     text_revision: int
+    relevance: ClassVar[type[PeerRelevance]] = GoalContactRelevance
+
+    @property
+    def note(self) -> str:
+        return (
+            f"Mentioned by {self.owner}'s goal {self.goal_id} "
+            f"text revision {self.text_revision} (awareness only)"
+        )
 
     @property
     def owner_incarnation(self) -> ThreadIncarnation:
@@ -183,7 +205,26 @@ class ThreadCommsSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
-class ContactProjection:
+class PeerRelation:
+    """How much one peer matters to a thread, and why."""
+
+    peer: ThreadIncarnation
+    relevance: type[PeerRelevance]
+    note: str = ""
+
+    @staticmethod
+    def order(first: PeerRelation, second: PeerRelation) -> int:
+        """More derived relevance first, read from the hierarchy; then name."""
+        if first.relevance is not second.relevance:
+            if issubclass(first.relevance, second.relevance):
+                return -1
+            if issubclass(second.relevance, first.relevance):
+                return 1
+        return (first.peer.name > second.peer.name) - (first.peer.name < second.peer.name)
+
+
+@dataclass(frozen=True, slots=True)
+class Contacts:
     """One registry/relationship snapshot, independent of bus history."""
 
     explicit: tuple[Collaboration, ...]
@@ -450,7 +491,49 @@ class ThreadRelationships:
                 tuple(row for row in diagnostics if row.owner == thread.name),
             )
 
-    def contact_projection(self, owner: str) -> ContactProjection:
+    def peer_relations(self, owner: str) -> tuple[PeerRelation, ...]:
+        """Every other registered thread with its relevance to ``owner``, most relevant first."""
+        with _store_lock(self._wire_lock_path):
+            registry = self.registry.snapshot()
+            thread = self.registry.require(owner)
+            edges = self.store.read().resolved(registry).collaborations
+            contacts, _ = self._goal_contacts(registry)
+        granted: dict[ThreadIncarnation, list[type[PeerRelevance]]] = {}
+        notes: dict[ThreadIncarnation, list[str]] = {}
+        for peer in registry.threads.values():
+            if peer.incarnation == thread.incarnation:
+                continue
+            granted[peer.incarnation] = [StrangerRelevance]
+            # The builtin channels hold every thread; a shared tag is a shared channel.
+            if thread.tags & peer.tags:
+                granted[peer.incarnation].append(ChannelmateRelevance)
+        relation: MutualThreadRelation
+        for relation in (*edges, *contacts):
+            identity = relation.counterpart(thread)
+            if identity in granted:
+                granted[identity].append(relation.relevance)
+                notes.setdefault(identity, []).append(relation.note)
+        return tuple(sorted(
+            (
+                PeerRelation(
+                    identity,
+                    PeerRelevance.most_derived(members),
+                    "\n".join(note for note in notes.get(identity, ()) if note),
+                )
+                for identity, members in granted.items()
+            ),
+            key=cmp_to_key(PeerRelation.order),
+        ))
+
+    def relevance(self, owner: str, peer: str) -> type[PeerRelevance]:
+        """The most derived relevance ``peer`` has to ``owner``."""
+        identity = self.registry.require(peer).incarnation
+        for relation in self.peer_relations(owner):
+            if relation.peer == identity:
+                return relation.relevance
+        raise ValueError("A thread has no relevance to itself")
+
+    def contacts(self, owner: str) -> Contacts:
         """Combine manual and bound-goal contacts without reading a bus row."""
         with _store_lock(self._wire_lock_path):
             registry = self.registry.snapshot()
@@ -473,23 +556,19 @@ class ThreadRelationships:
                     continue
                 peer_name = identity.name
                 current = visible.get(identity)
-                provenance = (
-                    f"Mentioned by {contact.owner}'s goal {contact.goal_id} "
-                    f"text revision {contact.text_revision} (awareness only)"
-                )
                 visible[identity] = RelationshipEntry(
                     peer_name,
                     "thread",
                     detail=(
-                        f"{current.detail}\n{provenance}"
+                        f"{current.detail}\n{contact.note}"
                         if current and current.detail
-                        else provenance
+                        else contact.note
                     ),
                     available=True,  # _goal_contacts checked this exact live incarnation.
                     sources=(*current.sources, "goal_mention") if current else ("goal_mention",),
                     goal_contacts=(*current.goal_contacts, contact) if current else (contact,),
                 )
-            return ContactProjection(
+            return Contacts(
                 explicit,
                 tuple(sorted(visible.values(), key=lambda row: (row.target, not row.available))),
                 tuple(row for row in diagnostics if row.owner == thread.name),
@@ -664,16 +743,12 @@ class ThreadRelationships:
             current = collaborating.get(contact_identity)
             person = people.get(other_name)
             available = person is not None and person.thread.incarnation == contact_identity
-            provenance = (
-                f"Mentioned by {contact.owner}'s goal {contact.goal_id} "
-                f"text revision {contact.text_revision} (awareness only)"
-            )
             collaborating[contact_identity] = RelationshipEntry(
                 other_name,
                 "thread",
                 person if available else None,
                 detail=(
-                    f"{current.detail}\n{provenance}" if current and current.detail else provenance
+                    f"{current.detail}\n{contact.note}" if current and current.detail else contact.note
                 ),
                 available=available,
                 sources=(*current.sources, "goal_mention") if current else ("goal_mention",),
