@@ -52,11 +52,13 @@ class RegistryAdmissionCheck(RegistryIdentityCheck):
         return self.expected.turn_lease is not None or super().thinking_matches()
 
 
-class RegistryPublicationCheck(RegistryAdmissionCheck):
-    """Publish this admitted source after next-turn project/settings changes.
+class RunningTurnRegistryCheck(RegistryAdmissionCheck):
+    """A turn that already started finishes in the project it started in.
 
-    This grants no input admission. The same lease/process/source must remain;
-    the captured executing directory must still belong to this conversation.
+    The registry's project selects the next turn, so changing it during a
+    turn does not stop that turn from recording its result and replies. The
+    same lease, process and session must remain, and the turn's directory
+    must still be one of this conversation's. This accepts no new input.
     """
 
     def worktree_matches(self) -> bool:

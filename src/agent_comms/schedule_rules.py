@@ -26,8 +26,30 @@ class SessionScheduleCheck(RuleCheck):
 
 
 @dataclass(frozen=True, kw_only=True)
-class GoalScheduleCheck(SessionScheduleCheck):
+class OwnerTurnScheduleCheck(SessionScheduleCheck):
     turns: "TurnRunner"
+
+
+class ProjectResumeCheck(OwnerTurnScheduleCheck):
+    """Start the turn the registry records as due after a project change.
+
+    The registry entry is the only record, so an owner started later reads
+    the same state and starts that turn too.
+    """
+
+    async def schedule(self) -> None:
+        inputs, session_id = self.inputs, self.session_id
+        try:
+            self.require_valid()
+            entry = (await inputs._own_entry(session_id)).entry
+            self.require_valid()
+        except ReservationViolationError:
+            return
+        if entry.status.running and entry.thread.owes_project_resume:
+            inputs.pending_turns.setdefault(session_id, []).append(
+                ScheduledTurn.resuming_in_project(entry.thread.worktree)
+            )
+            WakeScheduleCheck(session_id=session_id, inputs=inputs).schedule()
 
 
 class WakeScheduleCheck(SessionScheduleCheck):
@@ -109,16 +131,16 @@ class ClosingScheduleRule(ReservationRule):
         return check.inputs.closing
 
 
-class OccupiedGoalScheduleRule(ReservationRule):
-    check_type = GoalScheduleCheck
+class OccupiedOwnerTurnRule(ReservationRule):
+    check_type = OwnerTurnScheduleCheck
     explanation = "The session still owns a running turn."
 
     def violated(self, check):
         return check.session_id in check.turns.turn_tasks
 
 
-class NativeInboxGoalScheduleRule(ReservationRule):
-    check_type = GoalScheduleCheck
+class NativeInboxOwnerTurnRule(ReservationRule):
+    check_type = OwnerTurnScheduleCheck
     explanation = "A live native inbox still owns pending input."
 
     def violated(self, check):
@@ -134,16 +156,16 @@ class PendingWakeScheduleRule(ReservationRule):
         return wake is not None and not wake.done()
 
 
-class PendingTurnGoalScheduleRule(ReservationRule):
-    check_type = GoalScheduleCheck
-    explanation = "Already queued turns have priority over goal continuation."
+class PendingTurnOwnerTurnRule(ReservationRule):
+    check_type = OwnerTurnScheduleCheck
+    explanation = "Already queued turns have priority over a turn the owner starts itself."
 
     def violated(self, check):
         return bool(check.inputs.pending_turns.get(check.session_id))
 
 
 class DisabledWakeScheduleRule(ReservationRule):
-    check_type = WakeScheduleCheck
+    check_type = (WakeScheduleCheck, ProjectResumeCheck)
     explanation = "Background waking is disabled by the input/runtime configuration."
 
     def violated(self, check):

@@ -10,7 +10,6 @@ from agent_comms.runtime_requests import ProjectRuntimeRequest, RuntimeRequest
 from agent_comms.thread_presentation import LiveThreadOwnerBinding
 from native_backend_fixture import native_backend_fixture
 from agent_comms.coordinator import Coordination
-from agent_comms.schedule_rules import WakeScheduleCheck
 from native_proof_cases import read_proof_rows
 from types import SimpleNamespace
 
@@ -79,7 +78,11 @@ async def test_current_project_observation_keeps_original_binding_across_rename_
                     response = await owner.prompt(session, [{
                         'type': 'text', 'text': 'One authored native project-change question.'}])
                     assert response.stop_reason == 'end_turn'
-                    WakeScheduleCheck(session_id=session, inputs=owner.inputs).schedule()
+                    # The registry records the resume as due; the owner's own
+                    # observation starts it, with no call from the finished turn.
+                    assert comms.registry.require(name).project_resume_due
+                    while native.provider.posts != 2 or owner.turns.turn_state(session).busy:
+                        await asyncio.sleep(0.01)
                     await owner.inputs.wake_tasks[session]
             finally:
                 native.provider.response_gate = None
@@ -90,6 +93,7 @@ async def test_current_project_observation_keeps_original_binding_across_rename_
             assert comms.registry.require(name).session_file == str(native.session)
             assert comms.registry.require(name).worktree == str(second)
             assert comms.registry.require(name).turn_lease is None
+            assert not comms.registry.require(name).project_resume_due
             assert len(comms.registry.all_threads()) == 1
             # A native input can own several context-observation generations.
             assert len({row['inputId'] for row in read_proof_rows(native.session)}) == 2

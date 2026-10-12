@@ -24,7 +24,6 @@ from .acp_extension import (
 )
 from .activity import StoppedDrainDiagnostic, UnavailableDrainDiagnostic
 from .agent_backend import InputContent, InputId, InputRequest, SendNow, WhenBusy
-from .agent_events import Done
 from .comms import Comms
 from .coordination_errors import CoordinationError, IdentityConflict
 from .native_pi import NativePiUnavailable
@@ -42,7 +41,7 @@ from .registry_document import RegistryEntry
 from .registry_store import RegistryEntryRevision
 from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
-from .schedule_rules import WakeScheduleCheck
+from .schedule_rules import ProjectResumeCheck, WakeScheduleCheck
 from .session_lifecycle import SessionLifecycle
 from .store_files import _async_store_lock, _store_lock, file_revision
 from .thread_identity import AdmissionIdentity
@@ -357,6 +356,9 @@ class InputDrain:
                         await Coordination.run_worker(partial(
                             self.comms.goals.recover_closed_goal_wait, session_id,
                         ))
+                    await ProjectResumeCheck(
+                        session_id=session_id, inputs=self, turns=self.effects.turns,
+                    ).schedule()
                     await self.effects.turns.goals.schedule_goal(session_id)
                 except asyncio.CancelledError:
                     raise
@@ -626,14 +628,6 @@ class InputDrain:
             await self.emit_input_delivery_changed(session_id)
         if self.queued_inputs.get(session_id, {}).pop(input_id, None):
             await self.emit_queue_state(session_id)
-
-    def continue_in_project(
-        self, session_id: str, terminal: Done, original_project: str, current_project: str
-    ) -> None:
-        if self.closing or current_project == original_project:
-            return
-        if continuation := terminal.project_continuation(current_project):
-            self.pending_turns.setdefault(session_id, []).append(continuation)
 
     def finish_original_inputs(self, keys: tuple[str, ...]) -> InputDocument:
         """The joined retirement owns the original input and its wire cut."""

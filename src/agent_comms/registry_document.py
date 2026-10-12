@@ -429,6 +429,7 @@ class RegistryDocument(RegistryPresence):
             current,
             turn_generation=current.turn_generation + 1,
             last_finished_turn_id=None,
+            project_resume_due=False,
             active_turn=ActiveTurn(
                 turn_id,
                 current.pid,
@@ -457,6 +458,9 @@ class RegistryDocument(RegistryPresence):
             current,
             active_turn=None,
             last_finished_turn_id=(lease.turn_id if current.turn_generation else None),
+            project_resume_due=(
+                current.project_resume_due and current.active_turn.phase.keeps_project_resume
+            ),
         )
         self.last_seen[name] = time.time()
         if not attested:

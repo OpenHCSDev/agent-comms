@@ -12,7 +12,6 @@ from acp import RequestError
 
 from agent_comms import agent_events as ae
 from delivery_owner_fixture import canonical_agent
-from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
@@ -172,41 +171,6 @@ async def test_saved_native_identity_changes_publish_one_complete_update(tmp_pat
             assert native.provider.posts == 0 and native.starts == []
     assert all(not child.alive() and not child.platform.group_members(child.identity)
                for child in native.children)
-
-
-async def test_owner_automatically_continues_same_session_in_new_project(tmp_path, monkeypatch):
-    old = tmp_path / "old"
-    new = tmp_path / "new"
-    old.mkdir()
-    new.mkdir()
-    comms = wire(tmp_path / "wire")
-    agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
-    session = (await agent.new_session(str(old))).session_id
-    session_file = str(old / "session.jsonl")
-    calls = []
-
-    async def events(*args, **kwargs):
-        calls.append((args[3], kwargs.get("session_file"), args[2]))
-        yield ae.AgentInfo(session_file=session_file)
-        if len(calls) == 1:
-            comms.threads.set_project(session, str(new))
-            yield ae.ToolEnd(id="project", name="comms_set_project", ok=True)
-        yield ae.StreamSettled()
-        yield ae.Done(ok=True, text="")
-
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    try:
-        await agent.prompt(session, [{"type": "text", "text": "Change projects"}])
-        WakeScheduleCheck(session_id=session, inputs=agent.inputs).schedule()
-        await asyncio.wait_for(agent.inputs.wake_tasks[session], timeout=2)
-        assert len(calls) == 2
-        assert calls[0][0] == str(old)
-        assert calls[1][0] == str(new) and calls[1][1] == session_file
-        assert "Project change completed" in calls[1][2]
-        assert comms.registry.require(session).pid == os.getpid()
-        assert len(comms.registry.all_threads()) == 1
-    finally:
-        await agent.shutdown()
 
 
 async def test_cancel_during_project_change_does_not_restart_work(tmp_path, monkeypatch):

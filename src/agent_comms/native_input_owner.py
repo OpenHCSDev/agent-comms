@@ -20,7 +20,7 @@ from .native_admission_rules import (
     GoalRegistryAdmissionCheck,
     GoalRegistryIdentityCheck,
     RegistryIdentityCheck,
-    RegistryPublicationCheck,
+    RunningTurnRegistryCheck,
 )
 from .registry_document import RegistrySnapshot
 from .reservation_rules import ReservationViolationError
@@ -140,16 +140,29 @@ class RegistryOwner:
         """
         self.require_active_turn()
         return self._snapshot_owner(
-            snapshot, "Native source owner changed before publication", RegistryPublicationCheck,
+            snapshot, "Native source owner changed before publication", RunningTurnRegistryCheck,
         )
 
+    def require_running_turn(self, registry: Registration) -> None:
+        """This owner's started turn may still record its result and replies.
+
+        A project or goal chosen during the turn belongs to the next turn.
+        """
+        self.require_active_turn()
+        self._require_live(registry, RunningTurnRegistryCheck)
+
     def require_registry(self, registry: Registration) -> None:
+        self._require_live(registry, self.check_type)
+
+    def _require_live(
+        self, registry: Registration, check: type[RegistryIdentityCheck],
+    ) -> None:
         try:
             actual, admission = registry.live_owner_with_admission(self.thread.name)
         except (RelationViolationError, ValueError) as error:
             raise StaleFence("recipient registry owner stopped or changed") from error
         self._require_current(
-            actual, admission, "recipient registry owner stopped or changed", self.check_type,
+            actual, admission, "recipient registry owner stopped or changed", check,
         )
 
 

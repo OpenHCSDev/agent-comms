@@ -35,6 +35,8 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     accepts_followup: ClassVar[bool] = True
     can_compact: ClassVar[bool] = False
     can_cancel: ClassVar[bool] = True
+    # A turn released in this phase still owes the turn after its project change.
+    keeps_project_resume: ClassVar[bool] = True
     activity_state: ClassVar[ActivityState] = ActivityState.THINKING
     label: ClassVar[str] = "Waiting for model"
 
@@ -124,6 +126,7 @@ class IdlePhase(TurnPhase):
 
 class CancellingPhase(TurnPhase):
     accepts_followup = False
+    keeps_project_resume = False
     label = "Cancelling"
     can_cancel = False
 

@@ -121,7 +121,7 @@ class PrivateSendAdmission:
             wire_root_id=self.wire_root_id,
             prompt=self.prompt.text,
         )
-        self.owner.require_registry(self.bus._registry)
+        self.owner.require_running_turn(self.bus._registry)
 
     async def execute(
         self,

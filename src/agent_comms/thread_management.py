@@ -270,10 +270,8 @@ class ThreadManagement:
             current = str(target)
             if current == previous:
                 return ProjectChangeResult(thread.name, previous, current, False)
-            history = tuple(dict.fromkeys((*thread.previous_worktrees, previous)))
             self.registry.register(
-                replace(thread, worktree=current, previous_worktrees=history),
-                self.registry.status(thread.name),
+                thread.moved_to_project(previous, current), self.registry.status(thread.name),
             )
             return ProjectChangeResult(thread.name, previous, current, True)
 

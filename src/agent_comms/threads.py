@@ -61,6 +61,12 @@ class Thread(ThreadProvenance):
     auto_title_pending: bool = field(
         default=False, metadata={"registration_inheritance": InheritPrevious}
     )
+    # The project changed during a turn, and no turn has started in it yet.
+    # The next turn start clears this; an idle owner starts that turn itself.
+    project_resume_due: bool = field(
+        default=False,
+        metadata={"registration_inheritance": InheritPrevious, "wire_omit_default": True},
+    )
     title: str | None = field(default=None, kw_only=True,
                              metadata={"registration_inheritance": InheritMissing})
     role: ThreadRole = ThreadRole.AGENT
@@ -81,6 +87,19 @@ class Thread(ThreadProvenance):
         selected = str(Path(worktree).expanduser().resolve())
         return any(selected == str(Path(path).expanduser().resolve())
                    for path in (self.worktree, *self.previous_worktrees))
+
+    def moved_to_project(self, previous: str, project: str) -> Thread:
+        """A running turn finishes where it started and owes one turn in the new project."""
+        return replace(
+            self, worktree=project,
+            previous_worktrees=tuple(dict.fromkeys((*self.previous_worktrees, previous))),
+            project_resume_due=self.project_resume_due or self.executing,
+        )
+
+    @property
+    def owes_project_resume(self) -> bool:
+        """Idle with the resume still due; a turn for the active goal is that turn."""
+        return self.project_resume_due and not self.executing and self.active_goal is None
 
     @property
     def turn_state(self) -> TurnState:

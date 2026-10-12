@@ -94,6 +94,15 @@ class ScheduledTurn:
     def autonomous_goal(self) -> bool:
         return self.goal_id is not None and self.origin is None
 
+    @classmethod
+    def resuming_in_project(cls, project: str) -> ScheduledTurn:
+        return cls(
+            f"Project change completed: tools and context now use {project!r}. "
+            "Continue the user's previous request from this directory. "
+            "If the request was only to switch projects, report that you are ready; "
+            "do not invent extra work."
+        )
+
     def require_dependency_wake(self, error: Exception) -> None:
         """Only dependency launches use standby refusal settlement."""
         if self.goal_wait_id is None:

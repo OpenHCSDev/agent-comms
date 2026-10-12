@@ -211,7 +211,7 @@ class SelectedAttempt:
             action.apply(tools)
             request.admission.commit(participant.store, result.context)
             self.stage.progress.finish()
-            participant.owner.require_registry(participant.comms.registry)
+            participant.owner.require_running_turn(participant.comms.registry)
             published = await participant.response_owner.publish_responses(
                 participant.store.session.path, participant.bus, self.stage.fence, replies
             )

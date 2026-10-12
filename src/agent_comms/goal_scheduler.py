@@ -35,7 +35,7 @@ from .goals import Goal, GoalRevision
 from .native_input_owner import GoalLaunchOwner
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
-from .schedule_rules import GoalScheduleCheck, WakeScheduleCheck
+from .schedule_rules import OwnerTurnScheduleCheck, WakeScheduleCheck
 from .store_files import _store_lock
 from .threads import Thread
 
@@ -62,7 +62,7 @@ class GoalScheduler:
 
     async def schedule_goal(self, session_id: str) -> None:
         """Join durable goal admission before binding its existing loop queue."""
-        check = GoalScheduleCheck(
+        check = OwnerTurnScheduleCheck(
             session_id=session_id, inputs=self.inputs, turns=self.effects.turns,
         )
         try:

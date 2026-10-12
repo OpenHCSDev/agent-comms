@@ -336,7 +336,6 @@ class OwnedTurn:
         )
         permits.callback(self.finish_goals)
         resources.push_async_callback(self.close_changed_project)
-        self.lease_custody.push_async_callback(self.continue_changed_project)
 
     def finish_goals(self) -> None:
         self.progress.goals.finish(self.progress.result)
@@ -347,15 +346,6 @@ class OwnedTurn:
         if current.worktree != self.thread.worktree:
             if persistent := self.runner.persistent_backends.get(self.session_id):
                 await persistent.close_idle()
-
-    async def continue_changed_project(self) -> None:
-        if self.progress.result is not None:
-            name = self.runner.sessions.bindings[self.session_id]
-            current = await Coordination.run_worker(partial(self.runner.comms.registry.require, name))
-            self.runner.inputs.continue_in_project(
-                self.session_id, self.progress.result, self.thread.worktree,
-                current.worktree,
-            )
 
     async def prepare_native(self):
         await self.runner.effects._emit_event(
