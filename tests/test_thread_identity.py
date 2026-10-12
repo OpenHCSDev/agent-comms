@@ -156,7 +156,7 @@ def test_admission_scope_cannot_decode_a_registry_process_owner(tmp_path):
     registry_owner = snapshot.owner_identity("owner")
     assert admission.admission_generation == registry_owner.generation
     assert admission != registry_owner
-    context = QueuedInputContext.capture(owner, admission, None)
+    context = QueuedInputContext.capture(owner, admission)
     assert context.owns(admission)
     assert not context.owns(registry_owner)
     # Repeated revocation advances admission without a second owner replacement.
