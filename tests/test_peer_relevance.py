@@ -89,6 +89,7 @@ def test_peer_list_keeps_every_related_peer_whatever_its_name_or_the_thread_coun
     comms.relationships.edit("owner", RelationshipEdit.decode("add"), "zz-partner", "Shared review")
     comms.goals.update_goal("zz-partner", SetGoalAction(text="Review the parser."))
     comms.goals.update_goal("owner", SetGoalAction(text="Ship it with @zy-mentioned."))
+    comms.goals.update_goal("mate-000", SetGoalAction(text="Unrelated work."))
     peers = _peers(comms, "owner")
     assert [peer.name for peer in peers[:3]] == ["zz-partner", "zy-mentioned", "mate-000"]
     assert len(peers) == slots and "aa-stranger" not in {peer.name for peer in peers}

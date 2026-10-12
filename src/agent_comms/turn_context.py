@@ -15,7 +15,7 @@ from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .goals import Goal
 from .native_session_reopen import NativeSessionIdentity
-from .peer_relevance import AlwaysListed, PeerRelevance, Visible
+from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance, Visible
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
 from .thread_status import ThreadStatus
 
@@ -714,7 +714,7 @@ class PeerState:
 
     @classmethod
     def from_view(cls, view: ThreadView, relation: PeerRelation) -> PeerState:
-        goal = view.thread.active_goal
+        goal = view.thread.active_goal if relation.relevance.grants(GoalShown) else None
         return cls(
             view.thread.name,
             type(view.status),

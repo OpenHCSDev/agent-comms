@@ -25,6 +25,10 @@ class AlwaysListed(RelevanceCapability):
     """The peer is in the peer list whatever its name and however many threads exist."""
 
 
+class GoalShown(RelevanceCapability):
+    """The peer list says what the peer is working on now."""
+
+
 class Prioritized(RelevanceCapability):
     """The peer's messages surface first in awareness."""
 
@@ -64,7 +68,7 @@ class ChannelmateRelevance(StrangerRelevance, Visible):
     """A peer that shares a tag channel."""
 
 
-class GoalContactRelevance(ChannelmateRelevance, AlwaysListed, Prioritized):
+class GoalContactRelevance(ChannelmateRelevance, AlwaysListed, GoalShown, Prioritized):
     """A peer bound to an active goal by a mention."""
 
 
