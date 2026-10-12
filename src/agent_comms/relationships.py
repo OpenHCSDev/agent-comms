@@ -46,6 +46,27 @@ if TYPE_CHECKING:
     from .registration import Registration
 
 
+@dataclass(frozen=True, slots=True)
+class RelationRevision:
+    """An earlier note of a relation and when it was replaced or written."""
+
+    note: str
+    at: float
+
+
+@dataclass(frozen=True, slots=True)
+class RelationRecord:
+    """One relation as a thread reads it: who made it, when, why and how it changed."""
+
+    peer: str
+    relevance: type[PeerRelevance]
+    author: str
+    # None when the relation records no time of its own.
+    created_at: float | None
+    note: str
+    history: tuple[RelationRevision, ...]
+
+
 class MutualThreadRelation(ABC):
     """Shared identity behavior for explicit and goal-derived mutual visibility."""
 
@@ -53,6 +74,10 @@ class MutualThreadRelation(ABC):
     relevance: ClassVar[type[PeerRelevance]]
     # Why the two threads are related, in words an agent can read.
     note: str
+
+    @abstractmethod
+    def record(self, peer: ThreadIncarnation) -> RelationRecord:
+        """Describe this relation to the thread on the other side of ``peer``."""
 
     @property
     @abstractmethod
@@ -92,6 +117,17 @@ class CollaborationRevision(MutualThreadRelation):
     note: str
     created_at: float
     updated_at: float
+    relevance: ClassVar[type[PeerRelevance]] = CollaboratorRelevance
+
+    def earlier_notes(self) -> tuple[RelationRevision, ...]:
+        return ()
+
+    def record(self, peer: ThreadIncarnation) -> RelationRecord:
+        # The stored owner is the thread that created the collaboration.
+        return RelationRecord(
+            peer.name, self.relevance, self.owner, self.created_at, self.note,
+            self.earlier_notes(),
+        )
 
     @property
     def owner_incarnation(self) -> ThreadIncarnation:
@@ -122,13 +158,17 @@ class CollaborationRevision(MutualThreadRelation):
 
 @dataclass(frozen=True, slots=True)
 class Collaboration(CollaborationRevision):
-    relevance: ClassVar[type[PeerRelevance]] = CollaboratorRelevance
     # Earlier revisions are kept as history, never as parallel active edges.
     history: tuple[CollaborationRevision, ...] = ()
 
     def revision(self) -> CollaborationRevision:
         return CollaborationRevision(
             **{field.name: getattr(self, field.name) for field in fields(CollaborationRevision)}
+        )
+
+    def earlier_notes(self) -> tuple[RelationRevision, ...]:
+        return tuple(
+            RelationRevision(revision.note, revision.updated_at) for revision in self.history
         )
 
     def updated(self, note: str, now: float) -> Collaboration:
@@ -153,6 +193,10 @@ class GoalDerivedContact(MutualThreadRelation):
             f"Mentioned by {self.owner}'s goal {self.goal_id} "
             f"text revision {self.text_revision} (awareness only)"
         )
+
+    def record(self, peer: ThreadIncarnation) -> RelationRecord:
+        # The goal's owner wrote the mention; a mention records no time.
+        return RelationRecord(peer.name, self.relevance, self.owner, None, self.note, ())
 
     @property
     def owner_incarnation(self) -> ThreadIncarnation:
@@ -210,7 +254,11 @@ class PeerRelation:
 
     peer: ThreadIncarnation
     relevance: type[PeerRelevance]
-    note: str = ""
+    records: tuple[RelationRecord, ...] = ()
+
+    @property
+    def note(self) -> str:
+        return "\n".join(record.note for record in self.records if record.note)
 
     @staticmethod
     def order(first: PeerRelation, second: PeerRelation) -> int:
@@ -499,7 +547,7 @@ class ThreadRelationships:
             edges = self.store.read().resolved(registry).collaborations
             contacts, _ = self._goal_contacts(registry)
         granted: dict[ThreadIncarnation, list[type[PeerRelevance]]] = {}
-        notes: dict[ThreadIncarnation, list[str]] = {}
+        records: dict[ThreadIncarnation, list[RelationRecord]] = {}
         for peer in registry.threads.values():
             if peer.incarnation == thread.incarnation:
                 continue
@@ -512,13 +560,13 @@ class ThreadRelationships:
             identity = relation.counterpart(thread)
             if identity in granted:
                 granted[identity].append(relation.relevance)
-                notes.setdefault(identity, []).append(relation.note)
+                records.setdefault(identity, []).append(relation.record(identity))
         return tuple(sorted(
             (
                 PeerRelation(
                     identity,
                     PeerRelevance.most_derived(members),
-                    "\n".join(note for note in notes.get(identity, ()) if note),
+                    tuple(records.get(identity, ())),
                 )
                 for identity, members in granted.items()
             ),

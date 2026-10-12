@@ -960,11 +960,16 @@ class TurnContext:
     def with_awareness(
         self, comms, owner: Thread, relations: tuple[PeerRelation, ...], *, blocking: bool = False
     ) -> TurnContext:
-        """Append what the owner should know without being asked: addressed messages and partner activity."""
+        """Append what the owner should know without being asked.
+
+        Its relationships, the messages addressed to it and its partners' goal changes.
+        """
         from .context_segments.partner_activity import PartnerActivitySegment
+        from .context_segments.relationships import RelationshipsSegment
 
         context = self
         for segment in (
+            *RelationshipsSegment.capture(owner, relations),
             *comms.bus.awareness_segments(owner, relations, blocking=blocking),
             *PartnerActivitySegment.capture(owner, relations, comms.goals),
         ):

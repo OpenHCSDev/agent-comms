@@ -99,8 +99,7 @@ def test_peer_list_keeps_every_related_peer_whatever_its_name_or_the_thread_coun
     assert (mate.relevance, mate.note, mate.goal) == (ChannelmateRelevance, "", None)
     assert all(peer.relevance.grants(Visible) for peer in peers)
     assert [peer.relevance.grants(AlwaysListed) for peer in peers[:3]] == [True, True, False]
-    shown = json.loads(_coordination_text(comms, "owner").split("most relevant first: ")[1]
-                       .split("\n\n")[0])
+    shown = json.loads(_coordination_text(comms, "owner").split("Peer state: ")[1])
     assert shown[0]["relevance"] == "collaborator" and shown[0]["goal"] == "Review the parser."
 
 
@@ -156,3 +155,37 @@ def test_awareness_shows_a_related_peers_messages_first_within_the_same_window(t
     assert shown() == [earlier.seq, later.seq]
     comms.relationships.edit("Alice", RelationshipEdit.decode("add"), "Bob", "Shared review")
     assert shown() == [later.seq, earlier.seq]
+
+
+def test_context_shows_each_relation_with_its_author_time_note_and_history(tmp_path):
+    from agent_comms.context_segments.relationships import RelationshipsSegment
+
+    comms = _wire(tmp_path, ("owner", ()), ("partner", ()), ("mentioned", ()), ("nobody", ()))
+
+    def records(name):
+        context = TurnContext.for_inspection(comms, comms.registry.require(name))
+        segments = [s for s in context.segments if isinstance(s, RelationshipsSegment)]
+        return segments[0].records if segments else ()
+
+    assert records("owner") == ()
+    created = comms.relationships.edit(
+        "partner", RelationshipEdit.decode("add"), "owner", "First plan")
+    updated = comms.relationships.edit(
+        "owner", RelationshipEdit.decode("update"), "partner", "Second plan")
+    comms.goals.update_goal("owner", SetGoalAction(text="Ship it with @mentioned."))
+    collaboration, mention = records("owner")
+    assert (collaboration.peer, collaboration.relevance, collaboration.author) == (
+        "partner", CollaboratorRelevance, "partner")
+    assert (collaboration.created_at, collaboration.note) == (created.created_at, "Second plan")
+    assert [(revision.note, revision.at) for revision in collaboration.history] == [
+        ("First plan", created.updated_at)]
+    assert updated.updated_at > created.updated_at
+    assert (mention.peer, mention.relevance, mention.author, mention.created_at) == (
+        "mentioned", GoalContactRelevance, "owner", None)
+    assert records("partner")[0].peer == "owner" and records("partner")[0].author == "partner"
+    assert records("nobody") == ()
+    context = TurnContext.for_inspection(comms, comms.registry.require("owner"))
+    shown = json.loads(next(
+        s for s in context.segments if isinstance(s, RelationshipsSegment)
+    ).text().splitlines()[-1])
+    assert shown[0]["history"] == [{"note": "First plan", "at": created.updated_at}]
