@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import ClassVar
 
 
 class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcome
@@ -25,6 +26,17 @@ class CoordinationBusy(SelectedToolDenied):
         super().__init__(
             "The coordination database is busy. This tool call did not run and "
             "changed nothing; call the tool again."
+        )
+
+
+class ToolStartNotSeen(SelectedToolDenied):
+    """Pi asked to run a tool call it never reported as started; the call was not checked."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Pi did not report this tool call as started within "
+            f"{NativeToolCall.start_wait_seconds} s, so it was not checked. "
+            "The tool was not started; call it again."
         )
 
 
@@ -122,6 +134,7 @@ class NativeToolCall(ABC):
     started: asyncio.Event = field(
         default_factory=asyncio.Event, init=False, compare=False, repr=False
     )
+    start_wait_seconds: ClassVar[int] = 10
 
     @property
     @abstractmethod
@@ -137,13 +150,19 @@ class NativeToolCall(ABC):
     def start(self) -> None:
         self.observation.start(self)
 
+    async def _wait_started(self) -> None:
+        try:
+            async with asyncio.timeout(self.start_wait_seconds):
+                await self.started.wait()
+        except TimeoutError as error:
+            raise ToolStartNotSeen() from error
+
     async def authorize(self, action: Callable[[], None]) -> None:
         try:
-            async with asyncio.timeout(10):
-                await self.started.wait()
+            await self._wait_started()
             self.observation.require_executing()
             self.admission.consume(self, action)
-        except (asyncio.CancelledError, TimeoutError):
+        except (asyncio.CancelledError, TimeoutError, ToolStartNotSeen):
             self.observation = UncertainCall()
             self.admission = UncertainAdmission()
             self.started.set()  # Wake other waiters; they must fail state validation.

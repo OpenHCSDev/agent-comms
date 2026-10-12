@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import re
 import socket
@@ -19,7 +20,7 @@ import stat
 import struct
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from contextlib import ExitStack
+from contextlib import ExitStack, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Generic, TypeVar
@@ -48,6 +49,8 @@ _MAX_REQUEST = _MAX_CONTENT + 8192
 _CALL_ID = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
 _TOKEN = re.compile(r"[0-9a-f]{64}\Z")
 _TOOL_SOURCE_SHA = "361bce4704c6830b4212894b005d9a191262e37c49e15b396afb2936ffd1a845"
+
+_LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -502,18 +505,29 @@ class OwnerToolSocket(ABC, Generic[Call]):
                     raise SelectedToolDenied("Selected tool peer is not the launched Pi child")
                 raw = await asyncio.wait_for(reader.readline(), timeout=10)
                 response = await self.handle_request(raw)
+                answer = "allowed"
             except (ValueError, TimeoutError) as error:
                 # SelectedToolDenied (a ValueError) is every typed denial and
                 # UNKNOWN outcome; ValueError also covers the untrusted child's
                 # undecodable request. Any other failure is a defect: it
                 # propagates and the child sees a closed socket, never a reply.
                 response = self.failure_response(error)
-            writer.write((json.dumps(response) + "\n").encode("ascii"))
-            await writer.drain()
+                answer = "refused"
+            try:
+                writer.write((json.dumps(response) + "\n").encode("ascii"))
+                await writer.drain()
+            except ConnectionError:
+                # Not an owner failure: the child gave up and told the model
+                # so. Whatever the owner did for this call stays recorded.
+                _LOG.warning(
+                    "The Pi child stopped waiting for a tool check before its answer "
+                    "(%s) could be sent", answer,
+                )
         finally:
             writer.close()
             try:
-                await writer.wait_closed()
+                with suppress(ConnectionError):
+                    await writer.wait_closed()
             finally:
                 self._handlers.discard(task)
 

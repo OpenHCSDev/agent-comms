@@ -114,3 +114,73 @@ async def test_multicall_native_transport_matches_events_and_refuses_duplicate(t
         )
     socket.assert_complete()
     assert len(owner.calls) == 2
+
+
+def _request(socket, id, name, args):
+    return (
+        json.dumps({"token": socket.token, "call_id": id, "name": name, "arguments": args}) + "\n"
+    ).encode()
+
+
+@pytest.mark.asyncio
+async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog):
+    """The live owner logged two tracebacks when Pi gave up on a slow tool check."""
+    import asyncio
+    import os
+
+    answered = asyncio.Event()
+
+    class Owner:
+        input_id = secrets.token_hex(16)
+
+        def admit(self, call):
+            answered.set()
+
+    tmp_path.chmod(0o700)
+    socket = CodingToolSocket(tmp_path, secrets.token_hex(32), Owner())
+    socket.expected_pid = os.getpid()
+    unhandled = []
+    asyncio.get_running_loop().set_exception_handler(lambda _loop, context: unhandled.append(context))
+    await socket.start()
+    try:
+        call = ("slow", "read", {"path": "a"})
+        socket.announce([ToolCallContent(id=call[0], name=call[1], arguments=call[2])])
+        reader, writer = await asyncio.open_unix_connection(str(socket.address))
+        writer.write(_request(socket, *call))
+        await writer.drain()
+        # Pi's side: stop waiting and reset the connection before the owner
+        # has seen the tool start, which is what its answer waits for.
+        writer.transport.abort()
+        await asyncio.sleep(0.1)
+        socket.tool_started(ToolExecutionStart(tool_call_id=call[0], tool_name=call[1], args=call[2]))
+        async with asyncio.timeout(5):
+            await answered.wait()
+            while socket._handlers:
+                await asyncio.sleep(0.01)
+    finally:
+        await socket.close()
+    assert not unhandled
+    assert "stopped waiting for a tool check before its answer (allowed)" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_tool_call_pi_never_started_is_refused_with_its_reason(tmp_path):
+    class Owner:
+        input_id = secrets.token_hex(16)
+
+        def admit(self, call):
+            raise AssertionError("an unstarted call was checked")
+
+    tmp_path.chmod(0o700)
+    socket = CodingToolSocket(tmp_path, secrets.token_hex(32), Owner())
+    call = ("never", "read", {"path": "a"})
+    socket.announce([ToolCallContent(id=call[0], name=call[1], arguments=call[2])])
+    with pytest.raises(ValueError, match="did not report this tool call as started within 10 s") as refused:
+        await socket.handle_request(_request(socket, *call))
+    # The child shows the model this text; it used to be empty.
+    assert socket.failure_response(refused.value)["error"].endswith(
+        "The tool was not started; call it again."
+    )
+    # The call stays refused if Pi asks again; a new call is checked afresh.
+    with pytest.raises(ValueError, match="not executing"):
+        await socket.handle_request(_request(socket, *call))
