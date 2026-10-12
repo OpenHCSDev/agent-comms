@@ -143,6 +143,9 @@ class PiUsage(PiPayload):
 
 @dataclass(frozen=True)
 class PiContent(PiPayload, DeclaredFamily, affix="Content"):
+    def tool_calls(self) -> tuple[ToolCallContent, ...]:
+        return ()
+
     def preserve_evidence(self, raw: dict) -> PiContent:
         """Keep unrepresented native fields opaque, never equivalent to plain text."""
         return self if self.to_wire() == raw else UnknownContent(raw)
@@ -211,6 +214,9 @@ class ThinkingContent(PiContent):
 
 @dataclass(frozen=True)
 class ToolCallContent(PiContent, declared_name="toolCall"):
+    def tool_calls(self) -> tuple[ToolCallContent, ...]:
+        return (self,)
+
     def assistant_transcript(self):
         from .transcript_events import ToolStartTranscript
 
@@ -393,6 +399,11 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     @property
     def parts(self) -> tuple[PiContent, ...]:
         return (TextContent(self.content),) if isinstance(self.content, str) else self.content or ()
+
+    @property
+    def tool_calls(self) -> tuple[ToolCallContent, ...]:
+        """The tool calls this message makes, in the order it makes them."""
+        return tuple(call for part in self.parts for call in part.tool_calls())
 
     @property
     def unread_reply(self) -> bool:

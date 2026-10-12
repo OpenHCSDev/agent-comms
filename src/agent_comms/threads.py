@@ -296,6 +296,17 @@ class Thread(ThreadProvenance):
     def has_process(self) -> bool:
         return self.process_identity is not None
 
+    def same_launch(self, other: Thread) -> bool:
+        """Whether both records describe one process serving one saved session with one model setting.
+
+        Something read from the running agent under one record still describes the
+        other only when this holds. Titles, tags, goals and turns do not change it.
+        """
+        def launch(thread: Thread):
+            return (thread.incarnation, thread.process_identity, thread.role, thread.session_file,
+                    thread.worktree, thread.execution, thread.model, thread.thinking_level)
+        return launch(self) == launch(other)
+
     def without_turn_admission(self) -> Thread:
         if self.active_turn is None:
             return self

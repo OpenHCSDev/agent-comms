@@ -240,3 +240,19 @@ def test_stopped_status_changes_do_not_invent_another_owner(tmp_path):
     assert registry.snapshot().owner_identity("owner") == stopped
     registry.remove("owner")
     assert registry.snapshot().owner_generations["owner"] == stopped.generation
+
+
+def test_same_launch_ignores_metadata_and_follows_process_session_and_model(tmp_path):
+    process = ProcessIdentity.capture(os.getpid())
+    thread = Thread("owner", frozenset(), str(tmp_path), process_identity=process,
+                    session_file=str(tmp_path / "a.jsonl"), model="model-a", created_at=1.0)
+
+    assert thread.same_launch(replace(thread, title="Renamed", tags=frozenset({"team"}), turn_generation=3))
+    for changed in (
+        replace(thread, process_identity=None),
+        replace(thread, session_file=str(tmp_path / "b.jsonl")),
+        replace(thread, model="model-b"),
+        replace(thread, worktree=str(tmp_path / "elsewhere")),
+        replace(thread, created_at=2.0),
+    ):
+        assert not thread.same_launch(changed)
