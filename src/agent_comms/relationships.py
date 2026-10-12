@@ -25,9 +25,9 @@ from .goals import GoalMentionBinding
 from .locked_store import LockedStore
 from .wire_record import WireRecord
 from .messages import Message
-from .presentation import ThreadView
+from .presentation import ThreadView, WireRevision
 from .registry_document import RegistrySnapshot
-from .store_files import _store_lock, file_revision
+from .store_files import StoreRevision, _store_lock, file_revision
 from .thread_identity import ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
@@ -385,6 +385,18 @@ class RelationshipStore(ThreadOwnedState, LockedStore[RelationshipDocument]):
         self.update(remove)
 
 
+@dataclass(frozen=True)
+class RelationshipsRevision:
+    """One observation of everything a relationships snapshot derives from.
+
+    Two equal observations mean a snapshot taken at either shows the same
+    thing. Activity expires with time, so observations a second apart differ.
+    """
+
+    wire: WireRevision
+    relationships: StoreRevision
+
+
 class ThreadRelationships:
     """One root-scoped service, retained by Comms; no timers or owner actions."""
 
@@ -402,6 +414,9 @@ class ThreadRelationships:
         self._recent_revision: tuple[int, int, int, int] | None = None
         self._recent: tuple[Message, ...] = ()
         self._limited = False
+
+    def revision(self) -> RelationshipsRevision:
+        return RelationshipsRevision(self.views.revision(), file_revision(self.store.path))
 
     def collaborations(self, owner: str) -> tuple[Collaboration, ...]:
         with _store_lock(self._wire_lock_path):

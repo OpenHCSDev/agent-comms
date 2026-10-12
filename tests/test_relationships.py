@@ -325,3 +325,15 @@ def test_retained_alias_contact_without_projected_person_is_unavailable(tmp_path
     assert unavailable.sources == ("explicit", "goal_mention")
     assert not unavailable.available and unavailable.person is None
     assert "Retained explicit contact" in unavailable.detail
+
+
+def test_revision_changes_when_a_relationship_or_a_thread_does(tmp_path, monkeypatch):
+    monkeypatch.setattr("agent_comms.history_views.time.time", lambda: 1_000)
+    comms = setup_wire(tmp_path)
+    start = comms.relationships.revision()
+    assert comms.relationships.revision() == start
+    comms.relationships.edit("owner", RelationshipEdit.decode("add"), "peer", "Review")
+    edited = comms.relationships.revision()
+    assert edited != start
+    comms.registry.rename("peer", "reviewer")
+    assert comms.relationships.revision() != edited
