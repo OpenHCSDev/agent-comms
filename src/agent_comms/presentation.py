@@ -691,6 +691,7 @@ class WireRevision:
     runtime_info: StoreRevision
     reads: StoreRevision
     goal_waits: StoreRevision
+    relationships: StoreRevision
     notifications: tuple[StoreRevision, ...]
     expiry_tick: int
 

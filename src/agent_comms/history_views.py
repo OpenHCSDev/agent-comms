@@ -454,6 +454,7 @@ class HistoryViews:
     def revision_paths(self) -> dict[str, Path | tuple[Path, ...]]:
         """The stores a view derives from, by WireRevision part: what to stat and to watch."""
         from .notification_assignment import NotificationAssignment
+        from .relationships import RelationshipStore
 
         return {
             "registry": self.registry.store.path,
@@ -464,6 +465,7 @@ class HistoryViews:
             "runtime_info": self.agents.runtime_info.path,
             "reads": self.bus.reads.path,
             "goal_waits": self.root / GoalWaits.filename,
+            "relationships": self.root / RelationshipStore.filename,
             "notifications": tuple(NotificationAssignment.source_paths(self.root)),
         }
 
