@@ -102,3 +102,23 @@ def test_partner_activity_only_reads():
     assert called <= {
         "grants", "goal_history", "latest", "read", "sha256", "hexdigest", "dumps", "encode",
     }
+
+
+def test_relevance_reaches_only_what_a_thread_sees_and_hears():
+    """Relevance grants no permission and decides no wake.
+
+    Only the context builders read it. In particular the wake, triage,
+    delivery and claim modules never do: a direct message wakes its recipient
+    whoever sent it, and a reply is triaged whoever sent it, which is what
+    stops two collaborators owing each other answers without end.
+    """
+    readers = set()
+    for path, tree in _consumer_trees():
+        names = _names(tree)
+        imports = {
+            node.module.rsplit(".", 1)[-1] for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.module
+        }
+        if "peer_relevance" in imports or names & (RELEVANCE | {"grants", "peer_relations"}):
+            readers.add(path.relative_to(PACKAGE).as_posix())
+    assert readers == {"turn_context.py", "owned_turn.py", "context_segments/partner_activity.py"}

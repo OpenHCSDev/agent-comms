@@ -33,16 +33,15 @@ class Informed(RelevanceCapability):
     """The thread is told when the peer's goal changes."""
 
 
-class DirectWake(RelevanceCapability):
-    """The peer's direct messages wake the thread without a triage call."""
-
-
 class PeerRelevance(DeclaredFamily, affix="Relevance"):
     """How much one thread matters to another.
 
     A member guarantees everything the members it derives from guarantee, so
     precedence is the class hierarchy itself. Relevance decides what a thread
-    sees and hears; it grants no permission.
+    sees and hears. It grants no permission and decides no wake: a direct
+    message already wakes its recipient whoever sent it, and a reply is
+    triaged whoever sent it, because that check is what stops two threads
+    answering each other without end.
     """
 
     @classmethod
@@ -69,5 +68,5 @@ class GoalContactRelevance(ChannelmateRelevance, AlwaysListed, Prioritized):
     """A peer bound to an active goal by a mention."""
 
 
-class CollaboratorRelevance(GoalContactRelevance, Informed, DirectWake):
+class CollaboratorRelevance(GoalContactRelevance, Informed):
     """A peer in an explicit collaboration."""
