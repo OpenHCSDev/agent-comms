@@ -323,6 +323,7 @@ async def second(value):
     ("CodecSubclass", "class Local(FieldCodec):\n    pass\n"),
     ("StringDispatch", 'def decide(x):\n    return x in ("a", "b", "c")\n'),
     ("TypeSwitch", 'def decide(x):\n    return isinstance(x, A) or isinstance(x, B) or isinstance(x, C)\n'),
+    ("AnyAnnotation", "from typing import Any\ndef read(value: Any) -> None: ...\n"),
 ])
 def test_per_file_increase_cannot_be_offset_or_moved(repo: Repository, measure: str, source: str) -> None:
     base = repo.commit({"old.py": source, "new.py": ""})
@@ -401,3 +402,66 @@ def test_typing_spelling_does_not_hide_shadowed_or_unresolved_read(repo: Reposit
     status, report = repo.compare(base, head)
     assert status == 1
     assert report["delta"]["StringSubscript"] == 2
+
+
+ANY_DECLARATIONS = '\n'.join([
+    'import typing as t',
+    'from dataclasses import dataclass',
+    'from typing import TYPE_CHECKING, Annotated, Callable, Literal, Optional, TypeAlias',
+    'if TYPE_CHECKING:',
+    '    from typing import Any',
+    'Payload = dict[str, Any]',
+    'Row: TypeAlias = list[Any]',
+    '@dataclass(frozen=True)',
+    'class Record:',
+    '    fill: Any = 0',
+    '    quoted: "Optional[Any]" = None',
+    'class Plain:',
+    '    cache: t.Any',
+    '    def read(self, value: Any | None, *rest: Any, **named: Any) -> Callable[..., Any]:',
+    '        local: Annotated[Any, "Any"] = value',
+    '        return local',
+]) + '\n'
+
+# Each line names a type or a value without declaring ``Any`` as a type.
+ANY_NON_DECLARATIONS = '\n'.join([
+    'from typing import Annotated, Any, Literal',
+    'choice: Literal["Any"]',
+    'described: Annotated[int, Any]',
+    'skipped = (Any, object)',
+    'chosen = handlers["Any"]',
+    'def unstated(annotation: object) -> bool:',
+    '    return annotation is Any or isinstance(annotation, str)',
+    'class Local:',
+    '    Any = int',
+]) + '\n'
+
+
+def test_any_is_counted_wherever_a_type_is_declared(repo: Repository) -> None:
+    from agent_comms.debt_ratchet import AnyAnnotation
+
+    uses = AnyAnnotation.uses(ANY_DECLARATIONS.encode(), "declarations.py")
+    assert sorted((use.site, use.owner) for use in uses) == [
+        ("alias", ""), ("alias", ""),
+        ("class attribute", "Plain"),
+        ("dataclass field", "Record"), ("dataclass field", "Record"),
+        ("parameter", "Plain.read"), ("parameter", "Plain.read"), ("parameter", "Plain.read"),
+        ("return", "Plain.read"),
+        ("variable", "Plain.read"),
+    ]
+    assert AnyAnnotation.count(ANY_NON_DECLARATIONS.encode(), "values.py") == 0
+
+    base = repo.commit({"declarations.py": "", "values.py": ""})
+    head = repo.commit({"declarations.py": ANY_DECLARATIONS, "values.py": ANY_NON_DECLARATIONS})
+    status, report = repo.compare(base, head)
+    assert status == 1
+    assert report["delta"][f"AnyAnnotation:{repo.root}/declarations.py"] == len(uses)
+    assert report["delta"][f"AnyAnnotation:{repo.root}/values.py"] == 0
+
+
+def test_stating_a_type_lowers_the_any_count_and_passes(repo: Repository) -> None:
+    base = repo.commit({"declarations.py": ANY_DECLARATIONS})
+    head = repo.commit({"declarations.py": ANY_DECLARATIONS.replace("fill: Any = 0", "fill: int = 0")})
+    status, report = repo.compare(base, head)
+    assert status == 0
+    assert report["delta"][f"AnyAnnotation:{repo.root}/declarations.py"] == -1

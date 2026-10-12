@@ -49,7 +49,16 @@ class GitMeasure(Measure):
         return cls.align(snapshot(base), snapshot(head))
 
 
-class OccurrenceMeasure(GitMeasure):
+class CountedSource(GitMeasure):
+    """A measure that is one number per source file."""
+
+    @classmethod
+    @abstractmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        """Return this file's count."""
+
+
+class OccurrenceMeasure(CountedSource):
     """Shared additive counting for syntactic occurrence measures."""
 
     @staticmethod
@@ -66,7 +75,7 @@ class OccurrenceMeasure(GitMeasure):
         return {cls.__name__: sum(cls.count(source, path) for path, source in sources)}
 
 
-class PerFileOccurrenceMeasure(OccurrenceMeasure):
+class PerFileMeasure(CountedSource):
     """An improvement in one file cannot hide a regression in another."""
 
     @classmethod
@@ -78,6 +87,10 @@ class PerFileOccurrenceMeasure(OccurrenceMeasure):
         identities = sorted(base.keys() | head.keys())
         return ({key: base.get(key, 0) for key in identities},
                 {key: head.get(key, 0) for key in identities})
+
+
+class PerFileOccurrenceMeasure(PerFileMeasure, OccurrenceMeasure):
+    """A per-node count, kept separately for each file."""
 
 
 class FamilyFlattened(PerFileOccurrenceMeasure):
@@ -454,6 +467,18 @@ class TypingImports(MroDispatch):
         return {name: value for name, value in imports.values.items()
                 if name not in imports.shadowed}
 
+    @classmethod
+    def at_any_depth(cls, tree: ast.Module) -> dict[str, object]:
+        """Every name an import binds to ``typing``, wherever the import is written.
+
+        For a measure that counts uses of a typing name: skipping an import inside
+        ``if TYPE_CHECKING:`` or a function body would hide the uses it enables.
+        """
+        imports = cls(set(ast.walk(tree)))
+        for node in ast.walk(tree):
+            imports.dispatch_sync(node)
+        return {name: value for name, value in imports.values.items() if value is not None}
+
 
 class TypingReference(MroDispatch):
     """One AST expression's resolved imported declaration, never evaluated code."""
@@ -498,6 +523,159 @@ class StringSubscript(OccurrenceMeasure):
             and isinstance(node.slice, ast.Constant)
             and isinstance(node.slice.value, str)
         )
+
+
+class AnyInTypeExpression(MroDispatch):
+    """Count ``typing.Any`` in one type expression without evaluating it.
+
+    Only type-forming syntax is followed: a subscript, a union, a member list
+    and, in an annotation, a quoted forward reference. A call or a comparison
+    is a runtime value, so ``annotation is Any`` in introspection code is not a use.
+    """
+
+    def __init__(self, imports: dict[str, object], quoted: bool) -> None:
+        self.imports = imports
+        self.quoted = quoted
+        self.found = 0
+
+    def resolved(self, node: ast.AST) -> object:
+        reference = TypingReference(self.imports)
+        reference.dispatch_sync(node)
+        return reference.value
+
+    @handles(ast.Name, ast.Attribute)
+    def reference(self, node: ast.expr) -> None:
+        self.found += int(self.resolved(node) is typing.Any)
+
+    @handles(ast.Subscript)
+    def parameterised(self, node: ast.Subscript) -> None:
+        origin = self.resolved(node.value)
+        members = [node.slice]
+        if origin is typing.Literal:
+            members = []  # Literal members are values, not types.
+        if origin is typing.Annotated:
+            members = getattr(node.slice, "elts", members)[:1]  # The rest is metadata.
+        for member in members:
+            self.dispatch_sync(member)
+
+    @handles(ast.Tuple, ast.List)
+    def members(self, node: ast.Tuple | ast.List) -> None:
+        for member in node.elts:
+            self.dispatch_sync(member)
+
+    @handles(ast.BinOp)
+    def union(self, node: ast.BinOp) -> None:
+        self.dispatch_sync(node.left)
+        self.dispatch_sync(node.right)
+
+    @handles(ast.Constant)
+    def forward_reference(self, node: ast.Constant) -> None:
+        if not self.quoted or not isinstance(node.value, str):
+            return
+        try:
+            quoted = ast.parse(node.value.strip(), mode="eval")
+        except (SyntaxError, ValueError):
+            return
+        self.dispatch_sync(quoted.body)
+
+
+@dataclass(frozen=True)
+class AnyUse:
+    """One written ``typing.Any`` where a file declares a type."""
+
+    line: int
+    site: str
+    owner: str
+
+
+class DeclaredTypeSites(MroDispatch):
+    """Every place a file declares a type; each handler names one kind of place."""
+
+    def __init__(self, imports: dict[str, object]) -> None:
+        self.imports = imports
+        self.uses: list[AnyUse] = []
+
+    def read(self, tree: ast.Module) -> None:
+        pending: list[tuple[ast.AST, tuple[ast.AST, ...]]] = [(tree, ())]
+        while pending:
+            node, scope = pending.pop()
+            self.dispatch_sync(node, scope)
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                scope = (*scope, node)
+            pending.extend((child, scope) for child in ast.iter_child_nodes(node))
+
+    def declare(self, site: str, expression: ast.AST | None, scope: tuple[ast.AST, ...],
+                quoted: bool = True) -> None:
+        if expression is None:
+            return
+        counted = AnyInTypeExpression(self.imports, quoted)
+        counted.dispatch_sync(expression)
+        owner = ".".join(enclosing.name for enclosing in scope)
+        self.uses.extend([AnyUse(expression.lineno, site, owner)] * counted.found)
+
+    @staticmethod
+    def record_class(scope: tuple[ast.AST, ...]) -> bool:
+        """Whether the innermost scope is a class whose annotations are its fields."""
+        def last_name(expression: ast.AST) -> str:
+            return ast.unparse(getattr(expression, "func", expression)).rpartition(".")[2]
+        decorators = {last_name(decorator) for decorator in scope[-1].decorator_list}
+        bases = {last_name(base) for base in scope[-1].bases}
+        return "dataclass" in decorators or bool(bases & {"NamedTuple", "TypedDict"})
+
+    def assignment_site(self, scope: tuple[ast.AST, ...]) -> str:
+        if not scope or not isinstance(scope[-1], ast.ClassDef):
+            return "variable"
+        return "dataclass field" if self.record_class(scope) else "class attribute"
+
+    @handles(ast.arg)
+    def parameter(self, node: ast.arg, scope: tuple[ast.AST, ...]) -> None:
+        self.declare("parameter", node.annotation, scope)
+
+    @handles(ast.FunctionDef, ast.AsyncFunctionDef)
+    def result(self, node, scope: tuple[ast.AST, ...]) -> None:
+        self.declare("return", node.returns, (*scope, node))
+
+    @handles(ast.AnnAssign)
+    def annotated(self, node: ast.AnnAssign, scope: tuple[ast.AST, ...]) -> None:
+        self.declare(self.assignment_site(scope), node.annotation, scope)
+        alias = AnyInTypeExpression(self.imports, quoted=True).resolved(node.annotation)
+        if alias is typing.TypeAlias:
+            self.declare("alias", node.value, scope)
+
+    @handles(ast.Assign)
+    def alias(self, node: ast.Assign, scope: tuple[ast.AST, ...]) -> None:
+        # ``Payload = dict[str, Any]`` names a type. A bare member list such as
+        # ``(Any, object)`` is a runtime collection, and runtime strings are not
+        # forward references.
+        if not isinstance(node.value, (ast.Tuple, ast.List)):
+            self.declare("alias", node.value, scope, quoted=False)
+
+    # Honor the package's Python 3.11 contract without inventing parser nodes.
+    if hasattr(ast, "TypeAlias"):
+        @handles(ast.TypeAlias)
+        def alias_statement(self, node, scope: tuple[ast.AST, ...]) -> None:
+            self.declare("alias", node.value, scope)
+
+
+class AnyAnnotation(PerFileMeasure):
+    """``typing.Any`` written where a type is declared.
+
+    A declared type is what a consumer turns into a form control, a parameter
+    description or an array conversion; ``Any`` is the answer that is missing.
+    Counted: parameters, returns, annotated assignments and type aliases,
+    including nested (``dict[str, Any]``) and quoted uses.
+    """
+
+    @classmethod
+    def uses(cls, source: bytes, filename: str) -> tuple[AnyUse, ...]:
+        tree = ast.parse(source, filename)
+        sites = DeclaredTypeSites(TypingImports.at_any_depth(tree))
+        sites.read(tree)
+        return tuple(sorted(sites.uses, key=lambda use: (use.line, use.site, use.owner)))
+
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        return len(cls.uses(source, filename))
 
 
 def git(repo: Path, *args: str) -> bytes:
