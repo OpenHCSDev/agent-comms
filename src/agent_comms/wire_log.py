@@ -265,12 +265,6 @@ class WireLog:
         with self.verified_snapshot() as records:
             return [message for record in records for message in record.messages()]
 
-    @contextmanager
-    def delivery_snapshot(self):
-        """Original routing members derive from the same opened strict read."""
-        with self.verified_snapshot() as records:
-            yield (item for record in records for item in record.delivery_messages())
-
     def record_context(self, manifest) -> None:
         """Append the original context projection through its sealed writer.
 

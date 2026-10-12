@@ -359,22 +359,15 @@ class BusPresentation:
     ) -> None:
         with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
             if through is None:
-                # Acquire the bus cut before the registry, as publication does.
-                records = stack.enter_context(self.bus.log.verified_snapshot())
+                # Open the bus cut before the registry, as sending a message does.
+                marker, _, source, stream, records = stack.enter_context(
+                    self.bus.log.page_snapshot()
+                )
             with DisplaySelection.reading(
                 self.registry, self.catalog, self.bus.reads, viewer
             ) as basis:
                 current = basis.scope(target)
-                if through is None:
-                    # Explicit Mark Read selects this entire opened source cut.
-                    messages = (
-                        message for record in records for message in record.messages()
-                        if current.includes(message)
-                    )
-                    displayed = self.bus.reads.capture(
-                        viewer, messages, basis.registry, self.bus.log.path
-                    )
-                else:
+                if through is not None:
                     if expected_scope is None:
                         raise ValueError("Channel display scope missing; refresh the displayed page.")
                     displayed = expected_scope.require_displayed()
@@ -383,8 +376,18 @@ class BusPresentation:
                     displayed.validate(
                         viewer, basis.registry, self.bus.reads.bus_identity(self.bus.log.path)
                     )
-                    displayed = displayed.through(through)
-                self.bus.reads.mark_displayed(viewer, displayed)
+                    self.bus.reads.mark_displayed(viewer, displayed.through(through))
+                    return
+            # Explicit Mark Read selects the channel's messages in this whole
+            # cut. The page index reads them once the registry is released,
+            # because it takes the bus lock.
+            page = MessagePageRequest.every(current).read_opened(
+                self.bus.log, marker, source, stream, records
+            )
+            self.bus.reads.mark_displayed(
+                viewer,
+                self.bus.reads.capture(viewer, page.messages, basis.registry, self.bus.log.path),
+            )
 
     def display_view_metrics(
         self,

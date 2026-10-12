@@ -357,6 +357,22 @@ class DMDisplayScope(MessageDisplayScope):
 
 
 @dataclass(frozen=True, slots=True)
+class ListedDeliveries(MessageDisplayScope):
+    """The messages of another scope whose sequences the route index listed."""
+
+    scope: MessageDisplayScope
+    sequences: frozenset[int]
+    targets: frozenset[str]
+
+    @property
+    def index_targets(self) -> frozenset[str]:
+        return self.targets
+
+    def includes(self, message: Message) -> bool:
+        return message.seq in self.sequences and self.scope.includes(message)
+
+
+@dataclass(frozen=True, slots=True)
 class ChannelDisplayScope(MessageDisplayScope):
     """One captured local display predicate; it never changes delivery or history ownership."""
 

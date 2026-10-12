@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import sys
 from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Iterator
@@ -224,6 +225,15 @@ class MessagePageRequest:
     @classmethod
     def capture(cls, scope, *, before=None, after=None, limit=100, max_bytes=256 * 1024):
         return cls(scope, PageTraversal.capture(before, after), limit, max_bytes)
+
+    @classmethod
+    def every(cls, scope: MessageDisplayScope, *, after: int = 0) -> MessagePageRequest:
+        """All of a scope's messages after a sequence, with no count or byte bound.
+
+        The page index finds them by target, so the read costs their rows and
+        not the silent records between them.
+        """
+        return cls(scope, NewerTraversal(after), sys.maxsize, sys.maxsize)
 
     def collect(self, records: Iterator[tuple[Message, int]]) -> MessagePage:
         return self.traversal.collect(self, records)

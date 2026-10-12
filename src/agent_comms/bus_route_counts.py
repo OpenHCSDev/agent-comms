@@ -79,6 +79,12 @@ class RouteUnread(TypedRow):
     count: int
 
 
+@dataclass(frozen=True)
+class UnseenDelivery(TypedRow):
+    seq: int
+    target: str
+
+
 class BusRouteCounts:
     def __init__(self, bus_path: Path):
         self.bus_path = bus_path
@@ -196,6 +202,14 @@ class BusRouteCounts:
         RouteSourceRow(1, identity, size, tail_digest).insert(self.connection)
         return True
 
+    _requests = """requests AS (
+                SELECT json_extract(value, '$.actor') AS actor,
+                       json_extract(value, '$.target') AS target,
+                       json_extract(value, '$.sender') AS sender,
+                       json_extract(value, '$.sender_lookup') AS sender_lookup,
+                       json_extract(value, '$.since') AS since FROM json_each(?)
+            )"""
+
     def routes(self) -> list[RouteTotalRow]:
         return RouteTotalRow.select(self.connection)
 
@@ -211,13 +225,7 @@ class BusRouteCounts:
         """
         return RouteUnread.read(
             self.connection.execute(
-                f'''WITH requests AS (
-                SELECT json_extract(value, '$.actor') AS actor,
-                       json_extract(value, '$.target') AS target,
-                       json_extract(value, '$.sender') AS sender,
-                       json_extract(value, '$.sender_lookup') AS sender_lookup,
-                       json_extract(value, '$.since') AS since FROM json_each(?)
-            ), painted AS (
+                f'''WITH {self._requests}, painted AS (
                 SELECT json_extract(owner.value, '$.actor') AS actor,
                        row.target, row.sender, row.sender_lookup, row.timestamp
                 FROM json_each(?) AS owner, json_each(owner.value, '$.sequences') AS seen
@@ -238,5 +246,25 @@ class BusRouteCounts:
                 ON totals.target=request.target AND totals.sender=request.sender
                     AND totals.sender_lookup=request.sender_lookup''',
                 (json.dumps(FieldCodec.encode(requests)), json.dumps(FieldCodec.encode(seen))),
+            )
+        )
+
+    def unseen_deliveries(
+        self, requests: list[PendingRoute], seen: frozenset[int]
+    ) -> list[UnseenDelivery]:
+        """One actor's unread deliveries on its routes, oldest first, without bodies.
+
+        The same route rows as ``unseen_counts``, listed instead of counted.
+        """
+        return UnseenDelivery.read(
+            self.connection.execute(
+                f'''WITH {self._requests}
+            SELECT row.seq, row.target
+            FROM requests AS request JOIN "{RouteEntryRow.declared_name}" AS row
+                ON row.target=request.target AND row.sender=request.sender
+                    AND row.sender_lookup=request.sender_lookup AND row.timestamp>=request.since
+            WHERE row.seq NOT IN (SELECT value FROM json_each(?))
+            ORDER BY row.seq''',
+                (json.dumps(FieldCodec.encode(requests)), json.dumps(sorted(seen))),
             )
         )
