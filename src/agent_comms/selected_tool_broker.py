@@ -14,6 +14,7 @@ import json
 import os
 import re
 import socket
+import sqlite3
 import stat
 import struct
 from abc import ABC, abstractmethod
@@ -28,12 +29,13 @@ from agent_comms.coordinator import Coordination
 from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
+from .coordination_errors import CoordinationReadUnavailable
 from .envelope_claim_transitions import ExistingFileClaim, WakeAdmission
 from .field_codec import FieldCodec
 from .native_runtime_input import NativeRuntimeInput
 from .native_input_record import NativeInputIdText, NativeInputIdentity, FullNativeExecution
 from .coordination_tables.participants import OwnerGenerations
-from .native_tool_call import NativeToolCall, SelectedToolDenied
+from .native_tool_call import CoordinationBusy, NativeToolCall, SelectedToolDenied
 from .pi_events import ToolExecutionEnd, ToolExecutionStart
 from .pi_payloads import PiContent, ToolCallContent
 from .private_path import PrivateDirectoryRole, PrivateFileRole, PrivateSocketRole
@@ -283,27 +285,44 @@ def selected_tool_mode_for_owner(
 def verify_sent_full_input(
     store: Coordination, admission: WakeAdmission, owner_name: str, input_id: str
 ) -> None:
-    """Only the exact FULL input admitted by the owner may call native tools."""
-    with Coordination(str(store.session.path), lock_timeout=0) as scoped, scoped.session.read():
-        assert_native_runtime_schema(scoped.session._connection)
-        row = NativeRuntimeInput.one(scoped.session._connection, input_id=input_id)
-        if row is None:
-            raise SelectedToolDenied("Selected tool has no reserved FULL input")
-        if admission.wake_assignment_id not in row.execution.source_assignment_ids(
-            scoped.session._connection, input_id
-        ):
-            raise SelectedToolDenied("Selected tool source was not included in this native input")
-        expected = NativeInputIdentity(
-            input_id, FullNativeExecution(admission.execution_id, admission.attempt_ordinal),
-            OwnerGenerations(owner_lookup=admission.recipient_lookup, owner_thread=owner_name, generation=admission.participant_generation),
-        )
-        if row.identity != expected:
-            raise SelectedToolDenied("Selected tool does not match the exact sent FULL input")
-        if not row.sent_owner_admission_generation.matches(admission.owner_admission_generation):
-            raise SelectedToolDenied("Selected tool names another sending admission")
-        if row.reference.recorded or row.verdict is not None:
-            raise SelectedToolDenied("Selected input was already settled")
+    """Only the exact FULL input admitted by the owner may call native tools.
 
+    This is the first check of a tool call and it only reads. Other owners
+    write the same database, so the read waits the coordinator's bounded
+    time; a database still busy after that is reported as busy, not as a
+    refusal of the call and not as an unknown outcome.
+    """
+    try:
+        with Coordination(str(store.session.path)) as scoped, scoped.session.read():
+            _require_sent_full_input(scoped, admission, owner_name, input_id)
+    except sqlite3.OperationalError as error:
+        try:
+            CoordinationReadUnavailable.raise_from(error)
+        except CoordinationReadUnavailable as unavailable:
+            raise CoordinationBusy() from unavailable
+
+
+def _require_sent_full_input(
+    scoped: Coordination, admission: WakeAdmission, owner_name: str, input_id: str
+) -> None:
+    assert_native_runtime_schema(scoped.session._connection)
+    row = NativeRuntimeInput.one(scoped.session._connection, input_id=input_id)
+    if row is None:
+        raise SelectedToolDenied("Selected tool has no reserved FULL input")
+    if admission.wake_assignment_id not in row.execution.source_assignment_ids(
+        scoped.session._connection, input_id
+    ):
+        raise SelectedToolDenied("Selected tool source was not included in this native input")
+    expected = NativeInputIdentity(
+        input_id, FullNativeExecution(admission.execution_id, admission.attempt_ordinal),
+        OwnerGenerations(owner_lookup=admission.recipient_lookup, owner_thread=owner_name, generation=admission.participant_generation),
+    )
+    if row.identity != expected:
+        raise SelectedToolDenied("Selected tool does not match the exact sent FULL input")
+    if not row.sent_owner_admission_generation.matches(admission.owner_admission_generation):
+        raise SelectedToolDenied("Selected tool names another sending admission")
+    if row.reference.recorded or row.verdict is not None:
+        raise SelectedToolDenied("Selected input was already settled")
 
 
 def verify_selected_terminal(directory: Path, input_id: str, call_id: str) -> None:

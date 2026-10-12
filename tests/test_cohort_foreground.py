@@ -267,7 +267,7 @@ async def test_foreground_selected_write_preflight_refuses_uninitialized_or_exte
         root_id = comms.messaging.initialize_private_initial_protocol()
         external = tmp_path / "external.py"
         external.write_bytes(b"external\n")
-        with pytest.raises(ValueError, match="inside the worktree"):
+        with pytest.raises(ValueError, match="outside this thread.s project directory"):
             await foreground.run_foreground_once(
                 root,
                 wire_root_id=root_id,

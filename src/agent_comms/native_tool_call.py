@@ -18,6 +18,16 @@ class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcom
     """A rejected request, including duplicate or uncertain prior consumption."""
 
 
+class CoordinationBusy(SelectedToolDenied):
+    """The coordination database stayed busy; the call was not checked and nothing changed."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "The coordination database is busy. This tool call did not run and "
+            "changed nothing; call the tool again."
+        )
+
+
 class CallObservation(ABC):  # noqa: B024 - shared rejection; leaves override valid transitions
     executing = False
 

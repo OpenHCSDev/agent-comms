@@ -35,6 +35,18 @@ class ClaimConflict(ClaimTransitionError):  # noqa: N818 - domain-specific losin
         super().__init__(f"Resource already claimed by {existing.owner!r}")
 
 
+class OutsideProjectError(ClaimTransitionError):
+    """A file claim names a path outside the thread's project directory."""
+
+    def __init__(self, resource: Path, project: Path):
+        self.resource, self.project = resource, project
+        super().__init__(
+            f"{resource} is outside this thread's project directory {project}. "
+            "File edits are limited to the project. To work in another directory, "
+            "change your project with comms_set_project."
+        )
+
+
 @dataclass(frozen=True)
 class FileClaimPath(ABC):
     """A caller's file operation owns which physical paths may be claimed."""
@@ -48,26 +60,31 @@ class FileClaimPath(ABC):
     def normalized(self, root: Path) -> str:
         base = Path(root).absolute()
         try:
-            physical_root = base.resolve(strict=True)
-            if physical_root != base or not base.is_dir():
-                raise ClaimTransitionError("Worktree must be a physical existing directory.")
-            requested = self.resource
-            if ".." in requested.parts:
-                raise ClaimTransitionError("Parent traversal is not a resource identifier.")
-            candidate = requested if requested.is_absolute() else base / requested
+            physical = base.resolve(strict=True) == base and base.is_dir()
+        except (OSError, RuntimeError) as error:
+            raise ClaimTransitionError("Worktree must be a physical existing directory.") from error
+        if not physical:
+            raise ClaimTransitionError("Worktree must be a physical existing directory.")
+        requested = self.resource
+        if ".." in requested.parts:
+            raise ClaimTransitionError("Parent traversal is not a resource identifier.")
+        candidate = requested if requested.is_absolute() else base / requested
+        try:
             resolved = candidate.resolve(strict=False)
-            if resolved != candidate:
-                raise ClaimTransitionError("Symlink aliases are not supported.")
-            relative = resolved.relative_to(physical_root)
-            if not relative.parts:
-                raise ClaimTransitionError("Worktree directories cannot be claimed.")
+        except (OSError, RuntimeError, ValueError) as error:
+            raise ClaimTransitionError(f"Cannot resolve file path {candidate}: {error}") from error
+        if resolved != candidate:
+            raise ClaimTransitionError("Symlink aliases are not supported.")
+        if resolved == base:
+            raise ClaimTransitionError("Worktree directories cannot be claimed.")
+        if not resolved.is_relative_to(base):
+            raise OutsideProjectError(resolved, base)
+        try:
             self.validate_leaf(resolved)
-        except (OSError, ValueError, RuntimeError) as error:
-            if isinstance(error, ClaimTransitionError):
-                raise
-            raise ClaimTransitionError(
-                "Resource is not a supported file inside the worktree."
-            ) from error
+        except FileNotFoundError as error:
+            raise ClaimTransitionError(f"File does not exist: {resolved}") from error
+        except OSError as error:
+            raise ClaimTransitionError(f"Cannot inspect file {resolved}: {error}") from error
         return str(resolved)
 
     @abstractmethod
