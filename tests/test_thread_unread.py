@@ -13,6 +13,9 @@ from agent_comms.view_unread import TranscriptReadState
 
 
 def append(path, role="assistant", content="Reply"):
+    # Pi writes an assistant's content as a list of parts, never a bare string.
+    if role == "assistant" and isinstance(content, str):
+        content = [{"type": "text", "text": content}]
     with path.open("a") as stream:
         stream.write(
             json.dumps({"type": "message", "message": {"role": role, "content": content}}) + "\n"
@@ -33,7 +36,7 @@ def test_reply_counts_are_persistent_human_read_positions(tmp_path):
     comms, source = setup_thread(tmp_path)
     append(source, "user", "My own prompt")
     append(source, content=[{"type": "thinking", "thinking": "private"}])
-    append(source, content=[{"type": "toolCall", "id": "tool", "name": "read"}])
+    append(source, content=[{"type": "toolCall", "id": "tool", "name": "read", "arguments": {}}])
     append(source, "toolResult", "tool output")
     append(source, content=[{"type": "text", "text": "one"}, {"type": "text", "text": "two"}])
     assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread["worker"] == 1
@@ -165,10 +168,10 @@ def test_partial_tail_and_replaced_source_do_not_lose_replies(tmp_path):
         "worker", worktree=str(tmp_path), through=comms.transcripts.transcript_checkpoint("worker")
     )
     with source.open("a") as stream:
-        stream.write('{"type":"message","message":{"role":"assistant","content":"next')
+        stream.write('{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"next')
     assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread["worker"] == 0
     with source.open("a") as stream:
-        stream.write('"}}\n')
+        stream.write('"}]}}\n')
     assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread["worker"] == 1
     replacement = tmp_path / "replacement.jsonl"
     append(replacement)
@@ -283,8 +286,9 @@ def test_busy_index_is_not_discarded(tmp_path):
     blocker = sqlite3.connect(state._index_path)
     blocker.execute("BEGIN IMMEDIATE")
     try:
-        with pytest.raises(sqlite3.OperationalError, match="locked"):
-            state.counts("viewer", {"worker": str(source)})
+        # Another process holds the index: the count is not known yet, and nothing is discarded.
+        busy = state.counts("viewer", {"worker": str(source)})
+        assert (busy.counts, busy.pending) == ({}, frozenset({"worker"}))
         assert state._index_path.stat().st_ino == inode
     finally:
         blocker.rollback()
@@ -311,3 +315,39 @@ def test_reopen_wire_does_not_reuse_cancelled_index_owner(tmp_path):
     fresh = wire(comms.root)
     assert fresh.views.transcript_reads is not comms.views.transcript_reads
     assert fresh.views.viewer_snapshot(str(tmp_path)).thread_unread == {"worker": 1}
+
+
+def test_two_processes_indexing_one_growing_transcript_count_each_reply_once(tmp_path):
+    """Every open UI indexes the same file; neither may index a reply the other just did."""
+    from threading import Thread as Worker
+
+    source = tmp_path / "session.jsonl"
+    source.touch()
+    index = tmp_path / "wire" / "read_ledger.json"
+    index.parent.mkdir()
+    # Two owners of one index file behave as two processes do: separate
+    # connections and separate in-process locks.
+    states = [TranscriptReadState(index), TranscriptReadState(index)]
+    failures: list[BaseException] = []
+    done = False
+
+    def observe(state):
+        while not done and not failures:
+            try:
+                state.counts("viewer", {"worker": str(source)})
+            except BaseException as error:  # the observer process dies on any of these
+                failures.append(error)
+
+    workers = [Worker(target=observe, args=(state,)) for state in states]
+    for worker in workers:
+        worker.start()
+    for _ in range(300):
+        append(source)
+    done = True
+    for worker in workers:
+        worker.join()
+    assert failures == []
+    counted = TranscriptReadState(index).counts("viewer", {"worker": str(source)})
+    while counted.pending:
+        counted = TranscriptReadState(index).counts("viewer", {"worker": str(source)})
+    assert counted.counts == {"worker": 300}

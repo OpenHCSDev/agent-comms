@@ -177,22 +177,28 @@ class TranscriptReadState(ThreadOwnedState):
         if revision is None:
             return ReplyIndex(complete=True)
         database = self._database()
-        cached = ReplyIndex.one(database, source=source) or ReplyIndex()
-        unchanged = cached.revision == revision
-        if unchanged and cached.complete:
-            return cached
-        append = (
-            cached.revision is not None
-            and cached.revision[0] == revision[0]
-            and revision[1] > cached.revision[1]
-            and cached.through <= cached.revision[1]
-        )
-        resume = unchanged or append
-        through, total = (cached.through, cached.total) if resume else (0, 0)
+        if (cached := ReplyIndex.one(database, source=source)) is not None:
+            if cached.revision == revision and cached.complete:
+                return cached
         if not budget.available:
-            return ReplyIndex(revision, through, total, source)
+            return ReplyIndex(revision, source=source)
         complete = False
         with database:
+            # Every process showing this bus writes this file. What is indexed
+            # is read under the write lock, so no two of them index one record.
+            database.execute("BEGIN IMMEDIATE")
+            cached = ReplyIndex.one(database, source=source) or ReplyIndex()
+            unchanged = cached.revision == revision
+            if unchanged and cached.complete:
+                return cached
+            append = (
+                cached.revision is not None
+                and cached.revision[0] == revision[0]
+                and revision[1] > cached.revision[1]
+                and cached.through <= cached.revision[1]
+            )
+            resume = unchanged or append
+            through, total = (cached.through, cached.total) if resume else (0, 0)
             if not resume:
                 database.execute(
                     f"DELETE FROM {TranscriptReply.declared_name} WHERE source = ?", (source,)
@@ -234,8 +240,10 @@ class TranscriptReadState(ThreadOwnedState):
             try:
                 return self._counts_locked(viewer, sources, budget)
             except sqlite3.DatabaseError as error:
+                if error.sqlite_errorcode & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+                    # Another process is indexing: the same answer as a busy lock here.
+                    return TranscriptUnread({}, frozenset(sources))
                 if error.sqlite_errorcode not in (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB):
-                    # Contention is not corruption: never unlink a busy database.
                     raise
                 self._discard_database()
                 return self._counts_locked(viewer, sources, budget)
