@@ -265,9 +265,13 @@ class InitialInput(QueuedInput):
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> None:
         """Own original reservation, dispatch and unbound retirement as one lifetime."""
+        from .turn_context import TurnContext, UserRequestSegment
+
+        request = UserRequestSegment.capture(task)
         async with AsyncExitStack() as resources:
             async with cls.reserve(
-                inputs, session_id, thread_name, text=display_text or task, prompt=task,
+                inputs, session_id, thread_name, text=display_text or task,
+                prompt=TurnContext.render_segments((request,), images=images).text,
                 echo=display_text is not None, images=images,
                 controller=inputs.runtime.controller.get(), input_id=input_id, origin=origin,
             ) as (item, _owner, row, custody):

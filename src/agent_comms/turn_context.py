@@ -8,7 +8,7 @@ import re
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
@@ -690,14 +690,30 @@ class InstructionSegment(ContextSegment):
 
 
 @dataclass(frozen=True, kw_only=True)
-class UserFollowupSegment(InstructionSegment, UserInputSegment):
+class TypedUserInputSegment(InstructionSegment, UserInputSegment):
+    """Text the user typed into this thread's own view, labelled as such for the model."""
+
+    LABEL: ClassVar[str]
+
     @classmethod
-    def capture(cls, content: str) -> UserFollowupSegment:
-        instruction = InstructionFile.read("user-followup.md")
+    def capture(cls, content: str) -> Self:
+        instruction = InstructionFile.read(cls.LABEL)
         return cls(provenance=(instruction.source,), instruction=instruction, content=content)
 
     def values(self) -> dict[str, object]:
         return {"content": self.content}
+
+
+class UserRequestSegment(TypedUserInputSegment):
+    """The message that starts a turn."""
+
+    LABEL = "user-request.md"
+
+
+class UserFollowupSegment(TypedUserInputSegment):
+    """A message typed while a turn is running."""
+
+    LABEL = "user-followup.md"
 
 
 @dataclass(frozen=True)
