@@ -2,6 +2,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 
 import pytest
+from metaclass_registry import DuplicateRegistryKeyError
 
 from agent_comms.declared_family import DeclaredFamily
 
@@ -46,7 +47,7 @@ def test_golden_names_decode_capability_and_slots_identity():
 
 
 def test_collisions_fail_without_replacing_owner():
-    with pytest.raises(TypeError, match="Duplicate"):
+    with pytest.raises(DuplicateRegistryKeyError, match="http_ready"):
 
         class Collision(SampleFamily, declared_name="http_ready"):
             def execute(self):

@@ -26,7 +26,7 @@ classifiers = [
 keywords = ["agents", "coordination", "message-bus", "acp", "multi-agent"]
 
 dependencies = [
-    "metaclass-registry>=0.1.0",
+    "metaclass-registry>=0.4.0",
     "nominal-refactor-audit @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor.git@9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10#subdirectory=skills/refactor-audit",
 ]
 
