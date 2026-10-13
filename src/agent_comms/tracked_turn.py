@@ -16,7 +16,8 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 
 from . import pi_commands as commands
 from . import pi_events as pi
-from .agent_events import AgentEvent
+from .agent_events import AgentEvent, InputRefused
+from .following_inputs import FollowingInputs
 from .backend import MODEL_WAIT_TIMEOUT_SECONDS, TurnSession
 from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier
@@ -48,7 +49,9 @@ from .turn_context import InputContributionCoordinates
 
 if TYPE_CHECKING:
     from .pi_native_backend import PersistentPiSession
+    from .agent_backend import TurnInboxItem
     from .coordinated_runtime import SelectedExecution
+    from .owned_send_admission import OwnedSendAdmission
     from .private_send_admission import PrivateSendAdmission
 
 
@@ -195,6 +198,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         observe_event,
         request_observer,
         pi_session: PersistentPiSession | None,
+        following: FollowingInputs,
     ):
         # The owner's Pi session child: an idle child left by its previous
         # input is reused when its launch and source still match.
@@ -208,6 +212,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         )
         self.retainable = False
         self.command = command
+        self.following = following
+        self.rejected_commands: list[InputRefused] = []
         self.provider, self.model = provider, model
         self.prompt_send_boundary = prompt_send_boundary
         self.maintenance_root = maintenance_root
@@ -242,6 +248,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         request_observer: Callable[[RequestProgress, ProcessIdentity], None] | None = None,
         launch_owner: SelectedExecution | None = None,
         pi_session: PersistentPiSession | None = None,
+        following: FollowingInputs = FollowingInputs(),
     ) -> NativeTurnResult:
         if type(input_id) is not str or re.fullmatch(r"[0-9a-f]{32}", input_id) is None:
             raise ValueError("A native turn requires a 128-bit lowercase hex input ID")
@@ -289,6 +296,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             # A selected stage runs on its execution's child; an independent
             # execution names the child it runs on.
             pi_session=launch_owner.pi_session if launch_owner is not None else pi_session,
+            following=following,
         )
         return await turn.complete()
 
@@ -335,7 +343,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     async def retain_or_close(self) -> None:
         """Keep a settled, proved child idle in the owner's custody; retire anything else."""
+        await self.stop_forwarding()
         identity = self.native.attestation.identity
+        # An input written but never started may still run in the child; it is not idle.
+        self.retainable = self.retainable and self.inputs.settled
         if self.retainable and identity is not None and self.native_session.retain(self.native, identity):
             return
         await self.native_session.close()
@@ -365,7 +376,14 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     async def next_event(self) -> pi.PiEvent:
         try:
-            raw = await self.watchdog.read(self)
+            while True:
+                refused, self.rejected_commands = self.rejected_commands, []
+                self.rejected_signal.clear()
+                for command in refused:
+                    await self.following.refused(command.id)
+                raw = await self.watchdog.read(self)
+                if not self.rejected_commands:
+                    break  # Otherwise the read was only woken to report a refused input.
             event = PiRpcChannel.decode_record(raw, strict=True) if raw else None
         except (UnicodeError, ValueError, TypeError) as error:
             raise NativePiUnavailable(
@@ -470,6 +488,28 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 NativeEntry.open_input_evidence(self.active_session_file)
             )
             await Coordination.run_worker(self.evidence.observe)
+            await self.following.open(self)
+
+    def forward_inbox(self, inbox: asyncio.Queue[TurnInboxItem], admission: OwnedSendAdmission) -> None:
+        """Later inputs go to the running child under the owner's write checks."""
+        self.inputs.queue = inbox
+        self.send_boundary = admission
+        self.interrupt_boundary = partial(admission, already_bound=True)
+        self.native_start = admission.native_start
+        self.ensure_input_forwarding()
+
+    @handles(pi.MessageStart)
+    async def message_start(self, event: pi.MessageStart) -> None:
+        await event.message.tracked_start(self, event)
+
+    async def later_input_started(self, event: pi.MessageStart) -> None:
+        matched, input_id = self.inputs.mark_started(self, event)
+        if not matched:
+            raise NativePiUnavailable("Native Pi started a user message this turn did not send")
+        # The answer to this turn is whatever the model says last, after the later input.
+        self.text_parts.clear()
+        self.terminal = PendingTrackedTerminal()
+        await self.following.started(input_id)
 
     @handles(pi.ContextCommitted)
     async def committed_context(self, event: pi.ContextCommitted) -> None:
@@ -538,7 +578,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     @handles(pi.AgentSettled)
     async def settled(self, event: pi.AgentSettled) -> None:
-        if event.settles(self):
+        # Pi runs an input it was handed before settling; the turn ends after that run.
+        if event.settles(self) and self.inputs.all_written_started:
             with self.startup.measurements.operation("native_agent_settled"):
                 self.finished = True
 

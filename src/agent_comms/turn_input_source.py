@@ -7,7 +7,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .channel_input_batch import InputBatch
+from .channel_input_batch import InputBatch, SingleInputBatch
 from .messages import Message
 from .turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 
@@ -174,6 +174,22 @@ class RoutedInput(TurnInputSource):
 
 class RoutedOriginalInput(OriginalTurnInput, RoutedInput):
     pass
+
+
+class SelectedOriginalInput(RoutedOriginalInput):
+    """The messages a selected turn answers: their assignments record them, not input rows."""
+
+    @classmethod
+    def answering(cls, prompt: str) -> SelectedOriginalInput:
+        return cls(
+            accepted_id=None,
+            goal_permission=InactiveGoalPermission(),
+            prompt=prompt,
+            original_display=None,
+            origins=(),
+            dependency=NoInputDependency(),
+            batch=SingleInputBatch(()),
+        )
 
 
 class DependencyOriginalInput(OriginalTurnInput, DirectInput):

@@ -17,7 +17,8 @@ from acp.schema import (
 )
 
 from .image_inputs import prompt_images
-from .queued_input import InitialInput, InputHandoffRefused
+from .following_inputs import OwnerFollowingInputs
+from .queued_input import InitialInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
 from .acp_failure import ACPFailure
@@ -517,22 +518,9 @@ class TurnRunner:
                 result = await execution.run(
                     on_compaction=partial(self.effects._emit_event, session_id),
                     pi_session=self.backend_for(session_id, owner),
+                    following=(following := OwnerFollowingInputs(self.inputs, session_id, owner, inbox)),
                 )
-                while not inbox.empty():
-                    command = inbox.get_nowait()
-                    if not command.carried_inputs:
-                        continue  # A send-now control carries no input of its own.
-                    (input_id,) = (carried.value for carried in command.carried_inputs)
-                    item = self.inputs.queued_inputs.get(session_id, {}).get(input_id)
-                    if item is None:
-                        await self.inputs.input_refused(session_id, input_id)
-                        continue
-                    try:
-                        await item.dispatch(self, session_id, execution.owner_name)
-                    except InputHandoffRefused:
-                        await self.inputs.input_refused(session_id, input_id)
-                        continue
-                    break  # The existing native forwarder consumes the remaining live inbox.
+                await following.pass_on_unread(self)
                 return result
             finally:
                 await self.inputs.finish_turn_inputs(session_id, inbox)
