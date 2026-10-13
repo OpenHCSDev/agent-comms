@@ -33,6 +33,7 @@ class PhysicalPilot(Pilot):
     def __init__(self, app, stage: Path):
         super().__init__(app)
         self.stage = stage
+        assert sys.__stdout__.isatty(), 'Physical controls require the owned terminal'
         self.window = os.environ['WINDOWID']
 
     async def command(self, *args):
@@ -59,7 +60,7 @@ class PhysicalPilot(Pilot):
         geometry = await self.command('xdotool', 'getwindowgeometry', '--shell', self.window)
         dimensions = dict(line.split('=', 1) for line in geometry.splitlines())
         rows, columns, pixel_width, pixel_height = struct.unpack(
-            'HHHH', fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, bytes(8)))
+            'HHHH', fcntl.ioctl(sys.__stdout__.fileno(), termios.TIOCGWINSZ, bytes(8)))
         assert (columns, rows) == tuple(self.app.size)
         assert pixel_width and pixel_height, 'st must report its terminal pixel area'
         cell_width, cell_height = pixel_width // columns, pixel_height // rows
