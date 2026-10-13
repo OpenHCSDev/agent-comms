@@ -666,7 +666,7 @@ class PrivateEvidenceRead:
         with ExitStack() as custody:
             try:
                 stream = custody.enter_context(
-                    os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb")
+                    os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb", buffering=0)
                 )
                 source = cls(path, stream)
             except OSError as error:
