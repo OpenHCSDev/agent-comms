@@ -271,9 +271,6 @@ def extend_native_run(core):
                  '        return this._nativeRun.retrying || this._retryAbortController !== undefined;')
     if '_nativeRunHadTrackedInput' in session.read_text():
         raise ValueError('Competing native tracked-run authority remains')
-    types = core/'agent-session.d.ts'
-    replace_once(types, '    private _nativeRunHadTrackedInput;',
-                 '    private _nativeRun;')
 
 
 def main(package):
