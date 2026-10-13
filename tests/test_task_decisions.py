@@ -10,7 +10,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.task_sources import Decision
 from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
@@ -314,7 +314,7 @@ def test_stale_goal_scope_cannot_publish_even_through_original_publisher(comms):
         source_turn_id=TurnId(owner.active_turn.id),
     )
     comms.registry.register(replace(owner, goal=replace(owner.goal, revision=2)))
-    message = Message("alpha", "#team", declaration.text, MessageType.INFO, task=declaration)
+    message = Message("alpha", "#team", declaration.text, InfoKind, task=declaration)
     with pytest.raises(ValueError, match="goal changed"):
         comms.bus.publisher.publish_ordinary(message)
     assert not comms.bus.log.full_history()
@@ -361,7 +361,7 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
     before = (comms.root / "bus.jsonl").read_bytes()
     with pytest.raises(RelationViolationError, match="human sender"):
         comms.bus.publisher.publish_ordinary(
-            Message(owner.name, "#team", "A peer is not the user", MessageType.INFO, task=declaration))
+            Message(owner.name, "#team", "A peer is not the user", InfoKind, task=declaration))
     assert (comms.root / "bus.jsonl").read_bytes() == before
     corrected = comms.messaging.send_user_message(
         "#team", "Retract the old path choice. Never replay UNKNOWN.",

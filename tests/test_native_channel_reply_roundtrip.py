@@ -26,7 +26,7 @@ from agent_comms.comms import Comms
 from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.field_codec import FieldCodec
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -113,7 +113,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 if broadcast and not is_triage:
                     text = json.dumps(FieldCodec.encode((Message(
                         request["model"], "#team", "ROUNDTRIP_NATIVE_REPLY",
-                        MessageType.INFO, timestamp=0,
+                        InfoKind, timestamp=0,
                     ),)))
                 if reject_triage and len(requests) == 2:
                     # Actual successful native output from the live failure:

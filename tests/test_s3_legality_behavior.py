@@ -24,7 +24,7 @@ from agent_comms.execution_states import (
     FailedExecution,
 )
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import InfoKind, Message, MessageKind, QuestionKind
 from agent_comms.obligation_states import PublishedResponse, PublishingResponse, ResponseState
 from agent_comms.wake_policy import WakePolicy
 from test_coordination_store import ready, started
@@ -314,7 +314,7 @@ def published_snapshot(pending):
         sender="worker",
         target="owner",
         body="done",
-        type=MessageType.INFO,
+        type=InfoKind,
         timestamp=1.0,
         notice=False,
     )
@@ -384,8 +384,8 @@ def test_snapshot_publication_parent_receipt_and_frozen_envelope(pending):
             if type(original) is bool
             else original + 1
             if type(original) is float
-            else MessageType.QUESTION
-            if isinstance(original, MessageType)
+            else QuestionKind
+            if isinstance(original, type) and issubclass(original, MessageKind)
             else original + "-other"
         )
         rejected(

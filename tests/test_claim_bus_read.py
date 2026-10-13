@@ -35,7 +35,7 @@ from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeAdmission
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.thread_identity import TurnId, TurnIdentity
@@ -206,7 +206,7 @@ async def test_write_in_a_direct_message_turn_runs_without_reading_the_whole_bus
             comms.messaging.send_message("sender", session, "Change the value")
             native.provider.tool_call = ("write", {"path": str(target), "content": "value = 2\n"})
             native.provider.text = json.dumps(FieldCodec.encode(
-                (Message(session, "sender", "Changed it.", MessageType.INFO, timestamp=0),)
+                (Message(session, "sender", "Changed it.", InfoKind, timestamp=0),)
             ))
 
             def whole_bus(*_, **__):

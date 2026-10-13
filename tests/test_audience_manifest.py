@@ -12,7 +12,7 @@ from agent_comms.audience_manifest import (
     freeze_audience,
 )
 from agent_comms.mentions import ThreadMention
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, AlertKind, InfoKind
 from agent_comms.thread_identity import ThreadRole
 
 
@@ -21,7 +21,7 @@ def message(**changes):
         sender="sender",
         target="#team",
         body="@alpha please review",
-        type=MessageType.INFO,
+        type=InfoKind,
         sender_role=ThreadRole.USER,
         timestamp=1234.5,
         seq=11,
@@ -72,7 +72,7 @@ def test_full_envelope_hash_binds_body_type_role_mentions_sequence_and_target():
     base = freeze()
     alternatives = (
         message(body="@alpha please retry"),
-        message(type=MessageType.ALERT),
+        message(type=AlertKind),
         message(sender_role=ThreadRole.AGENT),
         message(mentions=()),
         message(seq=12),

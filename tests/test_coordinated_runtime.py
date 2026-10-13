@@ -278,7 +278,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         # Relevance guidance can mention triage inside a FULL prompt too.
         from agent_comms.private_send_stage import TriageNativeSend
         from agent_comms.field_codec import FieldCodec
-        from agent_comms.messages import Message, MessageType
+        from agent_comms.messages import Message, InfoKind
 
         admission = _kwargs["prompt_send_boundary"]
         if isinstance(admission.stage, TriageNativeSend):
@@ -286,7 +286,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         else:
             targets = tuple(dict.fromkeys(row.lifecycle.exact_target for row in admission.stage.assignments))
             reply = json.dumps(FieldCodec.encode(tuple(
-                Message(admission.owner.thread.name, target, "42", MessageType.INFO, timestamp=0)
+                Message(admission.owner.thread.name, target, "42", InfoKind, timestamp=0)
                 for target in targets
             )))
         observer = _kwargs.get("observe_event")

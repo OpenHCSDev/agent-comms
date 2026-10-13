@@ -21,7 +21,7 @@ from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
 from agent_comms.native_pi import read_tracked_input_digest
 from agent_comms.native_prompt_binding import read_expected_prompt_binding
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.selected_tool_broker import SelectedToolIntent
 from agent_comms.wake_candidate_index import WakeCandidateIndex
@@ -144,7 +144,7 @@ async def test_native_full_four_tools_publish_and_release(
                     assert phase.declared_name == 'model_wait'
                     assert 'participant' not in comms.registry.snapshot().threads
                     answer = Message("beta", derive_exact_reply_target(initial.message),
-                                     "CODING_TOOLS_OK", MessageType.INFO, timestamp=0)
+                                     "CODING_TOOLS_OK", InfoKind, timestamp=0)
                     delta = {"role": "assistant", "content": json.dumps(FieldCodec.encode((answer,)))}
                     reason = "stop"
                 chunk = {

@@ -7,7 +7,7 @@ import sys
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import InfoKind, Message
 from agent_comms.threads import Thread
 
 
@@ -21,7 +21,7 @@ def main():
         ))
     root_id = service.messaging.initialize_private_initial_protocol()
     original = service.bus.publisher.publish_initial_cohort(
-        Message('original_sender', '#team', 'Retained original frozen audience', MessageType.INFO)
+        Message('original_sender', '#team', 'Retained original frozen audience', InfoKind)
     )
     sender = service.registry.require('original_sender')
     service.registry.rename('original_sender', 'renamed_sender')

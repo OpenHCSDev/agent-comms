@@ -11,7 +11,7 @@ from .coordination_tables.publications import PublicationReceipt
 from .diagnostics import record_terminal_failure
 from .errors import RelationViolationError
 from .fresh_private_session import FreshPrivateSession
-from .messages import MessageType
+from .messages import AlertKind
 from .native_source_cursor import NativeSourceCursor
 from .private_sidecar import SidecarCommitUnknown
 
@@ -84,6 +84,6 @@ def publish_native_failure(
         participant.batch.target,
         f"Message processing failed: {description} "
         f"No automatic retry. [Open diagnostic]({diagnostic.as_uri()})",
-        MessageType.ALERT,
+        AlertKind,
         notice=True,
     )

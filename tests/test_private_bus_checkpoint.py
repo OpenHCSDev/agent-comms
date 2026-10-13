@@ -15,7 +15,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, HandoffKind, InfoKind
 from agent_comms.bus_source_page import AddressedPage
 from agent_comms.private_bus_checkpoint import (
     install_private_bus_checkpoint,
@@ -87,13 +87,13 @@ def test_claim_barrier_retains_post_durability_marker_sample(tmp_path, monkeypat
 def test_public_identity_scan_keeps_retained_rows_without_delivery_pointers(tmp_path):
     import json
     from agent_comms.bus_publication import HumanOrigin
-    from agent_comms.messages import Message, MessageType
+    from agent_comms.messages import Message, HandoffKind, InfoKind
     from agent_comms.private_bus_checkpoint import DeliverySources
     from agent_comms.wire_metadata import WireMetadata
 
     comms, root_id = _root(tmp_path)
     user = comms.messaging.user_identity(str(tmp_path))
-    original = Message(user.name, 'Alice', 'Retained original body', MessageType.INFO,
+    original = Message(user.name, 'Alice', 'Retained original body', InfoKind,
                        timestamp=1.0, seq=1, sender_role=user.role)
     # An authored offline retained cut, installed by the existing certificate
     # owner. PublicWireRecord deliberately publishes no DeliverySources row.
@@ -215,7 +215,7 @@ def test_claim_and_keyed_response_append_share_certificate(tmp_path: Path) -> No
             "sender",
             "owner",
             "claim",
-            MessageType.HANDOFF,
+            HandoffKind,
             claims=[ExistingFileClaim(Path("owned.py"))],
         )
         assert claim.claim_transition is not None
@@ -330,7 +330,7 @@ def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> N
 def test_unknown_public_writer_cannot_make_initial_absent_audience(tmp_path: Path) -> None:
     comms, _ = _root(tmp_path)
     comms.messaging.send_initial_cohort("sender", "Alice", "sealed")
-    raw = Message("sender", "Bob", "unsealed", MessageType.INFO, seq=2).to_wire()
+    raw = Message("sender", "Bob", "unsealed", InfoKind, seq=2).to_wire()
     with comms.bus.log.path.open("ab") as stream:
         stream.write(json.dumps(raw).encode() + b"\n")
         stream.flush()
@@ -448,7 +448,7 @@ def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path, monkeypatch
     comms, _ = _root(tmp_path)
     for index in range(1002):
         comms.bus.publisher.publish_initial_cohort(
-            Message("sender", "#team", f"@Alice item-{index} " + "x" * 7900, MessageType.INFO)
+            Message("sender", "#team", f"@Alice item-{index} " + "x" * 7900, InfoKind)
         )
     assert comms.bus.log.path.stat().st_size > 8 * 1024 * 1024
     lookup = stable_thread_lookup(17002.0)
@@ -473,7 +473,7 @@ def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path, monkeypatch
         )
         with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
             comms.bus.publisher.publish_initial_cohort(
-                Message("sender", "Alice", "lagged-row", MessageType.INFO)
+                Message("sender", "Alice", "lagged-row", InfoKind)
             )
     cold_start = time.monotonic()
     recovered, page, more = _page(comms, lookup, after=1000)

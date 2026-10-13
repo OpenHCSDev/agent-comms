@@ -20,7 +20,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.historical_native_inputs import read_historical_native_inputs
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
@@ -163,7 +163,7 @@ def test_unmarked_existing_data_is_not_rewritten_or_appended_by_send(tmp_path):
             )
         )
     stored = Message(
-        sender="sender", target="beta", body="preserved history", type=MessageType.INFO, seq=1
+        sender="sender", target="beta", body="preserved history", type=InfoKind, seq=1
     )
     comms.bus.log.path.write_text(json.dumps(stored.to_wire()) + "\n")
     before = comms.bus.log.path.read_bytes()

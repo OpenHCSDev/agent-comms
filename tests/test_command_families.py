@@ -13,7 +13,7 @@ import pytest
 from agent_comms.cli import build_parser, main
 from agent_comms.cli_commands import CliCommand, option
 from agent_comms.comms import wire
-from agent_comms.messages import MessageType
+from agent_comms.messages import InfoKind
 from agent_comms.runtime import RuntimeProxy, RuntimeServer
 from agent_comms.runtime_requests import (
     ResultRuntimeRequest,
@@ -52,7 +52,7 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
     invoke = parse(["invoke", "--tool", "comms_threads"])
     assert invoke.arguments == {}
     send = parse(["send", "--from", "a", "--to", "b", "--body", "hello"])
-    assert send.type is MessageType.INFO
+    assert send.type is InfoKind
     restart = parse(["restart", "--all"])
     assert restart.all_ is True
     assert restart.agent_bin is None
@@ -125,7 +125,7 @@ def test_runtime_wire_format_round_trip(parameters):
             {"action": "edit_goal", "goal_id": "g", "expected_revision": True, "text": "x"},
             "Expected.*int",
         ),
-        ({"action": "retry_goal"}, "missing.*goal_id.*expected_revision"),
+        ({"action": "retry_goal"}, "Missing.*goal_id.*expected_revision"),
         ({"action": "set_goal", "text": "  "}, "A goal requires text."),
         (
             {"action": "edit_goal", "goal_id": "g", "expected_revision": 1, "text": False},

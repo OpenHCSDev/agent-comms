@@ -15,7 +15,7 @@ from agent_comms.comms import wire
 from agent_comms.coordination_errors import StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.threads import Thread
 from agent_comms.turn_phase import CancellingPhase
@@ -109,7 +109,7 @@ async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp
             def reply(message):
                 return json.dumps(FieldCodec.encode((Message(
                     session, derive_exact_reply_target(message), f"Reply {len(sent)}",
-                    MessageType.INFO, timestamp=0,
+                    InfoKind, timestamp=0,
                 ),)))
 
             def change_project_and_send_again():

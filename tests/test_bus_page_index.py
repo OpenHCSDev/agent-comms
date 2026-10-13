@@ -7,7 +7,7 @@ import sqlite3
 
 from agent_comms.bus_page_index import BusPageRow
 from agent_comms.comms import Comms
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
 from agent_comms.wire_metadata import ArchivedAccess
 from agent_comms.wire_log import OpenedWireSnapshot
@@ -20,7 +20,7 @@ def retained_source(root, count):
     comms.messaging.initialize_private_initial_protocol()
     with comms.bus.log.path.open("w") as output:
         for seq in range(1, count + 1):
-            row = Message("a", "b" if seq % 3 == 0 else "c", f"m{seq}", MessageType.INFO, seq=seq)
+            row = Message("a", "b" if seq % 3 == 0 else "c", f"m{seq}", InfoKind, seq=seq)
             output.write(json.dumps(row.to_wire()) + "\n")
     comms.bus.log.path.chmod(0o600)
     marker = comms.bus.log.read_metadata_unlocked(required=True)

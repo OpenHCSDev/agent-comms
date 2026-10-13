@@ -605,7 +605,7 @@ async def test_contended_cursor_refresh_still_invalidates_replaced_owner(tmp_pat
 
 async def test_acp_private_does_not_overlap_owner_turn(native_backend):
     from agent_comms.field_codec import FieldCodec
-    from agent_comms.messages import Message, MessageType
+    from agent_comms.messages import Message, InfoKind
     from agent_comms.native_input_record import FullNativeExecution
     from agent_comms.wake import derive_exact_reply_target
 
@@ -618,7 +618,7 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
             sent = comms.messaging.send_message("sender", session, "Selected input after current turn")
             native.provider.text = json.dumps(FieldCodec.encode((Message(
                 session, derive_exact_reply_target(sent), "Selected input acknowledged",
-                MessageType.INFO, timestamp=0,
+                InfoKind, timestamp=0,
             ),)))
             assert await agent.inputs.drain_inbox(session) == 0
             assert agent.turns.owns_turn(session, turn.turn_id)

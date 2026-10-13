@@ -5,7 +5,7 @@ import os
 
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
 
 
@@ -16,12 +16,12 @@ def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeyp
     comms.agents.activity.emit(Activity(thread="alpha", state=ActivityState.WORKING, timestamp=300))
     comms.bus.publisher.publish_ordinary(
         Message(
-            sender="alpha", target="beta", body="outgoing", type=MessageType.INFO, timestamp=400
+            sender="alpha", target="beta", body="outgoing", type=InfoKind, timestamp=400
         )
     ).message_id
     comms.bus.publisher.publish_ordinary(
         Message(
-            sender="beta", target="alpha", body="incoming", type=MessageType.INFO, timestamp=500
+            sender="beta", target="alpha", body="incoming", type=InfoKind, timestamp=500
         )
     ).message_id
     assert comms.views.last_sent_timestamps() == {"alpha": 400, "beta": 500}

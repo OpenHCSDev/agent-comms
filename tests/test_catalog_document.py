@@ -9,7 +9,7 @@ import pytest
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.comms import wire
 from agent_comms.display_order import ChannelSort
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 
 
 def test_update_failure_restores_whole_document_not_just_mode(tmp_path):
@@ -48,13 +48,13 @@ def test_message_decode_fields_are_declared_not_a_second_roster():
     class AnnotatedMessage(Message):
         annotation: str = ""
 
-    original = AnnotatedMessage("alpha", "#api", "hello", MessageType.INFO, annotation="retained")
+    original = AnnotatedMessage("alpha", "#api", "hello", InfoKind, annotation="retained")
     assert AnnotatedMessage.from_wire(original.to_wire()) == original
     with pytest.raises(ValueError, match="Unknown fields"):
         Message.from_wire({**original.to_wire(), "extension": "not supported"})
     with pytest.raises(ValueError):
         Message.from_wire(
-            {**Message("alpha", "#api", "hello", MessageType.INFO).to_wire(), "notice": "false"}
+            {**Message("alpha", "#api", "hello", InfoKind).to_wire(), "notice": "false"}
         )
     historical = Message.from_wire({"from": "alpha", "to": "#api", "text": "old", "type": "info"})
     assert historical.timestamp == 0.0
@@ -86,7 +86,7 @@ def test_initial_publication_rechecks_current_catalog_revision(tmp_path, monkeyp
 
 
 def test_message_integer_timestamp_keeps_original_identity():
-    original = Message("alpha", "#api", "old", MessageType.INFO, timestamp=123, seq=7)
+    original = Message("alpha", "#api", "old", InfoKind, timestamp=123, seq=7)
     encoded = original.to_wire()
     restored = Message.from_wire(encoded)
     assert restored.to_wire() == encoded

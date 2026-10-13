@@ -20,7 +20,7 @@ from .channel_targets import is_channel_target
 from .comms import Comms
 from .coordinator import Coordination
 from .diagnostics import PublicationMeasurements, record_terminal_failure, record_request_progress
-from .messages import MessageType
+from .messages import AlertKind
 from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
 from .turn_phase import PublishingPhase
@@ -313,7 +313,7 @@ class TurnProgress(events.AgentEventConsumer):
                     target,
                     f"{prefix}: backend turn did not complete. "
                     f"[Open diagnostic]({diagnostic_path.as_uri()})",
-                    MessageType.ALERT,
+                    AlertKind,
                     notice=True,
                 )
         return self.comms.transcripts.transcript_checkpoint(self.thread_name)

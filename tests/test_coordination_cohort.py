@@ -32,7 +32,7 @@ from agent_comms.exporting import (
     FullLimit,
     JsonlFormat,
 )
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.threads import Thread
@@ -307,7 +307,7 @@ def test_all_channel_excludes_sender_and_nonexecutors_and_control_is_not_forgeab
     )
     with pytest.raises(RelationViolationError, match="initial issuer"):
         comms.bus.publisher.publish_initial_cohort(
-            Message(sender="sender", target="#all", body="system", type=MessageType.INFO),
+            Message(sender="sender", target="#all", body="system", type=InfoKind),
             control="system_control",
         )
     assert comms.bus.log.latest_sequence() == 0

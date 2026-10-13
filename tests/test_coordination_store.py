@@ -68,7 +68,7 @@ from agent_comms.execution_states import (
     PendingExecution,
 )
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.recovery_states import FailedRecovery, ModelStalledRecovery, RecoveredRecovery
 from agent_comms.wake_policy import BoundedTriageWake, FullWake, PassiveWake, WakePolicy
@@ -1266,7 +1266,7 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
             sender="thread",
             target="owner",
             body="reply",
-            type=MessageType.INFO,
+            type=InfoKind,
             timestamp=1.0,
             notice=False,
         )
@@ -1274,7 +1274,7 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
             "exec",
             "thread",
             "owner",
-            MessageType.INFO,
+            InfoKind,
             False,
             1.0,
             "reply",

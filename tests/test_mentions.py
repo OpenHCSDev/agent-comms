@@ -3,7 +3,7 @@ import pytest
 from agent_comms import MentionQuery
 from agent_comms.comms import wire
 from agent_comms.mentions import MentionCandidate, ThreadMention
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, AlertKind, InfoKind
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedOnlyPolicy
 from agent_comms.routing import ScheduledTurn
 from agent_comms.thread_identity import ThreadRole
@@ -107,7 +107,7 @@ def test_unmentioned_channel_policy_uses_typed_sender_role(sender_role, unmentio
         "sender",
         "#team",
         "status for the team",
-        MessageType.INFO,
+        InfoKind,
         sender_role=sender_role,
     )
     assert unmentioned.response_policy is unmentioned_policy
@@ -121,7 +121,7 @@ def test_unmentioned_channel_policy_uses_typed_sender_role(sender_role, unmentio
         "sender",
         "#team",
         "@beta investigate",
-        MessageType.INFO,
+        InfoKind,
         sender_role=sender_role,
         mentions=(ThreadMention("beta", 0, 5),),
     )
@@ -135,7 +135,7 @@ def test_unmentioned_channel_policy_uses_typed_sender_role(sender_role, unmentio
         "sender",
         "#team",
         "delivery failed",
-        MessageType.ALERT,
+        AlertKind,
         sender_role=sender_role,
         notice=True,
     )
@@ -155,13 +155,13 @@ def test_completion_uses_the_model_syntax_at_the_cursor():
 
 
 def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
-    from agent_comms.messages import MessageType
+    from agent_comms.messages import AlertKind, InfoKind
 
     comms = wire(tmp_path)
     for name in ("sender", "owner"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     # A notice never wakes its recipient, so failure feedback cannot loop.
-    comms.messaging.send("owner", "#team", "Delivery failed: usage limit", MessageType.ALERT, notice=True)
+    comms.messaging.send("owner", "#team", "Delivery failed: usage limit", AlertKind, notice=True)
     notice = comms.views.channel_history("#team")[-1]
     assert notice.notice is True and not notice.starts_turn
     assert "sender" not in comms.views.last_sent_timestamps()

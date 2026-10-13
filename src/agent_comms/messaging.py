@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Type
 
 from .active_route import guard_original_root_write
 from .candidate_maintenance import schedule_candidate_catchup
@@ -15,7 +15,8 @@ if TYPE_CHECKING:
 from .envelope_claim_transitions import FileClaimPath
 from .errors import RelationViolationError, UnregisteredThreadError
 from .message_bus import MessageBus
-from .messages import Message, MessageType
+from .messages import InfoKind, Message, MessageKind
+from .change_report import ChangeReport
 from .store_files import _store_lock
 from .thread_identity import ThreadRole
 from .threads import Thread
@@ -38,15 +39,17 @@ class Messaging:
         sender: str,
         target: str,
         body: str,
-        type: MessageType = MessageType.INFO,
+        type: Type[MessageKind] = InfoKind,
         *,
         notice: bool = False,
         claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path] = (),
+        report: ChangeReport | None = None,
     ) -> str:
         """Declare a message and route it through the bus."""
         return self.send_message(
-            sender, target, body, type, notice=notice, claims=claims, releases=releases
+            sender, target, body, type, notice=notice, claims=claims, releases=releases,
+            report=report,
         ).message_id
 
     def send_message(
@@ -54,12 +57,13 @@ class Messaging:
         sender: str,
         target: str,
         body: str,
-        type: MessageType = MessageType.INFO,
+        type: Type[MessageKind] = InfoKind,
         *,
         notice: bool = False,
         claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path] = (),
         task: TaskAttachment = NoTaskAttachment(),
+        report: ChangeReport | None = None,
     ) -> Message:
         """Return one committed envelope, including optional guarded claims."""
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
@@ -72,7 +76,7 @@ class Messaging:
                 )
             message = Message(
                 sender=owner.name, target=target, body=body, type=type,
-                notice=notice, task=task,
+                notice=notice, task=task, report=report,
             )
             if claims or releases:
                 committed = self.bus.publisher.publish_claim_envelope(
@@ -100,7 +104,7 @@ class Messaging:
         sender: str,
         target: str,
         body: str,
-        type: MessageType = MessageType.INFO,
+        type: Type[MessageKind] = InfoKind,
         *,
         notice: bool = False,
     ) -> Message:
@@ -189,7 +193,7 @@ class Messaging:
         from .bus_publication import HumanOrigin
 
         return self.bus.publisher.publish_ordinary(
-            Message(user.name, target, body, MessageType.INFO, task=task, notice=notice),
+            Message(user.name, target, body, InfoKind, task=task, notice=notice),
             _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
         )
 

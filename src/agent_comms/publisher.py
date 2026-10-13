@@ -367,6 +367,9 @@ class Publisher:
             sender_thread = snapshot.threads.get(sender)
             if sender_thread is None or not snapshot.statuses[sender].visible:
                 raise RelationViolationError("Initial sender must be visible and registered.")
+            # The kind owns its own validation; one publication check, before
+            # any sequence reservation, refusing with what is missing.
+            message.type.require_publishable(message, Path(sender_thread.worktree))
             if _human_origin is None:
                 if not sender_thread.role.executable:
                     raise RelationViolationError(
