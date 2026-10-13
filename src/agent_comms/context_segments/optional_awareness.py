@@ -19,7 +19,7 @@ from agent_comms.coordination_tables.responses import ResponseObligation
 
 from ..cohort_schema import AwarenessClaimGenerations, ClaimBatchMembers, ClaimBatchReceipts, CohortDeliveryReceipts
 from ..field_codec import FieldCodec
-from ..turn_context import ContextSegment, InstructionFile, TurnContext
+from ..turn_context import ContextSegment, InstructionFile, InstructionSegment, TurnContext
 from ..wake_candidate_index import ProjectionUnavailableError
 
 
@@ -120,15 +120,33 @@ class OptionalAwarenessResult(ABC):
     def render(self, max_text_bytes: int) -> str: ...
 
 
-@dataclass(frozen=True)
-class OmittedAwareness(OptionalAwarenessResult):
+@dataclass(frozen=True, kw_only=True)
+class OmittedAwareness(InstructionSegment, OptionalAwarenessResult):
+    """The named visible state of a delivery whose optional awareness dropped.
+
+    The original is delivered alone and the omission is stated on the delivered
+    input itself, like the bus-level unavailable-awareness state, never only a
+    log line.
+    """
+
     reason: str
 
-    def render(self, max_text_bytes: int) -> str:
+    @classmethod
+    def capture(cls, reason: str) -> OmittedAwareness:
+        instruction = InstructionFile.read("selected-awareness-omitted.md")
+        return cls(provenance=(instruction.source,), instruction=instruction, reason=reason)
+
+    def values(self) -> dict[str, object]:
+        return {"reason": self.reason}
+
+    def segments(self, max_text_bytes: int) -> tuple[ContextSegment, ...]:
         logging.getLogger(__name__).warning(
             "Optional awareness omitted; original delivered alone (%s)", self.reason
         )
-        return ""
+        return (self,)
+
+    def render(self, max_text_bytes: int) -> str:
+        return self.text()
 
 
 @dataclass(frozen=True)
@@ -144,9 +162,9 @@ class CompleteAwareness(ContextSegment, OptionalAwarenessResult):
 
     def segments(self, max_text_bytes):
         if len(self.text().encode("utf-8")) > max_text_bytes:
-            return OmittedAwareness("rendered awareness exceeds the resource budget").segments(
-                max_text_bytes
-            )
+            return OmittedAwareness.capture(
+                "rendered awareness exceeds the resource budget"
+            ).segments(max_text_bytes)
         return (self,)
 
     def context(self) -> dict:

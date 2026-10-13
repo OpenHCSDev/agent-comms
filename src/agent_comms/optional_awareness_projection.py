@@ -144,7 +144,7 @@ class OptionalAwarenessProjection:
     ) -> tuple[ContextSegment, ...]:
         deadline = time.monotonic() + self.build_seconds
         if not self._build_slot.acquire(blocking=False):
-            return OmittedAwareness("builder busy").segments(self.max_text_bytes)
+            return OmittedAwareness.capture("builder busy").segments(self.max_text_bytes)
         loop = asyncio.get_running_loop()
         finished: asyncio.Future[OptionalAwarenessResult] = loop.create_future()
         try:
@@ -156,13 +156,15 @@ class OptionalAwarenessProjection:
             ).start()
         except RuntimeError:
             self._build_slot.release()
-            return OmittedAwareness("builder unavailable").segments(self.max_text_bytes)
+            return OmittedAwareness.capture("builder unavailable").segments(
+                self.max_text_bytes
+            )
         try:
             result = await asyncio.wait_for(finished, max(0.0, deadline - time.monotonic()))
         except TimeoutError:
-            return OmittedAwareness("TimeoutError").segments(self.max_text_bytes)
+            return OmittedAwareness.capture("TimeoutError").segments(self.max_text_bytes)
         if time.monotonic() > deadline:
-            return OmittedAwareness("TimeoutError").segments(self.max_text_bytes)
+            return OmittedAwareness.capture("TimeoutError").segments(self.max_text_bytes)
         return result.segments(self.max_text_bytes)
 
     def __post_init__(self) -> None:
@@ -196,7 +198,7 @@ class OptionalAwarenessProjection:
         ) as error:
             # Busy, stale, changed-owner and pending-rename are this read's
             # named unavailable states. Anything else is a defect and raises.
-            return OmittedAwareness(type(error).__name__)
+            return OmittedAwareness.capture(type(error).__name__)
 
     def _build(
         self, initial: CommittedDelivery, assignment: WakeAssignment, owner: Thread

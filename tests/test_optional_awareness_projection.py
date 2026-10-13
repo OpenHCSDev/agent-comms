@@ -314,7 +314,7 @@ def test_stale_index_unsealed_candidate_and_replaced_owner_omit(tmp_path: Path) 
             initial, assignment, owner
         ).complete
         unavailable = _projection(index, store, owner, 0, second.seq)(initial, assignment, owner)
-        assert not unavailable.complete and unavailable.render(32768) == ""
+        assert not unavailable.complete and "Optional awareness omitted" in unavailable.render(32768)
         replaced = replace(owner, created_at=owner.created_at + 10)
         assert not _projection(index, store, owner, 0, 1)(initial, assignment, replaced).complete
     finally:
@@ -344,7 +344,7 @@ def test_open_obligation_budget_cannot_be_hidden_by_selected_cursor(tmp_path: Pa
         result = _projection(index, store, owner, older.message.seq, newer.message.seq, max_rows=1)(
             newer, current, owner
         )
-        assert not result.complete and result.render(32768) == ""
+        assert not result.complete and "Optional awareness omitted" in result.render(32768)
     finally:
         store.close()
 
@@ -361,7 +361,7 @@ def test_captured_owner_sql_generation_advance_omits(tmp_path: Path) -> None:
             assignment.recipient_lookup, owner.name, expected_generation=1
         )
         stale = builder(initial, assignment, owner)
-        assert not stale.complete and stale.render(32768) == ""
+        assert not stale.complete and "Optional awareness omitted" in stale.render(32768)
     finally:
         store.close()
 
@@ -382,7 +382,7 @@ def test_new_snapshot_after_same_name_generation_bump_omits_old_claim(
         result = _projection(index, store, owner, 0, initial.message.seq)(
             initial, assignment, owner
         )
-        assert not result.complete and result.render(32768) == ""
+        assert not result.complete and "Optional awareness omitted" in result.render(32768)
     finally:
         store.close()
 
@@ -458,7 +458,7 @@ def test_owner_generation_advance_during_snapshot_omits_at_inclusion(
 
         monkeypatch.setattr(OptionalAwarenessProjection, "_open_obligations", race)
         stale = builder(initial, assignment, owner)
-        assert not stale.complete and stale.render(32768) == ""
+        assert not stale.complete and "Optional awareness omitted" in stale.render(32768)
     finally:
         store.close()
 
@@ -485,7 +485,7 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
         )
         db.execute(trigger)
         stale = builder(initial, assignment, owner)
-        assert not stale.complete and stale.render(32768) == ""
+        assert not stale.complete and "Optional awareness omitted" in stale.render(32768)
     finally:
         store.close()
 
@@ -675,7 +675,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
             owner, process_identity=replace(identity, start_time=identity.start_time + 1)
         )
         changed = builder(initial, assignment, replaced_process)
-        assert not changed.complete and changed.render(32768) == ""
+        assert not changed.complete and "Optional awareness omitted" in changed.render(32768)
         assert builder(initial, assignment, owner).complete
 
         # Simulate damaged derived proof, restoring the real schema before read.
@@ -691,7 +691,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         )
         db.execute(trigger)
         missing = builder(initial, assignment, owner)
-        assert not missing.complete and missing.render(32768) == ""
+        assert not missing.complete and "Optional awareness omitted" in missing.render(32768)
         assert WakeAssignment.select(db) == assignments_before
         assert ResponseObligation.select(db) == obligations_before
         assert comms.bus.log.path.read_bytes() == wire_before
@@ -716,7 +716,7 @@ def test_full_bounded_awareness_window_keeps_foreground_deadline(tmp_path: Path)
         elapsed = time.monotonic() - started
         # One hundred complete claim descriptions exceed the existing 16KiB
         # optional text budget; omission must still fit the actual 250ms gate.
-        assert not bounded.complete and bounded.render(32768) == ""
+        assert not bounded.complete and "Optional awareness omitted" in bounded.render(32768)
         assert bounded.reason == "ProjectionUnavailableError"
         assert elapsed < 0.250
         print(f"actual 100-row optional projection: {elapsed:.6f}s", flush=True)
