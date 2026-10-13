@@ -34,7 +34,12 @@ and `skew-read/` (bounded AST/source evidence; remove after review).
 Keep strict decoding and the actual stored member. At the existing observation
 read boundary return a named unreadable-history state, preserving the original
 reason and reader runtime. Sidebar and thread results carry that state; the
-existing UI models and transcript owner show it instead of crashing the app.
+Core status model renders the reason. The paired Toad handlers and transcript
+failure behavior are not implemented yet: the edit tool refused that checkout
+because this thread is restricted to the Core project. Do not install this Core
+checkpoint with the unmodified Toad result dispatcher. The project binding must
+permit `/home/ts/wt/toad-history-read-state` before paired implementation and UI
+acceptance can finish; no shell writes were used to bypass the denial.
 Genuine process death remains distinct from a read refusal. No unknown members
 are skipped, guessed, converted on load or restored as compatibility aliases.
 
@@ -59,3 +64,25 @@ restart. Relink alone does not replace already imported code. The installer must
 join outgoing writers/readers using the original process/route lifetime owners,
 carry records while stopped, then restart them on the new pins. Never replay an
 UNKNOWN attempt or change a blocked goal to make installation look successful.
+
+## Verification of this Core checkpoint
+
+- Reused refactor-audit `Package.load`/`overlay.py` for Core and Toad AST evidence.
+  No parse omissions; lazy discovery and dynamic MRO targets still require the
+  semantic source trace above (AST does not prove behavior).
+- 29 focused checks pass: strict restored `selected_response` round-trip,
+  unknown-name rejection, named error pickling/status, a real spawned observer
+  surviving an unknown saved member, sidebar refusal followed by thread refusal
+  and a successful independent read on the same pipe, observer-death separation
+  and route checks. No input was sent to a provider; the fixture bus is private
+  disposable output under the owned scratch root.
+- The configured installed interpreter, using this source, strictly decoded an
+  actual 49,494-byte retained live observation containing a nested
+  `selected_response` manifest (144 estimated tokens). Live bus bytes were only
+  read, not changed. This checks a real saved record, not complete UI acceptance.
+- Early fixture runs were invalid (inherited live N/K launch environment, then
+  missing private marker/guard). The final fixture uses the actual protocol
+  initializer; the command unsets live root/launch selections. Those initial
+  failures are not attributed to the application implementation.
+- Installed Toad journey and the writer/reader runtime gate remain unverified
+  and unfinished. The branch is a draft checkpoint, not a delivered live fix.

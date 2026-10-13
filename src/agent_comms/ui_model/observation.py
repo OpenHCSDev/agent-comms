@@ -20,6 +20,7 @@ import itertools
 import multiprocessing
 import os
 import signal
+import sys
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
@@ -78,6 +79,35 @@ class InterestRequest(ObservationRequest):
         service.changed.set()
 
 
+class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
+    """A strict stored-data read failed, not the observer or the whole UI.
+
+    The reader runtime is known; the writer version is not inferred from a
+    missing declaration. Older saved records can fail after a declaration is
+    deleted just as newer records can fail in an older reader.
+    """
+
+    def __init__(self, reader_runtime: str, reason: str):
+        self.reader_runtime = reader_runtime
+        self.reason = reason
+        # Keep constructor arguments intact for the process pipe's pickle.
+        super().__init__(reader_runtime, reason)
+
+    @classmethod
+    def capture(cls, error: Exception) -> UnreadableHistory:
+        reasons = []
+        cause: BaseException | None = error
+        while cause is not None:
+            reasons.append(str(cause))
+            cause = cause.__cause__
+        return cls(sys.prefix, "\nCaused by: ".join(reasons))
+
+    def __str__(self) -> str:
+        return (f"Saved history unreadable: {self.reason}\n"
+                f"Reader runtime: {self.reader_runtime}. Restart this process on "
+                "the reviewed runtime; if it still fails, the saved records need repair.")
+
+
 @dataclass(frozen=True)
 class AwaitedRead(ObservationRequest):
     """A read the UI awaits; the service answers it by ``request_id``.
@@ -113,6 +143,8 @@ class ReadRequest(AwaitedRead):
         try:
             self.require_root(comms)
             return ReadAnswered(self.request_id, self.read(comms))
+        except (OSError, ValueError) as error:
+            return self.refused(UnreadableHistory.capture(error))
         except Exception as error:
             return self.refused(error)
 
@@ -354,11 +386,19 @@ class SidebarObserved(Observed):
 
 
 @dataclass(frozen=True)
+class SidebarUnreadable(Observed):
+    """The requested sidebar could not be read; no stale snapshot is offered."""
+
+    request: ObserveSidebar
+    error: UnreadableHistory
+
+
+@dataclass(frozen=True)
 class ThreadsObserved(Observed):
     """Presentations of the observed threads; a busy store leaves some unread this time."""
 
     presentations: Mapping[str, ThreadPresentation | None]
-    unavailable: frozenset[str]
+    unavailable: Mapping[str, UnreadableHistory]
     busy: frozenset[str]
 
 
@@ -457,21 +497,29 @@ class ObservationService:
         if sidebar is not None:
             key = (sidebar, revision.expiry_tick // EXPIRY_PERIOD)
             if stores or key != self.sent_sidebar:
-                snapshot = views.viewer_snapshot(
-                    sidebar.worktree, show_stopped=sidebar.show_stopped, show_archived=sidebar.show_archived)
-                self.connection.send(SidebarObserved(revision, sidebar, snapshot, SidebarModel.derive(snapshot)))
+                try:
+                    snapshot = views.viewer_snapshot(
+                        sidebar.worktree, show_stopped=sidebar.show_stopped, show_archived=sidebar.show_archived)
+                    result = SidebarObserved(
+                        revision, sidebar, snapshot, SidebarModel.derive(snapshot)
+                    )
+                except self.UNAVAILABLE as error:
+                    result = SidebarUnreadable(revision, sidebar, UnreadableHistory.capture(error))
+                self.connection.send(result)
                 self.sent_sidebar = key
         threads = self.interest.threads
         if threads and (stores or threads != self.sent_threads or self.retry_threads):
-            presentations, unavailable, busy = {}, set(), set()
+            presentations, unavailable, busy = {}, {}, set()
             for name in threads:
                 try:
                     presentations[name] = views.thread_presentation(name)
                 except CoordinationReadUnavailable:
                     busy.add(name)
-                except self.UNAVAILABLE:
-                    unavailable.add(name)
-            self.connection.send(ThreadsObserved(revision, presentations, frozenset(unavailable), frozenset(busy)))
+                except self.UNAVAILABLE as error:
+                    unavailable[name] = UnreadableHistory.capture(error)
+            self.connection.send(ThreadsObserved(
+                revision, presentations, unavailable, frozenset(busy)
+            ))
             self.sent_threads, self.retry_threads = threads, bool(busy)
         views = self.interest.views
         if views is not None and (self.checked_views is None or self.checked_views[0] != views

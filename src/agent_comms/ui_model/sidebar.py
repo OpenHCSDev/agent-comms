@@ -126,6 +126,12 @@ class SidebarModel:
         channels = {view.channel.name: ChannelRowModel.of(view, snapshot, busy) for view in snapshot.channels}
         return channels, threads
 
+    def clear(self) -> None:
+        """An unreadable source supplies no current rows or snapshot."""
+        self.snapshot = None
+        self.threads.replace({})
+        self.channels.replace({})
+
     def apply(self, snapshot: CoordinationSnapshot,
               derived: tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]) -> None:
         """Publish rows derived from ``snapshot`` (on the UI thread; derivation is not)."""
