@@ -43,7 +43,7 @@ def run(root: Path, backup: Path) -> None:
                 # Creation is no-replace: this operation cannot be silently rerun.
                 backup.mkdir(mode=0o700, parents=True, exist_ok=False)
                 for name in ("bus.jsonl", "bus_meta.json", "private_bus_checkpoint.sqlite3",
-                             "registry.json", ".private-registry-guard.json", "catalog.json",
+                             "registry.json", ".registry-owner-guard", "catalog.json",
                              "input_dispositions.json", "owner_release_receipts.json"):
                     original = root / name
                     if original.exists():
@@ -82,7 +82,10 @@ def run(root: Path, backup: Path) -> None:
                         bus.publisher.publish_claim_envelope(
                             Message(owner.name, "#all", "Terminal attempt file claims released",
                                     InfoKind, notice=True),
-                            worktree=Path(owner.worktree), incarnation=incarnation,
+                            # Historical claims may predate a project move.
+                            # This is release-only; the recorded generation and
+                            # incarnation fence it, not today's project directory.
+                            worktree=Path(Path(batch[0].resource).anchor), incarnation=incarnation,
                             releases=tuple(ClaimRelease(c.resource, c.generation) for c in batch),
                             _locked_registry_snapshot=registry, _bus_lock=lock,
                         )
