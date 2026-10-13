@@ -94,9 +94,39 @@ non-None direct write to `session.output.error_message`. Native preparation's
 Done consumer was inspected: it still raises failed preparation outcomes, while
 its caller retains the existing genuine-exception publication path.
 
-Production imports and `git diff --check` pass for this correction. The new
-completion sequence still requires a fresh paired native/ACP/UI run; the previous
-failed input and worker's ongoing fresh-success request are not replayed or
-restarted. Original sessions, UNKNOWN inputs and blocked
+Production imports and `git diff --check` pass for this correction.
+
+## Corrected candidate live acceptance
+
+The installed private paired candidate uses Toad `e48836d43` and Core production
+`b8537e449`. The subsequent Core instruction-only commit does not change those
+production bytes. Independent integration inspection of the raw ACP log
+`Agent_Comms_2026-10-12T22_46_53_152699.txt` confirms exactly one `request_failed`
+notification, with `native_message` provenance, and one terminal error receipt
+containing the identical failure and `notification_published=true`.
+
+The canonical native file independently matches the retained evidence: new
+failure input C_F5 produces assistant entry `b3aa86d5` at
+`2026-10-13T03:05:29.785Z`; a separate input C_S6 produces successful assistant
+entry `70adae50` at `2026-10-13T03:10:45.525Z` with
+`CANDIDATE_SUCCESS_AFTER_FAILURE`. Their input IDs differ, and the later native
+user message contains neither the failed input marker nor its requested reply.
+The configured provider/model is unchanged. The controlled localhost transport
+refusal produces `fetch failed` without a provider diagnostic, so generic failure
+classification is correct for that native message; the original diagnostic-rich
+WebSocket record was separately verified through the codec without diagnostic loss.
+
+The same already-open candidate view's `after-success.png` visibly places the
+failure at its original historical position before the later input and success.
+The latest publication capture at native offset 147299152 contains only the
+canonical `TranscriptHistory`, not local failure Notes or log-link siblings.
+The evidence is owned by `toad-close-lifecycle` under
+`/home/ts/wt/toad-close-lifecycle/.artifacts/error-placement/candidate`; native,
+ACP and image evidence were read independently, not accepted solely from checks
+stored in its JSON report. No original failed/UNKNOWN input was replayed.
+
+This establishes corrected candidate once-only publication and retained temporal
+placement. Default-runtime installation and the installed final UI/log-access
+journey remain distinct delivery steps with the existing Toad implementation owner. Original sessions, UNKNOWN inputs and blocked
 historical goals are untouched. The cause of the original provider disconnect is
 not established by this repair.
