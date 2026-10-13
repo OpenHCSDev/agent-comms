@@ -14,6 +14,7 @@ from acp.schema import TextContentBlock
 
 from agent_comms import restart_queue as queue
 from agent_comms.owner_launch import RestartEnvironment, RetainedOwnerLaunch
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV
 from agent_comms.comms import Comms
 from agent_comms.child_process import AttachedChild
@@ -205,7 +206,7 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
         assert replacement_env["QUEUE_FIXTURE_AUTH_SENTINEL"] == "source-auth-only"
         assert replacement_env["PI_CODING_AGENT_DIR"] == str(fixture.config)
         assert replacement_env[PACKAGE_ENV] == str(target_package)
-        assert replacement_env[RestartEnvironment.binary_key] == request.target.agent_bin
+        assert replacement_env[NativeArguments.binary_key] == request.target.agent_bin
         assert replacement_env.get("PYTHONPATH") == os.environ.get("PYTHONPATH")
         assert replacement_env.get("VIRTUAL_ENV") == os.environ.get("VIRTUAL_ENV")
         assert fixture.session.read_bytes().startswith(before)

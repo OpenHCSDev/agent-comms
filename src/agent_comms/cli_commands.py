@@ -43,6 +43,7 @@ from .turn_context import ContextSegment
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
+from .native_arguments import NativeArguments
 from .change_report import ChangeReport
 from .message_reference import MessageReference
 from .thread_management import ForkSpec, ThreadDeleted
@@ -740,8 +741,7 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
     def apply(self, ctx: Comms) -> Any:
         import asyncio
 
-        from .config_options import ThinkingLevelConfigOption
-        from .native_arguments import NativeArguments
+        from .config_options import ConfigOptions
         from .owner_launch import RestartEnvironment
         from .pi_vocabulary import ThinkingLevel
         from .errors import RelationViolationError
@@ -756,14 +756,17 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
             model=thread.model if self.model is None else self.model.strip(),
             thinking_level=thread.thinking_level if level is None else level,
         )
-        selected = ThinkingLevel.optional_name(candidate.thinking_level)
-        if selected is not None:
-            catalog = ThinkingLevelConfigOption(
-                os.environ.get("AGENT_COMMS_AGENT_BIN", "pi"),
-                NativeArguments.configured(), RestartEnvironment.inherit(os.environ),
-            )
-            asyncio.run(catalog.validate(candidate, selected))
-        updated = ctx.threads.set_thread_configuration(thread, model=self.model, thinking_level=level)
+        catalogs = ConfigOptions(
+            NativeArguments.configured_binary(),
+            NativeArguments.configured(),
+            RestartEnvironment.inherit(os.environ),
+        )
+        asyncio.run(catalogs.validate(candidate))
+        updated = ctx.threads.set_thread_configuration(
+            thread,
+            model=candidate.model,
+            thinking_level=ThinkingLevel.optional_name(candidate.thinking_level),
+        )
         return {"configured": updated.name, "model": updated.model,
                 "thinking_level": ThinkingLevel.optional_name(updated.thinking_level)}
 
@@ -1350,7 +1353,7 @@ class ForkCliCommand(CliCommand):
     )
     prompt: str | None = option("--prompt", default=None, multiline=True)
     pi_bin: str = option(
-        "--pi-bin", default_factory=lambda: os.environ.get("AGENT_COMMS_AGENT_BIN", "pi")
+        "--pi-bin", default_factory=NativeArguments.configured_binary
     )
 
     @classmethod

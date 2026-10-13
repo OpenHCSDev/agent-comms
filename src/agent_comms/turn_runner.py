@@ -58,7 +58,6 @@ if TYPE_CHECKING:
 
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
-DEFAULT_AGENT_BIN = "pi"
 NO_REPLY_WINDOW = 2.5  # silence: end the turn after this long with nothing
 REPLY_WINDOW = 8.0  # once replies flow, keep collecting at most this long
 REPLY_QUIET = 1.5  # after the last reply, wait this long then end the turn
@@ -102,7 +101,7 @@ class TurnRunner:
         self.comms = comms
         self.runtime = runtime
         self.effects = effects
-        self.agent_bin = agent_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", DEFAULT_AGENT_BIN)
+        self.agent_bin = NativeArguments.configured_binary(agent_bin)
         self.agent_args = NativeArguments.configured(agent_args)
         self.turn_tasks: dict[str, asyncio.Task[Any]] = {}
         # One backend per ACP session, of the bound thread's declared kind.
