@@ -131,7 +131,7 @@ class TurnProgress(events.AgentEventConsumer):
             source_error=error,
         )
         detail = (
-            "Native turn failed; original input was not retried. "
+            "Native turn failed. "
             f"[Open diagnostic]({diagnostic.as_uri()})"
         )
         if self.result is not None:

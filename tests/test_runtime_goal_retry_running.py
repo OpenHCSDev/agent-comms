@@ -118,7 +118,8 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
             active_backends -= 1
 
     if outcome == "error":
-        native.provider.status = 503
+        native.provider.status = 400
+        native.provider.error_message = "insufficient_quota"
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     await proxy.subscribe()

@@ -201,7 +201,8 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
                 target=sid, text="Never replay this earlier uncertain input",
             )
             unknown = agent.inputs.dispositions.read().rows[key]
-            native.provider.status = 503
+            native.provider.status = 400
+            native.provider.error_message = "insufficient_quota"
             if owner_pauses:
                 class PauseAtResponse:
                     async def wait(self):

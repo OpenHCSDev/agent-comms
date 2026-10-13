@@ -168,14 +168,13 @@ async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, mo
     errors = failure_facts(updates, RequestFailedUpdate)
     from agent_comms.input_attempt import NotSentInput, ReservedInput
 
-    # A failed native terminal and a later controller exception carry the
-    # original reservation followed by its canonical unbound settlement.
-    # Equal text must not discard that distinct input evidence.
-    assert [update.failure.input_state for update in errors] == (
-        [ReservedInput, NotSentInput] if prior is not None else [NotSentInput]
-    )
+    # A completed native failure retains its original input observation. The
+    # later unbound settlement updates input delivery, not a second failure.
+    # A controller fault without native Done resolves after that settlement.
+    state = ReservedInput if isinstance(prior, events.Done) else NotSentInput
+    assert [update.failure.input_state for update in errors] == [state]
     assert request_failure.notification_published and request_failure.failure == errors[-1].failure
-    if prior is not None:
+    if isinstance(prior, events.Done):
         assert errors[-1].failure.detail == prior.text
     else:
         assert "Open diagnostic" in errors[-1].failure.detail
@@ -195,7 +194,8 @@ async def test_actual_provider_failure_reports_started_input_once_without_retry(
             updates.append(kwargs["update"])
 
     owner.on_connect(Client())
-    native.provider.status = 503
+    native.provider.status = 400
+    native.provider.error_message = "insufficient_quota"
     with pytest.raises(RequestError) as caught:
         async with asyncio.timeout(30):
             await owner.prompt(session, [{"type": "text", "text": "Actual failed input"}])
@@ -203,7 +203,7 @@ async def test_actual_provider_failure_reports_started_input_once_without_retry(
     errors = failure_facts(updates, RequestFailedUpdate)
     assert len(errors) == 1
     assert request_failure.notification_published and request_failure.failure == errors[0].failure
-    assert "loopback retryable failure" in errors[0].failure.detail
+    assert "insufficient_quota" in errors[0].failure.detail
     assert errors[0].failure.input_state.public_status == "started"
     assert not failure_facts(updates, InputFailedUpdate)
     assert native.provider.posts == 1  # failed original, zero seed/retry
