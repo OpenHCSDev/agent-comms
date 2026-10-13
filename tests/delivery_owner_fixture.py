@@ -62,3 +62,20 @@ def canonical_agent(comms, **options):
         comms, private_nk_native_package=package,
         private_nk_wire_root_id=root_id, **options,
     )
+
+
+async def reply_turn_finished(owner, session):
+    """Wait for the reply turn a drain scheduled; the task removes itself when it ends."""
+    task = owner.inputs.wake_tasks.get(session)
+    if task is not None:
+        await task
+
+
+def drain_diagnostic(comms, thread):
+    """What the owner records on its thread when its inbox drain failed."""
+    from agent_comms.comms import Comms
+
+    view = next(
+        view for view in Comms(comms.root).views.thread_views() if view.thread.name == thread
+    )
+    return view.activity.readiness.source_diagnostic()

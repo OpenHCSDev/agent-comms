@@ -378,7 +378,7 @@ class DeliveredInput(QueuedInput):
         follow-ups leaves them pending for the ordinary wake after it ends.
         """
         inbox = await inputs.effects.turns.active_backend_inbox(session_id)
-        # Only an owner turn forwards its inbox to Pi while it runs.
+        # A turn takes later inputs once its first one is in.
         if inbox is None or session_id not in inputs.original_sources:
             return
         store_path = inputs.comms.root / "coordination.sqlite3"
@@ -413,6 +413,9 @@ class DeliveredInput(QueuedInput):
                     break
         for item in unplaced:
             await item.not_started(inputs)
+
+    async def dispatch(self, turns: TurnRunner, session_id: str, name: str) -> None:
+        raise InputHandoffRefused("A bus message its turn never took wakes its owner instead")
 
     def after_clear(self) -> DeliveredInput:
         return self  # Clearing the user's queue cannot withdraw a bus message.

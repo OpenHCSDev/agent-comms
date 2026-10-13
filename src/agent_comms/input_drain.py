@@ -22,15 +22,10 @@ from .acp_extension import (
     QueueProjection,
     encode_updates,
 )
-from .activity import (
-    NativeInputDrainDiagnostic,
-    StoppedDrainDiagnostic,
-    UnavailableDrainDiagnostic,
-)
 from .agent_backend import InputContent, InputId, InputRequest, SendNow, TurnInboxItem
 from .comms import Comms
 from .coordination_errors import CoordinationError, IdentityConflict
-from .native_pi import NativePiUnavailable
+from .drain_failures import drain_failures
 from .coordination_cohort import next_sealed_assignment
 from .coordinator import Coordination
 from .bus_publication import stable_thread_lookup
@@ -379,9 +374,10 @@ class InputDrain:
                     revision = replace(revision, registry=read.revision)
                     entry = read.entry
                 owner = entry.owner_identity
-                try:
-                    await self.drain_inbox(session_id)
+                async with drain_failures(self.comms, thread, owner):
+                    # A stored model change precedes the messages the same tick hands over.
                     await self.sessions.config.sync_thread(session_id)
+                    await self.drain_inbox(session_id)
                     if self._in_standby(session_id):
                         # Recovery reads only stores in the revision, so it runs
                         # when one of them changed, not on a clock.
@@ -392,39 +388,6 @@ class InputDrain:
                         session_id=session_id, inputs=self, turns=self.effects.turns,
                     ).schedule()
                     await self.effects.turns.goals.schedule_goal(session_id)
-                except asyncio.CancelledError:
-                    raise
-                except NativePiUnavailable as error:
-                    # A failed native input has already been settled and
-                    # published by its request owner; it is never replayed, so
-                    # the owner keeps taking later inputs, as a restart would.
-                    # This is not an inbox read failure and must not borrow the
-                    # Inbox unavailable presentation.
-                    await Coordination.run_worker(partial(
-                        self.comms.agents.set_drain_diagnostic, thread, owner,
-                        NativeInputDrainDiagnostic(owner, type(error).__name__, str(error)),
-                        source_error=error,
-                    ))
-                except (
-                    OSError,
-                    ValueError,
-                    sqlite3.Error,
-                    CoordinationError,
-                    RequestError,
-                ) as error:
-                    await Coordination.run_worker(partial(
-                        self.comms.agents.set_drain_diagnostic, thread, owner,
-                        UnavailableDrainDiagnostic(owner, type(error).__name__, str(error)),
-                        source_error=error,
-                    ))
-                except Exception as error:
-                    await Coordination.run_worker(partial(
-                        self.comms.agents.set_drain_diagnostic, thread, owner,
-                        StoppedDrainDiagnostic(owner, type(error).__name__, str(error)),
-                        source_error=error,
-                    ))
-                    raise
-                else:
                     current = await Coordination.run_worker(partial(self.comms.registry.require, thread))
                     if (
                         not current.executing
@@ -653,6 +616,7 @@ class InputDrain:
     ) -> asyncio.Queue[TurnInboxItem]:
         """Transfer existing live inputs to the new lease, never read them from disk."""
         inbox = self.backend_inboxes.setdefault(session_id, asyncio.Queue())
+        self.sessions.config.turn_started(session_id, owner)
         for input_id, item in self.queued_inputs.get(session_id, {}).items():
             self.queued_inputs[session_id][input_id] = item.bind_turn(
                 owner, admission, turn_id
@@ -737,6 +701,7 @@ class InputDrain:
         """Retire this turn's live capabilities; retain UNKNOWN only as notices."""
         if self.backend_inboxes.get(session_id) is inbox:
             self.backend_inboxes.pop(session_id, None)
+            self.sessions.config.settings_in_use.pop(session_id, None)
         while not inbox.empty():
             inbox.get_nowait()
         try:

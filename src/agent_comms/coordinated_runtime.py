@@ -18,6 +18,7 @@ from .pi_native_backend import PersistentPiSession
 from .comms import Comms
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked
 from .coordinator import Coordination
+from .following_inputs import FollowingInputs
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable, _private_session_dir
 from .selected_actions import SelectedAction, SelectedExistingFileWrite
 from .selected_participant import SelectedParticipant
@@ -51,6 +52,7 @@ class SelectedExecution:
     pi_session: PersistentPiSession = field(
         default_factory=PersistentPiSession, init=False, compare=False,
     )
+    following: FollowingInputs = field(default_factory=FollowingInputs, init=False, compare=False)
     _tracked_factory: Callable[..., NativePiRpcLaunch] | None = field(
         init=False, default=None, repr=False, compare=False,
     )
@@ -128,11 +130,14 @@ class SelectedExecution:
     async def run(
         self, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None,
         pi_session: PersistentPiSession | None = None,
+        following: FollowingInputs | None = None,
     ) -> CoordinatedTurn | None:
         if not self._run_permit.acquire(blocking=False):
             raise IdentityConflict("Selected execution cannot be reused")
         if pi_session is not None:
             self.pi_session = pi_session
+        if following is not None:
+            self.following = following
         self.root = Path(self.root).absolute()
         # Package acquisition belongs to this execution before it can select
         # a claim. Join its blocking verification before that custody advances.
