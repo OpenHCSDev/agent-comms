@@ -206,7 +206,7 @@ class SelectedAttempt:
                 selected_tool_mode=action.mode(tools),
             )
             result.require_publishable()
-            replies = participant.batch.response_messages(result.text, participant.owner.thread.name)
+            replies = (participant.batch.response_message(result.text, participant.owner.thread.name),)
             participant.transition(PublishingPhase())
             action.apply(tools)
             request.admission.commit(participant.store, result.context)

@@ -26,6 +26,7 @@ from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohor
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageType
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.selected_source_batch import SelectedSource, SelectedSourceBatch
 from agent_comms.threads import Thread
@@ -71,15 +72,15 @@ def alice_batch(*sent: tuple[str, str]):
 def test_plain_answer_to_one_reply_route_is_that_routes_reply() -> None:
     with alice_batch(("Alice", "What did you find?")) as batch:
         assert batch.targets == ("sender",)
-        reply, = batch.response_messages("Blocked: the edit did not run.\n", "Alice")
+        reply = batch.response_message("Blocked: the edit did not run.\n", "Alice")
         assert (reply.sender, reply.target, reply.body, reply.type) == (
             "Alice", "sender", "Blocked: the edit did not run.", MessageType.INFO,
         )
         # A JSON value that is not the requested array is plain text too.
-        reply, = batch.response_messages('{"files": 3}', "Alice")
+        reply = batch.response_message('{"files": 3}', "Alice")
         assert reply.body == '{"files": 3}'
         with pytest.raises(NativePiUnavailable):
-            batch.response_messages("  \n", "Alice")
+            batch.response_message("  \n", "Alice")
 
 
 def test_no_answer_format_is_demanded_of_the_model() -> None:
@@ -94,18 +95,21 @@ def test_no_answer_format_is_demanded_of_the_model() -> None:
         array = json.dumps(FieldCodec.encode(
             (Message("Alice", "sender", "Found it.", MessageType.INFO, timestamp=0),)
         ))
-        reply, = batch.response_messages(array, "Alice")
+        reply = batch.response_message(array, "Alice")
         assert (reply.target, reply.body) == ("sender", array)
 
 
-def test_plain_answer_to_several_reply_routes_is_delivered_to_every_route() -> None:
-    with alice_batch(("Alice", "A private question"), ("#team", "@Alice a team question")) as batch:
-        assert batch.targets == ("sender", "#team")
-        replies = batch.response_messages("One answer for everyone.", "Alice")
-        assert [(reply.target, reply.body, reply.type) for reply in replies] == [
-            ("sender", "One answer for everyone.", MessageType.INFO),
-            ("#team", "One answer for everyone.", MessageType.INFO),
-        ]
+def test_one_selected_turn_answers_one_reply_route() -> None:
+    """A mixed direct/channel wave never shares one answer across audiences.
+
+    The captured sources are grouped by reply route where the batch is
+    assembled (SelectedParticipant.first_route_batch); a batch constructed
+    across routes is refused outright.
+    """
+    with pytest.raises(IdentityConflict) as refused, \
+            alice_batch(("Alice", "A private question"), ("#team", "@Alice a team question")):
+        pass
+    assert "more than one reply route" in str(refused.value)
 
 
 @pytest.mark.skipif(

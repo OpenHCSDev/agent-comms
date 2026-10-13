@@ -56,8 +56,11 @@ class SelectedSourceBatch:
             raise IdentityConflict("Selected batch changed original source order")
         if len({row.recipient_lookup for row in assignments}) != 1:
             raise IdentityConflict("Selected batch crosses recipient ownership")
-        if any(derive_exact_reply_target(source.delivery.message) is None for source in self.sources):
+        routes = {derive_exact_reply_target(source.delivery.message) for source in self.sources}
+        if None in routes:
             raise IdentityConflict("Selected source lacks an original reply route")
+        if len(routes) != 1:
+            raise IdentityConflict("Selected batch answers more than one reply route")
 
     @property
     def assignments(self) -> tuple[WakeAssignment, ...]:
@@ -100,18 +103,15 @@ class SelectedSourceBatch:
             targets=self.targets,
         )
 
-    def response_messages(self, text: str, sender: str) -> tuple[Message, ...]:
-        """The model's one plain answer, stamped onto each original reply route.
+    def response_message(self, text: str, sender: str) -> Message:
+        """The model's one plain answer for this batch's one reply route.
 
-        The turn already fixes the sender, targets and type, so routing is not
-        asked of the model and no answer shape is decoded. These Message values
-        are proposals only; the sending step owns the actual timestamp,
+        The turn already fixes the sender, target and type, so routing is not
+        asked of the model and no answer shape is decoded. This Message value
+        is a proposal only; the sending step owns the actual timestamp,
         audience and bus row.
         """
         answer = text.strip()
         if not answer:
             raise NativePiUnavailable("Native turn produced no publishable answer")
-        return tuple(
-            Message(sender, target, answer, MessageType.INFO)
-            for target in self.targets
-        )
+        return Message(sender, self.targets[0], answer, MessageType.INFO)
