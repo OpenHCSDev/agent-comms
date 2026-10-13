@@ -104,9 +104,9 @@ class SelectedSourceBatch:
         """The model's one plain answer, stamped onto each original reply route.
 
         The turn already fixes the sender, targets and type, so routing is not
-        asked of the model and no answer shape is decoded. These uncommitted
-        Message values grant no publication. The fenced publisher still owns
-        the timestamp, audience, receipt and actual row.
+        asked of the model and no answer shape is decoded. These Message values
+        are proposals only; the sending step owns the actual timestamp,
+        audience and bus row.
         """
         answer = text.strip()
         if not answer:
