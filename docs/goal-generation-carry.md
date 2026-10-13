@@ -72,5 +72,28 @@ batch: 34 passed. The first default pytest invocation had 33 passing tests but
 failed the whole-project coverage gate; this is not a full-suite pass.
 
 The temporary tool is deleted after the live run (retained in branch history).
-The opened-store consumption change still needs merge/installation. Candidate
-installed historical-goal acceptance is recorded separately once completed.
+The opened-store consumption change still needs merge/installation.
+
+Candidate clean-export wheel e21a2615 was installed in an isolated environment,
+reusing current Toad #606 dependencies without changing the live pointer. The
+real Toad App/Pilot and ACP/native process opened SDK-authored saved history with
+a pre-generation blocked goal. The actual Retry widget first refused missing
+launch authority, with zero provider calls; creating the fresh carry row left
+the same public goal blocked. A second actual Retry click completed the same
+goal at generation 2: two controlled localhost requests, two saved user inputs,
+original history byte prefix preserved, native child retired. This is installed
+headless UI acceptance, not a new physical st or paid-provider claim. Receipt
+and rendered SVGs: `.scratch/existing-generation-installed-journey-v2/`.
+
+The initial UI check timed out searching for an instruction beyond the clipped
+single-line error flash; it made zero provider calls. That original is retained
+in `.scratch/existing-generation-installed-journey/`. The successful check used
+a fresh session/root and asserted the visible `no launch authority` text.
+
+After-source census: 307 production and 359 test modules, no parse omissions.
+The sole admission constructor is OwnedTurn.stream and now calls the opening
+owner. All nullable cache reads/writes are inside Goals; admission's distinct
+non-null field is its supplied capability. Evidence:
+`.scratch/existing-generation-owner-{before,after}.json`. Python AST does not
+prove compiled JS, dependency dynamic lookup or runtime equivalence; native/UI
+acceptance above is the behavioral check.
