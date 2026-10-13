@@ -99,3 +99,40 @@ class SelectedWakeSegment(InstructionSegment):
             work_context=work_context,
             relevance=relevance.content,
         )
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeliveredMessageSegment(InstructionSegment):
+    """One committed message handed to its recipient's already running turn."""
+
+    source: CommittedDelivery
+    assignment: WakeAssignment
+    owner: Thread
+
+    @classmethod
+    def capture(cls, source, assignment, owner):
+        instruction = InstructionFile.read("delivered-message.md")
+        return cls(
+            provenance=(instruction.source, WireProvenance(source.message.reference)),
+            instruction=instruction,
+            source=source,
+            assignment=assignment,
+            owner=owner,
+        )
+
+    def values(self):
+        self.assignment.require_selected_source(self.source, self.owner)
+        message = self.source.message
+        return dict(
+            message=json.dumps(
+                {
+                    "source_seq": self.assignment.wire_seq,
+                    "sender": message.sender,
+                    "target": message.target,
+                    "audience": self.assignment.audience.value,
+                    "body": message.body,
+                },
+                ensure_ascii=True,
+                separators=(",", ":"),
+            )
+        )

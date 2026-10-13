@@ -41,7 +41,6 @@ from acp.schema import (
 from agent_comms.coordination_errors import (
     IdentityConflict,
     PublicationActivationBlocked,
-    StaleFence,
 )
 from agent_comms.coordinator import Coordination
 
@@ -60,6 +59,7 @@ from .coordination_cohort import next_sealed_assignment
 from .field_codec import FieldCodec
 from .cursor_publication import CursorPublication
 from .input_drain import InputDrain
+from .queued_input import DeliveredInput
 from .input_effects import InputEffects
 from .message_bus import MessageBus
 from .routing import MessageRoute
@@ -388,13 +388,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         thread_name = await self.sessions.sync_identity(session_id)
         snapshot = await Coordination.run_worker(self._comms.registry.snapshot)
         owner = snapshot.require(thread_name)
-        if (
-            self.inputs.background_wakes_disabled
-            or snapshot.status(thread_name).stopped
-            or session_id in self.turns.turn_tasks
-            or owner.turn_state.busy
-            or session_id in self.inputs.backend_inboxes
-        ):
+        if self.inputs.background_wakes_disabled or snapshot.status(thread_name).stopped:
             # Admission changes still invalidate the client while this owner
             # cannot run a wake. An eligible drain observes once after its
             # acceptance/selection, instead of verifying history before it too.
@@ -402,8 +396,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             return 0
         if owner.pid != os.getpid():
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
-        if owner.turn_state.busy:
-            raise StaleFence("private N/K ACP owner is busy")
         bus = MessageBus(
             self._comms.root / "bus.jsonl", self._comms.registry, private_response_writes=True
         )
@@ -433,6 +425,18 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             bus, wire_root_id, store_path, stable_thread_lookup(owner.created_at), 0,
             owner_name=owner.name, acquire_package=execution.validate,
         )
+        if (
+            session_id in self.turns.turn_tasks
+            or owner.turn_state.busy
+            or session_id in self.inputs.backend_inboxes
+        ):
+            # A running turn takes its owner's pending messages as inputs;
+            # whatever it cannot take wakes this owner once the turn ends.
+            await DeliveredInput.deliver_pending(
+                self.inputs, session_id, owner, bus, wire_root_id, admission_after_seq
+            )
+            await self.cursors.publish(session_id, thread_name)
+            return 0
         def select(store):
             participant = store.participants.get(stable_thread_lookup(owner.created_at))
             candidate = next_sealed_assignment(
