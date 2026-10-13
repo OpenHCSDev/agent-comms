@@ -209,7 +209,13 @@ async def native_backend_fixture(tmp_path):
                                 "name": "Local response fixture",
                                 "contextWindow": 2000000,
                                 "maxTokens": 8192,
-                            }
+                            },
+                            {
+                                "id": "fixture-second",
+                                "name": "Second local response fixture",
+                                "contextWindow": 2000000,
+                                "maxTokens": 8192,
+                            },
                         ],
                     }
                 }

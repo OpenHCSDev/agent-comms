@@ -13,11 +13,19 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.assignment_states import DeferredAssignment, FullPendingAssignment
+from agent_comms.assignment_states import (
+    DeferredAssignment,
+    DeliveredAssignment,
+    FullPendingAssignment,
+)
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
-from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
+from agent_comms.coordination_cohort import (
+    accept_delivery_cohort,
+    pending_sealed_assignments,
+    sealed_cohort_assignments,
+)
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
@@ -441,3 +449,58 @@ def test_simultaneous_accepts_one_applied_one_replay(tmp_path: Path) -> None:
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         assert sorted(executor.map(worker, range(2))) == ["AlreadyApplied", "Applied"]
+
+
+def test_message_taken_by_a_running_turn_is_delivered_once_and_stays_delivered(
+    tmp_path: Path,
+) -> None:
+    comms, coordinator, root_id, lookups = _root(tmp_path)
+    message = comms.messaging.send_initial_cohort("sender", "#team", "read this while you work")
+    accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, coordinator)
+    alice, bob = sorted(accepted.value.assignments, key=lambda item: item.recipient)
+
+    # Pending cannot jump to delivered: only a message already handed to the
+    # running turn (paused) can be proved started there.
+    with pytest.raises(IdentityConflict):
+        coordinator.assignments.transition_preengagement(
+            alice.assignment_id, DeliveredAssignment, expected_revision=alice.revision
+        )
+
+    paused = coordinator.assignments.transition_preengagement(
+        alice.assignment_id, DeferredAssignment, expected_revision=alice.revision
+    ).value
+    delivered = coordinator.assignments.transition_preengagement(
+        alice.assignment_id, DeliveredAssignment, expected_revision=paused.revision
+    ).value
+    assert type(delivered.lifecycle) is DeliveredAssignment
+    assert delivered.lifecycle.mode == alice.lifecycle.mode
+    assert delivered.execution_id is None
+
+    # Delivered is final: no wake, no second delivery.
+    for after in (DeferredAssignment, type(alice.lifecycle)):
+        with pytest.raises(IdentityConflict):
+            coordinator.assignments.transition_preengagement(
+                alice.assignment_id, after, expected_revision=delivered.revision
+            )
+    pending = pending_sealed_assignments(coordinator, lookups["Alice"], "Alice")
+    assert alice.assignment_id not in {item.assignment_id for item in pending}
+
+    # The stored rules, not only the Python states, refuse to reopen it.
+    with pytest.raises(sqlite3.IntegrityError):
+        coordinator.session._connection.execute(
+            "UPDATE wake_claims SET lifecycle=(SELECT lifecycle FROM wake_claims "
+            "WHERE assignment_id=?), revision=revision+1 WHERE assignment_id=?",
+            (bob.assignment_id, alice.assignment_id),
+        )
+    coordinator.session._connection.rollback()
+
+    # A message the turn never took returns to pending and wakes normally.
+    bob_paused = coordinator.assignments.transition_preengagement(
+        bob.assignment_id, DeferredAssignment, expected_revision=bob.revision
+    ).value
+    back = coordinator.assignments.transition_preengagement(
+        bob.assignment_id, type(bob.lifecycle), expected_revision=bob_paused.revision
+    ).value
+    assert type(back.lifecycle) is type(bob.lifecycle)
+    pending = pending_sealed_assignments(coordinator, lookups["Bob"], "Bob")
+    assert bob.assignment_id in {item.assignment_id for item in pending}
