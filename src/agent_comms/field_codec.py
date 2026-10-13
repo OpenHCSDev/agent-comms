@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import types
 from abc import ABC, abstractmethod
-from dataclasses import MISSING, Field, fields, is_dataclass
+from dataclasses import MISSING, Field, dataclass, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
 from functools import lru_cache
@@ -38,6 +38,9 @@ class FieldRepresentation(ABC):
     """
 
     accepts_null = False
+    # True when the wire value is one external JSON shape decoded by from_wire
+    # rather than the representation's own validated decode.
+    external_json_shape = False
 
     @classmethod
     @abstractmethod
@@ -93,7 +96,11 @@ class JsonShapeFamily(WireValue):
     its name-decoding contract. Each JsonShapeMember declares
     its external shape through its value annotation; this codec owns primitive
     selection and recursive conversion. Rendering stays with the value owners.
+    Its wire value is the declared shape itself, so it answers
+    ``external_json_shape`` True and decodes through ``from_wire``.
     """
+
+    external_json_shape = True
 
     accepts_null = True
 
@@ -440,6 +447,113 @@ class FieldCodec(Sealed):
             return [cls.project(item, view) for item in value]
         return cls.encode(value)
 
+    @dataclass(frozen=True)
+    class _FieldPlan:
+        """One field's decode decisions, resolved once from its declaration.
+
+        Each way a field decodes is one subclass: the plan builder picks the
+        class from the declaration once, and decoding is that object's own
+        ``decode`` — no per-row re-classification and no kind switch.
+        """
+
+        name: str
+        key: str
+        required: bool
+        reject_null: bool
+        choices: object
+        target: Any
+
+        def decode(self, value: object) -> object:
+            # The nested/annotation path: the target's own decode rules.
+            return FieldCodec.decode(self.target, value)
+
+    @dataclass(frozen=True)
+    class _RepresentationField(_FieldPlan):
+        """A field decoded through its declared representation capability."""
+
+        representation: object
+        accepts_null: bool
+        external_json_shape: bool
+
+        def decode(self, value: object) -> object:
+            if value is None and not self.accepts_null:
+                return FieldCodec.decode(self.target, value)
+            if self.external_json_shape:
+                return self.representation.from_wire(value)
+            return self.representation.decode(value)
+
+    @dataclass(frozen=True)
+    class _ScalarField(_FieldPlan):
+        """A field of an exact JSON primitive declaration."""
+
+        def decode(self, value: object) -> object:
+            return FieldCodec._decode_scalar(self.target, value)
+
+    @dataclass(frozen=True)
+    class _EnumField(_FieldPlan):
+        """A field of an Enum declaration."""
+
+        def decode(self, value: object) -> object:
+            return self.target(value)
+
+    @dataclass(frozen=True)
+    class _RecordPlan:
+        """A record's whole decode plan, derived once from its declaration."""
+
+        fields: tuple[FieldCodec._FieldPlan, ...]
+        required_keys: tuple[str, ...]
+        init_required_keys: tuple[str, ...]
+        reject_null_keys: frozenset[str]
+        accepted_keys: frozenset[str]
+
+    @classmethod
+    @lru_cache(maxsize=_declaration_cache_capacity)
+    def _record_plan(cls, record: type) -> FieldCodec._RecordPlan:
+        """Resolve every per-row type decision for one record declaration once.
+
+        Declarations are immutable for this process; this is the same
+        declaration-derived derivation as _fields/_types, consumed by the
+        single decode implementation instead of re-classifying each field on
+        every row.
+        """
+        declared = cls._fields(record)
+        hints = cls._types(record)
+        computed = {member.wire_name for member in cls._projections(record, "wire").values()}
+        entries = []
+        for field, key in declared:
+            target, representation = cls._representation(hints[field.name])
+            common = dict(
+                name=field.name,
+                key=key,
+                required=bool(field.metadata.get("wire_required")),
+                reject_null=bool(field.metadata.get("wire_nonnull")),
+                choices=field.metadata.get("wire_choices"),
+                target=target,
+            )
+            if representation is not None:
+                entries.append(cls._RepresentationField(
+                    representation=representation,
+                    accepts_null=representation.accepts_null,
+                    external_json_shape=representation.external_json_shape,
+                    **common,
+                ))
+            elif target in (str, int, bool, float, type(None)):
+                entries.append(cls._ScalarField(**common))
+            elif isinstance(target, type) and issubclass(target, Enum):
+                entries.append(cls._EnumField(**common))
+            else:
+                entries.append(cls._FieldPlan(**common))
+        return cls._RecordPlan(
+            fields=tuple(entries),
+            required_keys=tuple(entry.key for entry in entries if entry.required),
+            init_required_keys=tuple(
+                entry.key for entry, (field, _) in zip(entries, declared)
+                if field.default is MISSING and field.default_factory is MISSING
+            ),
+            reject_null_keys=frozenset(entry.key for entry in entries if entry.reject_null),
+            accepted_keys=frozenset(entry.key for entry in entries) | computed,
+        )
+
     @staticmethod
     @lru_cache(maxsize=_declaration_cache_capacity)
     def _projections(declaration: type, view: str) -> types.MappingProxyType[str, Projected]:
@@ -456,7 +570,7 @@ class FieldCodec(Sealed):
     def _decode(cls, target: Any, data: Any) -> Any:
         target, representation = cls._representation(target)
         if representation is not None and (data is not None or representation.accepts_null):
-            if issubclass(representation, JsonShapeFamily):
+            if representation.external_json_shape:
                 # Decode through the representation capability, independently
                 # of the family's public name decoder. Children validate once;
                 # WireValue's pre-validation would traverse each subtree again.
@@ -523,47 +637,36 @@ class FieldCodec(Sealed):
             target = target.decode(name)
             data = {key: value for key, value in data.items() if key != tag}
         if isinstance(target, type) and is_dataclass(target):
+            plan = cls._record_plan(target)
             if not isinstance(data, dict):
                 raise ValueError("Expected a record object.")
-            declared = cls._fields(target)
-            missing = [
-                key for field, key in declared
-                if key not in data and field.metadata.get("wire_required")
-            ]
+            missing = [key for key in plan.required_keys if key not in data]
             if missing:
                 raise ValueError(
                     f"Missing required fields for {target.__name__}: {', '.join(missing)}"
                 )
-            init_missing = [
-                key for field, key in declared
-                if key not in data and field.default is MISSING
-                and field.default_factory is MISSING
-            ]
+            init_missing = [key for key in plan.init_required_keys if key not in data]
             if init_missing:
                 raise TypeError(
                     f"Missing required fields for {target.__name__}: {', '.join(init_missing)}"
                 )
-            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
-            unknown = set(data) - {key for _, key in declared} - computed
+            unknown = data.keys() - plan.accepted_keys
             if unknown:
                 raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
-            if any(
-                field.metadata.get("wire_nonnull") and key in data and data[key] is None
-                for field, key in declared
-            ):
+            null = plan.reject_null_keys & data.keys()
+            if any(data[key] is None for key in null):
                 raise ValueError(f"Null field for {target.__name__}")
-            for field, key in declared:
-                choices = field.metadata.get("wire_choices")
-                if choices is not None and key in data and data[key] not in choices():
-                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
-            hints = cls._types(target)
-            return target(
-                **{
-                    field.name: cls.decode(hints[field.name], data[key])
-                    for field, key in declared
-                    if key in data
-                }
-            )
+            values = {}
+            for entry in plan.fields:
+                if entry.key not in data:
+                    continue
+                value = data[entry.key]
+                if entry.choices is not None and value not in entry.choices():
+                    raise ValueError(
+                        f"Field {entry.key} must be one of: {', '.join(entry.choices())}"
+                    )
+                values[entry.name] = entry.decode(value)
+            return target(**values)
         if isinstance(target, type) and issubclass(target, Enum):
             return target(data)
         return cls._decode_scalar(target, data)
