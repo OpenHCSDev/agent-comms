@@ -775,6 +775,9 @@ async def test_optional_awareness_requires_complete_binding_and_resource_budget(
     assert len(calls) == 1 and initial.message.body in calls[0][1]
     assert ("Selected source decisions through " in calls[0][1]) is (kind == "complete")
     assert ("Nonbinding rows omitted: 0" in calls[0][1]) is (kind == "complete")
+    # The omitted awareness is a named visible state on the delivered input
+    # itself, never only a log line.
+    assert ("Optional awareness omitted" in calls[0][1]) is (kind != "complete")
 
 
 async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
