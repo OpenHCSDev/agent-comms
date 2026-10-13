@@ -495,13 +495,13 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         *,
         turn_id: str | None = None,
         route: MessageRoute | None = None,
-    ) -> None:
-        """Publish typed live or saved transcript events."""
+    ) -> events.AgentEvent | TranscriptUpdate:
+        """Publish and return the observation with its actual delivery result."""
         client = client or self._runtime
         if isinstance(event, events.AgentEvent):
-            await AcpEventConsumer(self, session_id, client, turn_id, route).dispatch(event)
-            return
+            return await AcpEventConsumer(self, session_id, client, turn_id, route).dispatch(event)
         await event.publish(session_id, client)
+        return event
 
     @staticmethod
     def _prompt_text(prompt: list[Any]) -> str:

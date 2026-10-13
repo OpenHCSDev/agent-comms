@@ -82,6 +82,12 @@ class ErrorStopReason(PiStopReason):
             session.usage.used = session.usage.confirmed
             session.usage.provisional = False
             yield session.context_info()
+        if not (session.explicit_interrupt and cls.explicit_abort) and (
+            session.watchdog.phase.holds_refusal_reports
+        ):
+            # A refusal the recovery is re-requesting is interim evidence; the
+            # recovery's own end event reports the final outcome.
+            return
         from .acp_failure import NativeMessageFailureSource
 
         error = session.output.error(

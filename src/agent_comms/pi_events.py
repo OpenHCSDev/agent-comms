@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from . import agent_events as events
 from .declared_family import DeclaredFamily
+from .acp_failure import ProviderRetryResult
 from .field_codec import FieldCodec
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .request_progress import RequestProgress
@@ -221,19 +222,38 @@ class ModelRequestProgress(PiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AutoRetryEnd(PiEvent):
-    success: bool | None = field(default=None, metadata={"wire_name": "success"})
-
+class AutoRetryEnd(PiEvent, ProviderRetryResult):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        session.output.retry_result = self.for_failure(session.output.redact)
         session.watchdog.progress()
         if self.success:
             session.output.error_message = None
         else:
             session.watchdog.retry_recovery_pending = False
-            yield session.output.error("Provider retry attempts were exhausted.")
+            for event in self.exhausted(session):
+                yield event
             yield session.watchdog.state(
                 "failed", "provider_retry_exhausted", 0, phase=ModelWaitPhase()
             )
+
+
+    def exhausted(self, session: TurnSession) -> tuple[events.AgentEvent, ...]:
+        return (session.output.error("Provider retry attempts were exhausted."),)
+
+
+class NativeRetryEnd(AutoRetryEnd):
+    """Close native recovery; the retained assistant reports its final failure."""
+
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        async for event in super().apply(session):
+            yield event
+        if self.success:
+            yield session.watchdog.state(
+                "recovered", "provider_auto_retry_progress", 0, phase=ModelWaitPhase()
+            )
+
+    def exhausted(self, session: TurnSession) -> tuple[events.AgentEvent, ...]:
+        return ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -269,12 +289,25 @@ class RetryAttemptEvent(PiEvent):
 
 class AutoRetryStart(RetryAttemptEvent):
     retry_reason_code = "provider_auto_retry"
+    recovery_on_progress = True
 
     def prepare_retry(self, session: TurnSession) -> None:
         session.output.final_assistant_stop = False
         session.watchdog.prompt_accepted = True
-        session.watchdog.retry_recovery_pending = True
+        session.watchdog.retry_recovery_pending = self.recovery_on_progress
         session.watchdog.retry_recovery_reason = "provider_auto_retry_progress"
+
+
+class NativeRetryStart(AutoRetryStart):
+    """The native turn recovery re-requests a refused empty response.
+
+    stack/native-turn-recovery.mjs owns whether a provider refusal is retryable
+    and how many times (RecoveryBudget); this wire kind carries that decision
+    before the refused assistant message, so Core reports only the recovery's
+    final outcome and never counts a refusal itself.
+    """
+
+    recovery_on_progress = False
 
 
 class ReasonedCompaction(PiEvent):
