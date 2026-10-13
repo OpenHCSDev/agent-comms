@@ -47,7 +47,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=47f9856b6762553ca10ef94e26de85b2ba069c0d" },
-    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?rev=b8bda1ba592451763414b16d35a67f41bc6429e9" },
+    { name = "batrachian-toad", git = "https://github.com/OpenHCSDev/toad.git?rev=277c239b9b35285f596015feee5419776a936f50" },
     { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?rev=e4a9154826dd5f96125a7cf75060af47ce39c544" },
 ]
 
@@ -236,7 +236,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?rev=b8bda1ba592451763414b16d35a67f41bc6429e9#b8bda1ba592451763414b16d35a67f41bc6429e9" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?rev=277c239b9b35285f596015feee5419776a936f50#277c239b9b35285f596015feee5419776a936f50" }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "agent-comms", extra = ["acp"] },
@@ -384,7 +384,7 @@ wheels = [
 
 [[package]]
 name = "formbridge"
-version = "0.1.0"
+version = "0.1.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docutils" },
@@ -395,9 +395,9 @@ dependencies = [
     { name = "pyzmq" },
     { name = "zmqruntime" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7c/42/ee83d07abb49ca79c6d889385f0dc8dcb87d8579647b7282c80dc1e2d17a/formbridge-0.1.0.tar.gz", hash = "sha256:89705201b12568427948ca30e85e5a0663c803de7f490691673184ddf17e1f58", size = 166196, upload-time = "2026-10-12T02:59:18.319Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ef/5e/47238dbbadedae4ccb388f6b79eb8b4d6110e38c8d5be468a3b7d14d30d2/formbridge-0.1.5.tar.gz", hash = "sha256:6708621112e6a7f9c69f4769e06fe045ced1f7b3bbeb672e6b5f36d93c80bb8c", size = 169732, upload-time = "2026-10-12T22:36:45.594Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f3/80/9c79e273ca0afae38256d1fc7847ab32f72b5574dfc04eced4b97ec5f19a/formbridge-0.1.0-py3-none-any.whl", hash = "sha256:22498e4433470cc4568ec19638f78260a700d67ef607e893941fe51f9c4634d3", size = 189865, upload-time = "2026-10-12T02:59:16.89Z" },
+    { url = "https://files.pythonhosted.org/packages/56/fc/d58eee84447a4935a7c7dad4711c7dc96b4947ecd3ec11414a622ec4af85/formbridge-0.1.5-py3-none-any.whl", hash = "sha256:320d9a229e565d9808f10176ba31d21c79e0d36140e120d0b8e87521f84e8912", size = 191228, upload-time = "2026-10-12T22:36:44.243Z" },
 ]
 
 [[package]]
@@ -821,16 +821,16 @@ wheels = [
 
 [[package]]
 name = "objectstate"
-version = "2.1.1"
+version = "4.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dill" },
     { name = "pycodify" },
     { name = "python-introspect" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e0/01/09c65f328378e73aa64c228e4980a9383ed89875219670e686627b52d31f/objectstate-2.1.1.tar.gz", hash = "sha256:ec68cbe3bbdbe1d9751cce777aabf2b0f154bce41084ca3efa5ae01fa4c92865", size = 207020, upload-time = "2026-10-12T02:42:42.179Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1a/6b/c2575bae5ed3780b8c70e8238e98ce925e7e7a62a405221984d7ca68f86a/objectstate-4.0.1.tar.gz", hash = "sha256:2334594a45890a05d495fac516faa4d9331631f959f5e7764e3072f6c23b7f84", size = 231078, upload-time = "2026-10-12T22:21:10.05Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/12/cc/70fb6afd3f7cc85924d0e42b067a095a8ef36a775e94033150601eb0cc75/objectstate-2.1.1-py3-none-any.whl", hash = "sha256:abe590848e00c062266b5ed9cb2ffae4ef868c7d1ad3d2b74abacf88e09ccd1f", size = 140857, upload-time = "2026-10-12T02:42:40.991Z" },
+    { url = "https://files.pythonhosted.org/packages/95/c0/be82a93bb4b2ebfae5ac86becff434cbfc057aa12d8b9afe361b78ae3642/objectstate-4.0.1-py3-none-any.whl", hash = "sha256:253c4c9082b732a313b5d5da537172c0104e10742979178b2cd9b95bcfc7366c", size = 140718, upload-time = "2026-10-12T22:21:08.579Z" },
 ]
 
 [[package]]
@@ -1062,15 +1062,15 @@ wheels = [
 
 [[package]]
 name = "python-introspect"
-version = "0.2.8"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-types" },
     { name = "metaclass-registry" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bd/af/3e444a47e58de1cf4f1e5767b62ddbad55b69fd207960facde8566c9aa48/python_introspect-0.2.8.tar.gz", hash = "sha256:35ee71364dfaf897f4f577a8b526dc1e38afcbc2db0e33180b18bb7de09de51a", size = 58521, upload-time = "2026-10-11T19:34:25.627Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6d/71/55abd50b3f5da2560950c17de878021012f1c033618ad08187916a6f23fe/python_introspect-0.3.0.tar.gz", hash = "sha256:1b305b7976c5620b137edcb013a7a97356031d1abb0eec552a467e85633a7534", size = 62345, upload-time = "2026-10-12T21:00:11.236Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/22/4c/15f356c798be43f7b5f134ad67d56d4208b8fff2762938265d28b082307e/python_introspect-0.2.8-py3-none-any.whl", hash = "sha256:4e8ef0c50dd0dad8f300f68836cef4ecba4ffcc74a4b9d2d2624eebe03b167e4", size = 44387, upload-time = "2026-10-11T19:34:24.354Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/09/59afdbb10c00e3df9ed3f537a5d657a7b1df7189b7542dc9df5ba7d0810b/python_introspect-0.3.0-py3-none-any.whl", hash = "sha256:95155269ea563a5486e0c3851c868fdf0e15065097cd894efad949c69b69b777", size = 46792, upload-time = "2026-10-12T21:00:09.755Z" },
 ]
 
 [[package]]
@@ -1205,7 +1205,7 @@ syntax = [
 [[package]]
 name = "textual-diff-view"
 version = "0.1.5"
-source = { git = "https://github.com/OpenHCSDev/textual-diff-view.git?rev=8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9#8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9" }
+source = { git = "https://github.com/OpenHCSDev/textual-diff-view.git?rev=388dd69cf550f02273605a561a5a0bee5dd2ea35#388dd69cf550f02273605a561a5a0bee5dd2ea35" }
 dependencies = [
     { name = "textual", extra = ["syntax"] },
 ]
@@ -1668,7 +1668,7 @@ wheels = [
 
 [[package]]
 name = "zmqruntime"
-version = "0.6.4"
+version = "0.6.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-types" },
@@ -1680,7 +1680,7 @@ dependencies = [
     { name = "pyzmq" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/82/64/df1de7577e7ae986625feb242e217477bc2dd29b9e905754324911f17eb1/zmqruntime-0.6.4.tar.gz", hash = "sha256:8e980bc4d0a2945c65d1dc94e9eb4d1a8599c9ee9cff680fe828ec9bda59314b", size = 727576, upload-time = "2026-10-12T12:35:33.155Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/42/b8/fed21fa56ddc7ea1e9d3c517fa54b8aea81cf0e5b8ca6086d477e0bb3de8/zmqruntime-0.6.5.tar.gz", hash = "sha256:b63cb6d3bd95d522e8db4213cd74a6ccb7058dc7d16bff756e08eb6585b2101b", size = 728551, upload-time = "2026-10-12T22:22:17.485Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1c/77/7451f76f64db3e9616461746be8841183962fb947df11cbc2e960071a371/zmqruntime-0.6.4-py3-none-any.whl", hash = "sha256:6869ecb54b1b4487007e0f07e8edcd9e48bf9616b544201793cd830c33e5dde2", size = 99055, upload-time = "2026-10-12T12:35:31.994Z" },
+    { url = "https://files.pythonhosted.org/packages/69/35/428582be6777f5c8be66bdd898597246e98d2cb674c412844d982e187121/zmqruntime-0.6.5-py3-none-any.whl", hash = "sha256:f27f91c4bca10f72985743ae53e05b1557c03380438d226f2714142cd127c76d", size = 99040, upload-time = "2026-10-12T22:22:16.116Z" },
 ]
