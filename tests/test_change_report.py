@@ -113,15 +113,23 @@ class TestHandoffClaims:
         with pytest.raises(ValueError, match="fixed.*without a file:line"):
             wired.messaging.send("PR111", "fixer", "it is fixed", HandoffKind)
 
+    def test_a_bare_evidence_word_is_not_a_command(self, wired):
+        with pytest.raises(ValueError, match="fixed.*without a file:line"):
+            wired.messaging.send("PR111", "fixer", "I will find it; it is fixed", HandoffKind)
+
     def test_claim_with_a_file_line_reference_publishes(self, wired):
         committed = wired.messaging.send_message(
             "PR111", "fixer", "it is fixed at src/x.py:12", HandoffKind)
         assert committed.type is HandoffKind
 
-    def test_claim_with_a_search_command_publishes(self, wired):
+    def test_claim_with_a_command_in_backticks_publishes(self, wired):
         committed = wired.messaging.send_message(
             "PR111", "fixer", "fixed; proof: `grep -rn kind src`", HandoffKind)
         assert committed.type is HandoffKind
+
+    def test_a_command_outside_backticks_is_not_evidence(self, wired):
+        with pytest.raises(ValueError, match="fixed.*without a file:line"):
+            wired.messaging.send("PR111", "fixer", "fixed; I ran grep everywhere", HandoffKind)
 
     def test_plain_handoff_without_claims_publishes(self, wired):
         committed = wired.messaging.send_message(
