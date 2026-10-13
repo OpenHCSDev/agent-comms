@@ -6,12 +6,14 @@ import hashlib
 import json
 import re
 from abc import abstractmethod
-from dataclasses import dataclass, field, replace
+from collections.abc import Mapping
+from dataclasses import dataclass, field, fields, replace
+from dataclasses import MISSING
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Self, get_type_hints
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, FieldRepresentation
 from .message_reference import MessageReference
 from .goals import Goal
 from .native_session_reopen import NativeSessionIdentity
@@ -30,8 +32,48 @@ if TYPE_CHECKING:
 class Provenance(DeclaredFamily, affix="Provenance"):
     """A source coordinate, not permission to execute or replay it."""
 
+    # Fields whose values one recorded manifest repeats for every contribution.
+    # Each row records each distinct value once and references it by index.
+    shared_fields: ClassVar[tuple[tuple[str, str], ...]] = ()
+
     @abstractmethod
     def public_description(self) -> str: ...
+
+    def compact_form(self, sources: ManifestSources) -> dict[str, Any]:
+        """The row's compact source form: shared fields recorded once per row."""
+        hints = get_type_hints(type(self))
+        form: dict[str, Any] = {"kind": self.declared_name}
+        for member in fields(type(self)):
+            value = getattr(self, member.name)
+            shared = dict(self.shared_fields).get(member.name)
+            form[member.name] = sources.record(shared, value) if shared else FieldCodec.encode(value, hints[member.name])
+        return form
+
+    @classmethod
+    def expand_form(cls, form: Mapping[str, Any], sources: ManifestSources) -> Provenance:
+        """Rebuild the full source from one row's compact form."""
+        if not isinstance(form, dict):
+            raise ValueError("Compact source form is not an object.")
+        if not isinstance(form.get("kind"), str):
+            raise ValueError("Compact source form lacks its source kind.")
+        member = cls.decode(form["kind"])
+        hints = get_type_hints(member)
+        values = {}
+        for declared in fields(member):
+            if declared.name not in form:
+                if declared.default is not MISSING or declared.default_factory is not MISSING:
+                    continue
+                raise ValueError(f"Compact source {member.declared_name} lacks {declared.name}")
+            shared = dict(member.shared_fields).get(declared.name)
+            raw = form[declared.name]
+            values[declared.name] = (
+                sources.value(shared, raw, hints[declared.name])
+                if shared else FieldCodec.decode(hints[declared.name], raw)
+            )
+        unknown = form.keys() - {"kind", *(declared.name for declared in fields(member))}
+        if unknown:
+            raise ValueError(f"Unknown fields for compact source {member.declared_name}: {sorted(unknown)}")
+        return member(**values)
 
     def public_text(self, comms) -> str:
         """Read an authenticated source, never reconstruct request wording.
@@ -61,6 +103,8 @@ class FileProvenance(Provenance):
     path: str
     sha256: str
 
+    shared_fields = (("path", "paths"),)
+
     def public_description(self) -> str:
         return f"File {self.path} · SHA256 {self.sha256}"
 
@@ -80,6 +124,8 @@ class CodexRolloutProvenance(Provenance):
     length: int
     sha256: str
     instruction: int
+
+    shared_fields = (("path", "paths"),)
 
     def public_description(self) -> str:
         return (f"Historical Codex instruction · {self.path} · record bytes "
@@ -131,6 +177,8 @@ class JournalProvenance(Provenance):
     path: str
     entries: tuple[str, ...]
 
+    shared_fields = (("path", "paths"),)
+
     def public_description(self) -> str:
         return f"Native journal {self.path} · entries {', '.join(self.entries)}"
 
@@ -145,6 +193,8 @@ class NativeProvenance(Provenance):
     request_generation: int
     context_digest: str
 
+    shared_fields = (("identity", "sessions"),)
+
     def public_description(self) -> str:
         return (f"Native request {self.identity.session_id} · generation {self.request_generation} "
                 f"· context {self.context_digest}")
@@ -157,6 +207,8 @@ class NativeProvenance(Provenance):
 class PreviewProvenance(Provenance):
     identity: NativeSessionIdentity
     context_digest: str
+
+    shared_fields = (("identity", "sessions"),)
 
     def public_description(self) -> str:
         return f"Current native preview {self.identity.session_id} · context {self.context_digest}"
@@ -175,6 +227,8 @@ class ResourceProvenance(Provenance):
     sha256: str
     representation: str
 
+    shared_fields = (("path", "paths"),)
+
     def public_description(self) -> str:
         return f"Resource {self.path} · {self.representation} · SHA256 {self.sha256}"
 
@@ -185,6 +239,128 @@ class UnattributedProvenance(Provenance):
 
     def public_description(self) -> str:
         return "Unattributed captured text · original source was not observed"
+
+
+class ManifestSources:
+    """One recorded manifest's shared facts, each recorded once and indexed."""
+
+    _tables: ClassVar[dict[str, type]] = {
+        "sessions": NativeSessionIdentity,
+        "paths": str,
+    }
+
+    def __init__(self) -> None:
+        self.stored: dict[str, list] = {"sources": [], **{name: [] for name in self._tables}}
+        self._index: dict[str, dict] = {name: {} for name in self.stored}
+
+    def record(self, table: str, value: Any) -> int:
+        """One value's index in its row table, recording it on first use."""
+        target = self._tables[table]
+        form = value if target is str else FieldCodec.encode(value)
+        key = form if target is str else json.dumps(form, sort_keys=True)
+        index = self._index[table].setdefault(key, len(self.stored[table]))
+        if index == len(self.stored[table]):
+            self.stored[table].append(form)
+        return index
+
+    def value(self, table: str, index: Any, annotation: Any) -> Any:
+        """The row's recorded value behind one index."""
+        target = self._tables[table]
+        if type(index) is not int or not 0 <= index < len(self.stored[table]):
+            raise ValueError(f"Shared {table} index is outside the recorded manifest row")
+        recorded = self.stored[table][index]
+        if target is str:
+            if not isinstance(recorded, str):
+                raise ValueError(f"Shared {table} entry is not a path string")
+            return recorded
+        return FieldCodec.decode(target, recorded)
+
+    def source(self, value: Provenance) -> int:
+        form = value.compact_form(self)
+        key = json.dumps(form, sort_keys=True)
+        index = self._index["sources"].setdefault(key, len(self.stored["sources"]))
+        if index == len(self.stored["sources"]):
+            self.stored["sources"].append(form)
+        return index
+
+    def source_form(self, index: Any) -> Mapping[str, Any]:
+        if type(index) is not int or not 0 <= index < len(self.stored["sources"]):
+            raise ValueError("Source index is outside the recorded manifest row")
+        return self.stored["sources"][index]
+
+
+class ContextManifestWire(FieldRepresentation):
+    """The manifest's compact row form: each distinct fact recorded once.
+
+    A recorded request repeats the same native cut and journal path for every
+    context message, and once named every contribution's sources in full, so a
+    long session multiplied its provenance into megabytes per request. This
+    representation records each distinct fact once per manifest and references
+    it by index. The decoded value is the original full manifest; every reader
+    keeps its existing contract, and no reader needs the journal to close the
+    manifest: the row carries every source it names.
+    """
+
+    external_json_shape = True
+
+    @classmethod
+    def encode(cls, value: ContextManifest) -> Any:
+        sources = ManifestSources()
+        segments = [segment.compact_form(sources) for segment in value.segments]
+        form: dict[str, Any] = {
+            "thread": FieldCodec.encode(value.thread),
+            "turn": FieldCodec.encode(value.turn),
+            "counter": value.counter,
+            "sources": sources.stored["sources"],
+            "sessions": sources.stored["sessions"],
+            "paths": sources.stored["paths"],
+            "segments": segments,
+        }
+        if value.request_id is not None:
+            form["request_id"] = value.request_id
+        return form
+
+    @classmethod
+    def from_wire(cls, data: Any) -> ContextManifest:
+        if not isinstance(data, dict):
+            raise ValueError("Compact manifest form is not an object.")
+        unknown = data.keys() - {
+            "thread", "turn", "counter", "request_id", "sources", "sessions", "paths", "segments",
+        }
+        if unknown:
+            raise ValueError(f"Unknown fields for compact manifest: {sorted(unknown)}")
+        missing = {"thread", "turn", "counter", "sources", "sessions", "paths", "segments"} - data.keys()
+        if missing:
+            raise ValueError(f"Compact manifest lacks {sorted(missing)}")
+        for table in ("sources", "sessions", "paths", "segments"):
+            if not isinstance(data[table], list):
+                raise ValueError(f"Compact manifest {table} is not an array.")
+        if not isinstance(data["counter"], str):
+            raise ValueError("Compact manifest counter is not a string.")
+        if "request_id" in data and not isinstance(data["request_id"], str):
+            raise ValueError("Compact manifest request_id is not a string.")
+        sources = ManifestSources()
+        sources.stored = {
+            "sources": list(data["sources"]), "sessions": list(data["sessions"]),
+            "paths": list(data["paths"]),
+        }
+        for source in sources.stored["sources"]:
+            Provenance.expand_form(source, sources)
+        return ContextManifest(
+            FieldCodec.decode(ThreadIncarnation, data["thread"]),
+            FieldCodec.decode(ContextTurn, data["turn"]),
+            tuple(SegmentManifest.expand_form(form, sources) for form in data["segments"]),
+            data["counter"],
+            request_id=data.get("request_id"),
+        )
+
+    @classmethod
+    def decode(cls, value: object) -> object:
+        return cls.from_wire(value)
+
+    @classmethod
+    def schema(cls) -> dict[str, Any]:
+        return {"type": "object"}
 
 
 @dataclass(frozen=True)
@@ -236,6 +412,61 @@ class SegmentManifest:
             yield from span.provenance
         for contributor in self.contributors:
             yield from contributor.source_membership()
+
+    def compact_form(self, sources: ManifestSources) -> dict[str, Any]:
+        """The manifest row's compact segment: sources referenced by index."""
+        form: dict[str, Any] = {
+            "kind": self.kind.declared_name,
+            "sources": [sources.source(value) for value in self.provenance],
+            "sha256": self.sha256,
+            "utf8_bytes": self.utf8_bytes,
+            "tokens": self.tokens,
+        }
+        if self.contributors:
+            form["contributors"] = [item.compact_form(sources) for item in self.contributors]
+        if self.captured_text:
+            form["captured_text"] = list(self.captured_text)
+        if self.source_spans:
+            form["source_spans"] = [span.compact_form(sources) for span in self.source_spans]
+        return form
+
+    @classmethod
+    def expand_form(cls, form: Mapping[str, Any], sources: ManifestSources) -> SegmentManifest:
+        """Rebuild the full segment from one manifest row's compact form."""
+        if not isinstance(form, dict):
+            raise ValueError("Compact segment form is not an object.")
+        known = {"kind", "sources", "sha256", "utf8_bytes", "tokens",
+                 "contributors", "captured_text", "source_spans"}
+        unknown = form.keys() - known
+        if unknown:
+            raise ValueError(f"Unknown fields for compact segment: {sorted(unknown)}")
+        missing = {"kind", "sources", "sha256", "utf8_bytes", "tokens"} - form.keys()
+        if missing:
+            raise ValueError(f"Compact segment lacks {sorted(missing)}")
+        if not isinstance(form["kind"], str):
+            raise ValueError("Compact segment kind is not a source name.")
+        raw_sources = form["sources"]
+        if not isinstance(raw_sources, list) or not raw_sources:
+            raise ValueError("Compact segment requires its recorded sources")
+        contributors = form.get("contributors")
+        captured_text = form.get("captured_text")
+        source_spans = form.get("source_spans")
+        for name, value in (("contributors", contributors), ("captured_text", captured_text),
+                            ("source_spans", source_spans)):
+            if value is not None and not isinstance(value, list):
+                raise ValueError(f"Compact segment {name} is not an array.")
+        if captured_text is not None and not all(isinstance(item, str) for item in captured_text):
+            raise ValueError("Compact segment captured_text entries are not strings.")
+        return cls(
+            ContextSegment.decode(form["kind"]),
+            tuple(Provenance.expand_form(sources.source_form(index), sources)
+                  for index in raw_sources),
+            form["sha256"], form["utf8_bytes"], form["tokens"],
+            tuple(cls.expand_form(item, sources) for item in contributors or ()),
+            captured_text=tuple(captured_text or ()),
+            source_spans=tuple(ContributionCoordinates.expand_form(span, sources)
+                               for span in source_spans or ()),
+        )
 
     def public_description(self) -> str:
         return f"{self.kind.public_title()} · {self.tokens} estimated tokens"
@@ -421,6 +652,39 @@ class ContributionCoordinates:
     def capture(cls, kind, provenance, offset, text):
         raw = text.encode("utf-8")
         return cls(kind, provenance, offset, len(raw), hashlib.sha256(raw).hexdigest())
+
+    def compact_form(self, sources: ManifestSources) -> dict[str, Any]:
+        """The manifest row's compact span: sources referenced by index."""
+        return {
+            "kind": self.kind.declared_name,
+            "sources": [sources.source(value) for value in self.provenance],
+            "offset": self.offset,
+            "length": self.length,
+            "sha256": self.sha256,
+        }
+
+    @classmethod
+    def expand_form(cls, form: Mapping[str, Any], sources: ManifestSources) -> ContributionCoordinates:
+        """Rebuild the full coordinates from one manifest row's compact form."""
+        if not isinstance(form, dict):
+            raise ValueError("Compact span form is not an object.")
+        unknown = form.keys() - {"kind", "sources", "offset", "length", "sha256"}
+        if unknown:
+            raise ValueError(f"Unknown fields for compact span: {sorted(unknown)}")
+        missing = {"kind", "sources", "offset", "length", "sha256"} - form.keys()
+        if missing:
+            raise ValueError(f"Compact span lacks {sorted(missing)}")
+        if not isinstance(form["kind"], str):
+            raise ValueError("Compact span kind is not a source name.")
+        raw_sources = form["sources"]
+        if not isinstance(raw_sources, list) or not raw_sources:
+            raise ValueError("Compact span requires its recorded sources")
+        return cls(
+            ContextSegment.decode(form["kind"]),
+            tuple(Provenance.expand_form(sources.source_form(index), sources)
+                  for index in raw_sources),
+            form["offset"], form["length"], form["sha256"],
+        )
 
     def public_text(self, original: str) -> str:
         raw = original.encode("utf-8")

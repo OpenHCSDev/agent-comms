@@ -11,7 +11,7 @@ import json
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import FieldCodec
@@ -22,6 +22,8 @@ if TYPE_CHECKING:
     from .delivery_policy import KeyedResponseReceipt
     from .messages import Message
     from .message_reference import MessageReference
+    from .turn_context import ContextManifest  # noqa: F401 - resolved by get_type_hints
+    from .turn_context import ContextManifestWire  # noqa: F401 - resolved by get_type_hints
     from .wire_metadata import WireMetadata
 
 
@@ -126,7 +128,7 @@ class WireObservation(DeclaredFamily, affix="WireObservation"):
 
 @dataclass(frozen=True)
 class ContextManifestWireObservation(WireObservation):
-    manifest: "ContextManifest"
+    manifest: Annotated[ContextManifest, ContextManifestWire]
 
     def __post_init__(self):
         self.manifest.turn.require_recorded()
@@ -204,5 +206,6 @@ class WireScan:
 
 
 from .turn_context import ContextManifest
+from .turn_context import ContextManifestWire
 from .delivery_policy import KeyedResponseReceipt
 from .messages import Message
