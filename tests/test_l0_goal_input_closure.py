@@ -85,14 +85,12 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
     register(comms, "owner")
     goal = Goal("Objective", "goal", state=state)
     comms.registry.register(replace(comms.registry.require("owner"), goal=goal))
-    private = tmp_path / "private"
-    private.mkdir(mode=0o700)
-    store = GoalAttemptStore.initialize(private)
+    store = comms.goals.open_goal_store()
     retry = RetryGoalAction(
         expect=GoalPrecondition(goal_id=goal.id, expected_owner=ProcessIdentity.capture(os.getpid()))
     )
     with pytest.raises(ValueError, match="Retry cannot create a grant"):
-        comms.goals.update_goal("owner", retry, actor=OwnerInvocable, owner_store=store)
+        comms.goals.update_goal("owner", retry, actor=OwnerInvocable)
     assert store.snapshot(goal.id) is None
     assert comms.registry.require("owner").goal == goal
     # A known failed generation requires an explicit owner decision to advance.
@@ -100,7 +98,7 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
     reservation = store.reserve(goal.id, 1)
     reservation.fail(store, "Observed failure")
     assert not store.snapshot(goal.id).lifecycle.allows_resume(False)
-    changed = comms.goals.update_goal("owner", retry, actor=OwnerInvocable, owner_store=store)
+    changed = comms.goals.update_goal("owner", retry, actor=OwnerInvocable)
     assert changed.state.active and changed.id == goal.id
     assert store.snapshot(goal.id).lifecycle == ReadyGeneration()
     assert store.snapshot(goal.id).number == 2
@@ -218,7 +216,7 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
         comms.registry.register(replace(comms.registry.require(session), goal=goal))
         with pytest.raises(RuntimeError, match="Retry cannot create a grant"):
             await proxy.request("retry_goal", goal_id=goal.id, expected_revision=goal.revision)
-        assert owner.turns.goals.open_goal_store().snapshot(goal.id) is None
+        assert comms.goals.open_goal_store().snapshot(goal.id) is None
         assert comms.registry.require(session).goal == goal
         assert not owner.turns.turn_tasks and not owner.inputs.wake_tasks
     finally:

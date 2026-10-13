@@ -67,6 +67,16 @@ class UnresolvedAttemptError(GoalAttemptError):
     """A blocked or in-flight attempt needs an explicit resolution."""
 
 
+class MissingGoalGenerationError(GoalAttemptError, ValueError):
+    """Historical goal has no launch record; Retry must not invent authority."""
+
+    def __init__(self, goal_id: str):
+        super().__init__(
+            f"Goal {goal_id} has no launch authority. Clear this goal and set it again. "
+            "Retry cannot create a grant."
+        )
+
+
 class StaleAttemptError(GoalAttemptError):
     """A late outcome cannot modify the current goal generation."""
 
@@ -648,6 +658,12 @@ class GoalAttemptStore:
                 return Generation.read_in(conn, goal_id)
             except sqlite3.Error as error:
                 raise StorageUncertainError("Cannot read goal attempt state.") from error
+
+    def require_generation(self, goal_id: str) -> Generation:
+        generation = self.snapshot(goal_id)
+        if generation is None:
+            raise MissingGoalGenerationError(goal_id)
+        return generation
 
     def _is_generation(self, generation: Generation) -> bool:
         return self.snapshot(generation.goal_id) == generation

@@ -1,6 +1,6 @@
 8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d  dist/cli.js
 efabbb4fc9680938d03619a09100ea96096636d5886ae966ee6615ab11796c84  dist/core/agent-session.js
-971a04b96dbc4a6e392f396d737552c1ce6873b5deb2bff00c201a92732aa28d  dist/core/compaction/compaction.js
+c69971d290b3b53e391eeb8aafdb2b45f6d5fd11ccf4330eb733fa2cb557ebaa  dist/core/compaction/compaction.js
 0bcfbc31fab1a6216f81a4ae2313c7e884743795600816fbc36f1da552c44f84  dist/core/compaction/compaction.d.ts
 54450bbf96d22be7af9d66fade282ee7f2095906e9d818b60182338ef88f64d1  dist/core/session-manager.js
 1ef2941db3e2fc0602c4bae08200a99b00ab447e42970a0eca085e7ea684b04e  dist/modes/rpc/rpc-mode.js
@@ -55,4 +55,4 @@ b20faeea0427f73d756a5264c1a907631c701a1140d9d716290800ce87e46d86  dist/core/skil
 d64e8c05c7932d377034820b1db0df45612afe64885c0765f8f348a12e1bc955  dist/core/skills.js
 8e8276bbabcd898136d431345611928626fad6b6f03ac572f1d8506e6ece326f  dist/core/system-prompt.d.ts
 0391543cf703a93a0163b37b3ccebe53e0f12bff6f6162b86d56fb017fe49011  dist/core/system-prompt.js
-# agent-comms-native-tree-v1 9db0fc328029f2b23318d2f41c6c5dd6c1c722c4e2cc9759c0422b15c3dcdbbc
+# agent-comms-native-tree-v1 5bfdc3662cc19ef466c346b383ac8f7885f3e8dbddaa38443b96c0655eda76c1

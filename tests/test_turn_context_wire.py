@@ -154,7 +154,7 @@ async def test_installed_context_callbacks_share_original_writer_custody(tmp_pat
         batch=SingleInputBatch(()))
     resources = ExitStack()
     goals = TurnGoalAccount(comms=comms, owner=thread, turn=TurnId(lease.turn_id),
-        lease=lease, permit=None, open_store=owner.turns.goals.open_goal_store,
+        lease=lease, permit=None,
         pending_origins=owner.turns.goals.pending_goal_origins, claims=resources)
     progress = TurnProgress(comms=comms, sessions=owner.sessions, inputs=owner.inputs,
         effects=owner, runtime=owner._runtime, emitted_errors=owner.turns.emitted_errors,

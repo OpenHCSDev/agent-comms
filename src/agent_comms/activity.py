@@ -71,14 +71,36 @@ class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
     def recovery(self) -> str: ...
 
     @property
+    def headline(self) -> str:
+        return "Inbox unavailable"
+
+    @property
     def summary(self) -> str:
-        return f"Inbox unavailable · {self.error_type}: {self.reason} · {self.recovery}"
+        return f"{self.headline} · {self.error_type}: {self.reason} · {self.recovery}"
+
+    def readiness(self) -> DrainReadiness:
+        return UnavailableDrainReadiness(self)
 
 
 class UnavailableDrainDiagnostic(DrainDiagnostic):
     @property
     def recovery(self) -> str:
         return "Waiting for recovery"
+
+
+class NativeInputDrainDiagnostic(DrainDiagnostic):
+    """A native request failure is not evidence that the inbox cannot be read."""
+
+    @property
+    def headline(self) -> str:
+        return "Native request failed"
+
+    @property
+    def recovery(self) -> str:
+        return "See request diagnostics; no automatic resend"
+
+    def readiness(self) -> DrainReadiness:
+        return NativeInputDrainReadiness(self)
 
 
 class StoppedDrainDiagnostic(DrainDiagnostic):
@@ -95,7 +117,7 @@ class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
         # Nullable metadata is classified only at the original source boundary.
         if diagnostic is None or diagnostic.owner != owner:
             return ReadyDrainReadiness()
-        return UnavailableDrainReadiness(diagnostic)
+        return diagnostic.readiness()
 
     @abstractmethod
     def source_diagnostic(self) -> DrainDiagnostic | None: ...
@@ -123,20 +145,31 @@ class ReadyDrainReadiness(DrainReadiness):
 
 
 @dataclass(frozen=True)
-class UnavailableDrainReadiness(DrainReadiness):
+class DiagnosticDrainReadiness(DrainReadiness):
+    """Keep the original observation and its warning without copying either."""
+
     diagnostic: DrainDiagnostic
 
     def source_diagnostic(self):
         return self.diagnostic
 
+    def presentation(self, ordinary, *, busy):
+        return ThreadPresentation(ordinary.title, "!", self.diagnostic.summary,
+                                  busy=busy, attention=True)
+
+
+class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
+    """Retain the failed request warning; new messages keep ordinary availability."""
+
+    def presentation(self, ordinary, *, busy):
+        return ordinary if busy or ordinary.busy else super().presentation(ordinary, busy=busy)
+
+
+class UnavailableDrainReadiness(DiagnosticDrainReadiness):
     def pending_notification(self, notification: MessageNotification) -> MessageNotification:
         return replace(notification, state="Waiting for recovery",
             detail=f"{self.diagnostic.summary}. This message is saved and has not started.",
             priority=4, busy=False)
-
-    def presentation(self, ordinary, *, busy):
-        return ThreadPresentation(ordinary.title, "!", self.diagnostic.summary,
-                                  busy=busy, attention=True)
 
     def require_available(self):
         raise RelationViolationError(self.diagnostic.summary)

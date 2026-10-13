@@ -223,7 +223,7 @@ class Publisher:
         worktree: Path,
         incarnation: str,
         claims: Sequence[FileClaimPath] = (),
-        releases: Sequence[str | Path] = (),
+        releases: Sequence[str | Path | ClaimRelease] = (),
         _locked_registry_snapshot: RegistrySnapshot | None = None,
         _bus_lock: StoreLock | None = None,
         _admission: WakeAdmission | None = None,
@@ -281,13 +281,19 @@ class Publisher:
             )
             owner_incarnation = str(incarnation)
             requested = tuple(sorted(path.normalized(worktree) for path in claims))
-            release_paths = tuple(sorted(_release_resource(worktree, path) for path in releases))
             release_records: list[ClaimRelease] = []
-            for resource in release_paths:
-                current = projection.get(resource)
-                if current is None:
-                    raise RelationViolationError("Cannot release an unclaimed resource.")
-                release_records.append(ClaimRelease(resource, current.generation))
+            for release in releases:
+                if isinstance(release, ClaimRelease):
+                    # A recorded claim names its own path and generation; the owner
+                    # may have changed project since. apply_transition fences it.
+                    release_records.append(release)
+                else:
+                    resource = _release_resource(worktree, release)
+                    current = projection.get(resource)
+                    if current is None:
+                        raise RelationViolationError("Cannot release an unclaimed resource.")
+                    release_records.append(ClaimRelease(resource, current.generation))
+            release_records.sort(key=lambda release: release.resource)
             transition = ClaimTransition(
                 stored.sender,
                 owner_incarnation,

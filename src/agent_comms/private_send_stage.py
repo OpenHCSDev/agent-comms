@@ -350,7 +350,7 @@ class FullNativeSend(NativeSendStage):
     def fail_unknown(self, bus, owner, witness) -> None:
         from .coordination_response import _response_boundary
 
-        with _response_boundary(bus) as registry:
+        with _response_boundary(bus, session=self.progress.attempts.session) as registry:
             witness.require_live(registry, self.fence)
             self.progress.fail_unknown()
 

@@ -1138,6 +1138,52 @@ class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
 
 
 @dataclass(frozen=True, kw_only=True)
+class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
+    help = "Commit and push a thread's uncommitted worktree changes as a checkpoint branch"
+    name: str = option("--name")
+
+    def apply(self, ctx: Comms) -> Any:
+        import subprocess
+
+        worktree = Path(ctx.registry.require(self.name).worktree).resolve()
+        branch = f"checkpoint/{self.name}"
+        # Git requires an absolute ceiling. Stop before entering the declared
+        # worktree's parent, never checkpoint an ancestor repository.
+        environment = {**os.environ, "GIT_CEILING_DIRECTORIES": str(worktree.parent)}
+
+        def git(*arguments: str, timeout: int = 60):
+            try:
+                done = subprocess.run(["git", "-C", str(worktree), *arguments],
+                                      capture_output=True, text=True, timeout=timeout,
+                                      env=environment)
+            except (OSError, subprocess.TimeoutExpired):
+                return 1, "", ""
+            return done.returncode, done.stdout, done.stderr
+
+        code, out, _ = git("rev-parse", "--is-inside-work-tree")
+        if code != 0 or out.strip() != "true":
+            return {"thread": self.name, "checkpoint": "refused", "branch": branch,
+                    "reason": "the thread declaration's worktree is not a git worktree"}
+        if not git("status", "--porcelain")[1].strip():
+            return {"thread": self.name, "checkpoint": "clean", "branch": branch}
+        git("add", "-A")
+        code, out, err = git("commit", "-m", f"Checkpoint {self.name} before compaction")
+        if code != 0 and "nothing to commit" in (out + err):
+            return {"thread": self.name, "checkpoint": "clean", "branch": branch}
+        if code != 0:
+            return {"thread": self.name, "checkpoint": "failed", "branch": branch,
+                    "reason": (err.strip() or out.strip())[:400]}
+        # The transport can fail mid-flight; the named state is what survives,
+        # never a silent skip and never a block on compaction.
+        code, out, err = git("push", "--force", "origin", f"HEAD:refs/heads/{branch}", timeout=120)
+        if code != 0:
+            return {"thread": self.name, "checkpoint": "push-unknown", "branch": branch,
+                    "reason": (err.strip() or out.strip())[:400]}
+        commit = git("rev-parse", "--short", "HEAD")[1].strip()
+        return {"thread": self.name, "checkpoint": "pushed", "branch": branch, "commit": commit}
+
+
+@dataclass(frozen=True, kw_only=True)
 class ActivityCliCommand(CliCommand):
     help = "Publish current thread activity"
     name: str = option("--name")
