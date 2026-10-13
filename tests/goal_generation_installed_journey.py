@@ -2,7 +2,8 @@
 
 Run with the candidate wheel installed, the shipped Toad dependencies, and
 PI_COMPACTION_TEST_PACKAGE naming the unchanged immutable native package.
-Only the existing loopback provider's responses are controlled.
+Only the existing loopback provider's responses are controlled. --physical runs
+this same journey in an owned st window using actual X keyboard/mouse events.
 """
 from __future__ import annotations
 
@@ -20,9 +21,58 @@ from agent_comms.comms import Comms
 from agent_comms.goal_management import Goals
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration
 from native_backend_fixture import native_backend_fixture
+from textual.pilot import Pilot
 
 
-async def run(stage: Path, extension: Path):
+class PhysicalPilot(Pilot):
+    """Drive the owned terminal, not injected Textual input messages."""
+
+    def __init__(self, app, stage: Path):
+        super().__init__(app)
+        self.stage = stage
+        self.window = os.environ['WINDOWID']
+
+    async def command(self, *args):
+        process = await asyncio.create_subprocess_exec(
+            *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdout, stderr = await process.communicate()
+        assert process.returncode == 0, (args, stderr.decode())
+        return stdout.decode()
+
+    async def pause(self, delay=.05):
+        await asyncio.sleep(delay)
+
+    async def press(self, *keys):
+        assert keys == ('enter',), 'This journey uses only the Enter key'
+        await self.command('xdotool', 'windowfocus', '--sync', self.window,
+                           'key', '--clearmodifiers', 'Return')
+
+    async def type(self, text):
+        await self.command('xdotool', 'windowfocus', '--sync', self.window,
+                           'type', '--clearmodifiers', '--delay', '1', '--', text)
+
+    async def click(self, selector):
+        region = self.app.query_one(selector).region
+        geometry = await self.command('xdotool', 'getwindowgeometry', '--shell', self.window)
+        dimensions = dict(line.split('=', 1) for line in geometry.splitlines())
+        # st's two-pixel border surrounds the terminal's reported cell grid.
+        cell_width = (int(dimensions['WIDTH']) - 4) // self.app.size.width
+        cell_height = (int(dimensions['HEIGHT']) - 4) // self.app.size.height
+        x = 2 + (region.x + region.width // 2) * cell_width + cell_width // 2
+        y = 2 + (region.y + region.height // 2) * cell_height + cell_height // 2
+        await self.command('xdotool', 'mousemove', '--sync', '--window', self.window,
+                           str(x), str(y), 'click', '1')
+        (self.stage / 'physical-click.json').write_text(json.dumps({
+            'selector': selector, 'window': self.window, 'x': x, 'y': y,
+            'cell_width': cell_width, 'cell_height': cell_height}) + '\n')
+        return True
+
+    async def capture(self, name):
+        await self.pause(.2)
+        await self.command('import', '-window', self.window, str(self.stage / f'{name}.png'))
+
+
+async def run(stage: Path, extension: Path, *, physical=False):
     assert '/site-packages/' in inspect.getfile(Goals), 'Use the installed candidate, not editable source'
     from toad.agent_schema import AgentDefinition
     from toad.app import ToadApp
@@ -65,7 +115,7 @@ async def run(stage: Path, extension: Path):
             })
             app = ToadApp(agent_data=definition, project_dir=str(native.project),
                           agent_session_id=session)
-            async with app.run_test(size=(120, 40)) as pilot:
+            async def journey(pilot):
                 async def until(predicate):
                     async with asyncio.timeout(35):
                         while not predicate():
@@ -77,8 +127,12 @@ async def run(stage: Path, extension: Path):
                 view = app.selected_session.conversation
                 await until(lambda: 'Original saved answer' in '\n'.join(
                     strip.text for strip in app.screen._compositor.render_strips()))
-                view.prompt.text = f'[{stage.name}] Set your own persistent goal, then block it for my explicit Retry.'
+                prompt = f'[{stage.name}] Set your own persistent goal, then block it for my explicit Retry.'
                 view.prompt.focus()
+                if physical:
+                    await pilot.type(prompt)
+                else:
+                    view.prompt.text = prompt
                 await pilot.press('enter')
                 await until(lambda: comms.registry.require(session).goal is not None
                             and comms.registry.require(session).goal.state.declared_name == 'blocked'
@@ -91,6 +145,8 @@ async def run(stage: Path, extension: Path):
                             and not view.query_one('#goal-toggle').disabled
                             and 'Retry' in str(view.query_one('#goal-toggle').render()))
                 app.save_screenshot(str(stage / 'blocked-before-retry.svg'))
+                if physical:
+                    await pilot.capture('blocked-before-retry')
                 assert await pilot.click('#goal-toggle'), 'Click the actual visible Retry control'
                 await until(lambda: comms.registry.require(session).goal.state.declared_name == 'completed'
                             and not comms.registry.require(session).executing)
@@ -105,12 +161,28 @@ async def run(stage: Path, extension: Path):
                 await until(lambda: view.goal_display.snapshot is not None
                             and view.goal_display.snapshot.state.declared_name == 'completed')
                 app.save_screenshot(str(stage / 'completed-after-retry.svg'))
-                print(json.dumps({'installed_core': inspect.getfile(Goals),
-                                  'saved_history_visible': True, 'model_set_then_blocked': True,
-                                  'actual_ui_retry_click': True, 'goal_identity_preserved': True,
-                                  'retry_generation': generation.number,
-                                  'completed': True, 'localhost_posts': native.provider.posts,
-                                  'saved_inputs': len(native.saved_inputs())}), flush=True)
+                if physical:
+                    await pilot.capture('completed-after-retry')
+                receipt = {'installed_core': inspect.getfile(Goals),
+                           'physical_st': physical,
+                           'saved_history_visible': True, 'model_set_then_blocked': True,
+                           'actual_ui_retry_click': True, 'goal_identity_preserved': True,
+                           'retry_generation': generation.number,
+                           'completed': True, 'localhost_posts': native.provider.posts,
+                           'saved_inputs': len(native.saved_inputs())}
+                (stage / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+
+            if physical:
+                async def drive(_pilot):
+                    try:
+                        await journey(PhysicalPilot(app, stage))
+                    finally:
+                        app.exit()
+                await app.run_async(auto_pilot=drive)
+            else:
+                async with app.run_test(size=(120, 40)) as pilot:
+                    await journey(pilot)
+    print((stage / 'receipt.json').read_text(), flush=True)
     print('GOAL_GENERATION_INSTALLED_UI_PASS', flush=True)
 
 
@@ -119,5 +191,7 @@ if __name__ == '__main__':
     parser.add_argument('--stage', type=Path, required=True)
     parser.add_argument('--extension', type=Path, required=True,
                         help='Approved compiled comms entry from the native deployment manifest')
+    parser.add_argument('--physical', action='store_true',
+                        help='Run in an owned plain st terminal on an isolated X display')
     args = parser.parse_args()
-    asyncio.run(run(args.stage.resolve(), args.extension.resolve(strict=True)))
+    asyncio.run(run(args.stage.resolve(), args.extension.resolve(strict=True), physical=args.physical))
