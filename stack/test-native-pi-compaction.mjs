@@ -8,7 +8,7 @@ import {join,resolve} from 'node:path';
 import {randomBytes} from 'node:crypto';
 
 const mode=process.argv[2] ?? 'threshold';
-assert.ok(['threshold','overflow','manual'].includes(mode));
+assert.ok(['threshold','overflow','manual','wip'].includes(mode));
 const pkg=process.env.PI_COMPACTION_TEST_PACKAGE;
 assert.ok(pkg,'Prepared native package required');
 const artifacts=resolve('.artifacts');mkdirSync(artifacts,{recursive:true,mode:0o700});
@@ -64,12 +64,22 @@ try {
     manager.appendModelChange(model.provider,model.id);
     // Old history (summarized) followed by a recent turn (kept). The last
     // assistant usage puts the context past Pi's threshold (window - reserve).
-    const used=mode==='threshold' ? 90000 : 30000;
+    const used=(mode==='threshold'||mode==='wip') ? 90000 : 30000;
+    const statedLines='Now: adding an event class\nUncommitted: stack/patch test edits\nNext: run the focused tests';
     for(let turn=0;turn<4;turn++){
         manager.appendMessage({role:'user',content:`OLD_FACT_${turn} `+'old history '.repeat(1500),timestamp:2*turn+1});
-        manager.appendMessage({role:'assistant',content:[{type:'text',text:`old answer ${turn}`}],api:model.api,
+        const stated=mode==='wip' && turn===1
+            ? [{type:'text',text:`Working.\n${statedLines}`}]
+            : [{type:'text',text:`old answer ${turn}`}];
+        manager.appendMessage({role:'assistant',content:stated,api:model.api,
             provider:model.provider,model:model.id,stopReason:'stop',timestamp:2*turn+2,
             usage:{input:used-100,output:100,cacheRead:0,cacheWrite:0,totalTokens:used,cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
+    }
+    if(mode==='wip'){
+        // The thread's own worktree carries uncommitted changes at compaction.
+        const {execFileSync}=await import('node:child_process');
+        execFileSync('git',['init','-q'],{cwd:root});
+        writeFileSync(join(root,'uncommitted.txt'),'dirty');
     }
     ({session}=await pi.createAgentSession({cwd:root,agentDir:root,modelRuntime:runtime,model,
         sessionManager:manager,settingsManager:settings,resourceLoader:loader,noTools:'all'}));
@@ -95,9 +105,18 @@ try {
     assert.equal(compactions().length,1,'Pi wrote exactly one compaction entry');
     assert.equal(summaries.length,1,'one summary request');
     assert.ok(summaries[0].text.includes('Additional focus: TASK_BRIEF_FIXTURE'),'task brief reaches the summary');
+    if(mode==='wip'){
+        const carried=compactions()[0].summary;
+        assert.ok(carried.startsWith('Work in progress when compaction started:'),'the stated lines ride at the top of the retained context');
+        assert.ok(carried.includes('Now: adding an event class'),'the stated Now line is carried verbatim');
+        assert.ok(carried.includes('Uncommitted: stack/patch test edits (the worktree has uncommitted changes at compaction)'),'the stated Uncommitted line carries the real worktree fact');
+        assert.ok(carried.includes('Next: run the focused tests'),'the stated Next line is carried verbatim');
+        assert.ok(carried.includes('SUMMARY_FIXTURE'),'the generated summary follows the carried lines');
+    }
     const last=prompts.at(-1).text;
     assert.ok(last.includes('SUMMARY_FIXTURE'),'model request starts from the summary');
     assert.ok(!last.includes('OLD_FACT_0'),'summarized history left the context');
+    if(mode==='wip') assert.ok(last.includes('Now: adding an event class'),'the retained context the model sees starts from the carried lines');
     assert.equal(manager.getLeafEntry().message.content[0].text,'TRACKED_REPLY');
     const committed=events.filter(event=>event.type==='context_committed' && event.inputId===inputId);
     const compactionEnds=events.filter(event=>event.type==='compaction_end');
