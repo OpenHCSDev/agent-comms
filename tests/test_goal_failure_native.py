@@ -15,7 +15,7 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from agent_comms.agent_events import CompactionStart, CompactionEnd
-from agent_comms.acp_failure import PromptFailureReceipt
+from agent_comms.acp_failure import RequestFailure
 from agent_comms.diagnostics import FailureReason
 from agent_comms.goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction, SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore, UnresolvedAttemptError
@@ -224,10 +224,10 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
                 await agent.turns.run_agent_turn(
                     sid, sid, "One new failed goal input", autonomous_goal=True
                 )
-            receipt = PromptFailureReceipt.from_error(
+            request_failure = RequestFailure.from_error(
                 error.value.code, str(error.value), error.value.data
             )
-            assert receipt.notification_published
+            assert request_failure.notification_published
             assert store.snapshot(goal.id).lifecycle == BlockedGeneration()
             assert len(native.saved_inputs()) == 3
             assert native.saved_inputs()[-1]["content"][0]["text"].endswith("One new failed goal input")

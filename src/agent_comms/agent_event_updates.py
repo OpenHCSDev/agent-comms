@@ -176,7 +176,7 @@ class AcpEventConsumer(MroDispatch):
 
     @handles(events.Done)
     async def on_done(self, event: events.Done) -> events.Done:
-        # Notification and the request receipt consume the same resolved outcome.
+        # Notification and request failure consume the same resolved outcome.
         return replace(event, outcome=await event.outcome.publish(self.client, self.session_id))
 
     @handles(events.PromptCancelled)

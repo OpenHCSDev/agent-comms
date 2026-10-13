@@ -87,16 +87,16 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         if native_ok:
             await asyncio.wait_for(turn, 8)
         else:
-            from agent_comms.acp_failure import PromptFailureReceipt
+            from agent_comms.acp_failure import RequestFailure
 
             with pytest.raises(RequestError) as failed:
                 await asyncio.wait_for(turn, 8)
             assert failed.value.__cause__ is not None
-            receipt_failure = PromptFailureReceipt.from_error(
+            request_failure = RequestFailure.from_error(
                 failed.value.code, str(failed.value), failed.value.data
             )
-            assert receipt_failure.notification_published
-            assert receipt_failure.failure.input_state is type(
+            assert request_failure.notification_published
+            assert request_failure.failure.input_state is type(
                 agent.inputs.dispositions.read().lookup(f"acp:{receipt.input_id}")
             )
         assert len(starts) == 1 and "Fresh owner input" in starts[0]

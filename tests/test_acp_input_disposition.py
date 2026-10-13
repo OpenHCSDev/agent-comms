@@ -13,7 +13,7 @@ from acp.schema import TextContentBlock
 from agent_comms import backend
 from agent_comms import pi_commands as commands
 from agent_comms import pi_events as pi
-from agent_comms.acp_failure import PromptFailureReceipt
+from agent_comms.acp_failure import RequestFailure
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, QueuePromptRequest, SteerPromptRequest, decode_updates, encode_request
 from agent_comms.child_process import BoundedRun, ExitedOutcome
 from agent_comms.comms import Comms
@@ -60,7 +60,7 @@ async def test_native_preflight_failure_is_visible_and_cannot_mark_started(nativ
             await owner.prompt(session, [TextContentBlock(type="text", text="test")])
         assert isinstance(caught.value.__cause__, NativePiUnavailable)
         assert "preflight" in str(caught.value.__cause__)
-        failure = PromptFailureReceipt.from_error(caught.value.code, str(caught.value), caught.value.data)
+        failure = RequestFailure.from_error(caught.value.code, str(caught.value), caught.value.data)
         assert failure.notification_published and failure.failure.input_state.public_status == "not_sent"
         rows = owner.inputs.dispositions.read().unknown(frozenset({session}))
         assert len(rows) == 1 and not rows[0].has_native_binding
@@ -130,7 +130,7 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
             else:
                 with pytest.raises(RequestError) as caught:
                     await asyncio.wait_for(turn, 30)
-                failure = PromptFailureReceipt.from_error(caught.value.code, str(caught.value), caught.value.data)
+                failure = RequestFailure.from_error(caught.value.code, str(caught.value), caught.value.data)
                 assert failure.notification_published
             final = InputDispositions(owner.inputs.dispositions.path).read().rows
             assert len(final) == 2

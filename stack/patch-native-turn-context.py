@@ -246,7 +246,8 @@ def extend_native_run(core):
                  '        if (this._nativeRun.tracked) return this._nativeRun.willRetry(this._lastAssistantMessage);')
     replace_once(session, '''        this._nativeRunHadTrackedInput = messages.some((message) => message.role === "user" &&
             this._nativeInputClaims.has(message.inputId));''',
-        '''        this._nativeRun = new NativeTurnRun(this.agent, event => this._emit(event))
+        '''        this._nativeRun = new NativeTurnRun(this.agent, event => this._emit(event),
+            message => this._isRetryableError(message))
             .include(messages, this._nativeInputClaims);''')
     replace_once(session, '''        const boundedStream = (model, context, options) => originalStream(model, context,
             this._nativeRunHadTrackedInput ? { ...options, maxRetries: 0 } : options);''',
@@ -264,11 +265,17 @@ def extend_native_run(core):
             if (await this._nativeRun.recover(msg)) return true;
             const overflow''')
     replace_once(session, '            this._nativeRunHadTrackedInput = false;\n            return msg.stopReason',
-                 '            this._nativeRun.close();\n            this._nativeRun = new NativeTurnRun(this.agent, event => this._emit(event));\n            return msg.stopReason')
+                 '            this._nativeRun.close();\n            this._nativeRun = new NativeTurnRun(this.agent, event => this._emit(event), message => this._isRetryableError(message));\n            return msg.stopReason')
     replace_once(session, '    abortRetry() {\n',
                  '    abortRetry() {\n        this._nativeRun.cancel();\n')
     replace_once(session, '        return this._retryAbortController !== undefined;',
                  '        return this._nativeRun.retrying || this._retryAbortController !== undefined;')
+    # Extend the one existing provider classifier, not a tracked-only list.
+    # AssistantMessage exposes errorMessage, not structured HTTP status/code.
+    retry = core.parent.parent/'node_modules/@earendil-works/pi-ai/dist/utils/retry.js'
+    replace_once(retry, 'const NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN = buildProviderErrorPattern([',
+                 'const NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN = buildProviderErrorPattern([\n    "\\\\b402\\\\b",')
+    replace_once(retry, '    "429",', '    "429",\n    "529",')
     types = core/'agent-session.d.ts'
     replace_once(types, '    private _retryAttempt;',
                  '    private _retryAttempt;\n    private _nativeRun: import("./turn-recovery.js").NativeTurnRun;')

@@ -15,7 +15,7 @@ from acp.schema import (
 
 from . import agent_events as events
 from .acp_extension import QueueScope, TranscriptChangedUpdate, encode_updates
-from .acp_failure import PromptFailureReceipt
+from .acp_failure import RequestFailure
 from .thread_identity import AdmissionIdentity
 from .channel_targets import is_channel_target
 from .comms import Comms
@@ -122,7 +122,7 @@ class TurnProgress(events.AgentEventConsumer):
     def thread_name(self) -> str:
         return self.sessions.bindings[self.session_id]
 
-    async def report_failure(self, error: Exception) -> PromptFailureReceipt | None:
+    async def report_failure(self, error: Exception) -> RequestFailure | None:
         """Attempt existing ACP error publication once without hiding the original fault."""
         diagnostic = record_terminal_failure(
             self.comms.root, turn_id=self.turn_lease.turn_id, thread=self.thread_name,
@@ -136,11 +136,11 @@ class TurnProgress(events.AgentEventConsumer):
         )
         if self.result is not None:
             # A transport/cleanup fault cannot reconstruct an already resolved
-            # native failure. Keep its original receipt and separate diagnostic.
-            return self.result.outcome.failure_receipt
+            # native failure. Keep the reported failure and separate diagnostic.
+            return self.result.outcome.request_failure
         try:
             await self.consume(events.Done(text=detail, ok=False))
-            return self.result.outcome.failure_receipt
+            return self.result.outcome.request_failure
         except Exception as delivery_error:
             self.effects._debug_log(
                 f"turn:error-publication failed: {delivery_error!r}; original: {error!r}"

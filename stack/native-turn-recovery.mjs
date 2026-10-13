@@ -2,23 +2,11 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 
 class RecoveryBudget {
-    static emptyWaitMs = 120_000;
     static retries = 3;
     // Sustained provider outages survive only if the wait stretches to minutes.
     static backoffMs = [1_000, 10_000, 60_000];
     static get attempts() { return this.retries + 1; }
     static delay(attempt) { return this.backoffMs[Math.min(attempt - 1, this.backoffMs.length - 1)]; }
-}
-
-/** Decode known explicit provider refusals, never generic transport failures. */
-class ProviderRefusal {
-    static decode(message) {
-        if (message?.stopReason !== 'error') return undefined;
-        // Provider formatters can retain HTTP status and JSON bodies around the
-        // original sentence. Decode the known refusal here, not in Core or UI.
-        const match = /(?:^|[\s":])(Our servers are currently overloaded\. Please try again later\.?|An error occurred while processing your request\. You can retry your request\.?|Internal (?:server )?error\.?)(?=$|[\s"},])/i.exec(message.errorMessage ?? '');
-        return match?.[1];
-    }
 }
 
 class NativeRunState {
@@ -37,7 +25,7 @@ class NothingProduced extends NativeRunState {
     produced() {
         this.close();
         if (this.attempt > 1) {
-            this.owner.emit({ type: 'native_retry_end', success: true, attempt: this.attempt - 1 });
+            this.owner.finishRetry(true);
         }
         return new OutputProduced(this.owner, this.attempt);
     }
@@ -46,40 +34,11 @@ class NothingProduced extends NativeRunState {
         // decoded and announced once here, before the refused message reaches
         // Core, so Core reports only the recovery's final outcome.
         if (!this.owner.tracked) return this;
-        const reason = ProviderRefusal.decode(message);
-        if (!reason) return this;
+        if (!this.owner.retryable(message)) return this;
+        const reason = message.errorMessage || 'Provider request failed';
         const refused = new RefusedNothingProduced(this.owner, this.attempt, reason);
         refused.announce();
         return refused;
-    }
-    request(options) {
-        const waiting = new WaitingNothingProduced(this.owner, this.attempt, options.signal);
-        this.owner.state = waiting;
-        return { ...options, signal: waiting.signal };
-    }
-}
-
-class WaitingNothingProduced extends NothingProduced {
-    constructor(owner, attempt, parentSignal) {
-        super(owner, attempt);
-        this.controller = new AbortController();
-        this.signal = parentSignal
-            ? AbortSignal.any([parentSignal, this.controller.signal]) : this.controller.signal;
-        this.timer = setTimeout(() => {
-            if (this.signal.aborted || this.owner.state !== this) return;
-            const refusal = new RefusedNothingProduced(this.owner, this.attempt,
-                `Provider produced nothing for ${RecoveryBudget.emptyWaitMs / 1000} seconds`);
-            this.owner.state = refusal;
-            refusal.announce();
-            this.controller.abort(new Error(refusal.reason));
-        }, RecoveryBudget.emptyWaitMs);
-        this.timer.unref();
-    }
-    close() { clearTimeout(this.timer); }
-    finished(message) {
-        this.close();
-        const next = super.finished(message);
-        return next === this ? new NothingProduced(this.owner, this.attempt) : next;
     }
 }
 
@@ -93,20 +52,14 @@ class RefusedNothingProduced extends NothingProduced {
         if (!this.mayRetry) {
             // The final refusal keeps the refusal window closed: Core reports
             // this message_end as the outcome after the recovery gave up.
-            this.owner.emit({ type: 'native_retry_end', success: false,
-                attempt: RecoveryBudget.retries, finalError: this.reason });
+            this.owner.finishRetry(false, this.reason);
             return;
         }
         this.owner.emit({ type: 'native_retry_start', attempt: this.attempt,
             maxAttempts: RecoveryBudget.retries, delayMs: RecoveryBudget.delay(this.attempt),
             errorMessage: this.reason });
     }
-    finished(message) {
-        // Only our own empty-wait abort has this state before message_end.
-        // Keep its actual cause in retained native history instead of "Request aborted".
-        message.errorMessage = this.reason;
-        return this;
-    }
+    finished() { return this; }
     async recover(message) {
         if (!this.mayRetry) {
             this.owner.state = new ExhaustedNothingProduced(this.owner, this.attempt, this.reason);
@@ -137,8 +90,7 @@ class BackoffNothingProduced extends RefusedNothingProduced {
         catch (error) {
             if (error.name !== 'AbortError') throw error;
             this.owner.state = new CancelledNothingProduced(this.owner, this.attempt);
-            this.owner.emit({ type: 'native_retry_end', success: false,
-                attempt: this.attempt, finalError: 'Retry cancelled' });
+            this.owner.finishRetry(false, 'Retry cancelled');
             return false;
         }
         // Continue the already committed context; retain the failed assistant in
@@ -155,11 +107,20 @@ class BackoffNothingProduced extends RefusedNothingProduced {
 
 /** Replaces the native tracked-input flag and owns monotonic whole-run production. */
 export class NativeTurnRun {
-    constructor(agent, emit) {
+    constructor(agent, emit, retryable) {
         this.agent = agent;
         this.emit = emit;
+        // AgentSession supplies its existing classifier, including context-
+        // overflow exclusion. Tracked and untracked runs share that authority.
+        this.retryable = retryable;
         this.inputs = new Set();
         this.state = new NothingProduced(this);
+    }
+    finishRetry(success, finalError) {
+        // The request index increments only after an admitted backoff. A
+        // cancelled first backoff therefore reports zero actual re-requests.
+        this.emit({ type: 'native_retry_end', success,
+            attempt: this.state.attempt - 1, ...(finalError ? { finalError } : {}) });
     }
     get tracked() { return this.inputs.size > 0; }
     get retrying() { return this.state.retrying; }

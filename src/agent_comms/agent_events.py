@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from .activity import ActivityState
 from .acp_failure import (
-    FailureSource, UnrecordedFailureSource, NativeTurnOutcome,
+    FailureSource, UnrecordedFailureSource, NativeTurnOutcome, ProviderRetryResult,
     UnresolvedNativeTurnOutcome, SuccessfulNativeTurnOutcome, FailedNativeTurnOutcome,
 )
 from .declared_family import DeclaredFamily
@@ -207,6 +207,7 @@ class Done(AgentEvent):
     reason_code: str | None = None
     diagnostic: dict[str, Any] | None = None
     outcome: NativeTurnOutcome = field(default_factory=UnresolvedNativeTurnOutcome)
+    retry_result: ProviderRetryResult | None = None
     # The completion boundary publishes only after resolving original inputs.
     publishes = False
 

@@ -1,4 +1,4 @@
-"""One completed native failure feeds notification and terminal receipt.
+"""One completed native failure feeds notification and reported request failure.
 
 The verified native CLI, HTTP provider, Core turn/application, input dispositions
 and saved journal are real. Only HTTP response contents are controlled.
@@ -14,7 +14,7 @@ from acp import RequestError
 
 from agent_comms import cohort_foreground, native_pi
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
-from agent_comms.acp_failure import ACPFailure, NativeMessageFailureSource, PromptFailureReceipt
+from agent_comms.acp_failure import ACPFailure, NativeMessageFailureSource, RequestFailure
 from agent_comms.field_codec import FieldCodec
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from compaction_loopback import LoopbackProvider
@@ -27,7 +27,7 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
     wired, tmp_path, monkeypatch, notification_fails,
 ):
     provider = LoopbackProvider(status=200, text="saved isolated history",
-                                error_message="Request validation failed")
+                                error_message="insufficient_quota")
     server = await asyncio.start_server(provider.handle, "127.0.0.1", 0)
     config = tmp_path / "config"
     config.mkdir(mode=0o700)
@@ -83,6 +83,8 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
                                             original_owner_input=True)
             saved = Path(wired.registry.require("project").session_file)
             original = saved.read_bytes()
+            # This existing HTTP fixture supports 400/503 errors. The shared
+            # classifier's explicit quota exclusion overrides server-error text.
             provider.status = 400
             with pytest.raises(RequestError) as caught:
                 await agent.turns.run_agent_turn("project", "project", "New input receiving a refusal",
@@ -94,9 +96,9 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
             assert isinstance(failure.source, NativeMessageFailureSource)
             assert failure.failure.input_state.has_started
             assert len(calls) == 1
-            receipt = FieldCodec.decode(PromptFailureReceipt, caught.value.data["agentCommsFailure"])
-            assert receipt.notification_published is (not notification_fails)
-            assert receipt.failure == failure.failure
+            request_failure = FieldCodec.decode(RequestFailure, caught.value.data["agentCommsFailure"])
+            assert request_failure.notification_published is (not notification_fails)
+            assert request_failure.failure == failure.failure
             assert not any(isinstance(item, InputFailedUpdate) for update in updates
                            for item in decode_updates(update.field_meta))
             assert saved.read_bytes().startswith(original)

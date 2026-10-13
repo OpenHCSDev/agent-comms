@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from . import agent_events as events
 from .declared_family import DeclaredFamily
+from .acp_failure import ProviderRetryResult
 from .field_codec import FieldCodec
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .request_progress import RequestProgress
@@ -221,24 +222,23 @@ class ModelRequestProgress(PiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AutoRetryEnd(PiEvent):
-    success: bool | None = field(default=None, metadata={"wire_name": "success"})
-
+class AutoRetryEnd(PiEvent, ProviderRetryResult):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        session.output.retry_result = self.for_failure(session.output.redact)
         session.watchdog.progress()
         if self.success:
             session.output.error_message = None
         else:
             session.watchdog.retry_recovery_pending = False
-            async for event in self.exhausted(session):
+            for event in self.exhausted(session):
                 yield event
             yield session.watchdog.state(
                 "failed", "provider_retry_exhausted", 0, phase=ModelWaitPhase()
             )
 
 
-    async def exhausted(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        yield session.output.error("Provider retry attempts were exhausted.")
+    def exhausted(self, session: TurnSession) -> tuple[events.AgentEvent, ...]:
+        return (session.output.error("Provider retry attempts were exhausted."),)
 
 
 class NativeRetryEnd(AutoRetryEnd):
@@ -252,9 +252,8 @@ class NativeRetryEnd(AutoRetryEnd):
                 "recovered", "provider_auto_retry_progress", 0, phase=ModelWaitPhase()
             )
 
-    async def exhausted(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        if False:
-            yield
+    def exhausted(self, session: TurnSession) -> tuple[events.AgentEvent, ...]:
+        return ()
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -499,7 +499,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         turn_id: str | None = None,
         route: MessageRoute | None = None,
     ) -> events.AgentEvent | TranscriptUpdate:
-        """Publish and return the observation carrying its actual delivery receipt."""
+        """Publish and return the observation with its actual delivery result."""
         client = client or self._runtime
         if isinstance(event, events.AgentEvent):
             return await AcpEventConsumer(self, session_id, client, turn_id, route).dispatch(event)

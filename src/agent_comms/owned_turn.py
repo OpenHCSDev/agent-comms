@@ -437,10 +437,10 @@ class OwnedTurn:
             raise
         except Exception as error:
             await Coordination.run_worker(self.settle_unbound)
-            receipt = await self.progress.report_failure(error)
-            if receipt is not None:
-                raise receipt.request_error() from error
+            request_failure = await self.progress.report_failure(error)
+            if request_failure is not None:
+                raise request_failure.request_error() from error
             raise
-        # Publication owns its notification receipt and the terminal outcome;
+        # The completed outcome owns notification delivery and request failure;
         # it is outside stream-fault reporting, so no failure is published twice.
         await self.progress.publish_result()

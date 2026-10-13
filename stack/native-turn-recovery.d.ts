@@ -5,7 +5,9 @@ import type { NativeInputClaim } from "./turn-context.js";
 
 /** The committed native run owns production, retry policy and attempt lifetime. */
 export declare class NativeTurnRun {
-    constructor(agent?: Agent, emit?: (event: AgentSessionEvent) => void);
+    constructor(agent?: Agent, emit?: (event: AgentSessionEvent) => void,
+                retryable?: (message: AssistantMessage) => boolean);
+    finishRetry(success: boolean, finalError?: string): void;
     get tracked(): boolean;
     get retrying(): boolean;
     include(messages: readonly AgentMessage[], claims: ReadonlyMap<string, NativeInputClaim>): this;

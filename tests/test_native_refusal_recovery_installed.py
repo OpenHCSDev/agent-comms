@@ -1,7 +1,7 @@
 """Continuous saved-history recovery through the verified native CLI and HTTP.
 
-Only local provider replies are controlled. The native run, backoff, silent-wait
-clock, Core event parsing, child custody and original session journal are real.
+Only local provider replies are controlled. The native run, refusal backoff,
+Core event parsing and original session journal are real. No silence timeout.
 """
 
 import asyncio
@@ -19,13 +19,11 @@ OVERLOADED = "Our servers are currently overloaded. Please try again later."
 
 
 @pytest.mark.asyncio
-async def test_actual_native_refusal_and_silent_wait_preserve_saved_history(tmp_path, monkeypatch):
+async def test_actual_native_refusal_preserves_saved_history(tmp_path, monkeypatch):
     replies = deque([
         LoopbackProvider(status=200, text="saved history before recovery"),
         *(LoopbackProvider(status=503, error_message=OVERLOADED) for _ in range(3)),
         LoopbackProvider(status=200, text="answered after three refusals"),
-        LoopbackProvider(status=0, response_timeout=150),
-        LoopbackProvider(status=200, text="answered after silent wait"),
     ])
     received = []
     tasks = set()
@@ -89,24 +87,17 @@ async def test_actual_native_refusal_and_silent_wait_preserve_saved_history(tmp_
             assert [event.attempt.attempt for event in recovered
                     if isinstance(event, ae.TurnState) and event.state == "retrying"] == [1, 2, 3]
             assert Path(saved).read_bytes().startswith(original)
-            silent = await turn("New independent input receiving a silent wait")
-            assert isinstance(silent[-1], ae.Done) and silent[-1].ok, silent
-            assert silent[-1].text == "answered after silent wait"
-            assert not any(isinstance(event, ae.Error) for event in silent)
-            assert [event.attempt.attempt for event in silent
-                    if isinstance(event, ae.TurnState) and event.state == "retrying"] == [1]
-            assert not replies and len(received) == 7
+            assert not replies and len(received) == 5
             assert all(reply.posts == 1 for reply in received)
             journal = [json.loads(line) for line in Path(saved).read_text().splitlines()]
             users = [row["message"] for row in journal
                      if row.get("type") == "message" and row["message"]["role"] == "user"]
-            assert len(users) == 3  # Each new input committed once, never replayed.
-            assert len({message["inputId"] for message in users}) == 3
+            assert len(users) == 2  # Each new input committed once, never replayed.
+            assert len({message["inputId"] for message in users}) == 2
             failures = [row["message"] for row in journal
                         if row.get("type") == "message"
                         and row["message"].get("stopReason") in {"error", "aborted"}]
-            assert len(failures) == 4  # Retained refusals and the original silent abort.
-            assert "Provider produced nothing for 120 seconds" in failures[-1]["errorMessage"]
+            assert len(failures) == 3  # All original refusals remain in saved history.
     finally:
         await session.close()
         server.close()

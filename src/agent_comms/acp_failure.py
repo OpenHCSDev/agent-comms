@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import ClassVar, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -59,7 +59,7 @@ class DeliveryFailure(DeliveryPresentation, DeclaredFamily, affix="Failure"):
 
     @property
     def input_disposition(self) -> str:
-        return "Unconfirmed — input not retried"
+        return "Unconfirmed"
 
     @property
     @abstractmethod
@@ -75,6 +75,31 @@ class BackendDeliveryFailure(DeliveryFailure):
         return self.message
 
 
+@dataclass(frozen=True, kw_only=True)
+class ProviderRetryResult:
+    """Native retry-end observation, shared by event and failure presentation."""
+
+    success: bool | None = None
+    attempt: int | None = None
+    final_error: str | None = field(default=None, metadata={"wire_name": "finalError"})
+
+    def for_failure(self, redact) -> ProviderRetryResult:
+        return ProviderRetryResult(
+            success=self.success, attempt=self.attempt,
+            final_error=redact(self.final_error) if self.final_error else None,
+        )
+
+    @property
+    def summary(self) -> str:
+        if self.attempt is None:
+            return ""
+        return " ".join(part for part in (
+            f"Provider request retries: {self.attempt}.",
+            "Recovery completed." if self.success else "",
+            f"Final provider response: {self.final_error}" if self.final_error else "",
+        ) if part)
+
+
 @dataclass(frozen=True)
 class ACPFailure(DeliveryFailure):
     code: int | None
@@ -82,6 +107,9 @@ class ACPFailure(DeliveryFailure):
     classification_priority: ClassVar[int] = 0
     input_state: type[InputAttempt] | None = None
     diagnostics: tuple[PiDiagnostic, ...] = ()
+    retry_result: ProviderRetryResult | None = field(
+        default=None, metadata={"wire_omit_default": True},
+    )
 
     @property
     def description(self) -> str:
@@ -94,10 +122,7 @@ class ACPFailure(DeliveryFailure):
     @property
     def input_disposition(self) -> str:
         if self.input_state is not None:
-            return (
-                self.input_state.public_status.replace("_", " ").capitalize()
-                + " — input not retried"
-            )
+            return self.input_state.public_status.replace("_", " ").capitalize()
         return super().input_disposition
 
     @property
@@ -106,6 +131,13 @@ class ACPFailure(DeliveryFailure):
 
     @property
     def action(self) -> str:
+        return " ".join(part for part in (
+            self.retry_result.summary if self.retry_result is not None else "",
+            self.next_step,
+        ) if part)
+
+    @property
+    def next_step(self) -> str:
         return "Inspect the input delivery status before deciding whether to send again."
 
     @classmethod
@@ -143,32 +175,26 @@ class ACPFailure(DeliveryFailure):
 
 
 @dataclass(frozen=True)
-class PromptFailureReceipt:
-    """One request's failure and proof of its already published notification."""
+class RequestFailure:
+    """Failure returned on the request, with whether its notification was sent."""
 
     failure: ACPFailure
     notification_published: bool
 
     def error_data(self):
-        from .field_codec import FieldCodec
-
-        # The request wire shape is the receipt, not a richer native outcome.
-        return {"agentCommsFailure": FieldCodec.encode(
-            PromptFailureReceipt(self.failure, self.notification_published)
-        )}
+        return {"agentCommsFailure": FieldCodec.encode(self)}
 
     def request_error(self):
         from acp import RequestError
-
         return RequestError.internal_error(self.error_data())
 
     @classmethod
     def from_error(cls, code, message, data):
-        return FieldCodec.decode(ErrorValue, data).original_root().failure_receipt(code, message)
+        return FieldCodec.decode(ErrorValue, data).original_root().request_failure(code, message)
 
 
 class NativeTurnOutcome(ABC):
-    """Resolved completion owns failure presentation and publication custody."""
+    """Resolved completion owns failure presentation and notification delivery."""
 
     @abstractmethod
     async def publish(self, client, session_id: str) -> NativeTurnOutcome: ...
@@ -177,7 +203,7 @@ class NativeTurnOutcome(ABC):
     def raise_if_failed(self) -> None: ...
 
     @property
-    def failure_receipt(self) -> PromptFailureReceipt | None:
+    def request_failure(self) -> RequestFailure | None:
         return None
 
 
@@ -200,7 +226,8 @@ class SuccessfulNativeTurnOutcome(NativeTurnOutcome):
 
 
 @dataclass(frozen=True)
-class FailedNativeTurnOutcome(PromptFailureReceipt, NativeTurnOutcome):
+class FailedNativeTurnOutcome(NativeTurnOutcome):
+    request: RequestFailure
     source: FailureSource = UnrecordedFailureSource()
     failed_input_text: str | None = None
 
@@ -209,15 +236,14 @@ class FailedNativeTurnOutcome(PromptFailureReceipt, NativeTurnOutcome):
         cls, terminal: Done, error: Error | None,
         document: InputDocument, original: OriginalTurnInput,
     ) -> FailedNativeTurnOutcome:
-        # Classification and original-input facts are resolved exactly once,
-        # from the same disposition snapshot used to settle this native Done.
         failure = replace(
             ACPFailure.from_error(-32603, terminal.text or "Backend failed",
                                   diagnostics=error.diagnostics if error is not None else ()),
             input_state=document.shared_state(original.notice_keys),
+            retry_result=terminal.retry_result,
         )
         return cls(
-            failure=failure, notification_published=False,
+            request=RequestFailure(failure, False),
             source=error.source if error is not None else UnrecordedFailureSource(),
             failed_input_text=(original.notice_text
                                if not document.all_started(original.notice_keys) else None),
@@ -229,28 +255,29 @@ class FailedNativeTurnOutcome(PromptFailureReceipt, NativeTurnOutcome):
             InputFailedUpdate, RequestFailedUpdate, TextRouteUpdate, encode_updates,
         )
 
+        failure = self.request.failure
         accepted = await client.session_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
                 field_meta=encode_updates(
-                    TextRouteUpdate(None), RequestFailedUpdate(self.failure, self.source),
-                    *((InputFailedUpdate(self.failed_input_text, self.failure),)
+                    TextRouteUpdate(None), RequestFailedUpdate(failure, self.source),
+                    *((InputFailedUpdate(self.failed_input_text, failure),)
                       if self.failed_input_text else ()),
                 ),
             ),
         )
         # ACP SDK clients return None after acknowledgement; Core's transport
         # returns False when nobody accepted the notification.
-        return replace(self, notification_published=accepted is not False)
+        return replace(self, request=replace(self.request, notification_published=accepted is not False))
 
     @property
-    def failure_receipt(self) -> PromptFailureReceipt:
-        return self
+    def request_failure(self) -> RequestFailure:
+        return self.request
 
     def raise_if_failed(self) -> None:
-        raise self.request_error()
+        raise self.request.request_error()
 
 
 class RequestACPFailure(ACPFailure):
@@ -268,7 +295,7 @@ class RequestACPFailure(ACPFailure):
 class ProviderQuotaFailure(ACPFailure):
     classification_priority = 100
     display_pattern = re.compile(
-        r"usage limit|quota|insufficient credits|credit balance|rate.limit|too many requests",
+        r"usage limit|quota|insufficient credits|credit balance",
         re.I,
     )
 
@@ -283,7 +310,7 @@ class ProviderQuotaFailure(ACPFailure):
         return "Provider usage limit reached"
 
     @property
-    def action(self) -> str:
+    def next_step(self) -> str:
         return (
             "Wait for the provider limit to reset or restore credits, "
             "then inspect input delivery before any explicit resend."
@@ -311,10 +338,10 @@ class ProviderConnectionFailure(ACPFailure):
         return "\n".join(part for part in (self.detail, known) if part)
 
     @property
-    def action(self) -> str:
+    def next_step(self) -> str:
         return (
             "The provider connection failed. Inspect the response and input delivery "
-            "before choosing whether to send a new message; this input was not retried."
+            "before choosing whether to send a new message."
         )
 
 
@@ -326,7 +353,7 @@ class ErrorValue(DeclaredFamily, JsonShapeFamily, affix="ErrorValue"):
     def detail(self) -> str: ...
 
     def original_root(self) -> ErrorValue:
-        """Only an original object may interpret root receipt/disposition facts."""
+        """Only an original object may interpret root request-failure/input facts."""
         return self.reason()
 
     def reason(self) -> ErrorValue:
@@ -337,8 +364,8 @@ class ErrorValue(DeclaredFamily, JsonShapeFamily, affix="ErrorValue"):
             code, self.detail or message or "ACP request failed", diagnostics=diagnostics
         )
 
-    def failure_receipt(self, code, message) -> PromptFailureReceipt:
-        return PromptFailureReceipt(self.failure(code, message), False)
+    def request_failure(self, code, message) -> RequestFailure:
+        return RequestFailure(self.failure(code, message), False)
 
     def encoded_reason(self, original: str) -> ErrorValue:
         # JSON scalars inside provider text remain the original plain text.
@@ -450,12 +477,11 @@ class ObjectErrorValue(NestedErrorValue, JsonShapeMember):
     def original_root(self) -> ErrorValue:
         values = dict(self.value)
         if "agentCommsFailure" in values:
-            receipt = FieldCodec.decode(
-                PromptFailureReceipt, FieldCodec.encode(values.pop("agentCommsFailure"))
+            request_failure = FieldCodec.decode(
+                RequestFailure, FieldCodec.encode(values.pop("agentCommsFailure"))
             )
-            # The canonical receipt owns ALL its presentation facts. Do not
-            # retain a second generic tree of its fields or reclassify it.
-            return PublishedErrorValue(receipt)
+            # Keep the reported failure, not a generic tree or reclassification.
+            return PublishedErrorValue(request_failure)
         status = values.pop("inputStatus", NullErrorValue(None))
         if "diagnostics" in values:
             diagnostics = values.pop("diagnostics").native_diagnostics()
@@ -516,17 +542,17 @@ class DiagnosticErrorValue(ErrorValue):
 
 @dataclass(frozen=True)
 class PublishedErrorValue(ErrorValue):
-    receipt: PromptFailureReceipt
+    reported_failure: RequestFailure
 
     @property
     def detail(self) -> str:
-        return self.receipt.failure.detail
+        return self.reported_failure.failure.detail
 
     def failure(self, code, message, *, diagnostics=()) -> ACPFailure:
-        return self.receipt.failure
+        return self.reported_failure.failure
 
-    def failure_receipt(self, code, message) -> PromptFailureReceipt:
-        return self.receipt
+    def request_failure(self, code, message) -> RequestFailure:
+        return self.reported_failure
 
     def to_wire(self):
-        return self.receipt.error_data()
+        return self.reported_failure.error_data()
