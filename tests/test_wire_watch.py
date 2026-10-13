@@ -111,6 +111,25 @@ async def test_idle_owner_wakes_on_declared_sources_without_polling(tmp_path, mo
 
 
 @pytest.mark.asyncio
+async def test_sidebar_time_expiry_does_not_depend_on_a_file_wake(monkeypatch):
+    from agent_comms.ui_model import observation
+
+    service = object.__new__(observation.ObservationService)
+    service.closed = False
+    service.observe_due = False
+    service.changed = asyncio.Event()
+    monkeypatch.setattr(observation, "EXPIRY_PERIOD", 0.02)
+    expiring = asyncio.create_task(service.expire())
+    try:
+        await asyncio.wait_for(service.changed.wait(), 0.2)
+        assert service.observe_due
+    finally:
+        service.closed = True
+        expiring.cancel()
+        await asyncio.gather(expiring, return_exceptions=True)
+
+
+@pytest.mark.asyncio
 async def test_shutdown_cancels_idle_file_wait(tmp_path, monkeypatch):
     probe = open_wire_watcher(WatchSource.wire(tmp_path))
     if not isinstance(probe, WireChangeWatch):
