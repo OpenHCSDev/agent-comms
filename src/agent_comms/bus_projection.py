@@ -91,7 +91,6 @@ class BusAppendIndex(Generic[Checkpoint]):
 
     def __init__(self, bus_path: Path, path: Path):
         self.bus_path, self.path = bus_path, path
-        self._retained: Checkpoint | None = None
 
     def _read(self) -> Checkpoint | None:
         try:
@@ -103,13 +102,7 @@ class BusAppendIndex(Generic[Checkpoint]):
 
     def prepare(self) -> Checkpoint | None:
         """Read a candidate before the bus cut is captured and its lock is taken."""
-        saved = self._read()
-        retained = self._retained
-        if saved is None:
-            return retained
-        if retained is None:
-            return saved
-        return retained if retained.offset >= saved.offset else saved
+        return self._read()
 
     def capture(
         self, prepared: Checkpoint | None, stream: BinaryIO | None,
@@ -118,19 +111,12 @@ class BusAppendIndex(Generic[Checkpoint]):
         if prepared is None or stream is None or revision is None:
             return None
         if prepared.accepts(revision, stream):
-            self._retained = prepared
             return prepared
         return None
 
-    def checkpoint(self, stream: BinaryIO, revision: BusFileRevision) -> Checkpoint | None:
-        """Read and validate a prefix for an immediate, uncaptured consumer."""
-        return self.capture(self.prepare(), stream, revision)
-
     def remember(self, record: Checkpoint) -> Checkpoint:
         payload = record.signed_payload()
-        retained = replace(record, integrity=payload["integrity"])
-        self._retained = retained
-        return retained
+        return replace(record, integrity=payload["integrity"])
 
     def write(self, record: Checkpoint, *, fsync_parent: bool = False) -> None:
         retained = self.remember(record)

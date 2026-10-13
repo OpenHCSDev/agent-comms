@@ -71,18 +71,14 @@ class OpenedWireSnapshot:
     def capture_append_indexes(
         self, prepared: tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...],
     ) -> None:
-        for index, record in prepared:
-            self._append_checkpoints[index] = index.capture(record, self.stream, self.revision)
+        self._append_checkpoints.update(prepared)
 
-    def append_checkpoint(self, index: BusAppendIndex[Checkpoint]) -> Checkpoint | None:
-        """Read the index value captured with this exact source cut."""
+    def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | None:
+        """Validate the captured candidate only when a consumer reads this cut."""
         if index not in self._append_checkpoints:
             raise ValueError("Append index was not registered before source capture")
-        record = self._append_checkpoints[index]
-        if record is None:
-            return None
-        if not isinstance(record, index.record_type):
-            raise TypeError("Captured append checkpoint belongs to another index")
+        record = index.capture(self._append_checkpoints[index], self.stream, self.revision)
+        self._append_checkpoints[index] = record
         return record
 
     def remember_append_checkpoint(
@@ -550,15 +546,16 @@ class WireLog:
             matched, _, _ = self._keyed_receipt_unlocked(intent)
             return matched
 
+    def prepare_append_indexes(self) -> tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...]:
+        """Read registered index candidates before taking any source locks."""
+        return tuple((index, index.prepare()) for index in self._append_indexes)
+
     @contextmanager
     def _opened_wire_snapshot(
-        self, *, need_sequence: bool = True, capture_indexes: bool = False,
+        self, *, need_sequence: bool = True,
+        prepared_indexes: tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...] = (),
     ):
         """Own one fixed opened inode/byte boundary beyond physical custody."""
-        prepared = (
-            tuple((index, index.prepare()) for index in self._append_indexes)
-            if capture_indexes else ()
-        )
         with ExitStack() as resources:
             with _store_lock(self.path) as lock:
                 metadata = (
@@ -590,9 +587,9 @@ class WireLog:
                         raise RelationViolationError("Opened read differs from its certified source cut")
                     snapshot_type = CertifiedOpenedWireSnapshot
                 opened = snapshot_type(metadata, through, stream, revision)
-            # Index file reads happened before the bus cut; prefix validation
-            # happens after its lock is released against the retained descriptor.
-            opened.capture_append_indexes(prepared)
+            # Transfer candidate records without reading files or hashing here.
+            # Consumers validate after the caller's outer locks are released.
+            opened.capture_append_indexes(prepared_indexes)
             yield opened
 
     @contextmanager

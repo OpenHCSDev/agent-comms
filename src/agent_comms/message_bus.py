@@ -106,7 +106,7 @@ class MessageBus:
         if source is not None:
             return self._activity.snapshot(source, self._bus_activity_fields)
         with self.log._opened_wire_snapshot(
-            need_sequence=False, capture_indexes=True,
+            need_sequence=False, prepared_indexes=self.log.prepare_append_indexes(),
         ) as opened:
             return self._activity_clocks(opened)
 

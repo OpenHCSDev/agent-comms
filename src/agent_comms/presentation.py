@@ -310,11 +310,12 @@ class BusPresentation:
         """
         if viewer is not None:
             self.display_index(viewer)
+        prepared = self.bus.log.prepare_append_indexes()
         with ExitStack() as stack:
             with _store_lock(self._wire_lock_path, shared=True):
                 source = stack.enter_context(
                     self.bus.log._opened_wire_snapshot(
-                        need_sequence=False, capture_indexes=True,
+                        need_sequence=False, prepared_indexes=prepared,
                     )
                 )
                 with DisplaySelection.reading(

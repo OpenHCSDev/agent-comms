@@ -208,6 +208,38 @@ def test_display_index_registers_once_and_only_view_snapshots_capture_indexes(wi
         assert set(source._append_checkpoints) == set(indexes)
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file-lock observation")
+def test_checkpoint_reads_and_digests_run_outside_wire_and_bus_locks(wired, monkeypatch):
+    import fcntl
+    from agent_comms.bus_projection import BusAppendIndex
+
+    wired.messaging.send_message("PR111", "#base", "checkpoint lock scope")
+    wired.views.viewer_snapshot("/lock-scope-viewer")
+    reads, checks = [], []
+    read = BusAppendIndex._read
+    accepts = AppendCheckpoint.accepts
+
+    def unlocked():
+        for name in (".wire.lock", ".bus.jsonl.lock"):
+            with (wired.root / name).open("rb") as descriptor:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def observed_read(index):
+        unlocked()
+        reads.append(index.path)
+        return read(index)
+
+    def observed_accepts(record, revision, stream):
+        unlocked()
+        checks.append(record.offset)
+        return accepts(record, revision, stream)
+
+    monkeypatch.setattr(BusAppendIndex, "_read", observed_read)
+    monkeypatch.setattr(AppendCheckpoint, "accepts", observed_accepts)
+    wired.views.viewer_snapshot("/lock-scope-viewer")
+    assert reads and checks
+
+
 def test_historical_checkpoint_advances_disk_but_cannot_replace_a_farther_prefix(wired):
     wired.messaging.send_message("PR111", "#base", "first source row")
     bus = wired.bus.log.path
