@@ -94,6 +94,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
         )
         agent.on_connect(client)
         try:
+            await agent._runtime.start()
             session_id = await self.bind_saved_owner(agent, project=self.project, session=self.session)
             yield agent, session_id
         finally:
@@ -208,7 +209,13 @@ async def native_backend_fixture(tmp_path):
                                 "name": "Local response fixture",
                                 "contextWindow": 2000000,
                                 "maxTokens": 8192,
-                            }
+                            },
+                            {
+                                "id": "fixture-second",
+                                "name": "Second local response fixture",
+                                "contextWindow": 2000000,
+                                "maxTokens": 8192,
+                            },
                         ],
                     }
                 }

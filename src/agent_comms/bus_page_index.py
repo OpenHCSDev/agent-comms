@@ -86,7 +86,7 @@ class BusPageIndex:
                 if not actual and not readonly:
                     for statement in schema.values():
                         self.connection.execute(statement)
-                elif {row.name: row.sql for row in actual} != schema:
+                elif SQLiteSchemaObject.differences(actual, schema):
                     raise StaleBusPageIndexError("Bus page index requires the quiet runtime reset")
         except BaseException:
             self.connection.close()

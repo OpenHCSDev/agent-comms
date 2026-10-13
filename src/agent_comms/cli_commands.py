@@ -1138,6 +1138,16 @@ class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
 
 
 @dataclass(frozen=True, kw_only=True)
+class SchemaReportCliCommand(CliCommand, declared_name="schema-report"):
+    help = "Report declared DDL differences in existing SQLite stores (including retained copies)"
+
+    def apply(self, ctx: Comms) -> Any:
+        from .schema_report import StoreSchemaReport
+
+        return FieldCodec.encode(StoreSchemaReport.scan(ctx))
+
+
+@dataclass(frozen=True, kw_only=True)
 class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
     help = "Commit and push a thread's uncommitted worktree changes as a checkpoint branch"
     name: str = option("--name")

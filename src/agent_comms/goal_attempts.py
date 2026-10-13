@@ -335,7 +335,7 @@ def assert_goal_attempt_schema(conn: sqlite3.Connection) -> None:
             "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"
         )
     )
-    if {row.name: row.sql for row in actual} != schema:
+    if SQLiteSchemaObject.differences(actual, schema):
         raise StorageUncertainError("Unsupported goal attempt schema; one-shot migration required.")
     if GoalAttemptSchema.select(conn) != [GoalAttemptSchema.current()]:
         raise StorageUncertainError("Unsupported goal attempt schema declaration.")

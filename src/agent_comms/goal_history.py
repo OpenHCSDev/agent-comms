@@ -86,7 +86,7 @@ class GoalHistoryStore:
                     "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
                     "AND name NOT LIKE 'sqlite_%'"
                 ))
-                if {row.name: row.sql for row in actual} != GoalHistoryEntry.schema_objects():
+                if SQLiteSchemaObject.differences(actual, GoalHistoryEntry.schema_objects()):
                     raise GoalHistoryError("Original goal history declaration differs.")
                 rows = tuple(GoalHistoryEntry.select(connection, order_by=("sequence",)))
             after = path.lstat()
@@ -151,7 +151,7 @@ class GoalHistoryStore:
                 )
                 if not actual:
                     GoalHistoryEntry.create(connection)
-                elif {row.name: row.sql for row in actual} != GoalHistoryEntry.schema_objects():
+                elif SQLiteSchemaObject.differences(actual, GoalHistoryEntry.schema_objects()):
                     raise GoalHistoryError("Goal history requires the one-shot durable migration.")
                 connection.commit()
             self._sync()

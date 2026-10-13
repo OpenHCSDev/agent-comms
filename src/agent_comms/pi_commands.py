@@ -391,6 +391,13 @@ class SetThinkingLevel(SettingCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
+class SetSteeringMode(PiCommand):
+    """How many waiting steers Pi hands the model at one step: "all" or "one-at-a-time"."""
+
+    mode: str | None = field(default=None, metadata={"wire_omit_default": True})
+
+
+@dataclass(frozen=True, kw_only=True)
 class Compact(NativeQuery):
     """Pi's own compaction engine, run now; Pi adds Core's task brief to the instructions."""
 

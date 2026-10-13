@@ -21,6 +21,7 @@ from acp.schema import (
 
 from .pi_vocabulary import ThinkingLevel
 from .comms import Comms
+from .agent_backend import UseSettings
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
@@ -126,7 +127,7 @@ class CatalogConfigOption(ConfigOption):
 
 class ModelConfigOption(CatalogConfigOption):
     title = "Model"
-    description = "Model selected for the next turn; the running turn keeps its captured model"
+    description = "Model for this thread; a running turn switches at its next model call"
     category = "model"
 
     def current_value(self, thread: Thread) -> str | None:
@@ -163,7 +164,7 @@ class ModelConfigOption(CatalogConfigOption):
 
 class ThinkingLevelConfigOption(CatalogConfigOption):
     title = "Thinking level"
-    description = "Thinking level selected for the next turn; the running turn keeps its captured effort"
+    description = "Thinking level for this thread; a running turn switches at its next model call"
     category = "thought_level"
 
     def current_value(self, thread: Thread) -> str | None:
@@ -268,6 +269,12 @@ class ConfigOptions:
         except (NativePiUnavailable, ValueError) as error:
             raise RequestError.invalid_params({"reason": str(error)}) from error
         await self.effects.turns.close_idle_backend(session_id, thread)
+        inbox = await self.effects.turns.active_backend_inbox(session_id)
+        if inbox is not None:
+            stored = await Coordination.run_worker(partial(self.comms.registry.require, name))
+            inbox.put_nowait(UseSettings(
+                stored.model, ThinkingLevel.optional_name(stored.thinking_level)
+            ))
         async with self.session_options(name) as options:
             await self._publish(session_id, options)
             return SetSessionConfigOptionResponse(config_options=options)
@@ -275,7 +282,7 @@ class ConfigOptions:
     async def configure_thread(
         self, thread: Thread, command: SettingCommand,
     ) -> None:
-        """Persist the native owner's complete next-turn result, never steer a turn."""
+        """Store the model and thinking level Pi itself reports for this change."""
         arguments = self.agent_args.with_model(thread.model).with_thinking(
             ThinkingLevel.optional_name(thread.thinking_level)
         )

@@ -21,7 +21,7 @@ from .queued_input import InitialInput, InputHandoffRefused
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
 from .acp_failure import ACPFailure
-from .agent_backend import AgentBackend, InputRequest, SendNow
+from .agent_backend import AgentBackend, InputRequest, SendNow, TurnInboxItem
 from .channel_targets import BuiltinChannel
 from .comms import Comms
 from .coordinator import Coordination
@@ -468,7 +468,7 @@ class TurnRunner:
         update = await Coordination.run_worker(partial(self.current_turn_update, session_id))
         await self.effects._emit_event(session_id, update, client=client)
 
-    async def active_backend_inbox(self, session_id: str) -> asyncio.Queue[InputRequest | SendNow] | None:
+    async def active_backend_inbox(self, session_id: str) -> asyncio.Queue[TurnInboxItem] | None:
         state = await Coordination.run_worker(partial(self.turn_state, session_id))
         return self.inputs.backend_inboxes.get(session_id) if state.accepts_followup else None
 
@@ -507,7 +507,7 @@ class TurnRunner:
         async with self.turn_locks.setdefault(session_id, asyncio.Lock()):
             task = asyncio.current_task()
             assert task is not None
-            inbox: asyncio.Queue[InputRequest | SendNow] = asyncio.Queue()
+            inbox: asyncio.Queue[TurnInboxItem] = asyncio.Queue()
             self.turn_tasks[session_id] = task
             self.inputs.backend_inboxes[session_id] = inbox
             try:
