@@ -230,10 +230,23 @@ class AutoRetryEnd(PiEvent):
             session.output.error_message = None
         else:
             session.watchdog.retry_recovery_pending = False
-            yield session.output.error("Provider retry attempts were exhausted.")
+            async for event in self.exhausted(session):
+                yield event
             yield session.watchdog.state(
                 "failed", "provider_retry_exhausted", 0, phase=ModelWaitPhase()
             )
+
+
+    async def exhausted(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        yield session.output.error("Provider retry attempts were exhausted.")
+
+
+class NativeRetryEnd(AutoRetryEnd):
+    """Close native recovery; the retained assistant reports its final failure."""
+
+    async def exhausted(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        if False:
+            yield
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -275,6 +288,16 @@ class AutoRetryStart(RetryAttemptEvent):
         session.watchdog.prompt_accepted = True
         session.watchdog.retry_recovery_pending = True
         session.watchdog.retry_recovery_reason = "provider_auto_retry_progress"
+
+
+class NativeRetryStart(AutoRetryStart):
+    """The native turn recovery re-requests a refused empty response.
+
+    stack/native-turn-recovery.mjs owns whether a provider refusal is retryable
+    and how many times (RecoveryBudget); this wire kind carries that decision
+    before the refused assistant message, so Core reports only the recovery's
+    final outcome and never counts a refusal itself.
+    """
 
 
 class ReasonedCompaction(PiEvent):

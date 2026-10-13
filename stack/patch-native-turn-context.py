@@ -269,7 +269,14 @@ def extend_native_run(core):
                  '    abortRetry() {\n        this._nativeRun.cancel();\n')
     replace_once(session, '        return this._retryAbortController !== undefined;',
                  '        return this._nativeRun.retrying || this._retryAbortController !== undefined;')
-    if '_nativeRunHadTrackedInput' in session.read_text():
+    types = core/'agent-session.d.ts'
+    replace_once(types, '    private _retryAttempt;',
+                 '    private _retryAttempt;\n    private _nativeRun: import("./turn-recovery.js").NativeTurnRun;')
+    replace_once(types, '    type: "auto_retry_start";',
+                 '    type: "auto_retry_start" | "native_retry_start";')
+    replace_once(types, '    type: "auto_retry_end";',
+                 '    type: "auto_retry_end" | "native_retry_end";')
+    if any('_nativeRunHadTrackedInput' in path.read_text() for path in (session, types)):
         raise ValueError('Competing native tracked-run authority remains')
 
 
@@ -279,6 +286,7 @@ def main(package):
     (core/'turn-context.js').write_bytes(Path(__file__).with_name('native-turn-context.mjs').read_bytes())
     (core/'turn-context.d.ts').write_bytes(Path(__file__).with_name('native-turn-context.d.ts').read_bytes())
     (core/'turn-recovery.js').write_bytes(Path(__file__).with_name('native-turn-recovery.mjs').read_bytes())
+    (core/'turn-recovery.d.ts').write_bytes(Path(__file__).with_name('native-turn-recovery.d.ts').read_bytes())
     session=core/'agent-session.js'
     replace_once(session, '        this.agent.onContextReady = async (context) => await this._commitNativeContext(context);',
         '''        this.agent.onContextReady = async (context, requestId) => {

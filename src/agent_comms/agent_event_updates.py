@@ -205,7 +205,6 @@ class AcpEventConsumer(MroDispatch):
                 ),
             ),
         )
-        self.agent.turns.emitted_errors[session_id] = failure
 
     @handles(events.PromptCancelled)
     async def on_cancelled(self, event):

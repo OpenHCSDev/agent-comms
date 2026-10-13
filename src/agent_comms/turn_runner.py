@@ -20,7 +20,6 @@ from .image_inputs import prompt_images
 from .queued_input import InitialInput, InputHandoffRefused
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
-from .acp_failure import ACPFailure
 from .agent_backend import AgentBackend, InputRequest, SendNow
 from .channel_targets import BuiltinChannel
 from .comms import Comms
@@ -119,7 +118,6 @@ class TurnRunner:
         # One backend per ACP session, of the bound thread's declared kind.
         self.persistent_backends: dict[str, AgentBackend] = {}
         self.turn_locks: dict[str, asyncio.Lock] = {}
-        self.emitted_errors: dict[str, ACPFailure] = {}
         self.goals = GoalScheduler(comms, effects)
         self.reply_window = (
             reply_window

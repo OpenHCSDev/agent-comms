@@ -15,6 +15,7 @@ from acp.schema import (
 
 from . import agent_events as events
 from .acp_extension import QueueScope, TranscriptChangedUpdate, encode_updates
+from .acp_failure import ACPFailure, PromptFailureReceipt
 from .thread_identity import AdmissionIdentity
 from .channel_targets import is_channel_target
 from .comms import Comms
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
     from .turn_effects import TurnEffects
     from .turn_goal_account import TurnGoalAccount
     from .owned_turn import OwnedTurn
+    from .input_drain import InputDrain
 
 
 @dataclass(kw_only=True)
@@ -41,6 +43,21 @@ class TurnEventPublication(MroDispatch):
     effects: TurnEffects
     sync_goal_execution: Callable[[str, str], Awaitable[None]]
     session_id: str
+    inputs: InputDrain
+    failure_receipt: PromptFailureReceipt | None = None
+
+    @handles(events.Error)
+    async def failed(self, event: events.Error) -> None:
+        # This runs only after actual notification publication. A receipt belongs
+        # to this turn's publication, never a session-keyed UI error mirror.
+        original = self.inputs.original_sources.get(self.session_id)
+        keys = original.notice_keys if original is not None else ()
+        document = await Coordination.run_worker(self.inputs.dispositions.read)
+        failure = replace(
+            ACPFailure.from_error(-32603, event.text, diagnostics=event.diagnostics),
+            input_state=document.shared_state(keys),
+        )
+        self.failure_receipt = PromptFailureReceipt(failure, True)
 
     @handles(events.InputStarted, events.Done, events.StreamSettled, events.ToolEnd)
     async def sync_goals(self, event: events.InputStarted) -> None:
@@ -78,6 +95,7 @@ class TurnProgress(events.AgentEventConsumer):
             effects=effects,
             sync_goal_execution=sync_goals,
             session_id=session_id,
+            inputs=inputs,
         )
 
     @property
@@ -121,7 +139,7 @@ class TurnProgress(events.AgentEventConsumer):
     def thread_name(self) -> str:
         return self.sessions.bindings[self.session_id]
 
-    async def report_failure(self, error: Exception) -> None:
+    async def report_failure(self, error: Exception) -> PromptFailureReceipt | None:
         """Attempt existing ACP error publication once without hiding the original fault."""
         diagnostic = record_terminal_failure(
             self.comms.root, turn_id=self.turn_lease.turn_id, thread=self.thread_name,
@@ -133,13 +151,13 @@ class TurnProgress(events.AgentEventConsumer):
             "Native turn failed; original input was not retried. "
             f"[Open diagnostic]({diagnostic.as_uri()})"
         )
+        event = events.Error(detail)
         try:
             await self.effects._emit_event(
-                self.session_id,
-                events.Error(detail),
-                turn_id=self.turn_lease.turn_id,
-                route=self.routing.reply,
+                self.session_id, event, turn_id=self.turn_lease.turn_id, route=self.routing.reply,
             )
+            await self.publication.dispatch(event)
+            return self.publication.failure_receipt
         except Exception as delivery_error:
             self.effects._debug_log(
                 f"turn:error-publication failed: {delivery_error!r}; original: {error!r}"
@@ -332,3 +350,14 @@ class TurnProgress(events.AgentEventConsumer):
                 ),
             ),
         )
+        if self.result is None or not self.result.ok:
+            receipt = self.publication.failure_receipt
+            if receipt is None:
+                document = await Coordination.run_worker(self.inputs.dispositions.read)
+                failure = replace(
+                    ACPFailure.from_error(-32603, self.result.text if self.result is not None
+                                          else "Native turn ended without a result"),
+                    input_state=document.shared_state(self.original.notice_keys),
+                )
+                receipt = PromptFailureReceipt(failure, False)
+            raise receipt.request_error()

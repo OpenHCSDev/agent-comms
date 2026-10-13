@@ -34,11 +34,21 @@ class NativeRunState {
 class NothingProduced extends NativeRunState {
     produced() {
         this.close();
+        if (this.attempt > 1) {
+            this.owner.emit({ type: 'native_retry_end', success: true, attempt: this.attempt - 1 });
+        }
         return new OutputProduced(this.owner, this.attempt);
     }
-    refusal(message) {
+    finished(message) {
+        // The recovery budget is the one owner of a refusal's retry count: it is
+        // decoded and announced once here, before the refused message reaches
+        // Core, so Core reports only the recovery's final outcome.
+        if (!this.owner.tracked) return this;
         const reason = ProviderRefusal.decode(message);
-        return reason ? new RefusedNothingProduced(this.owner, this.attempt, reason) : undefined;
+        if (!reason) return this;
+        const refused = new RefusedNothingProduced(this.owner, this.attempt, reason);
+        refused.announce();
+        return refused;
     }
     request(options) {
         const waiting = new WaitingNothingProduced(this.owner, this.attempt, options.signal);
@@ -58,6 +68,7 @@ class WaitingNothingProduced extends NothingProduced {
             const refusal = new RefusedNothingProduced(this.owner, this.attempt,
                 `Provider produced nothing for ${RecoveryBudget.emptyWaitMs / 1000} seconds`);
             this.owner.state = refusal;
+            refusal.announce();
             this.controller.abort(new Error(refusal.reason));
         }, RecoveryBudget.emptyWaitMs);
         this.timer.unref();
@@ -65,24 +76,29 @@ class WaitingNothingProduced extends NothingProduced {
     close() { clearTimeout(this.timer); }
     finished(message) {
         this.close();
-        return new NothingProduced(this.owner, this.attempt);
+        const next = super.finished(message);
+        return next === this ? new NothingProduced(this.owner, this.attempt) : next;
     }
 }
 
-class OutputProduced extends NativeRunState {
-    finished(message) {
-        if (message.stopReason !== 'error' && message.stopReason !== 'aborted' && this.attempt > 1) {
-            this.owner.emit({ type: 'auto_retry_end', success: true, attempt: this.attempt - 1 });
-            return new OutputProduced(this.owner);
-        }
-        return this;
-    }
-}
+class OutputProduced extends NativeRunState {}
 
 class RefusedNothingProduced extends NothingProduced {
     constructor(owner, attempt, reason) { super(owner, attempt); this.reason = reason; }
     get mayRetry() { return this.attempt < RecoveryBudget.attempts; }
     refusal() { return this; }
+    announce() {
+        if (!this.mayRetry) {
+            // The final refusal keeps the refusal window closed: Core reports
+            // this message_end as the outcome after the recovery gave up.
+            this.owner.emit({ type: 'native_retry_end', success: false,
+                attempt: RecoveryBudget.retries, finalError: this.reason });
+            return;
+        }
+        this.owner.emit({ type: 'native_retry_start', attempt: this.attempt,
+            maxAttempts: RecoveryBudget.retries, delayMs: RecoveryBudget.delay(this.attempt),
+            errorMessage: this.reason });
+    }
     finished(message) {
         // Only our own empty-wait abort has this state before message_end.
         // Keep its actual cause in retained native history instead of "Request aborted".
@@ -92,8 +108,6 @@ class RefusedNothingProduced extends NothingProduced {
     async recover(message) {
         if (!this.mayRetry) {
             this.owner.state = new ExhaustedNothingProduced(this.owner, this.attempt, this.reason);
-            this.owner.emit({ type: 'auto_retry_end', success: false,
-                attempt: RecoveryBudget.retries, finalError: this.reason });
             return false;
         }
         const backoff = new BackoffNothingProduced(this.owner, this.attempt, this.reason);
@@ -117,18 +131,18 @@ class BackoffNothingProduced extends RefusedNothingProduced {
     cancel() { this.controller.abort(); }
     async recover(message) {
         const delayMs = RecoveryBudget.delay(this.attempt);
-        this.owner.emit({ type: 'native_retry_start', attempt: this.attempt,
-            maxAttempts: RecoveryBudget.retries, delayMs, errorMessage: this.reason });
         try { await sleep(delayMs, undefined, { signal: this.controller.signal }); }
         catch (error) {
             if (error.name !== 'AbortError') throw error;
             this.owner.state = new CancelledNothingProduced(this.owner, this.attempt);
-            this.owner.emit({ type: 'auto_retry_end', success: false,
+            this.owner.emit({ type: 'native_retry_end', success: false,
                 attempt: this.attempt, finalError: 'Retry cancelled' });
             return false;
         }
         // Continue the already committed context; retain the failed assistant in
         // the native journal and remove ONLY that exact assistant from model context.
+        // The refusal was already announced and counted at recognition; the
+        // attempt increments exactly once, here.
         const messages = this.owner.agent.state.messages;
         if (messages.at(-1) !== message) throw new Error('Native recovery context changed');
         this.owner.agent.state.messages = messages.slice(0, -1);

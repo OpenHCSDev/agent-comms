@@ -37,6 +37,8 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     can_cancel: ClassVar[bool] = True
     # A turn released in this phase still owes the turn after its project change.
     keeps_project_resume: ClassVar[bool] = True
+    # Refusal reports wait while a retry excursion owns the turn's outcome.
+    holds_refusal_reports: ClassVar[bool] = False
     activity_state: ClassVar[ActivityState] = ActivityState.THINKING
     label: ClassVar[str] = "Waiting for model"
 
@@ -216,6 +218,9 @@ class ProviderRetryPhase(StallExempt, Excursion):
         return isinstance(event, pi.AutoRetryEnd)
     stall_reason = "retry_no_progress"
     label = "Provider retry"
+    # The recovery re-requests each refused empty response; its end event
+    # reports the outcome, so a retried refusal never reports interim.
+    holds_refusal_reports = True
 
 
 class SummarizationRetryPhase(StallExempt, Excursion):
