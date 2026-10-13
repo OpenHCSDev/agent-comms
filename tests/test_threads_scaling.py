@@ -136,14 +136,16 @@ def test_activity_clocks_reuse_the_original_boundary_and_extend_on_append(wired,
     assert parsed == [appended.seq]
 
 
-def test_captured_viewer_cut_keeps_its_admitted_append_checkpoints(wired, monkeypatch):
+@pytest.mark.parametrize("same_owner", [False, True])
+def test_captured_viewer_cut_keeps_its_admitted_append_checkpoints(wired, monkeypatch, same_owner):
     first = wired.messaging.send_message("PR111", "#base", "original captured activity")
     viewer = wired.messaging.user_identity("/isolated-checkpoint-viewer").name
     # Prepare both actual index owners before taking a cold observer's cut.
     wired.views.viewer_snapshot("/isolated-checkpoint-viewer")
-    cold = wire(wired.root)
-    with cold.views.presentation.snapshot(viewer=viewer) as (basis, source):
+    captured = wired if same_owner else wire(wired.root)
+    with captured.views.presentation.snapshot(viewer=viewer) as (basis, source):
         appended = wired.messaging.send_message("fixer", "#base", "later activity")
+        # B advances both index owners; A must retain its own admitted prefix.
         wired.views.viewer_snapshot("/isolated-checkpoint-viewer")
         parsed = []
         original = Message.from_wire
@@ -153,9 +155,9 @@ def test_captured_viewer_cut_keeps_its_admitted_append_checkpoints(wired, monkey
             return original(row)
 
         monkeypatch.setattr(Message, "from_wire", measured)
-        activity, unread = cold.views.presentation.display_view_metrics(
+        activity, unread = captured.views.presentation.display_view_metrics(
             source, basis.scopes, basis.scopes, basis.viewer, basis.viewer_names)
-        clocks = cold.bus.last_sent_timestamps(source=source)
+        clocks = captured.bus.last_sent_timestamps(source=source)
         assert clocks["PR111"] == first.timestamp
         assert clocks.get("fixer", 0) < appended.timestamp
         assert activity["#base"].last_message == first.timestamp

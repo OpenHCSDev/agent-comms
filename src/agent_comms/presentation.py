@@ -319,7 +319,7 @@ class BusPresentation:
                     # with checkpoints newer than the source we must display.
                     self.bus.prepare_activity(source)
                     if basis.viewer is not None and source.revision is not None:
-                        self.display_index(basis.viewer).checkpoint(source.stream, source.revision)
+                        source.append_checkpoint(self.display_index(basis.viewer))
             yield basis, source
 
     def channel_page(

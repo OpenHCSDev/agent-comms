@@ -124,7 +124,7 @@ class BusDisplayIndex(BusAppendIndex[DisplayCheckpoint]):
             stream.seek(source.size - 1)
             if stream.read(1) != b"\n":
                 return None
-        checkpoint = self.checkpoint(stream, source)
+        checkpoint = opened.append_checkpoint(self)
         if checkpoint is not None and checkpoint.current_for(source, semantics):
             return checkpoint
         if checkpoint is None:

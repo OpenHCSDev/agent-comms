@@ -104,12 +104,12 @@ class MessageBus:
     def prepare_activity(self, source: OpenedWireSnapshot) -> None:
         """Admit the small persisted prefix while this source cut is being captured."""
         if source.revision is not None and source.stream is not None:
-            self._activity.checkpoint(source.stream, source.revision)
+            source.append_checkpoint(self._activity)
 
     def _activity_clocks(self, source: OpenedWireSnapshot | None = None):
         """The existing index borrows the original captured source after release."""
         if source is not None:
-            return self._activity.snapshot(source.revision, source.stream, self._bus_activity_fields)
+            return self._activity.snapshot(source, self._bus_activity_fields)
         with self.log._opened_wire_snapshot(need_sequence=False) as opened:
             return self._activity_clocks(opened)
 

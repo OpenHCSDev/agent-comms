@@ -9,10 +9,10 @@ import stat
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, cast
 
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
@@ -24,7 +24,7 @@ from .bus_publication import (
     unique_wire_object,
 )
 from .bus_source_page import AddressedPage
-from .bus_projection import BusFileRevision
+from .bus_projection import AppendCheckpoint, BusAppendIndex, BusFileRevision, Checkpoint
 from .envelope_claim_transitions import (
     ClaimProjection,
     project_verified_transitions,
@@ -59,6 +59,22 @@ class OpenedWireSnapshot:
     through: int
     stream: BinaryIO | None
     revision: BusFileRevision | None
+    _append_checkpoints: dict[Path, AppendCheckpoint | None] = field(
+        default_factory=dict, init=False, repr=False, compare=False,
+    )
+
+    def append_checkpoint(self, index: BusAppendIndex[Checkpoint]) -> Checkpoint | None:
+        """Pin the admitted prefix for this cut, including an absent checkpoint.
+
+        These are borrowed immutable records, not another latest-index cache.
+        Another cut may advance the index owner without changing this resource.
+        """
+        if index.path not in self._append_checkpoints:
+            self._append_checkpoints[index.path] = (
+                index.checkpoint(self.stream, self.revision)
+                if self.stream is not None and self.revision is not None else None
+            )
+        return cast(Checkpoint | None, self._append_checkpoints[index.path])
 
     @property
     def boundary(self) -> int:
