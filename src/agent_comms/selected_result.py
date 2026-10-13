@@ -80,12 +80,11 @@ def publish_native_failure(
         native_response=native_response,
         source_error=source_error,
     )
-    for target in participant.batch.targets:
-        participant.comms.messaging.send(
-            participant.owner.thread.name,
-            target,
-            f"Message processing failed: {description} "
-            f"No automatic retry. [Open diagnostic]({diagnostic.as_uri()})",
-            MessageType.ALERT,
-            notice=True,
-        )
+    participant.comms.messaging.send(
+        participant.owner.thread.name,
+        participant.batch.target,
+        f"Message processing failed: {description} "
+        f"No automatic retry. [Open diagnostic]({diagnostic.as_uri()})",
+        MessageType.ALERT,
+        notice=True,
+    )
