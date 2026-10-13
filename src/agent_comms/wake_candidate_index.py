@@ -270,20 +270,27 @@ class WakeCandidateIndex:
         response_keys: list[CandidateResponseKey] = []
         stream.seek(offset)
         start = time.monotonic()
+        admitted = 0
         for _ in range(max_rows):
             if time.monotonic() - start > 0.2:
                 break  # Bounded maintenance; no expensive hot-path rebuild.
             available = max_bytes - (stream.tell() - offset)
             if available <= 0:
                 break
-            raw = stream.readline(min(available, _MAX_ROW) + 1)
+            raw = stream.readline(_MAX_ROW + 1)
             if not raw:
-                break
-            if len(raw) > available:
-                stream.seek(-(len(raw)), os.SEEK_CUR)
                 break
             if not raw.endswith(b"\n"):
                 raise ProjectionUnavailableError("incomplete candidate bus row")
+            if len(raw) > available and admitted:
+                # Keep the batch boundary inside the byte budget once it has
+                # admitted at least one record.
+                stream.seek(-(len(raw)), os.SEEK_CUR)
+                break
+            # A first record larger than the batch budget is admitted alone:
+            # every batch with remaining source bytes must advance the
+            # checkpoint, and the record itself stays bounded by _MAX_ROW.
+            admitted += 1
             record = json.loads(raw, object_pairs_hook=unique_wire_object)
             if not isinstance(record, dict):
                 raise ProjectionUnavailableError("candidate bus row is not an object")

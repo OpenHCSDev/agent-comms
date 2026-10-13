@@ -95,20 +95,37 @@ def test_hint_is_pure_and_crash_after_bus_before_wal_catches_up(tmp_path: Path) 
     assert comms.bus.log.path.read_bytes() == before
 
 
-def test_deferred_catch_up_refuses_zero_progress_budget_until_explicitly_enlarged(
+def test_catch_up_always_admits_one_record_beyond_the_batch_budget(
     tmp_path: Path,
 ) -> None:
     comms, index, root_id, lookup = _fresh(tmp_path)
     message = comms.messaging.send_initial_cohort("sender", "member000", "x" * 4096)
     hint = index.notify_committed_append(root_id=root_id, through_seq=message.seq)
-    for _ in range(2):
-        with pytest.raises(ProjectionUnavailableError, match="no checkpoint progress"):
-            index.catch_up_committed_append(hint, max_bytes=128, bootstrap_new=True)
-    assert index._verified_checkpoint(root_id) == 0
-    # The underlying explicit maintenance API keeps its configurable budget;
-    # a human/bounded scheduler may choose a larger safe batch, never spin.
-    assert index.catch_up_committed_append(hint, max_bytes=8192, bootstrap_new=True).caught_up
+    # A batch budget smaller than the next single record still advances the
+    # checkpoint by admitting that one record; it never refuses progress.
+    outcome = index.catch_up_committed_append(hint, max_bytes=128, bootstrap_new=True)
+    assert outcome.caught_up
+    assert index._verified_checkpoint(root_id) == message.seq
     assert [row.source_seq for row in _page(index, root_id, lookup, message.seq).entries] == [1]
+    assert index.catch_up_committed_append(hint, max_bytes=128) == outcome
+
+
+def test_catch_up_admits_a_record_larger_than_the_default_batch_budget(
+    tmp_path: Path,
+) -> None:
+    comms, index, root_id, lookup = _fresh(tmp_path)
+    # The live defect: bus records of ~630KB versus the scheduler's fixed
+    # 256KB batch budget made every catch-up batch admit zero rows forever.
+    message = comms.messaging.send_initial_cohort(
+        "sender", "member000", "x" * (300 * 1024)
+    )
+    assert comms.bus.log.path.stat().st_size > 256 * 1024
+    hint = index.notify_committed_append(root_id=root_id, through_seq=message.seq)
+    outcome = index.catch_up_committed_append(hint, bootstrap_new=True)
+    assert outcome.caught_up
+    assert [row.source_seq for row in _page(index, root_id, lookup, message.seq).entries] == [
+        message.seq
+    ]
 
 
 def test_crash_after_wal_before_ack_is_idempotent_and_future_hint_refuses(tmp_path: Path) -> None:
