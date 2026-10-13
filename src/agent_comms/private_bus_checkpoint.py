@@ -547,7 +547,7 @@ class PrefixCertificate(CheckpointTable, TypedTable):
         actual = SQLiteSchemaObject.read(db.execute(
             "SELECT name,sql FROM sqlite_master WHERE name=?", (FieldCodec.encode(cls),),
         ))
-        if {row.name: row.sql for row in actual} != cls.schema_objects():
+        if SQLiteSchemaObject.differences(actual, cls.schema_objects()):
             raise RelationViolationError("Private bus prefix certificate schema is unavailable.")
         try:
             row = cls.one(db, singleton=1)
@@ -635,7 +635,7 @@ def _saved(db: sqlite3.Connection) -> PrefixWitness:
     actual = SQLiteSchemaObject.read(
         db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
     )
-    if {row.name: row.sql for row in actual} != schema:
+    if SQLiteSchemaObject.differences(actual, schema):
         raise RelationViolationError("Private bus checkpoint schema is unavailable.")
     return PrefixCertificate.read_witness(db)
 

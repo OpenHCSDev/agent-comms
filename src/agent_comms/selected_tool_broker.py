@@ -88,10 +88,6 @@ class NativeToolMode(ABC):
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
         """Return the native tool selection and reviewed extension."""
 
-    async def finish(self) -> None:
-        """Release completed coding claims; selected proof keeps its old semantics."""
-        return None
-
     @abstractmethod
     def socket(self, directory: Path, token: str) -> OwnerToolSocket:
         """Create the existing authenticated owner transport for this policy."""

@@ -19,6 +19,7 @@ class CoordinationSession(CoordinationStore):
     ) -> None:
         super().__init__(path, lock_timeout=lock_timeout)
         self._clock_ms = clock_ms or (lambda: time.time_ns() // 1_000_000)
+        self._settlement_boundary = None
 
     def now(self, floor: int = 0) -> int:
         now = self._clock_ms()
@@ -31,6 +32,24 @@ class CoordinationSession(CoordinationStore):
         with self._transaction_lifetime() as db:
             db.execute("BEGIN IMMEDIATE")
             yield db
+
+    @contextmanager
+    def settlement(self) -> Iterator[sqlite3.Connection]:
+        """Borrow the ordered bus boundary before terminal SQL and claim release.
+
+        Standalone coordinator stores have no bus resources. Native stores use
+        the same boundary as response publication and owner-loss observation.
+        """
+        from .comms import Comms
+        from .coordination_response import _response_boundary
+
+        if self._settlement_boundary is not None or not (self.path.parent / "bus.jsonl").exists():
+            with self.transaction() as db:
+                yield db
+        else:
+            with _response_boundary(Comms(self.path.parent).bus, session=self):
+                with self.transaction() as db:
+                    yield db
 
     @contextmanager
     def irreversible_admission(self) -> Iterator[sqlite3.Connection]:

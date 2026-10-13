@@ -23,9 +23,9 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
     native.provider.response_gate = release
     async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
         comms = owner._comms
-        store = owner.turns.goals.open_goal_store()
+        store = comms.goals.open_goal_store()
         goal = comms.goals.update_goal(
-            session, SetGoalAction(text="Finish native retry objective"), owner_store=store
+            session, SetGoalAction(text="Finish native retry objective")
         )
         reservation = store.reserve(goal.id, 1)
         store.claim_launch(reservation)

@@ -11,7 +11,6 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from .child_process import ProcessIdentity
-from .coordination_errors import StaleFence
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .goal_actions import (
@@ -24,20 +23,17 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_attempts import (
-    Generation,
     GoalAttemptError,
-    GoalAttemptStore,
+    MissingGoalGenerationError,
     StaleAttemptError,
     UnresolvedAttemptError,
 )
 from .goal_presentation import GoalExecution
 from .goals import Goal, GoalRevision
-from .native_input_owner import GoalLaunchOwner
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
 from .schedule_rules import OwnerTurnScheduleCheck, WakeScheduleCheck
 from .store_files import _store_lock
-from .threads import Thread
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -52,7 +48,6 @@ class GoalScheduler:
     def __init__(self, comms: Comms, effects: TurnEffects):
         self.comms = comms
         self.effects = effects
-        self.goal_store: GoalAttemptStore | None = None
         self.pending_goal_origins: dict[str, str] = {}
         self.goal_execution_signatures: dict[str, tuple[Goal | None, GoalExecution | None]] = {}
 
@@ -97,29 +92,20 @@ class GoalScheduler:
                 return
             if self.pending_goal_origins.get(thread.name) == goal.id:
                 return
-            store = self.goal_store
-            if (
-                store is None
-                and (self.comms.root / "goal-private" / "goal_attempts.sqlite3").exists()
-            ):
-                store = self.open_goal_store()
-            if store is None:
-                self.comms.goals.block_goal_after_failed_turn(
-                    thread.name,
-                    started_goal=goal,
-                    expected_worktree=thread.worktree,
-                    diagnostic="Goal launch grant unavailable; explicit Retry required.",
-                )
-                return
             try:
-                generation = store.snapshot(goal.id)
-                if generation is None:
-                    raise UnresolvedAttemptError("Goal generation is absent")
+                store = self.comms.goals.open_goal_store()
+                generation = store.require_generation(goal.id)
                 generation.lifecycle.require_ready()
                 admission = self.comms.registry.snapshot().admission_generations[thread.name]
                 with _store_lock(self.comms._wire_lock_path):
-                    self.ready_goal_grant_locked(thread, admission, store, generation)
+                    self.comms.goals.ready_goal_grant_locked(thread, admission, generation)
             except StaleAttemptError:
+                return
+            except MissingGoalGenerationError as error:
+                self.comms.goals.block_goal_after_failed_turn(
+                    thread.name, started_goal=goal, expected_worktree=thread.worktree,
+                    diagnostic=str(error),
+                )
                 return
             except UnresolvedAttemptError:
                 self.comms.goals.block_goal_after_failed_turn(
@@ -137,31 +123,6 @@ class GoalScheduler:
                 return
             return ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id)
 
-    def open_goal_store(self) -> GoalAttemptStore:
-        if self.goal_store is None:
-            private = self.comms.root / "goal-private"
-            private.mkdir(mode=0o700, exist_ok=True)
-            self.goal_store = GoalAttemptStore.initialize(private)
-        return self.goal_store
-
-    def ready_goal_grant_locked(
-        self, owner: Thread, admission: int, store: GoalAttemptStore, generation: Generation
-    ) -> str:
-        """Caller holds the wire lock; READY recovery never authorizes an old owner."""
-        try:
-            GoalLaunchOwner(thread=owner, admission_generation=admission).require_ready(
-                self.comms.registry.snapshot(), generation.goal_id,
-            )
-        except (RelationViolationError, ValueError, StaleFence) as error:
-            raise StaleAttemptError(
-                "The executing goal owner changed before READY recovery."
-            ) from error
-        try:
-            return store.ready_grant(generation.goal_id, generation.number)
-        except UnresolvedAttemptError:
-            store.recover_unreserved_ready(generation.goal_id, generation.number)
-            return store.ready_grant(generation.goal_id, generation.number)
-
     async def set_goal(self, session_id: str, text: str) -> Goal:
         """Commit a UI goal through its executing owner and private launch ledger."""
         if not isinstance(text, str) or not text.strip():
@@ -171,7 +132,6 @@ class GoalScheduler:
             name,
             SetGoalAction(text=text, expect=GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()))),
             actor=OwnerInvocable,
-            owner_store=self.open_goal_store(),
         ))
         assert goal is not None
         await self.schedule_goal(session_id)
@@ -222,7 +182,6 @@ class GoalScheduler:
                     )
                 ),
                 actor=OwnerInvocable,
-                owner_store=self.open_goal_store() if action.owner_grant else None,
             ))
         finally:
             # Resume can discover that a paused attempt failed. Publish the
@@ -249,7 +208,6 @@ class GoalScheduler:
                 )
             ),
             actor=OwnerInvocable,
-            owner_store=self.open_goal_store(),
         ))
         assert resumed is not None
         # READY records the accepted owner decision even during an unrelated

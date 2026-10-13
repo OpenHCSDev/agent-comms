@@ -94,6 +94,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
         )
         agent.on_connect(client)
         try:
+            await agent._runtime.start()
             session_id = await self.bind_saved_owner(agent, project=self.project, session=self.session)
             yield agent, session_id
         finally:

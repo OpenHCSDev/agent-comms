@@ -133,15 +133,12 @@ class OwnedTurn:
             self.goal_permit = TurnGoalAccount.reserve(
                 owner=self.thread,
                 comms=self.runner.comms,
-                store=self.runner.goals.goal_store,
-                open_store=self.runner.goals.open_goal_store,
-                ready_grant=self.runner.goals.ready_goal_grant_locked,
                 autonomous=self.autonomous_goal,
             )
             if self.goal_permit is None:
                 return
             permits.callback(
-                self.goal_permit.retire_unverified, self.runner.goals.goal_store
+                self.goal_permit.retire_unverified, self.runner.comms.goals.open_goal_store()
             )
         return True
 
@@ -326,7 +323,6 @@ class OwnedTurn:
                 turn=TurnId(self.turn_id),
                 lease=self.turn_lease,
                 permit=self.goal_permit,
-                open_store=self.runner.goals.open_goal_store,
                 pending_origins=self.runner.goals.pending_goal_origins,
                 claims=origin_claims,
             ),
@@ -368,7 +364,7 @@ class OwnedTurn:
         admission = OwnedSendAdmission(
             comms=self.runner.comms,
             inputs=self.runner.inputs,
-            goal_store=self.runner.goals.goal_store,
+            goal_store=self.runner.comms.goals.goal_store,
             session_id=self.session_id,
             thread=self.thread,
             turn=TurnId(self.turn_id),

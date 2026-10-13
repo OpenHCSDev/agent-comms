@@ -318,6 +318,12 @@ class OwnerLifecycle:
             generation = snapshot.admission_generations[thread.name]
         self._stop_process(thread, generation)
         self._finish_stopped_owner(thread, generation)
+        # Stop is explicit abandonment of this exited local owner, not replay
+        # permission. The existing recovery owner checks its exact release and
+        # native-child absence before terminal settlement.
+        from .attempt_recovery import RecoveryMonitorCapability
+
+        RecoveryMonitorCapability.settle_stopped_owner(self.root, thread)
 
     def require_launch_authority(self) -> PrivateNkLaunch | None:
         """Check this lifecycle's launch authority without reserving a process.
@@ -448,6 +454,9 @@ class OwnerLifecycle:
                 return  # An exact, durably attested release of the signaled owner.
             self._require_same_stop_owner(thread, admission_generation)
             self.registry.unregister(thread.name)
+            after = self.registry.snapshot().admission_generations[thread.name]
+            receipt = OwnerReleaseReceipt(admission_generation, after, replace(thread, active_turn=None))
+            self.releases.update(lambda receipts: {**receipts, thread.name: receipt})
 
     def release(self, name: str) -> None:
         """Let the calling participant mark itself stopped without signalling."""

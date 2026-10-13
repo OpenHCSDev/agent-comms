@@ -72,7 +72,7 @@ class VerifiedOwnerLoss:
         if store.session.path.name != "coordination.sqlite3":
             raise RecoveryBlocked("native recovery requires the canonical coordination store")
         comms = Comms(store.session.path.parent)
-        with _response_boundary(comms.bus) as registry:
+        with _response_boundary(comms.bus, session=store.session) as registry:
             assert_native_runtime_schema(store.session._connection)
             snapshot = store.snapshots.get(execution_id)
             attempt = snapshot.attempt
@@ -199,6 +199,26 @@ class RecoveryMonitorCapability:
         if _grant is not _MONITOR_GRANT:
             raise PermissionError("recovery monitor requires trusted construction")
         self._store = store
+
+    @classmethod
+    def settle_stopped_owner(cls, root: Path, owner) -> None:
+        """An explicit stop retires only the exited owner's original local attempt."""
+        from .bus_publication import stable_thread_lookup
+        from .coordination_tables.executions import CurrentExecutions
+        from .comms import Comms
+
+        path = root / "coordination.sqlite3"
+        if not path.exists():
+            return  # No native coordinator, hence no selected attempt claims.
+        with Coordination(str(path)) as store:
+            pointer = CurrentExecutions.one(store.session._connection,
+                                            owner_lookup=stable_thread_lookup(owner.created_at))
+            if pointer is None or pointer.execution_id is None:
+                return
+            receipt = Comms(root).owners.releases.read().get(owner.name)
+            if receipt is None or receipt.thread.process_identity != owner.process_identity:
+                raise RecoveryBlocked("stopped attempt requires the exact exited owner release")
+            cls.abandon_released_native_attempt(store, pointer.execution_id)
 
     @classmethod
     def abandon_released_native_attempt(
@@ -329,7 +349,7 @@ class RecoveryMonitorCapability:
             raise RecoveryBlocked("monitor cannot record a live Pi RPC subprocess as dead")
         store = self._store
         replay_facts = ReplayFact(replay_facts)
-        with store.session.transaction() as db:
+        with store.session.settlement() as db:
             snapshot = store.snapshots.get(execution_id)
             attempt = snapshot.attempt
             if (

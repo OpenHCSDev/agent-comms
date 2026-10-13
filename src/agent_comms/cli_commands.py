@@ -1138,6 +1138,16 @@ class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
 
 
 @dataclass(frozen=True, kw_only=True)
+class SchemaReportCliCommand(CliCommand, declared_name="schema-report"):
+    help = "Report declared DDL differences in existing SQLite stores (including retained copies)"
+
+    def apply(self, ctx: Comms) -> Any:
+        from .schema_report import StoreSchemaReport
+
+        return FieldCodec.encode(StoreSchemaReport.scan(ctx))
+
+
+@dataclass(frozen=True, kw_only=True)
 class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
     help = "Commit and push a thread's uncommitted worktree changes as a checkpoint branch"
     name: str = option("--name")
@@ -1145,13 +1155,17 @@ class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
     def apply(self, ctx: Comms) -> Any:
         import subprocess
 
-        worktree = Path(ctx.registry.require(self.name).worktree)
+        worktree = Path(ctx.registry.require(self.name).worktree).resolve()
         branch = f"checkpoint/{self.name}"
+        # Git requires an absolute ceiling. Stop before entering the declared
+        # worktree's parent, never checkpoint an ancestor repository.
+        environment = {**os.environ, "GIT_CEILING_DIRECTORIES": str(worktree.parent)}
 
         def git(*arguments: str, timeout: int = 60):
             try:
                 done = subprocess.run(["git", "-C", str(worktree), *arguments],
-                                      capture_output=True, text=True, timeout=timeout)
+                                      capture_output=True, text=True, timeout=timeout,
+                                      env=environment)
             except (OSError, subprocess.TimeoutExpired):
                 return 1, "", ""
             return done.returncode, done.stdout, done.stderr
