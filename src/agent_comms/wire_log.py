@@ -9,7 +9,7 @@ import stat
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 from typing import BinaryIO
@@ -24,7 +24,12 @@ from .bus_publication import (
     unique_wire_object,
 )
 from .bus_source_page import AddressedPage
-from .bus_projection import BusFileRevision
+from .bus_projection import (
+    AppendCheckpoint,
+    BusAppendIndex,
+    BusFileRevision,
+    Checkpoint,
+)
 from .envelope_claim_transitions import (
     ClaimProjection,
     project_verified_transitions,
@@ -59,6 +64,28 @@ class OpenedWireSnapshot:
     through: int
     stream: BinaryIO | None
     revision: BusFileRevision | None
+    _append_checkpoints: dict[BusAppendIndex, AppendCheckpoint | None] = field(
+        default_factory=dict, init=False, repr=False, compare=False,
+    )
+
+    def capture_append_indexes(
+        self, prepared: tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...],
+    ) -> None:
+        self._append_checkpoints.update(prepared)
+
+    def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | None:
+        """Validate the captured candidate only when a consumer reads this cut."""
+        record = index.capture(self._append_checkpoints.get(index), self.stream, self.revision)
+        self._append_checkpoints[index] = record
+        return record
+
+    def remember_append_checkpoint(
+        self, index: BusAppendIndex[Checkpoint], record: Checkpoint,
+    ) -> None:
+        """Keep a computed exact-cut value with this existing source resource."""
+        if record.source != self.revision:
+            raise ValueError("Computed append checkpoint belongs to another source cut")
+        self._append_checkpoints[index] = index.remember(record)
 
     @property
     def boundary(self) -> int:
@@ -166,6 +193,15 @@ class WireLog:
     def __init__(self, path: Path):
         # Construction is read-only and needs no registry or publication settings.
         self.path = Path(path)
+        self._append_indexes: list[BusAppendIndex] = []
+
+    def register_append_index(self, index: BusAppendIndex[Checkpoint]) -> BusAppendIndex[Checkpoint]:
+        """Register one index owner for automatic capture with every opened cut."""
+        if index.bus_path != self.path:
+            raise ValueError("Append index belongs to another bus")
+        if index not in self._append_indexes:
+            self._append_indexes.append(index)
+        return index
 
     @contextmanager
     def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None,
@@ -506,8 +542,15 @@ class WireLog:
             matched, _, _ = self._keyed_receipt_unlocked(intent)
             return matched
 
+    def prepare_append_indexes(self) -> tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...]:
+        """Read registered index candidates before taking any source locks."""
+        return tuple((index, index.prepare()) for index in self._append_indexes)
+
     @contextmanager
-    def _opened_wire_snapshot(self, *, need_sequence: bool = True):
+    def _opened_wire_snapshot(
+        self, *, need_sequence: bool = True,
+        prepared_indexes: tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...] = (),
+    ):
         """Own one fixed opened inode/byte boundary beyond physical custody."""
         with ExitStack() as resources:
             with _store_lock(self.path) as lock:
@@ -540,6 +583,9 @@ class WireLog:
                         raise RelationViolationError("Opened read differs from its certified source cut")
                     snapshot_type = CertifiedOpenedWireSnapshot
                 opened = snapshot_type(metadata, through, stream, revision)
+            # Transfer candidate records without reading files or hashing here.
+            # Consumers validate after the caller's outer locks are released.
+            opened.capture_append_indexes(prepared_indexes)
             yield opened
 
     @contextmanager

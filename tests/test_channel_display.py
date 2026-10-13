@@ -100,8 +100,8 @@ def test_single_captured_basis_survives_mode_change_during_snapshot(tmp_path):
         finished.set()
 
     @contextmanager
-    def toggle_after_boundary(*, need_sequence=True):
-        with original(need_sequence=need_sequence) as snapshot:
+    def toggle_after_boundary(**options):
+        with original(**options) as snapshot:
             if started.is_set():
                 yield snapshot
                 return
@@ -243,8 +243,8 @@ def test_fixed_opened_boundary_excludes_later_append(tmp_path):
         finished.set()
 
     @contextmanager
-    def with_append(*, need_sequence=True):
-        with original(need_sequence=need_sequence) as snapshot:
+    def with_append(**options):
+        with original(**options) as snapshot:
             writer = WorkerThread(target=append, daemon=True)
             writer.start()
             assert started.wait(timeout=3) and not finished.is_set()
@@ -292,8 +292,8 @@ def test_public_retag_and_send_cannot_leak_new_nonmember_into_page(tmp_path):
         finished.set()
 
     @contextmanager
-    def concurrent_public_change(*, need_sequence=True):
-        with original(need_sequence=need_sequence) as snapshot:
+    def concurrent_public_change(**options):
+        with original(**options) as snapshot:
             writer = WorkerThread(target=retag_and_send, daemon=True)
             writer.start()
             assert started.wait(timeout=3) and not finished.is_set()
@@ -318,7 +318,7 @@ def test_direct_retag_before_open_is_captured_with_its_source(tmp_path):
     changed = False
 
     @contextmanager
-    def mutate_before_open(*, need_sequence=True):
+    def mutate_before_open(**options):
         nonlocal changed
         if not changed:
             changed = True
@@ -327,7 +327,7 @@ def test_direct_retag_before_open_is_captured_with_its_source(tmp_path):
             comms.bus.publisher.publish_ordinary(
                 Message("alice", "bob", "late direct", InfoKind)
             )
-        with original(need_sequence=need_sequence) as snapshot:
+        with original(**options) as snapshot:
             yield snapshot
 
     with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=mutate_before_open):
@@ -345,7 +345,7 @@ def test_direct_rename_and_own_send_do_not_inflate_unread(tmp_path):
     changed = False
 
     @contextmanager
-    def rename_and_send_before_open(*, need_sequence=True):
+    def rename_and_send_before_open(**options):
         nonlocal changed
         if not changed:
             changed = True
@@ -355,7 +355,7 @@ def test_direct_rename_and_own_send_do_not_inflate_unread(tmp_path):
                 Message("human", "#api", "owned unread", InfoKind),
                 _human_origin=HumanOrigin(human.name, human.created_at, human.worktree),
             )
-        with original(need_sequence=need_sequence) as snapshot:
+        with original(**options) as snapshot:
             yield snapshot
 
     with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=rename_and_send_before_open):
@@ -378,8 +378,8 @@ def test_public_mark_read_and_append_share_one_viewer_boundary(tmp_path):
         finished.set()
 
     @contextmanager
-    def concurrent_public_mark(*, need_sequence=True):
-        with original(need_sequence=need_sequence) as snapshot:
+    def concurrent_public_mark(**options):
+        with original(**options) as snapshot:
             if started.is_set():
                 yield snapshot
                 return
@@ -452,12 +452,12 @@ def test_new_channel_during_boundary_is_not_falsely_unknown(tmp_path):
     added = False
 
     @contextmanager
-    def register_before_open(*, need_sequence=True):
+    def register_before_open(**options):
         nonlocal added
         if not added:
             added = True
             comms.registry.register(Thread("late", frozenset({"new"}), str(tmp_path)))
-        with original(need_sequence=need_sequence) as snapshot:
+        with original(**options) as snapshot:
             yield snapshot
 
     with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=register_before_open):
