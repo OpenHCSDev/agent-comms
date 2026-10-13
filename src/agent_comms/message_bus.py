@@ -127,7 +127,8 @@ class MessageBus:
 
     def _delivery_scope(self, name: str, snapshot: RegistrySnapshot | None = None,
                         *, catalog: CatalogDocument | None = None) -> DeliveryScope:
-        snapshot = snapshot or self._registry.snapshot()
+        if snapshot is None:
+            snapshot = self._registry.snapshot()
         canonical = snapshot.canonical_name(name)
         if canonical not in snapshot.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
@@ -146,7 +147,8 @@ class MessageBus:
         The route index lists which deliveries are unread, as it does for the
         pending counts, and the page index reads only those rows.
         """
-        snapshot = snapshot or self._registry.snapshot()
+        if snapshot is None:
+            snapshot = self._registry.snapshot()
         delivery = self._delivery_scope(name, snapshot)
         selection = delivery.selection(target, snapshot, self._channels.read())
         seen = self.reads.seen_sequences(delivery.actor, snapshot)
