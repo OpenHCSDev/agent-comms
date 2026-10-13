@@ -660,7 +660,7 @@ async def test_slow_optional_awareness_omits_without_blocking_selected_original(
     def stalled_builder(_projection, _initial, _assignment, _owner):
         entered.set()
         release.wait(timeout=5)
-        return OmittedAwareness("late context must not appear")
+        return OmittedAwareness.capture("late context must not appear")
 
     monkeypatch.setattr(OptionalAwarenessProjection, "__call__", stalled_builder)
     try:
@@ -705,7 +705,7 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
         calls.append(True)
         entered.set()
         release.wait(timeout=3)
-        return OmittedAwareness("too late")
+        return OmittedAwareness.capture("too late")
 
     monkeypatch.setattr(OptionalAwarenessProjection, "__call__", blocked_builder)
     projection = OptionalAwarenessProjection.for_selected(
@@ -715,10 +715,12 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
         admission_generation=1,
     )
     try:
-        assert await projection.segments(first_initial, assignment, owner) == ()
+        omitted = await projection.segments(first_initial, assignment, owner)
+        assert len(omitted) == 1 and "Optional awareness omitted" in omitted[0].text()
         assert entered.is_set()
         for _ in range(40):
-            assert await projection.segments(first_initial, assignment, owner) == ()
+            repeated = await projection.segments(first_initial, assignment, owner)
+            assert len(repeated) == 1 and "Optional awareness omitted" in repeated[0].text()
         assert len(calls) == 1  # no queued/retired builder fleet
         assert await asyncio.wait_for(asyncio.to_thread(lambda: 42), timeout=1) == 42
         second_base = tmp_path / "second"
@@ -773,6 +775,9 @@ async def test_optional_awareness_requires_complete_binding_and_resource_budget(
     assert len(calls) == 1 and initial.message.body in calls[0][1]
     assert ("Selected source decisions through " in calls[0][1]) is (kind == "complete")
     assert ("Nonbinding rows omitted: 0" in calls[0][1]) is (kind == "complete")
+    # The omitted awareness is a named visible state on the delivered input
+    # itself, never only a log line.
+    assert ("Optional awareness omitted" in calls[0][1]) is (kind != "complete")
 
 
 async def test_selected_original_survives_auxiliary_cursor_over_100_initials(

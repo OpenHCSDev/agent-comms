@@ -105,3 +105,49 @@ def test_notification_runs_after_wire_and_bus_locks_and_failure_cannot_fail_send
         # cannot report the original send as failed or invite a retry.
         committed = comms.messaging.send_message("sender", "beta", "still committed")
         assert committed.seq == 1 and comms.bus.log.latest_sequence() == 1
+
+
+def test_one_background_drain_catches_up_a_backlog_of_oversized_records(
+    monkeypatch, tmp_path
+) -> None:
+    with TemporaryDirectory(
+        prefix="ac-candidate-drain-", dir=tmp_path.resolve(strict=True)
+    ) as dirname:
+        comms, root_id = _wire(Path(dirname))
+        monkeypatch.setattr(
+            "agent_comms.messaging.schedule_candidate_catchup", lambda *_: None
+        )
+        # A stalled index behind more oversized records than one bounded
+        # 32-batch drain could previously cover: the background drain must
+        # keep going until the index is caught up, not stop at its old
+        # per-delivery batch budget.
+        for number in range(40):
+            comms.messaging.send_initial_cohort(
+                "sender", "beta", f"{number:04d} " + "x" * (300 * 1024)
+            )
+        assert comms.bus.log.path.stat().st_size > 40 * 256 * 1024
+        index = WakeCandidateIndex(comms.bus)
+        assert index.catch_up_committed_append(
+            index.notify_committed_append(root_id=root_id, through_seq=1),
+            bootstrap_new=True,
+        ).checkpoint_seq == 1
+        hint = index.notify_committed_append(
+            root_id=root_id, through_seq=comms.bus.log.full_history()[-1].seq
+        )
+        maintenance._pending[comms.bus.log.path.parent] = (
+            comms.bus,
+            comms.bus.log.full_history()[-1].seq,
+        )
+        maintenance._drain_candidate(comms.bus.log.path.parent)
+        assert not maintenance._pending
+        assert index.catch_up_committed_append(hint).caught_up
+        page = index.page(
+            root_id=root_id,
+            recipient_lookup=stable_thread_lookup(
+                comms.registry.require("beta").created_at
+            ),
+            after_seq=0,
+            required_through_seq=comms.bus.log.full_history()[-1].seq,
+            limit=100,
+        )
+        assert len(page.entries) >= 1 and not page.has_more
