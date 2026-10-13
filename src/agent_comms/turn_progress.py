@@ -180,8 +180,11 @@ class TurnProgress(events.AgentEventConsumer):
                 self.reply_parts.clear()
 
     @handles(events.Error)
-    async def error(self, event: events.Error) -> None:
+    async def error(self, event: events.Error) -> object:
+        # Raw terminal evidence resolves the later Done; it is not itself a
+        # publishable completed outcome.
         self.terminal_error = event
+        return self.DISCARD
 
     @handles(events.Done)
     async def done(self, event: events.Done) -> events.Done:
@@ -200,13 +203,11 @@ class TurnProgress(events.AgentEventConsumer):
         if self.result is not None:
             event = replace(event, ok=False, text="Duplicate native terminal result")
         event = event.resolve(self.terminal_error, document, self.original)
+        # Retain the resolved outcome before transport publication. If delivery
+        # throws, failure handling must not classify or resolve it a second time.
         self.result = event
         await Coordination.run_worker(partial(self.goals.done, event))
-        with self.publication_measurements.measuring():
-            self.result = await self.effects._emit_event(
-                self.session_id, event, turn_id=self.turn_lease.turn_id, route=self.routing.reply
-            )
-        return self.result
+        return event
 
     @handles(events.InputStarted)
     async def input_started(self, event: events.InputStarted) -> None:
@@ -261,13 +262,19 @@ class TurnProgress(events.AgentEventConsumer):
         self.finish_event.set()
 
     async def consume(self, event: events.AgentEvent) -> None:
-        event = await self.dispatch(event)
-        if event.publishes:
-            with self.publication_measurements.measuring():
-                await self.effects._emit_event(
-                    self.session_id, event, turn_id=self.turn_lease.turn_id, route=self.routing.reply
-                )
-        await self.publication.dispatch(event)
+        publication = await self.dispatch(event)
+        if publication is None:
+            return
+        with self.publication_measurements.measuring():
+            published = await self.effects._emit_event(
+                self.session_id, publication,
+                turn_id=self.turn_lease.turn_id, route=self.routing.reply,
+            )
+        if isinstance(published, events.Done):
+            # ACP publication may replace Done with its notification receipt;
+            # terminal consumers retain that exact completed outcome.
+            self.result = published
+        await self.publication.dispatch(published)
 
     def publish_success(self) -> None:
         """Join each acquired original send before releasing the turn lease."""

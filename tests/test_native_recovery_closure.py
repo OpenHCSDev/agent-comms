@@ -43,45 +43,68 @@ function prepare(events) {{
     run.include([{{role:'user',inputId:'isolated-input'}}],claims);
     return {{agent,run}};
 }}
-const events=[];
-const {{agent,run}}=prepare(events);
 const refused={{role:'assistant',content:[],stopReason:'error',errorMessage:'503 overloaded'}};
-function finished(message) {{
-    agent.state.messages.push(message);
+function finished(owner, events, message) {{
+    owner.agent.state.messages.push(message);
     events.push({{type:'message_start',message:{{role:'assistant',content:[]}}}});
-    run.observe({{type:'message_end',message}},claims);
+    owner.run.observe({{type:'message_end',message}},claims);
     events.push({{type:'message_end',message}});
 }}
-finished(refused);
-assert.equal(await run.recover(refused),true); // Actual one-second native backoff.
-finished(terminal);
-assert.equal(await run.recover(terminal),false);
-run.close();run.close();run.cancel();
-assert.equal(JSON.stringify(terminal),original); // No replacement/mutation.
-const ends=events.filter(e=>e.type==='native_retry_end');
-assert.deepEqual(ends,[{{type:'native_retry_end',success:false,attempt:1,finalError:terminal.errorMessage}}]);
-assert(events.indexOf(ends[0]) < events.findIndex(e=>e.type==='message_end' && e.message===terminal));
-
-// Retiring a pending backoff also closes once, cancels its admitted wait, and
-// cannot let the old wait overwrite the closed state or re-request context.
-const retiredEvents=[];
-const retired=prepare(retiredEvents);
-retired.agent.state.messages.push(refused);
-retired.run.observe({{type:'message_end',message:refused}},claims);
-const wait=retired.run.recover(refused);
-retired.run.close();retired.run.close();
-assert.equal(await wait,false);
-assert.equal(retired.run.willRetry(refused),false);
-assert.deepEqual(retiredEvents.filter(e=>e.type==='native_retry_end'),[
-    {{type:'native_retry_end',success:false,attempt:0}}]);
-assert.equal(retired.agent.state.messages.length,1);
+async function differentTerminal() {{
+    const events=[]; const owner=prepare(events);
+    finished(owner,events,refused);
+    assert.equal(await owner.run.recover(refused),true);
+    finished(owner,events,terminal);
+    assert.equal(await owner.run.recover(terminal),false);
+    owner.run.close();owner.run.close();owner.run.cancel();
+    assert.equal(JSON.stringify(terminal),original);
+    const ends=events.filter(e=>e.type==='native_retry_end');
+    assert.deepEqual(ends,[{{type:'native_retry_end',success:false,attempt:1,finalError:terminal.errorMessage}}]);
+    assert(events.indexOf(ends[0]) < events.findIndex(e=>e.type==='message_end' && e.message===terminal));
+    return events;
+}}
+async function answered() {{
+    const events=[]; const owner=prepare(events);
+    finished(owner,events,refused);
+    assert.equal(await owner.run.recover(refused),true);
+    finished(owner,events,{{role:'assistant',content:[{{type:'text',text:'recovered'}}],stopReason:'stop'}});
+    owner.run.close();
+    assert.deepEqual(events.filter(e=>e.type==='native_retry_end'),[
+        {{type:'native_retry_end',success:true,attempt:1}}]);
+}}
+async function exhausted() {{
+    const events=[]; const owner=prepare(events);
+    for (let attempt=1; attempt<=4; attempt++) {{
+        const message={{...refused}};
+        finished(owner,events,message);
+        assert.equal(await owner.run.recover(message),attempt<4);
+    }}
+    owner.run.close();
+    assert.deepEqual(events.filter(e=>e.type==='native_retry_end'),[
+        {{type:'native_retry_end',success:false,attempt:3,finalError:refused.errorMessage}}]);
+}}
+async function retiredDuringBackoff() {{
+    const events=[]; const owner=prepare(events);
+    owner.agent.state.messages.push(refused);
+    owner.run.observe({{type:'message_end',message:refused}},claims);
+    const wait=owner.run.recover(refused);
+    owner.run.close();owner.run.close();
+    assert.equal(await wait,false);
+    assert.equal(owner.run.willRetry(),false);
+    assert.deepEqual(events.filter(e=>e.type==='native_retry_end'),[
+        {{type:'native_retry_end',success:false,attempt:0}}]);
+    assert.equal(owner.agent.state.messages.length,1);
+}}
+const [events] = await Promise.all([
+    differentTerminal(), answered(), exhausted(), retiredDuringBackoff(),
+]);
 console.log(JSON.stringify(events));
 """
     process = await asyncio.create_subprocess_exec(
         "node", "--input-type=module", "-e", program,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
-    output, error = await asyncio.wait_for(process.communicate(), 12)
+    output, error = await asyncio.wait_for(process.communicate(), 80)
     assert process.returncode == 0, error.decode()
     return json.loads(output)
 

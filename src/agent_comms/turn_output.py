@@ -23,6 +23,8 @@ class TurnOutput:
     final_assistant_stop: bool = False
     diagnostic: dict[str, int] = field(default_factory=dict)
     preflight_failure: str | None = None
+    # The live turn owns the one privacy-safe decoded retry result. Completion
+    # and failure presentation retain this immutable value; they do not decode it.
     retry_result: ProviderRetryResult | None = None
     _text: list[str] = field(default_factory=list, repr=False)
     _message: list[str] = field(default_factory=list, repr=False)

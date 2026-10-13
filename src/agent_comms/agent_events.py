@@ -40,8 +40,6 @@ if TYPE_CHECKING:
 class AgentEvent(ABC):
     """Identity and data for one observation made by the backend."""
 
-    publishes = True
-
     @abstractmethod
     def __init__(self) -> None:
         """Concrete dataclass declarations supply their own payload constructor."""
@@ -207,9 +205,8 @@ class Done(AgentEvent):
     reason_code: str | None = None
     diagnostic: dict[str, Any] | None = None
     outcome: NativeTurnOutcome = field(default_factory=UnresolvedNativeTurnOutcome)
+    # Immutable completion snapshot of TurnOutput's already decoded result.
     retry_result: ProviderRetryResult | None = None
-    # The completion boundary publishes only after resolving original inputs.
-    publishes = False
 
     def resolve(
         self, error: Error | None, document: InputDocument, original: OriginalTurnInput,
@@ -248,7 +245,6 @@ class Notice(AgentEvent):
 class Error(AgentEvent):
     # Raw native failure evidence is not a public completed outcome. Done owns
     # its resolution; a recovered turn never publishes an interim refusal.
-    publishes = False
     text: str
     reason_code: str | None = None
     command: PiCommand | None = None

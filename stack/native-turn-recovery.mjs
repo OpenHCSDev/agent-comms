@@ -12,11 +12,9 @@ class RecoveryBudget {
 class NativeRunState {
     constructor(owner, attempt = 1) { this.owner = owner; this.attempt = attempt; }
     get retrying() { return false; }
-    get mayRetry() { return false; }
     refusal() { return undefined; }
     produced() { return this; }
-    finished(message) { return this; }
-    request(options) { return options; }
+    finished() { return this; }
     close() {}
     cancel() { this.close(); }
 }
@@ -25,13 +23,15 @@ class NothingProduced extends NativeRunState {
     produced() { return new OutputProduced(this.owner, this.attempt); }
     terminal() { return new ClosedNothingProduced(this.owner, this.attempt); }
     finished(message) {
-        // The recovery budget is the one owner of a refusal's retry count: it is
-        // decoded and announced once here, before the refused message reaches
-        // Core, so Core reports only the recovery's final outcome.
+        // One decision constructs the state for this refusal. Retryable and
+        // exhausted states then own disjoint behavior without checking a flag.
         if (!this.owner.tracked) return this;
         if (!this.owner.retryable(message)) return this.terminal(message);
         const reason = message.errorMessage || 'Provider request failed';
-        return new RefusedNothingProduced(this.owner, this.attempt, reason).announce(message);
+        return (this.attempt < RecoveryBudget.attempts
+            ? new RefusedNothingProduced(this.owner, this.attempt, reason)
+            : new ExhaustedNothingProduced(this.owner, this.attempt, reason)
+        ).enter(message);
     }
 }
 
@@ -43,7 +43,7 @@ class RecoveringNothingProduced extends NothingProduced {
     }
     terminal(message) {
         this.owner.finishRetry(false, message?.errorMessage);
-        return super.terminal(message);
+        return super.terminal();
     }
     close() { this.owner.state = this.terminal(); }
 }
@@ -53,25 +53,22 @@ class ClosedNothingProduced extends NativeRunState {}
 
 class RefusedNothingProduced extends RecoveringNothingProduced {
     constructor(owner, attempt, reason) { super(owner, attempt); this.reason = reason; }
-    get mayRetry() { return this.attempt < RecoveryBudget.attempts; }
     refusal() { return this; }
-    announce(message) {
-        if (!this.mayRetry) {
-            // Close before this original terminal reaches Core. Retiring the
-            // returned closed state cannot publish the outcome a second time.
-            return this.terminal(message);
-        }
+    enter() {
         this.owner.emit({ type: 'native_retry_start', attempt: this.attempt,
             maxAttempts: RecoveryBudget.retries, delayMs: RecoveryBudget.delay(this.attempt),
             errorMessage: this.reason });
         return this;
     }
-    finished() { return this; }
     async recover(message) {
         const backoff = new BackoffNothingProduced(this.owner, this.attempt, this.reason);
         this.owner.state = backoff;
         return backoff.recover(message);
     }
+}
+
+class ExhaustedNothingProduced extends RecoveringNothingProduced {
+    enter(message) { return this.terminal(message); }
 }
 
 class BackoffNothingProduced extends RefusedNothingProduced {
@@ -108,6 +105,20 @@ class BackoffNothingProduced extends RefusedNothingProduced {
         this.owner.state = new RecoveringNothingProduced(this.owner, this.attempt + 1);
         return true;
     }
+}
+
+/** Explicit absence of a native run; never a partially initialized active run. */
+export class InactiveNativeTurnRun {
+    static shared = new InactiveNativeTurnRun();
+    get tracked() { return false; }
+    get retrying() { return false; }
+    include() { return this; }
+    observe() {}
+    stream(original, ...request) { return original(...request); }
+    willRetry() { return false; }
+    async recover() { return false; }
+    cancel() {}
+    close() {}
 }
 
 /** Replaces the native tracked-input flag and owns monotonic whole-run production. */
@@ -153,10 +164,10 @@ export class NativeTurnRun {
         }
     }
     stream(original, model, context, options) {
-        if (!this.tracked) return original(model, context, options);
-        return original(model, context, this.state.request({ ...options, maxRetries: 0 }));
+        return original(model, context,
+            this.tracked ? { ...options, maxRetries: 0 } : options);
     }
-    willRetry(message) { return this.tracked && (this.state.refusal(message)?.mayRetry ?? false); }
+    willRetry() { return this.tracked && this.state.refusal() !== undefined; }
     async recover(message) {
         if (!this.tracked || this.agent.state.messages.at(-1) !== message) return false;
         const refusal = this.state.refusal(message);

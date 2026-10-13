@@ -121,4 +121,7 @@ def test_every_failure_action_uses_native_retry_end_not_text_claims(failure_type
     assert "not retried" not in failure.feedback
     reported = RequestFailure(failure, True)
     assert FieldCodec.decode(RequestFailure, FieldCodec.encode(reported)) == reported
-    assert type(ACPFailure.from_error(-32603, "429 rate limit")) is RequestACPFailure
+    exhausted = ACPFailure.from_error(-32603, "429 rate limit")
+    assert type(exhausted) is ProviderQuotaFailure
+    assert exhausted.title == "Provider usage limit reached"
+    assert exhausted.next_step.startswith("Wait for the provider limit")

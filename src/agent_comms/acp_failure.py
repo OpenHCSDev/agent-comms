@@ -77,13 +77,18 @@ class BackendDeliveryFailure(DeliveryFailure):
 
 @dataclass(frozen=True, kw_only=True)
 class ProviderRetryResult:
-    """Native retry-end observation, shared by event and failure presentation."""
+    """One decoded native retry end, retained by the turn output and its outcome."""
 
-    success: bool | None = None
-    attempt: int | None = None
+    success: bool
+    attempt: int
     final_error: str | None = field(default=None, metadata={"wire_name": "finalError"})
 
+    def __post_init__(self) -> None:
+        if self.attempt < 0:
+            raise ValueError("Native retry count must be nonnegative")
+
     def for_failure(self, redact) -> ProviderRetryResult:
+        """Create the one privacy-safe result stored by this turn's output."""
         return ProviderRetryResult(
             success=self.success, attempt=self.attempt,
             final_error=redact(self.final_error) if self.final_error else None,
@@ -91,8 +96,6 @@ class ProviderRetryResult:
 
     @property
     def summary(self) -> str:
-        if self.attempt is None:
-            return ""
         return " ".join(part for part in (
             f"Provider request retries: {self.attempt}.",
             "Recovery completed." if self.success else "",
@@ -107,6 +110,7 @@ class ACPFailure(DeliveryFailure):
     classification_priority: ClassVar[int] = 0
     input_state: type[InputAttempt] | None = None
     diagnostics: tuple[PiDiagnostic, ...] = ()
+    # Public failed-outcome projection of the turn-owned immutable result.
     retry_result: ProviderRetryResult | None = field(
         default=None, metadata={"wire_omit_default": True},
     )
@@ -295,7 +299,7 @@ class RequestACPFailure(ACPFailure):
 class ProviderQuotaFailure(ACPFailure):
     classification_priority = 100
     display_pattern = re.compile(
-        r"usage limit|quota|insufficient credits|credit balance",
+        r"usage limit|quota|insufficient credits|credit balance|rate.limit|too many requests",
         re.I,
     )
 

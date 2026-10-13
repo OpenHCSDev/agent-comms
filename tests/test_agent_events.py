@@ -142,6 +142,40 @@ async def test_selected_handlers_preserve_replacements_and_identity(synchronous)
             await consumer.dispatch(Value("wrong"), borrowed)
 
 
+@pytest.mark.parametrize("synchronous", [False, True])
+async def test_handler_can_consume_without_returning_a_publication(synchronous):
+    @dataclass(frozen=True)
+    class PrivateObservation(events.AgentEvent):
+        pass
+
+    seen = []
+
+    class SyncConsumer(MroDispatch):
+        @handles(PrivateObservation)
+        def consume(self, value):
+            seen.append("consumed")
+            return self.DISCARD
+
+        @handles(events.AgentEvent)
+        def must_not_run(self, value):
+            seen.append("published")
+
+    class AsyncConsumer(SyncConsumer):
+        @handles(PrivateObservation)
+        async def consume(self, value):
+            return super().consume(value)
+
+        @handles(events.AgentEvent)
+        async def must_not_run(self, value):
+            return super().must_not_run(value)
+
+    consumer = SyncConsumer() if synchronous else AsyncConsumer()
+    value = PrivateObservation()
+    result = (consumer.dispatch_sync(value) if synchronous else await consumer.dispatch(value))
+    assert result is None
+    assert seen == ["consumed"]
+
+
 def test_payload_fields_and_frozen_multiple_inheritance():
     start = events.ToolStart("id", "read", "Read file", {"path": "file"})
     assert start.activity_state == ActivityState.WORKING

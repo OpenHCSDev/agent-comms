@@ -232,9 +232,9 @@ def extend_system_sources(core):
 def extend_native_run(core):
     """The original native run owns production, refusal and its recovery budget."""
     session = core/'agent-session.js'
-    session.write_text('import { NativeTurnRun } from "./turn-recovery.js";\n'+session.read_text())
+    session.write_text('import { InactiveNativeTurnRun, NativeTurnRun } from "./turn-recovery.js";\n'+session.read_text())
     replace_once(session, '    _nativeRunHadTrackedInput = false;',
-                 '    _nativeRun = new NativeTurnRun();')
+                 '    _nativeRun = InactiveNativeTurnRun.shared;')
     replace_once(session, '        if (event.type === "agent_end") this._lastAgentRunSignal = signal;',
         '        this._nativeRun.observe(event, this._nativeInputClaims);\n'
         '        if (event.type === "agent_end") this._lastAgentRunSignal = signal;')
@@ -243,12 +243,17 @@ def extend_native_run(core):
             this._nativeRunHadTrackedInput = this._nativeInputClaims.has(event.message.inputId);
 ''', '')
     replace_once(session, '        if (this._nativeRunHadTrackedInput) return false;',
-                 '        if (this._nativeRun.tracked) return this._nativeRun.willRetry(this._lastAssistantMessage);')
+                 '        if (this._nativeRun.tracked) return this._nativeRun.willRetry();')
     replace_once(session, '''        this._nativeRunHadTrackedInput = messages.some((message) => message.role === "user" &&
             this._nativeInputClaims.has(message.inputId));''',
-        '''        this._nativeRun = new NativeTurnRun(this.agent, event => this._emit(event),
+        '''        this._nativeRun = this._startNativeRun(messages);''')
+    replace_once(session, '    async _runAgentPrompt(messages) {',
+        '''    _startNativeRun(messages = []) {
+        return new NativeTurnRun(this.agent, event => this._emit(event),
             message => this._isRetryableError(message))
-            .include(messages, this._nativeInputClaims);''')
+            .include(messages, this._nativeInputClaims);
+    }
+    async _runAgentPrompt(messages) {''')
     replace_once(session, '''        const boundedStream = (model, context, options) => originalStream(model, context,
             this._nativeRunHadTrackedInput ? { ...options, maxRetries: 0 } : options);''',
         '''        const boundedStream = (model, context, options) =>
@@ -256,7 +261,7 @@ def extend_native_run(core):
     replace_once(session, '            if (this._nativeRunHadTrackedInput && turn.message?.stopReason === "length") return true;',
                  '            if (this._nativeRun.tracked && turn.message?.stopReason === "length") return true;')
     replace_once(session, '            this._nativeRunHadTrackedInput = false;\n            this._systemPromptOverride',
-                 '            this._nativeRun.close();\n            this._nativeRun = new NativeTurnRun();\n            this._systemPromptOverride')
+                 '            this._nativeRun.close();\n            this._nativeRun = InactiveNativeTurnRun.shared;\n            this._systemPromptOverride')
     replace_once(session, '            this._nativeRunHadTrackedInput = true;',
                  '            this._nativeRun.include(selected, this._nativeInputClaims);')
     replace_once(session, '''        if (this._nativeRunHadTrackedInput) {
@@ -265,7 +270,7 @@ def extend_native_run(core):
             if (await this._nativeRun.recover(msg)) return true;
             const overflow''')
     replace_once(session, '            this._nativeRunHadTrackedInput = false;\n            return msg.stopReason',
-                 '            this._nativeRun.close();\n            this._nativeRun = new NativeTurnRun(this.agent, event => this._emit(event), message => this._isRetryableError(message));\n            return msg.stopReason')
+                 '            this._nativeRun.close();\n            this._nativeRun = this._startNativeRun();\n            return msg.stopReason')
     replace_once(session, '    abortRetry() {\n',
                  '    abortRetry() {\n        this._nativeRun.cancel();\n')
     replace_once(session, '        return this._retryAbortController !== undefined;',
@@ -278,7 +283,7 @@ def extend_native_run(core):
     replace_once(retry, '    "429",', '    "429",\n    "529",')
     types = core/'agent-session.d.ts'
     replace_once(types, '    private _retryAttempt;',
-                 '    private _retryAttempt;\n    private _nativeRun: import("./turn-recovery.js").NativeTurnRun;')
+                 '    private _retryAttempt;\n    private _nativeRun: import("./turn-recovery.js").NativeTurnRun | import("./turn-recovery.js").InactiveNativeTurnRun;\n    private _startNativeRun;')
     replace_once(types, '    type: "auto_retry_start";',
                  '    type: "auto_retry_start" | "native_retry_start";')
     replace_once(types, '    type: "auto_retry_end";',
