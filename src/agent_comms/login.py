@@ -5,6 +5,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from .native_arguments import NativeArguments
+
 
 def run_login(provider: str = "") -> int:
     if provider and not re.fullmatch(r"[a-zA-Z0-9_-]+", provider):
@@ -24,7 +26,7 @@ def run_login(provider: str = "") -> int:
         env.pop(key, None)
     env["AGENT_COMMS_LOGIN_PROVIDER"] = provider
     command = [
-        env.get("AGENT_COMMS_AGENT_BIN", "pi"),
+        NativeArguments.configured_binary(environment=env),
         "--no-session",
         "--no-tools",
         "--no-extensions",

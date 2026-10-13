@@ -36,7 +36,7 @@ from .comms import Comms
 from .child_process import join_retirement
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .config_options import ConfigOptions
+from .config_options import SessionConfigOptions
 from .native_arguments import NativeArguments
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
@@ -70,7 +70,7 @@ class SessionLifecycle:
         self.proxies: dict[str, RuntimeProxy] = {}
         self._attachment_lock = asyncio.Lock()
         self.transcript = TranscriptReplay(comms, runtime)
-        self.config = ConfigOptions(comms, agent_bin, agent_args, runtime, self, effects)
+        self.config = SessionConfigOptions(comms, agent_bin, agent_args, runtime, self, effects)
 
     async def initialize(
         self,

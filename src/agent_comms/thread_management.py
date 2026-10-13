@@ -30,6 +30,7 @@ from .errors import RelationViolationError
 from .importing import ImportFormat, ImportLimits, ImportReceipt
 from .input_disposition import InputDispositions
 from .message_bus import MessageBus
+from .native_arguments import NativeArguments
 from .native_session_files import NativeSessionFiles
 from .owner_lifecycle import OwnerLifecycle
 from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
@@ -583,7 +584,7 @@ class ThreadManagement:
         so a large parent no longer blocks every owner on the root. The locked
         declaration re-checks the parent and name against the captured source.
         """
-        resolved_bin = pi_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", "pi")
+        resolved_bin = NativeArguments.configured_binary(pi_bin)
         parent = self._fork_parent(spec)
         location = asyncio.run(parent.backend.fork(parent, resolved_bin))
         with _store_lock(self._wire_lock_path):

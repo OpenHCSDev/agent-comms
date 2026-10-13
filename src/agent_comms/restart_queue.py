@@ -23,6 +23,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .owner_lifecycle import OwnerRestartSelection
 from .owner_launch import RestartEnvironment, RetainedOwnerLaunch
+from .native_arguments import NativeArguments
 from .owner_restart import StoppedOwnerFailure
 from .restart_refusals import RestartRefusal
 from pathlib import Path
@@ -88,7 +89,7 @@ class RestartTarget:
         return cls(
             sys.executable,
             runtime,
-            comms.owners.restart_entrypoint(source[RestartEnvironment.binary_key]),
+            comms.owners.restart_entrypoint(source[NativeArguments.binary_key]),
         )
 
     def require_watcher(self, comms: Comms) -> None:
