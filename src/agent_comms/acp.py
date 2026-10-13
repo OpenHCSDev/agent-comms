@@ -414,9 +414,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             )
             if candidate is None:
                 return False
-            # Pending work is not an idle no-op when an older execution owns
-            # custody. Let the existing drain diagnostic expose the canonical
-            # refusal; never retire or replay that execution here.
+            # An older turn is still running: refuse idle handling and let
+            # the existing drain diagnostic explain the refusal; never retire
+            # or replay that turn here.
             participant.pointer.require_idle()
             return True
         runnable = await Coordination.run_async(store_path, select)
