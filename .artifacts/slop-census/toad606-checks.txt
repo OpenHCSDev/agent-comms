@@ -1,0 +1,8 @@
+Desktop refused: :0 ValueError Not an owned isolated Xvfb resource: :0
+Desktop refused: unix:0.0 ValueError Cannot connect to isolated Xvfb display: unix:0.0
+Desktop refused: localhost:0.0 ValueError Cannot connect to isolated Xvfb display: localhost:0.0
+Owned fresh Xvfb accepted and connection retired: :1
+Third arbitrary export identity derived by both dependency consumers and wheel verification
+Already-ready idle App: observed= False observer still installed= True
+After forcing a later paint: observed= True observer retired= True
+5 constructor/identity checks passed; real Textual observer timing defect reproduced. No builds, installation, provider input, or terminal launch.

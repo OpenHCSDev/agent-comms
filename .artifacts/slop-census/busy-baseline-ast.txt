@@ -1,0 +1,312 @@
+HEAD a154caf9caf24e3caf3c19e0fdb9152c6c0adfbf
+MODULES 311 PARSE_OMISSIONS []
+src/agent_comms/acp.py:62 ImportFrom: from .input_drain import InputDrain
+src/agent_comms/acp.py:153 Name: self.inputs = InputDrain(comms, self.sessions, self._runtime, self, auto_wake)
+src/agent_comms/acp.py:395 Attribute: or owner.turn_state.busy
+src/agent_comms/acp.py:396 Attribute: or session_id in self.inputs.backend_inboxes
+src/agent_comms/acp.py:405 Attribute: if owner.turn_state.busy:
+FUNCTION_FACTS src/agent_comms/acp.py::_require_compaction_text {'kind': {'text'}} {'block': 1}
+FUNCTION_FACTS src/agent_comms/acp.py::_emit_event {} {'event': 1}
+FUNCTION_FACTS src/agent_comms/acp.py::_prompt_text {} {'block': 1}
+src/agent_comms/acp_extension.py:37 ImportFrom: from .input_drain import InputDrain
+src/agent_comms/acp_extension.py:542 Name: async def publish_acceptance(self, inputs: InputDrain, session_id: str) -> None:
+FUNCTION_FACTS src/agent_comms/acp_extension.py::decode_updates {} {'metadata': 1, 'extension': 1}
+FUNCTION_FACTS src/agent_comms/acp_extension.py::decode_request {} {'metadata': 1, 'extension': 1}
+src/agent_comms/activity.py:53 Attribute: if not self.busy:
+src/agent_comms/activity.py:139 Name: busy=busy, attention=True)
+src/agent_comms/activity.py:162 Attribute: if self.detail and not self.state.busy:
+src/agent_comms/activity.py:204 Attribute: return self.readiness.presentation(super().presentation(title), busy=self.state.busy)
+FUNCTION_FACTS src/agent_comms/activity.py::_latest_events {} {'record': 1}
+src/agent_comms/agent_activity.py:31 ImportFrom: from .turn_phase import PreparingPhase, TurnPhase
+src/agent_comms/agent_activity.py:153 Attribute: if participant.turn_state.busy:
+src/agent_comms/agent_activity.py:228 Name: def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
+src/agent_comms/agent_activity.py:232 Name: def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
+src/agent_comms/agent_backend.py:71 ClassDef: class WhenBusy(Enum):
+src/agent_comms/agent_backend.py:97 Name: when_busy: WhenBusy
+FUNCTION_FACTS src/agent_comms/agent_backend.py::validate_backends {} {'location': 1, "getattr(member, 'event_kinds',": 1}
+src/agent_comms/agent_events.py:31 ImportFrom: from .turn_phase import TurnPhase
+src/agent_comms/agent_events.py:88 Name: phase: TurnPhase
+src/agent_comms/agent_events.py:287 Name: phase: TurnPhase
+src/agent_comms/backend.py:50 ImportFrom: from .turn_inputs import InputForwarding
+src/agent_comms/backend.py:52 ImportFrom: from .turn_phase import ShutdownPhase, TurnPhase
+src/agent_comms/backend.py:247 Name: self.inputs = InputForwarding(steering_queue)
+src/agent_comms/backend.py:262 Name: def native_phase_changes(self, previous: TurnPhase) -> Iterator[events.NativePhaseChanged]:
+FUNCTION_FACTS src/agent_comms/backend.py::compaction_summary {} {'value': 1}
+FUNCTION_FACTS src/agent_comms/backend.py::abort_stalled_rpc {} {'abort_payload': 1}
+FUNCTION_FACTS src/agent_comms/backend.py::retain_or_close {} {'outcome': 1}
+src/agent_comms/channel_coding_tools.py:75 ClassDef: class CodingToolOwner:
+src/agent_comms/channel_coding_tools.py:84 Name: def for_original(self, assignment, operation_id) -> CodingToolOwner:
+src/agent_comms/channel_coding_tools.py:90 Attribute: if native is None or assignment.assignment_id not in native.execution.source_assignment_ids(
+src/agent_comms/channel_coding_tools.py:140 Name: owner: CodingToolOwner
+src/agent_comms/channel_coding_tools.py:161 Name: def __init__(self, directory: Path, token: str, owner: CodingToolOwner) -> None:
+src/agent_comms/cli_commands.py:1152 Attribute: thread.require_idle()
+FUNCTION_FACTS src/agent_comms/cli_commands.py::_json_object {} {'result': 1}
+FUNCTION_FACTS src/agent_comms/cli_commands.py::editor_default {} {'self.value': 1}
+FUNCTION_FACTS src/agent_comms/cli_commands.py::choices {} {'self.annotation': 1}
+FUNCTION_FACTS src/agent_comms/cli_commands.py::selected_targets {} {'target': 1, 'name': 1}
+FUNCTION_FACTS src/agent_comms/cli_commands.py::reconnect_targets {} {'result': 1}
+FUNCTION_FACTS src/agent_comms/cli_commands.py::editor_arguments {} {'annotation': 1}
+FUNCTION_FACTS src/agent_comms/cli_commands.py::execute_target {} {'target': 1}
+FUNCTION_FACTS src/agent_comms/cli_commands.py::add_parser {} {'scalar': 2, "options.get('default')": 1}
+FUNCTION_FACTS src/agent_comms/cli_commands.py::from_namespace {} {'hints[declared.name]': 1}
+FUNCTION_FACTS src/agent_comms/cli_commands.py::result_exit_code {} {'result': 1}
+FUNCTION_FACTS src/agent_comms/cli_commands.py::reconnect_targets {} {'result': 1}
+FUNCTION_FACTS src/agent_comms/cli_commands.py::selection_channels {} {'channel': 1}
+src/agent_comms/context_segments/selected.py:4 ImportFrom: from ..selected_participant import SelectedParticipant
+src/agent_comms/context_segments/selected.py:10 Name: participant: SelectedParticipant
+src/agent_comms/context_segments/selected.py:33 Name: participant: SelectedParticipant
+src/agent_comms/coordinated_runtime.py:23 ImportFrom: from .selected_participant import SelectedParticipant
+src/agent_comms/coordinated_runtime.py:142 Name: async with SelectedParticipant.select(
+src/agent_comms/goal_scheduler.py:44 ImportFrom: from .input_drain import InputDrain
+src/agent_comms/goal_scheduler.py:59 Name: def bind(self, sessions: SessionLifecycle, inputs: InputDrain) -> None:
+src/agent_comms/goal_scheduler.py:91 Attribute: thread.require_idle()
+FUNCTION_FACTS src/agent_comms/goal_scheduler.py::set_goal {} {'text': 1}
+src/agent_comms/historical_native_inputs.py:28 ImportFrom: from .native_input_record import NativeInputRecord, NativeInputReference, NativeInputExecution, TriageNativeExecution, FullNativeExecution
+src/agent_comms/historical_native_inputs.py:43 Name: execution: NativeInputExecution
+src/agent_comms/historical_native_inputs.py:66 Name: execution: TriageNativeExecution
+src/agent_comms/historical_native_inputs.py:77 Name: execution: TriageNativeExecution
+src/agent_comms/historical_native_inputs.py:85 Name: execution: FullNativeExecution
+src/agent_comms/historical_native_inputs.py:134 Attribute: f"JOIN ({NativeRuntimeInput.source_membership_sql()}) member ON member.input_id=n.input_id "
+src/agent_comms/input_drain.py:26 ImportFrom: from .agent_backend import InputContent, InputId, InputRequest, SendNow, WhenBusy
+src/agent_comms/input_drain.py:92 ClassDef: class InputDrain:
+src/agent_comms/input_drain.py:106 Attribute: self.backend_inboxes: dict[str, asyncio.Queue[InputRequest | SendNow]] = {}
+src/agent_comms/input_drain.py:129 Attribute: inbox = self.backend_inboxes.get(session_id)
+src/agent_comms/input_drain.py:304 Attribute: and session_id not in self.backend_inboxes
+src/agent_comms/input_drain.py:391 Attribute: and session_id not in self.backend_inboxes
+src/agent_comms/input_drain.py:432 Attribute: session_id in self.backend_inboxes,
+src/agent_comms/input_drain.py:521 Attribute: inbox = self.backend_inboxes[session_id]
+src/agent_comms/input_drain.py:532 Attribute: if self.backend_inboxes.get(session_id) is not inbox:
+src/agent_comms/input_drain.py:544 Name: when_busy=WhenBusy.STEER,
+src/agent_comms/input_drain.py:558 Attribute: inbox = self.backend_inboxes.setdefault(session_id, asyncio.Queue())
+src/agent_comms/input_drain.py:567 Attribute: inbox = self.backend_inboxes.get(session_id)
+src/agent_comms/input_drain.py:647 Attribute: if self.backend_inboxes.get(session_id) is inbox:
+src/agent_comms/input_drain.py:648 Attribute: self.backend_inboxes.pop(session_id, None)
+src/agent_comms/native_admission_epoch.py:68 Attribute: current.require_idle()
+src/agent_comms/native_input_owner.py:76 Attribute: self.thread.require_idle()
+src/agent_comms/native_input_record.py:53 ClassDef: class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
+src/agent_comms/native_input_record.py:75 Name: def require_attempt(self) -> FullNativeExecution:
+src/agent_comms/native_input_record.py:99 Attribute: f"JOIN ({self.source_membership_sql()}) m ON m.assignment_id=c.assignment_id "
+src/agent_comms/native_input_record.py:115 Name: def from_columns(cls, execution_id, attempt_ordinal) -> NativeInputExecution:
+src/agent_comms/native_input_record.py:126 ClassDef: class TriageNativeExecution(NativeInputExecution): / Name: class TriageNativeExecution(NativeInputExecution):
+src/agent_comms/native_input_record.py:146 Name: def from_columns(cls, execution_id, attempt_ordinal) -> TriageNativeExecution:
+src/agent_comms/native_input_record.py:162 ClassDef: class FullNativeExecution(NativeInputExecution): / Name: class FullNativeExecution(NativeInputExecution):
+src/agent_comms/native_input_record.py:179 Attribute: if self.source_assignment_ids(db, input_id) != tuple(row.assignment_id for row in assignments):
+src/agent_comms/native_input_record.py:188 Name: def from_columns(cls, execution_id, attempt_ordinal) -> FullNativeExecution:
+src/agent_comms/native_input_record.py:198 Name: def require_attempt(self) -> FullNativeExecution:
+src/agent_comms/native_input_record.py:243 Name: execution: NativeInputExecution
+src/agent_comms/native_input_record.py:269 Name: stage: type[NativeInputExecution]
+src/agent_comms/native_input_record.py:303 Name: execution: NativeInputExecution
+src/agent_comms/native_input_record.py:309 Name: def reference_stage(self) -> type[NativeInputExecution]:
+src/agent_comms/native_input_record.py:340 Name: stage: type[NativeInputExecution] | None
+src/agent_comms/native_input_record.py:350 Name: def reference_stage(self) -> type[NativeInputExecution] | None:
+src/agent_comms/native_prompt_binding.py:28 ImportFrom: from .native_input_record import NativeInputRecord, NativeInputIdText, NativeInputExecution
+src/agent_comms/native_prompt_binding.py:64 Name: stage: type[NativeInputExecution]
+src/agent_comms/native_prompt_binding.py:79 Name: def execution(self) -> NativeInputExecution:
+src/agent_comms/native_prompt_send.py:50 Name: busy: PromptAdmissionBusy | None = None
+src/agent_comms/native_prompt_send.py:57 Name: ) from busy
+src/agent_comms/native_prompt_send.py:65 Name: busy = error
+FUNCTION_FACTS src/agent_comms/native_prompt_send.py::_write_fenced {} {'error': 1}
+FUNCTION_FACTS src/agent_comms/native_prompt_send.py::send_fenced_prompt {'os.name': {'posix'}} {}
+src/agent_comms/native_runtime_input.py:21 ImportFrom: from .native_input_record import NativeInputRecord, NativeInputContext, NativeInputExecution
+src/agent_comms/native_runtime_input.py:80 Attribute: member.source_membership_sql() for member in NativeInputExecution.members_with(NativeInputExecution) / Name: member.source_membership_sql() for member in NativeInputExecution.members_with(NativeInputExecution)
+src/agent_comms/native_runtime_input.py:120 Name: def execution(self) -> NativeInputExecution:
+src/agent_comms/native_runtime_input.py:226 Name: stage: type[NativeInputExecution] = field(metadata={"sql": Column(check=NativeInputExecution.sql_constraint("stage"))})
+src/agent_comms/native_runtime_input.py:358 Name: stage: type[NativeInputExecution] | None = field(metadata={"sql": Column(check=NativeInputExecution.sql_constraint("stage")), "native_context": type[NativeInputExecution]})
+FUNCTION_FACTS src/agent_comms/native_runtime_input.py::_publication_read {'failure': {'missing'}} {}
+src/agent_comms/notification_assignment.py:116 Attribute: f"JOIN ({NativeRuntimeInput.source_membership_sql()}) member ON member.input_id=n.input_id "
+FUNCTION_FACTS src/agent_comms/notification_assignment.py::select {'failure': {'missing'}} {}
+src/agent_comms/owned_send_admission.py:35 ImportFrom: from .input_drain import InputDrain
+src/agent_comms/owned_send_admission.py:45 Name: inputs: InputDrain
+src/agent_comms/owner_lifecycle.py:88 Attribute: self.thread.require_idle()
+FUNCTION_FACTS src/agent_comms/owner_lifecycle.py::pin_private_nk_launch {} {'validated_root': 1, 'native_package': 1}
+FUNCTION_FACTS src/agent_comms/owner_lifecycle.py::_launch_owner_unlocked {'agent_bin': {'pi'}} {}
+src/agent_comms/owner_restart.py:87 Attribute: thread.require_idle()
+src/agent_comms/owner_restart.py:285 Attribute: thread.require_idle()
+src/agent_comms/pi_events.py:83 Name: accepts_prompt = False
+src/agent_comms/pi_events.py:165 Name: accepts_prompt = True
+src/agent_comms/pi_events.py:206 Name: accepts_prompt = True
+src/agent_comms/pi_events.py:590 Name: accepts_prompt = True
+src/agent_comms/pi_events.py:605 Name: accepts_prompt = True
+src/agent_comms/pi_events.py:641 Name: accepts_prompt = True
+src/agent_comms/pi_events.py:743 Name: accepts_prompt = True
+src/agent_comms/pi_events.py:771 Name: accepts_prompt = True
+src/agent_comms/pi_events.py:793 Name: accepts_prompt = True
+FUNCTION_FACTS src/agent_comms/pi_events.py::normalize_field {'key': {'reason', 'message'}} {}
+FUNCTION_FACTS src/agent_comms/pi_events.py::__post_init__ {} {'self.reason': 1}
+FUNCTION_FACTS src/agent_comms/pi_events.py::apply {'self.status_key': {'pi-mcp/live-v1'}} {}
+FUNCTION_FACTS src/agent_comms/pi_events.py::choice {'option_id': {'allow-once'}} {}
+FUNCTION_FACTS src/agent_comms/pi_events.py::normalize_field {'key': {'command', 'data'}, 'payload': {'error'}} {'record[payload]': 1}
+src/agent_comms/presentation.py:60 Name: busy: bool = False
+src/agent_comms/presentation.py:580 Attribute: ordinary = self.activity.readiness.presentation(ordinary, busy=self.activity.state.busy)
+src/agent_comms/presentation.py:585 Attribute: if self.status.active and self.thread.executing and not self.activity.state.busy:
+src/agent_comms/presentation.py:591 Attribute: and not self.activity.state.busy
+src/agent_comms/private_send_admission.py:43 ImportFrom: from .selected_participant import SelectedParticipant
+src/agent_comms/private_send_admission.py:50 Name: selected: SelectedParticipant
+src/agent_comms/private_send_admission.py:84 Name: selected: SelectedParticipant,
+src/agent_comms/private_send_stage.py:26 ImportFrom: from .native_input_record import (NativeInputIdentity, NativeInputExecution, TriageNativeExecution, FullNativeExecution)
+src/agent_comms/private_send_stage.py:55 Name: def execution(self) -> NativeInputExecution: ...
+src/agent_comms/private_send_stage.py:98 Attribute: self.execution.record_sources(db, input_id, self.assignments)
+src/agent_comms/private_send_stage.py:190 Attribute: if self.execution.source_assignment_ids(db, input_id) != tuple(
+src/agent_comms/private_send_stage.py:271 Name: def execution(self) -> TriageNativeExecution:
+src/agent_comms/private_send_stage.py:272 Name: return TriageNativeExecution()
+src/agent_comms/private_send_stage.py:280 Attribute: f"SELECT 1 FROM ({self.execution.source_membership_sql()}) members "
+src/agent_comms/private_send_stage.py:338 Name: def execution(self) -> FullNativeExecution:
+src/agent_comms/private_send_stage.py:339 Name: return FullNativeExecution(self.fence.execution_id, self.fence.attempt_ordinal)
+src/agent_comms/queued_input.py:34 ImportFrom: from .input_drain import InputDrain
+src/agent_comms/queued_input.py:103 Name: inputs: InputDrain,
+src/agent_comms/queued_input.py:141 Name: async def require_capacity(cls, inputs: InputDrain, session_id: str) -> None:
+src/agent_comms/queued_input.py:156 Name: cls, inputs: InputDrain, session_id: str, name: str, *, text: str, prompt: str,
+src/agent_comms/queued_input.py:220 Name: def require_live_source(self, inputs: InputDrain, session_id: str) -> None:
+src/agent_comms/queued_input.py:239 Attribute: owner.require_idle()
+src/agent_comms/queued_input.py:257 Name: async def require_capacity(cls, inputs: InputDrain, session_id: str) -> None:
+src/agent_comms/queued_input.py:262 Name: cls, inputs: InputDrain, session_id: str, thread_name: str, task: str, *,
+src/agent_comms/queued_input.py:281 Name: async def finish(self, inputs: InputDrain, session_id: str) -> None:
+src/agent_comms/queued_input.py:295 Name: def require_live_source(self, inputs: InputDrain, session_id: str) -> None:
+src/agent_comms/registration.py:22 ImportFrom: from .turn_phase import TurnPhase
+src/agent_comms/registration.py:191 Name: def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
+src/agent_comms/registration.py:197 Name: def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
+src/agent_comms/registration.py:241 Attribute: owner.thread.require_idle()
+src/agent_comms/registration.py:259 Attribute: owner.thread.require_idle()
+src/agent_comms/registry_document.py:31 ImportFrom: from .turn_phase import TurnPhase
+src/agent_comms/registry_document.py:285 Attribute: current.require_idle()
+src/agent_comms/registry_document.py:448 Name: def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
+src/agent_comms/registry_document.py:451 Name: def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
+src/agent_comms/restart_queue.py:228 Attribute: owner.require_idle()
+FUNCTION_FACTS src/agent_comms/restart_queue.py::enqueue {'sys.platform': {'linux'}} {}
+FUNCTION_FACTS src/agent_comms/restart_queue.py::run {'sys.platform': {'linux'}} {}
+src/agent_comms/schedule_rules.py:18 ImportFrom: from .input_drain import InputDrain
+src/agent_comms/schedule_rules.py:125 Attribute: return check.session_id in check.inputs.backend_inboxes
+src/agent_comms/selected_actions.py:14 ImportFrom: from .channel_coding_tools import CodingToolOwner
+src/agent_comms/selected_actions.py:27 Name: def mode(self, owner: CodingToolOwner) -> NativeToolMode | None:
+src/agent_comms/selected_actions.py:30 Name: def apply(self, owner: CodingToolOwner) -> None:
+src/agent_comms/selected_actions.py:84 Name: def mode(self, owner: CodingToolOwner) -> NativeToolMode:
+src/agent_comms/selected_actions.py:106 Name: def apply(self, owner: CodingToolOwner) -> None:
+src/agent_comms/selected_actions.py:136 Name: def apply(self, owner: CodingToolOwner) -> None:
+src/agent_comms/selected_participant.py:30 ImportFrom: from .turn_phase import PreparingPhase, TurnPhase
+src/agent_comms/selected_participant.py:35 ClassDef: class SelectedParticipant(MroDispatch):
+src/agent_comms/selected_participant.py:80 Name: def transition(self, phase: TurnPhase) -> None:
+src/agent_comms/selected_participant.py:172 Attribute: participant.pointer.require_idle()
+src/agent_comms/selected_participant.py:190 Attribute: owner.thread.require_idle()
+src/agent_comms/selected_request.py:11 ImportFrom: from .selected_participant import SelectedParticipant
+src/agent_comms/selected_request.py:18 Name: participant: SelectedParticipant
+src/agent_comms/selected_session.py:25 ImportFrom: from .selected_participant import SelectedParticipant
+src/agent_comms/selected_session.py:113 Name: participant: SelectedParticipant,
+FUNCTION_FACTS src/agent_comms/selected_session.py::launch_environment {'os.name': {'posix'}} {}
+src/agent_comms/selected_tool_broker.py:34 ImportFrom: from .native_input_record import NativeInputIdText, NativeInputIdentity, FullNativeExecution
+src/agent_comms/selected_tool_broker.py:292 Attribute: if admission.wake_assignment_id not in row.execution.source_assignment_ids(
+src/agent_comms/selected_tool_broker.py:297 Name: input_id, FullNativeExecution(admission.execution_id, admission.attempt_ordinal),
+FUNCTION_FACTS src/agent_comms/selected_tool_broker.py::announce {} {'item': 2}
+FUNCTION_FACTS src/agent_comms/selected_tool_broker.py::decode_call {'name': {'selected_claimed_write'}} {}
+src/agent_comms/selected_triage.py:96 ImportFrom: from .selected_turn import SelectedAttempt
+src/agent_comms/selected_triage.py:104 Name: attempt = SelectedAttempt.engage(participant, created)
+src/agent_comms/selected_turn.py:10 ImportFrom: from .channel_coding_tools import CodingToolOwner
+src/agent_comms/selected_turn.py:21 ImportFrom: from .selected_participant import SelectedParticipant
+src/agent_comms/selected_turn.py:36 Name: participant: SelectedParticipant
+src/agent_comms/selected_turn.py:89 ClassDef: class SelectedAttempt:
+src/agent_comms/selected_turn.py:92 Name: participant: SelectedParticipant
+src/agent_comms/selected_turn.py:98 Name: def engage(cls, participant: SelectedParticipant,
+src/agent_comms/selected_turn.py:99 Name: snapshot: RecoverySnapshot) -> SelectedAttempt:
+src/agent_comms/selected_turn.py:135 Name: def tool_owner(self, session, input_id, action) -> CodingToolOwner:
+src/agent_comms/selected_turn.py:153 Name: return CodingToolOwner(
+src/agent_comms/selected_turn.py:230 Name: participant: SelectedParticipant
+src/agent_comms/selected_turn.py:241 Name: attempt = SelectedAttempt.engage(participant, created)
+src/agent_comms/session_effects.py:13 ImportFrom: from .input_drain import InputDrain
+src/agent_comms/session_effects.py:19 Name: inputs: InputDrain
+src/agent_comms/thread_presentation.py:73 Name: busy: bool = False
+src/agent_comms/triage_native_sources.py:28 ImportFrom: from .native_input_record import TriageNativeExecution
+src/agent_comms/triage_native_sources.py:39 Name: f"WHERE n.input_id=NEW.input_id AND n.stage='{TriageNativeExecution.declared_name}') "
+src/agent_comms/turn_inputs.py:17 ImportFrom: from .agent_backend import InputRequest, SendNow, WhenBusy
+src/agent_comms/turn_inputs.py:25 Name: _PI_STREAMING_BEHAVIOR = {WhenBusy.STEER: "steer", WhenBusy.FOLLOW_UP: "followUp"}
+src/agent_comms/turn_inputs.py:29 ClassDef: class InputForwarding:
+src/agent_comms/turn_inputs.py:116 Attribute: streaming_behavior=_PI_STREAMING_BEHAVIOR[item.when_busy],
+src/agent_comms/turn_lease.py:12 ImportFrom: from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
+src/agent_comms/turn_lease.py:23 Name: phase: TurnPhase = field(default_factory=PreparingPhase)
+src/agent_comms/turn_lease.py:57 Name: def phase(self) -> TurnPhase:
+src/agent_comms/turn_lease.py:60 Name: def phase_effects(self, phase: TurnPhase) -> Iterator[TurnState]:
+src/agent_comms/turn_lease.py:65 Name: def native_phase_effects(self, phase: TurnPhase) -> Iterator[TurnState]:
+src/agent_comms/turn_lease.py:86 Attribute: return self.phase.busy
+src/agent_comms/turn_lease.py:90 Attribute: return self.phase.accepts_prompt
+src/agent_comms/turn_lease.py:94 Attribute: return self.phase.accepts_followup
+src/agent_comms/turn_phase.py:19 Name: def model_progress(self) -> TurnPhase:
+src/agent_comms/turn_phase.py:24 ClassDef: class TurnPhase(DeclaredFamily, affix="Phase"):
+src/agent_comms/turn_phase.py:33 Name: busy: ClassVar[bool] = True
+src/agent_comms/turn_phase.py:34 Name: accepts_prompt: ClassVar[bool] = False
+src/agent_comms/turn_phase.py:35 Name: accepts_followup: ClassVar[bool] = True
+src/agent_comms/turn_phase.py:49 Name: def described(self, detail: str) -> TurnPhase:
+src/agent_comms/turn_phase.py:52 Name: def input_started(self) -> TurnPhase:
+src/agent_comms/turn_phase.py:55 Name: def tool_started(self, tool_id: str, title: str) -> TurnPhase:
+src/agent_comms/turn_phase.py:58 Name: def tool_ended(self, tool_id: str) -> TurnPhase:
+src/agent_comms/turn_phase.py:61 Name: def compacting(self) -> TurnPhase:
+src/agent_comms/turn_phase.py:64 Name: def compaction_ended(self) -> TurnPhase:
+src/agent_comms/turn_phase.py:67 Name: def observed(self, phase: TurnPhase) -> TurnPhase:
+src/agent_comms/turn_phase.py:70 Name: def on(self, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
+src/agent_comms/turn_phase.py:71 Name: for member in TurnPhase.members_with(TurnPhase):
+src/agent_comms/turn_phase.py:83 Name: def enter(cls, current: TurnPhase, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
+src/agent_comms/turn_phase.py:92 Name: def model_progress(self) -> TurnPhase:
+src/agent_comms/turn_phase.py:95 Name: def stalled(self, accepted: bool) -> TurnPhase:
+src/agent_comms/turn_phase.py:99 ClassDef: class Excursion(TurnPhase): / Name: class Excursion(TurnPhase):
+src/agent_comms/turn_phase.py:106 ClassDef: class PromptAcceptancePhase(TurnPhase): / Name: class PromptAcceptancePhase(TurnPhase):
+src/agent_comms/turn_phase.py:111 ClassDef: class PreparingPhase(TurnPhase): / Name: class PreparingPhase(TurnPhase):
+src/agent_comms/turn_phase.py:115 ClassDef: class IdlePhase(TurnPhase): / Name: class IdlePhase(TurnPhase):
+src/agent_comms/turn_phase.py:116 Name: busy = False
+src/agent_comms/turn_phase.py:117 Name: accepts_prompt = True
+src/agent_comms/turn_phase.py:118 Name: accepts_followup = False
+src/agent_comms/turn_phase.py:125 ClassDef: class CancellingPhase(TurnPhase): / Name: class CancellingPhase(TurnPhase):
+src/agent_comms/turn_phase.py:126 Name: accepts_followup = False
+src/agent_comms/turn_phase.py:130 Name: def observed(self, phase: TurnPhase) -> TurnPhase:
+src/agent_comms/turn_phase.py:133 ClassDef: class ShutdownPhase(TurnPhase): / Name: class ShutdownPhase(TurnPhase):
+src/agent_comms/turn_phase.py:136 Name: accepts_followup = False
+src/agent_comms/turn_phase.py:141 Name: def observed(self, phase: TurnPhase) -> TurnPhase:
+src/agent_comms/turn_phase.py:145 ClassDef: class PublishingPhase(TurnPhase): / Name: class PublishingPhase(TurnPhase):
+src/agent_comms/turn_phase.py:146 Name: accepts_followup = False
+src/agent_comms/turn_phase.py:150 Name: def observed(self, phase: TurnPhase) -> TurnPhase:
+src/agent_comms/turn_phase.py:154 ClassDef: class ModelWaitPhase(TurnPhase): / Name: class ModelWaitPhase(TurnPhase):
+src/agent_comms/turn_phase.py:155 Name: def model_progress(self) -> TurnPhase:
+src/agent_comms/turn_phase.py:159 ClassDef: class SettlingStatsPhase(TurnPhase): / Name: class SettlingStatsPhase(TurnPhase):
+src/agent_comms/turn_phase.py:160 Name: accepts_followup = False
+src/agent_comms/turn_phase.py:166 Name: resume: TurnPhase = field(default_factory=ModelWaitPhase)
+src/agent_comms/turn_phase.py:174 Name: def enter(cls, current: TurnPhase, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
+src/agent_comms/turn_phase.py:184 Name: def compacting(self) -> TurnPhase:
+src/agent_comms/turn_phase.py:192 Name: def input_started(self) -> TurnPhase:
+src/agent_comms/turn_phase.py:195 Name: def tool_started(self, tool_id: str, title: str) -> TurnPhase:
+src/agent_comms/turn_phase.py:198 Name: def tool_ended(self, tool_id: str) -> TurnPhase:
+src/agent_comms/turn_phase.py:201 Name: def compaction_ended(self) -> TurnPhase:
+src/agent_comms/turn_phase.py:241 Name: def tool_started(self, tool_id: str, title: str) -> TurnPhase:
+src/agent_comms/turn_phase.py:245 Name: def tool_ended(self, tool_id: str) -> TurnPhase:
+src/agent_comms/turn_phase.py:261 Name: def enter(cls, current: TurnPhase, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
+src/agent_comms/turn_phase.py:265 Name: def on(self, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
+src/agent_comms/turn_phase.py:270 Name: def stalled(self, accepted: bool) -> TurnPhase:
+FUNCTION_FACTS src/agent_comms/turn_phase.py::starts {} {'event': 1}
+FUNCTION_FACTS src/agent_comms/turn_phase.py::ends {} {'event': 1}
+FUNCTION_FACTS src/agent_comms/turn_phase.py::starts {} {'event': 1}
+FUNCTION_FACTS src/agent_comms/turn_phase.py::ends {} {'event': 1}
+FUNCTION_FACTS src/agent_comms/turn_phase.py::starts {} {'event': 1}
+FUNCTION_FACTS src/agent_comms/turn_phase.py::ends {} {'event': 1}
+FUNCTION_FACTS src/agent_comms/turn_phase.py::starts {} {'event': 1}
+FUNCTION_FACTS src/agent_comms/turn_phase.py::ends {} {'event': 1}
+src/agent_comms/turn_runner.py:50 ImportFrom: from .turn_phase import CancellingPhase, TurnPhase
+src/agent_comms/turn_runner.py:55 ImportFrom: from .input_drain import InputDrain
+src/agent_comms/turn_runner.py:140 Name: def bind(self, sessions: SessionLifecycle, inputs: InputDrain) -> None:
+src/agent_comms/turn_runner.py:146 Attribute: return session_id in self.turn_tasks or self.turn_state(session_id).busy
+src/agent_comms/turn_runner.py:154 Attribute: return state.busy and state.managed_id == turn_id
+src/agent_comms/turn_runner.py:156 Name: async def transition_turn(self, session_id: str, lease: TurnLeaseFence, phase: TurnPhase) -> None:
+src/agent_comms/turn_runner.py:314 Attribute: if name != thread_name and activity.state.busy:
+src/agent_comms/turn_runner.py:473 Attribute: return self.inputs.backend_inboxes.get(session_id) if state.accepts_followup else None
+src/agent_comms/turn_runner.py:512 Attribute: self.inputs.backend_inboxes[session_id] = inbox
+FUNCTION_FACTS src/agent_comms/turn_runner.py::extension_ui_permission {"outcome.get('outcome')": {'selected'}} {'controller': 2, 'reply': 1}
+src/agent_comms/turn_stats.py:88 Attribute: self.busy
+src/agent_comms/turn_watchdog.py:79 Attribute: if event.accepts_prompt:
+src/agent_comms/ui_model/observation.py:361 Name: busy: frozenset[str]
+src/agent_comms/ui_model/observation.py:448 Name: presentations, unavailable, busy = {}, set(), set()
+src/agent_comms/ui_model/observation.py:453 Name: busy.add(name)
+src/agent_comms/ui_model/observation.py:456 Name: self.connection.send(ThreadsObserved(revision, presentations, frozenset(unavailable), frozenset(busy)))
+src/agent_comms/ui_model/observation.py:457 Name: self.sent_threads, self.retry_threads = threads, bool(busy)
+FUNCTION_FACTS src/agent_comms/ui_model/observation.py::store_names {} {'value': 1}
+FUNCTION_FACTS src/agent_comms/ui_model/observation.py::paths {} {'value': 1}
+src/agent_comms/ui_model/sidebar.py:44 Name: busy: bool
+src/agent_comms/ui_model/sidebar.py:59 Attribute: presentation.busy, person.runtime.model if person.runtime else person.thread.model,
+src/agent_comms/ui_model/sidebar.py:85 Name: any(name in busy for name in view.members),
+src/agent_comms/ui_model/sidebar.py:125 Attribute: busy = frozenset(name for name, row in threads.items() if row.busy) / Name: busy = frozenset(name for name, row in threads.items() if row.busy)
+src/agent_comms/ui_model/sidebar.py:126 Name: channels = {view.channel.name: ChannelRowModel.of(view, snapshot, busy) for view in snapshot.channels}
+src/agent_comms/ui_model/status.py:58 Attribute: return cls(name, True, tuple(lines), presentation.busy, presentation.attention,
+src/agent_comms/ui_model/status.py:83 Attribute: for name in result.busy)

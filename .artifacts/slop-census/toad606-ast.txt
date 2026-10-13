@@ -1,0 +1,55 @@
+HEAD c311d6ebf26de5aa0aa1e24e28e803b01ee17fd3
+MODULES 286 PARSE_OMISSIONS []
+src/toad/acp/agent_process.py:87 connection.custody.enter_context(acquisition.pop_all())
+src/toad/comms_root.py:125 self.custody.enter_context(acquisition.pop_all())
+src/toad/resource_release.py:36 def pop_all(self):
+src/toad/resource_release.py:37 release = super().pop_all()
+src/toad/transcript_filter.py:138 acquisition.pop_all()
+src/toad/transcript_publication.py:52 if history in self.captured and history.state.reports_coverage
+src/toad/transcript_publication.py:156 if history.is_attached and history.state.reports_coverage)
+src/toad/transcript_publication.py:597 def reports_coverage(self) -> bool:
+src/toad/transcript_publication.py:598 return any(history.state.reports_coverage for history in self.histories)
+src/toad/transcript_publication.py:916 if history._source_state.retirement_source().reports_coverage:
+src/toad/transcript_state.py:127 def reports_coverage(self) -> bool:
+src/toad/transcript_state.py:128 return self.source.reports_coverage
+src/toad/transcript_state.py:238 completion.pop_all()
+src/toad/widgets/session_history_details.py:20 parts.append("Saved history available" if self.transcript.reports_coverage
+src/toad/widgets/transcript_history.py:418 acquisition.pop_all()
+src/toad/widgets/transcript_history.py:1218 if self._source_state.reports_coverage:
+src/toad/widgets/transcript_history.py:1222 if self._source_state.reports_coverage:
+src/toad/widgets/transcript_history.py:1243 if not self._source_state.reports_coverage:
+src/toad/widgets/transcript_history.py:1253 return (self._source_state.reports_coverage
+tools/build_runtime.py:26 from performance.capture_live import XvfbDisplay
+tools/build_runtime.py:71 def observe_saved_thread(pid: int, output: str) -> None:
+tools/build_runtime.py:76 paint = App._display
+tools/build_runtime.py:79 App._display = paint  # One observation on our own fresh App.
+tools/build_runtime.py:84 if not presentation.transcript.reports_coverage:
+tools/build_runtime.py:91 App._display = observe
+tools/build_runtime.py:94 def open_saved_thread(runtime: Path, thread: str, display: XvfbDisplay, output: Path) -> Path:
+tools/build_runtime.py:134 class GitExport:
+tools/build_runtime.py:161 def verify_wheel(self, wheel: Path, installed: dict) -> None:
+tools/build_runtime.py:167 if name != self.package_name or installed[name]['version'] != metadata['Version']:
+tools/build_runtime.py:168 raise RuntimeError(f'{self.package_name} differs from its clean-export wheel')
+tools/build_runtime.py:177 class DependencySet:
+tools/build_runtime.py:179 replacements: tuple[GitExport, ...]
+tools/build_runtime.py:182 def replaced_names(self) -> frozenset[str]:
+tools/build_runtime.py:183 return frozenset(export.package_name for export in self.replacements)
+tools/build_runtime.py:187 replaced = self.replaced_names
+tools/build_runtime.py:218 for name in self.replaced_names:
+tools/build_runtime.py:225 class RuntimeBuild:
+tools/build_runtime.py:226 toad: GitExport
+tools/build_runtime.py:227 core: GitExport
+tools/build_runtime.py:232 display: XvfbDisplay
+tools/build_runtime.py:237 dependencies = DependencySet(read_inventory(self.baseline / 'bin/python'), (self.toad, self.core))
+tools/build_runtime.py:270 export.verify_wheel(wheel, installed)
+tools/build_runtime.py:277 record['screenshot'] = str(open_saved_thread(destination, self.thread, self.display, self.scratch / f'acceptance-{destination.name}'))
+tools/build_runtime.py:279 cleanup.pop_all()  # The completed immutable runtime leaves build custody.
+tools/build_runtime.py:295 with XvfbDisplay(args.display) as display:
+tools/build_runtime.py:296 build = RuntimeBuild(
+tools/build_runtime.py:297 GitExport(args.toad_repo.resolve(), args.toad_ref, 'toad', 'batrachian-toad'),
+tools/build_runtime.py:298 GitExport(args.core_repo.resolve(), args.core_ref, 'core', 'agent-comms'),
+tools/performance/capture_live.py:22 class XvfbDisplay(AbstractContextManager):
+tools/performance/capture_live.py:44 self.custody = custody.pop_all()
+tools/performance/frame_meter.py:133 display = app_type._display
+tools/performance/frame_meter.py:325 app_type._display = display
+tools/performance/frame_meter.py:379 app_type._display = timed_display
