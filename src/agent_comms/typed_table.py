@@ -374,9 +374,27 @@ class TypedRow:
 
 
 @dataclass(frozen=True)
+class SQLiteSchemaDifference:
+    name: str
+    stored: str | None
+    declared: str | None
+
+
+@dataclass(frozen=True)
 class SQLiteSchemaObject(TypedRow):
     name: str
     sql: str
+
+    @classmethod
+    def differences(
+        cls, actual: list[SQLiteSchemaObject], expected: Mapping[str, str],
+    ) -> tuple[SQLiteSchemaDifference, ...]:
+        stored = {row.name: row.sql for row in actual}
+        if stored == expected:
+            return ()
+        return tuple(SQLiteSchemaDifference(name, stored.get(name), expected.get(name))
+                     for name in sorted(stored.keys() | expected.keys())
+                     if stored.get(name) != expected.get(name))
 
 
 @dataclass(frozen=True)

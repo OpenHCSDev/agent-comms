@@ -251,7 +251,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
                 actual = SQLiteSchemaObject.read(
                     db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
                 )
-                if {item.name: item.sql for item in actual} != cls.schema_objects():
+                if SQLiteSchemaObject.differences(actual, cls.schema_objects()):
                     raise NativePiUnavailable("Native proof requires offline durable conversion")
                 if FileIdentity.from_stat(before) != FileIdentity.from_stat(path.lstat()):
                     raise NativePiUnavailable("Native proof inode changed while opening")

@@ -191,7 +191,7 @@ class WakeCandidateIndex:
                     for table in TypedTable.members_with(CandidateTable):
                         table.create(db)
                 return
-            if {row.name: row.sql for row in actual} != schema:
+            if SQLiteSchemaObject.differences(actual, schema):
                 raise ProjectionRebuildRequiredError(
                     "candidate index schema changed; reset required"
                 )
