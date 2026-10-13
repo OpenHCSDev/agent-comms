@@ -10,12 +10,15 @@ from __future__ import annotations
 import argparse
 import asyncio
 from dataclasses import replace
+import fcntl
 import inspect
 import json
 import os
 from pathlib import Path
 import shlex
+import struct
 import sys
+import termios
 
 from agent_comms.comms import Comms
 from agent_comms.goal_management import Goals
@@ -51,20 +54,25 @@ class PhysicalPilot(Pilot):
         await self.command('xdotool', 'windowfocus', '--sync', self.window,
                            'type', '--clearmodifiers', '--delay', '1', '--', text)
 
-    async def click(self, selector):
-        region = self.app.query_one(selector).region
+    async def click(self, widget):
+        region = widget.region
         geometry = await self.command('xdotool', 'getwindowgeometry', '--shell', self.window)
         dimensions = dict(line.split('=', 1) for line in geometry.splitlines())
-        # st's two-pixel border surrounds the terminal's reported cell grid.
-        cell_width = (int(dimensions['WIDTH']) - 4) // self.app.size.width
-        cell_height = (int(dimensions['HEIGHT']) - 4) // self.app.size.height
-        x = 2 + (region.x + region.width // 2) * cell_width + cell_width // 2
-        y = 2 + (region.y + region.height // 2) * cell_height + cell_height // 2
+        rows, columns, pixel_width, pixel_height = struct.unpack(
+            'HHHH', fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, bytes(8)))
+        assert (columns, rows) == tuple(self.app.size)
+        assert pixel_width and pixel_height, 'st must report its terminal pixel area'
+        cell_width, cell_height = pixel_width // columns, pixel_height // rows
+        border_x = (int(dimensions['WIDTH']) - pixel_width) // 2
+        border_y = (int(dimensions['HEIGHT']) - pixel_height) // 2
+        x = border_x + (region.x + region.width // 2) * cell_width + cell_width // 2
+        y = border_y + (region.y + region.height // 2) * cell_height + cell_height // 2
         await self.command('xdotool', 'mousemove', '--sync', '--window', self.window,
                            str(x), str(y), 'click', '1')
         (self.stage / 'physical-click.json').write_text(json.dumps({
-            'selector': selector, 'window': self.window, 'x': x, 'y': y,
-            'cell_width': cell_width, 'cell_height': cell_height}) + '\n')
+            'widget_id': widget.id, 'window': self.window, 'x': x, 'y': y,
+            'cell_width': cell_width, 'cell_height': cell_height,
+            'border_x': border_x, 'border_y': border_y}) + '\n')
         return True
 
     async def capture(self, name):
@@ -147,7 +155,7 @@ async def run(stage: Path, extension: Path, *, physical=False):
                 app.save_screenshot(str(stage / 'blocked-before-retry.svg'))
                 if physical:
                     await pilot.capture('blocked-before-retry')
-                assert await pilot.click('#goal-toggle'), 'Click the actual visible Retry control'
+                assert await pilot.click(view.query_one('#goal-toggle')), 'Click the actual visible Retry control'
                 await until(lambda: comms.registry.require(session).goal.state.declared_name == 'completed'
                             and not comms.registry.require(session).executing)
                 completed = comms.registry.require(session).goal
