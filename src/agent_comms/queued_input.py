@@ -20,6 +20,9 @@ from .errors import RelationViolationError
 from .goals import Goal
 from .image_inputs import ImageInput
 from .assignment_states import DeferredAssignment, DeliveredAssignment
+from .bus_publication import stable_thread_lookup
+from .coordination_cohort import pending_sealed_assignments
+from .coordination_errors import IdentityConflict
 from .input_attempt import ACPInputIdText, InputAttempt, ReservedInput
 from .input_disposition import InputDispositions
 from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
@@ -34,6 +37,7 @@ if TYPE_CHECKING:
     from asyncio import Queue
     from .agent_backend import InputContent, InputRequest, SendNow, TurnInboxItem
     from .bus_publication import CommittedDelivery
+    from .message_bus import MessageBus
     from .coordination_tables.assignments import WakeAssignment
     from .messages import Message
     from .acp_extension import QueueItem, QueueScope
@@ -192,8 +196,7 @@ class QueuedInput:
         """The accepted input owns transfer into this turn's existing native queue."""
         from .agent_backend import InputId, InputRequest, WhenBusy
 
-        if inputs.backend_inboxes.get(session_id) is not inbox:
-            raise InputHandoffRefused("Running turn inbox retired before input placement")
+        inputs.require_inbox(session_id, inbox)
         inputs.following_sources.setdefault(session_id, {})[self.input_id] = self.source()
         inputs.queued_inputs.setdefault(session_id, {})[self.input_id] = self
         inbox.put_nowait(InputRequest(
@@ -277,13 +280,9 @@ class QueuedInput:
     def restore_after_turn(self) -> QueuedInput | None:
         return self.immediate() if self.echo else None
 
-    @property
-    def started_text(self) -> str | None:
-        """What the client shows as the user's own text when this input starts."""
+    async def started(self, inputs: InputDrain) -> str | None:
+        """The running turn proved this input's start; the text the client shows as the user's."""
         return self.text
-
-    async def native_started(self, inputs: InputDrain) -> None:
-        """The running turn proved this input's own user start."""
 
     async def not_started(self, inputs: InputDrain) -> None:
         """The turn refused this input or ended before its user start."""
@@ -369,15 +368,57 @@ class DeliveredInput(QueuedInput):
             ))
         return tuple(reserved)
 
+    @classmethod
+    async def deliver_pending(
+        cls, inputs: InputDrain, session_id: str, owner: Thread, bus: MessageBus, root_id: str, after_seq: int,
+    ) -> None:
+        """Hand this owner's pending bus messages to its running turn.
+
+        Pi takes each one after its current tool batch. A turn that cannot take
+        follow-ups leaves them pending for the ordinary wake after it ends.
+        """
+        inbox = await inputs.effects.turns.active_backend_inbox(session_id)
+        # Only an owner turn forwards its inbox to Pi while it runs.
+        if inbox is None or session_id not in inputs.original_sources:
+            return
+        store_path = inputs.comms.root / "coordination.sqlite3"
+        lookup = stable_thread_lookup(owner.created_at)
+
+        def read(store: Coordination):
+            assignments = pending_sealed_assignments(
+                store, lookup, owner.name, after_seq=after_seq
+            )
+            with bus.log.certified_read() as source:
+                if source.marker.root_id != root_id:
+                    raise IdentityConflict("delivered source wire root changed")
+                originals = tuple(source.references(tuple(
+                    assignment.source for assignment in assignments
+                )))
+            return tuple(zip(originals, assignments, strict=True))
+
+        pending = await Coordination.run_async(store_path, read)
+        pending = pending[:max(await cls.capacity(inputs, session_id), 0)]
+        if not pending:
+            return
+        unplaced: tuple[Self, ...] = ()
+        async with _async_store_lock(inputs.comms._wire_lock_path):
+            reserved = await Coordination.run_async(store_path, partial(
+                cls.reserve_pending, inputs, owner.name, root_id, pending,
+            ))
+            for index, (item, content) in enumerate(reserved):
+                try:
+                    item.place(inputs, session_id, inbox, content)
+                except InputHandoffRefused:
+                    unplaced = tuple(item for item, _ in reserved[index:])
+                    break
+        for item in unplaced:
+            await item.not_started(inputs)
+
     def after_clear(self) -> DeliveredInput:
         return self  # Clearing the user's queue cannot withdraw a bus message.
 
     def restore_after_turn(self) -> None:
         return None
-
-    @property
-    def started_text(self) -> None:
-        return None  # Its transcript row is the bus message, not typed user text.
 
     async def settle(self, inputs: InputDrain, state) -> None:
         await Coordination.run_async(
@@ -388,15 +429,17 @@ class DeliveredInput(QueuedInput):
             ),
         )
 
-    async def native_started(self, inputs: InputDrain) -> None:
+    async def started(self, inputs: InputDrain) -> None:
+        # Its transcript row is the bus message, not typed user text.
         await self.settle(inputs, DeliveredAssignment)
 
     async def not_started(self, inputs: InputDrain) -> None:
         document = await Coordination.run_worker(
             partial(inputs.finish_original_inputs, (self.key,))
         )
-        if not document.lookup(self.key).has_native_binding:
-            await self.settle(inputs, self.assignment.lifecycle.mode.initial_state())
+        if document.lookup(self.key).has_native_binding:
+            return  # Written without a proved start: it stays paused, never resent.
+        await self.settle(inputs, self.assignment.lifecycle.mode.initial_state())
 
 
 class InitialInput(QueuedInput):

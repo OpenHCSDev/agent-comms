@@ -59,6 +59,7 @@ from .coordination_cohort import next_sealed_assignment
 from .field_codec import FieldCodec
 from .cursor_publication import CursorPublication
 from .input_drain import InputDrain
+from .queued_input import DeliveredInput
 from .input_effects import InputEffects
 from .message_bus import MessageBus
 from .routing import MessageRoute
@@ -431,8 +432,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         ):
             # A running turn takes its owner's pending messages as inputs;
             # whatever it cannot take wakes this owner once the turn ends.
-            await self.inputs.deliver_pending(
-                session_id, owner, bus, wire_root_id, admission_after_seq
+            await DeliveredInput.deliver_pending(
+                self.inputs, session_id, owner, bus, wire_root_id, admission_after_seq
             )
             await self.cursors.publish(session_id, thread_name)
             return 0
