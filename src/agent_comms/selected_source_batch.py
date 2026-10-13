@@ -107,11 +107,13 @@ class SelectedSourceBatch:
         """The model's one plain answer for this batch's one reply route.
 
         The turn already fixes the sender, target and type, so routing is not
-        asked of the model and no answer shape is decoded. This Message value
-        is a proposal only; the sending step owns the actual timestamp,
-        audience and bus row.
+        asked of the model and no answer shape is decoded. An empty answer is
+        refused by Message's own empty-body rule (messages.py:144-145); this
+        boundary only translates it to the recorded native-failure type. The
+        Message value is a proposal only; the sending step owns the actual
+        timestamp, audience and bus row.
         """
-        answer = text.strip()
-        if not answer:
-            raise NativePiUnavailable("Native turn produced no publishable answer")
-        return Message(sender, self.targets[0], answer, MessageType.INFO)
+        try:
+            return Message(sender, self.targets[0], text.strip(), MessageType.INFO)
+        except ValueError as error:
+            raise NativePiUnavailable("Native turn produced no publishable answer") from error
