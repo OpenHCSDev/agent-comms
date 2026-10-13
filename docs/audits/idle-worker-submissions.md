@@ -57,7 +57,8 @@ This actual delivered request contains:
 
 The same wording is present in the current owner log
 `diagnostics/owner-716545e8d63f1e097ecd18afb0cd0083-0aee67ffc092439690dd34f6fc2ef7fe.log:2`
-and in retained native session messages containing source sequence 3181.
+and in retained native user-message record `47b38174` containing source
+sequence 3181 (not just in this agent's answer quoting the notice).
 This establishes installed delivery visibility, not successful awareness.
 
 The live candidate DB had an empty WAL and a stable main-file revision during
@@ -87,7 +88,7 @@ There is a demonstrated notification gap:
   (`coordination_response.py:278-281`). The append occurs in
   `_settle_fenced_response` (`coordination_response.py:554-556`) through
   `Publisher._publish_keyed_response_unlocked`, whose end appends then returns
-  (`publisher.py:562-564`), without that notification.
+  (`publisher.py:561-562`), without that notification.
 
 core-awareness-index remains the implementation owner of this gap. Before
 editing, enumerate the complete append/lock-release consumer family with the
