@@ -39,6 +39,38 @@ def test_tick_revision_paths_are_the_watched_sources(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["unlink", "move-away"])
+async def test_quiet_native_watch_wakes_when_auth_file_disappears(tmp_path, action):
+    auth = tmp_path / "auth.json"
+    auth.write_text("{}")
+    watcher = open_wire_watcher(WatchSource.file(auth))
+    if not isinstance(watcher, WireChangeWatch):
+        watcher.close()
+        pytest.skip("Native file notifications are unavailable")
+    waiting = None
+    try:
+        await watcher.prepare()
+        waiting = asyncio.create_task(watcher.wait())
+        # Neither a clock nor an unrelated file removal may wake this observer.
+        unrelated = tmp_path / "unrelated"
+        unrelated.write_text("unrelated")
+        unrelated.unlink()
+        await asyncio.sleep(0.1)
+        assert not waiting.done()
+        if action == "unlink":
+            auth.unlink()
+        else:
+            auth.rename(tmp_path / "removed.json")
+        assert await asyncio.wait_for(waiting, 1) is watcher
+        assert not auth.exists()
+    finally:
+        if waiting is not None and not waiting.done():
+            waiting.cancel()
+            await asyncio.gather(waiting, return_exceptions=True)
+        watcher.close()
+
+
+@pytest.mark.asyncio
 async def test_private_guard_read_does_not_wake_its_own_wire_watcher(tmp_path):
     comms = Comms(tmp_path)
     comms.registry.declare(

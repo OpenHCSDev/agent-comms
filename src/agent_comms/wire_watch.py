@@ -1,7 +1,8 @@
 """Local file notification for idle wire owners.
 
-A native notification only prompts a normal read. Polling is used only when
-native directory notification is unavailable or loses its watched directory.
+A native notification only prompts a normal read. Missing directories are
+watched through their existing ancestors; polling is used only when native
+notification is unavailable.
 """
 
 from __future__ import annotations
@@ -20,13 +21,18 @@ from .goal_waits import GoalWaits
 
 _IN_MODIFY = 0x00000002
 _IN_CLOSE_WRITE = 0x00000008
+_IN_MOVED_FROM = 0x00000040
 _IN_MOVED_TO = 0x00000080
 _IN_CREATE = 0x00000100
+_IN_DELETE = 0x00000200
 _IN_DELETE_SELF = 0x00000400
 _IN_MOVE_SELF = 0x00000800
 _IN_Q_OVERFLOW = 0x00004000
 _IN_IGNORED = 0x00008000
-_MASK = _IN_CLOSE_WRITE | _IN_MOVED_TO | _IN_DELETE_SELF | _IN_MOVE_SELF
+_MASK = (
+    _IN_CLOSE_WRITE | _IN_MOVED_FROM | _IN_MOVED_TO | _IN_DELETE
+    | _IN_DELETE_SELF | _IN_MOVE_SELF
+)
 _HEADER = struct.Struct("=iIII")
 _AUTHORITY_FILES = frozenset({
     b"bus.jsonl",
