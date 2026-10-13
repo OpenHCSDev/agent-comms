@@ -290,7 +290,10 @@ class BusPresentation:
         self._display_indexes: dict[str, BusDisplayIndex] = {}
 
     def display_index(self, viewer: str) -> BusDisplayIndex:
-        return self._display_indexes.setdefault(viewer, BusDisplayIndex(self._path, viewer))
+        return self._display_indexes.setdefault(
+            viewer,
+            self.bus.log.register_append_index(BusDisplayIndex(self._path, viewer)),
+        )
 
     @contextmanager
     def snapshot(
@@ -304,6 +307,8 @@ class BusPresentation:
         holds none of these locks. Later appends are outside the opened cut;
         heartbeat changes cannot invalidate it.
         """
+        if viewer is not None:
+            self.display_index(viewer)
         with ExitStack() as stack:
             with _store_lock(self._wire_lock_path, shared=True):
                 source = stack.enter_context(
@@ -314,12 +319,6 @@ class BusPresentation:
                 ) as basis:
                     if target is not None:
                         basis.scope(target)
-                    # Borrow the existing checkpoint owners before releasing the
-                    # cut. A later writer cannot replace these admitted prefixes
-                    # with checkpoints newer than the source we must display.
-                    self.bus.prepare_activity(source)
-                    if basis.viewer is not None and source.revision is not None:
-                        source.append_checkpoint(self.display_index(basis.viewer))
             yield basis, source
 
     def channel_page(

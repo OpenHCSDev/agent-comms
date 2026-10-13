@@ -169,6 +169,29 @@ def test_captured_viewer_cut_keeps_its_admitted_append_checkpoints(wired, monkey
     assert parsed == []
 
 
+def test_computed_checkpoint_stays_with_the_same_opened_cut(wired, monkeypatch):
+    first = wired.messaging.send_message("PR111", "#base", "first exact-cut row")
+    viewer = wired.messaging.user_identity("/same-cut-viewer").name
+    with wired.views.presentation.snapshot(viewer=viewer) as (basis, source):
+        parsed = []
+        original = Message.from_wire
+
+        def measured(row):
+            parsed.append(row["seq"])
+            return original(row)
+
+        monkeypatch.setattr(Message, "from_wire", measured)
+        first_metrics = wired.views.presentation.display_view_metrics(
+            source, basis.scopes, basis.scopes, basis.viewer, basis.viewer_names)
+        first_clocks = wired.bus.last_sent_timestamps(source=source)
+        assert first.seq in parsed
+        parsed.clear()
+        assert wired.views.presentation.display_view_metrics(
+            source, basis.scopes, basis.scopes, basis.viewer, basis.viewer_names) == first_metrics
+        assert wired.bus.last_sent_timestamps(source=source) == first_clocks
+        assert parsed == []
+
+
 def test_mounted_activity_rebuilds_after_bus_replacement_or_damaged_checkpoint(wired):
     wired.messaging.send("PR111", "#base", "first")
     wired.messaging.send("fixer", "#base", "second")

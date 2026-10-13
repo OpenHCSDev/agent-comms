@@ -79,6 +79,7 @@ class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
                     sent[sender] = max(sent.get(sender, 0.0), timestamp)
         projected = ActivityCheckpoint(source, source.size,
                     AppendCheckpoint.fingerprint(stream, source.size), channels, sent)
+        opened.remember_append_checkpoint(self, projected)
         with suppress(OSError):
             self.write(projected, fsync_parent=True)
         return projected.snapshot

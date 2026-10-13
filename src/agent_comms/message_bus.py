@@ -56,7 +56,7 @@ class MessageBus:
         self._channels = ChannelCatalog(bus_path.parent / ChannelCatalog.filename)
         self._pending_cache: dict[str, PendingCounts] = {}
         self._view_unread_cache: dict[str, ViewUnread] = {}
-        self._activity = BusActivityIndex(bus_path)
+        self._activity = self.log.register_append_index(BusActivityIndex(bus_path))
         self.publisher = Publisher(
             self.log,
             registry,
@@ -100,11 +100,6 @@ class MessageBus:
                         counts[scope.channel] += 1
         self._view_unread_cache[viewer] = ViewUnread(revision, scopes, counts)
         return dict(counts)
-
-    def prepare_activity(self, source: OpenedWireSnapshot) -> None:
-        """Admit the small persisted prefix while this source cut is being captured."""
-        if source.revision is not None and source.stream is not None:
-            source.append_checkpoint(self._activity)
 
     def _activity_clocks(self, source: OpenedWireSnapshot | None = None):
         """The existing index borrows the original captured source after release."""

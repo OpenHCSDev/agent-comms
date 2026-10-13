@@ -84,6 +84,26 @@ class AppendCheckpoint:
 Checkpoint = TypeVar("Checkpoint", bound=AppendCheckpoint)
 
 
+@dataclass
+class CapturedCheckpoint(Generic[Checkpoint]):
+    """One append-index value borrowed for one opened source cut."""
+
+    source: BusFileRevision | None
+    record: AppendCheckpoint | None
+
+    def value(self, expected: type[Checkpoint]) -> Checkpoint | None:
+        if self.record is None:
+            return None
+        if not isinstance(self.record, expected):
+            raise TypeError("Captured append checkpoint belongs to another index")
+        return self.record
+
+    def remember(self, record: Checkpoint) -> None:
+        if record.source != self.source:
+            raise ValueError("Computed append checkpoint belongs to another source cut")
+        self.record = record
+
+
 class BusAppendIndex(Generic[Checkpoint]):
     """One strict record decoder and atomic writer for disposable projections."""
 
@@ -93,8 +113,14 @@ class BusAppendIndex(Generic[Checkpoint]):
         self.bus_path, self.path = bus_path, path
         self._retained: Checkpoint | None = None
 
+    def capture(
+        self, stream: BinaryIO | None, revision: BusFileRevision | None,
+    ) -> CapturedCheckpoint[Checkpoint]:
+        record = self.checkpoint(stream, revision) if stream is not None and revision is not None else None
+        return CapturedCheckpoint(revision, record)
+
     def checkpoint(self, stream: BinaryIO, revision: BusFileRevision) -> Checkpoint | None:
-        """Borrow this owner's captured prefix before consulting a later disk writer."""
+        """Borrow this owner's prefix for immediate use or source capture."""
         retained = self._retained
         if retained is not None and retained.accepts(revision, stream):
             return retained
@@ -109,13 +135,19 @@ class BusAppendIndex(Generic[Checkpoint]):
             return record
         return None
 
-    def write(self, record: Checkpoint, *, fsync_parent: bool = False) -> None:
+    def remember(self, record: Checkpoint) -> Checkpoint:
         payload = record.signed_payload()
-        self._retained = replace(record, integrity=payload["integrity"])
+        retained = replace(record, integrity=payload["integrity"])
+        self._retained = retained
+        return retained
+
+    def write(self, record: Checkpoint, *, fsync_parent: bool = False) -> None:
+        retained = self.remember(record)
+        payload = retained.signed_payload()
         # A historical cut remains usable in this owner's lifetime, but must
         # not replace a later append checkpoint published by another reader.
         with _store_lock(self.path):
             with self.bus_path.open("rb") as stream:
-                if BusFileRevision.capture(stream) != record.source:
+                if BusFileRevision.capture(stream) != retained.source:
                     return
             _atomic_write_text(self.path, json.dumps(payload), fsync_parent=fsync_parent)

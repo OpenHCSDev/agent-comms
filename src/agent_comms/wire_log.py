@@ -12,7 +12,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import BinaryIO, cast
+from typing import BinaryIO
 
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
@@ -24,7 +24,12 @@ from .bus_publication import (
     unique_wire_object,
 )
 from .bus_source_page import AddressedPage
-from .bus_projection import AppendCheckpoint, BusAppendIndex, BusFileRevision, Checkpoint
+from .bus_projection import (
+    BusAppendIndex,
+    BusFileRevision,
+    CapturedCheckpoint,
+    Checkpoint,
+)
 from .envelope_claim_transitions import (
     ClaimProjection,
     project_verified_transitions,
@@ -59,22 +64,28 @@ class OpenedWireSnapshot:
     through: int
     stream: BinaryIO | None
     revision: BusFileRevision | None
-    _append_checkpoints: dict[Path, AppendCheckpoint | None] = field(
+    _append_checkpoints: dict[BusAppendIndex, CapturedCheckpoint] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
 
-    def append_checkpoint(self, index: BusAppendIndex[Checkpoint]) -> Checkpoint | None:
-        """Pin the admitted prefix for this cut, including an absent checkpoint.
+    def capture_append_indexes(self, indexes: tuple[BusAppendIndex, ...]) -> None:
+        for index in indexes:
+            self._append_checkpoints[index] = index.capture(self.stream, self.revision)
 
-        These are borrowed immutable records, not another latest-index cache.
-        Another cut may advance the index owner without changing this resource.
-        """
-        if index.path not in self._append_checkpoints:
-            self._append_checkpoints[index.path] = (
-                index.checkpoint(self.stream, self.revision)
-                if self.stream is not None and self.revision is not None else None
-            )
-        return cast(Checkpoint | None, self._append_checkpoints[index.path])
+    def append_checkpoint(self, index: BusAppendIndex[Checkpoint]) -> Checkpoint | None:
+        """Read the index value captured with this exact source cut."""
+        if index not in self._append_checkpoints:
+            raise ValueError("Append index was not registered before source capture")
+        return self._append_checkpoints[index].value(index.record_type)
+
+    def remember_append_checkpoint(
+        self, index: BusAppendIndex[Checkpoint], record: Checkpoint,
+    ) -> None:
+        """Keep a computed exact-cut value with this existing source resource."""
+        if index not in self._append_checkpoints:
+            raise ValueError("Append index was not registered before source capture")
+        retained = index.remember(record)
+        self._append_checkpoints[index].remember(retained)
 
     @property
     def boundary(self) -> int:
@@ -182,6 +193,15 @@ class WireLog:
     def __init__(self, path: Path):
         # Construction is read-only and needs no registry or publication settings.
         self.path = Path(path)
+        self._append_indexes: list[BusAppendIndex] = []
+
+    def register_append_index(self, index: BusAppendIndex[Checkpoint]) -> BusAppendIndex[Checkpoint]:
+        """Register one index owner for automatic capture with every opened cut."""
+        if index.bus_path != self.path:
+            raise ValueError("Append index belongs to another bus")
+        if index not in self._append_indexes:
+            self._append_indexes.append(index)
+        return index
 
     @contextmanager
     def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None,
@@ -556,6 +576,7 @@ class WireLog:
                         raise RelationViolationError("Opened read differs from its certified source cut")
                     snapshot_type = CertifiedOpenedWireSnapshot
                 opened = snapshot_type(metadata, through, stream, revision)
+                opened.capture_append_indexes(tuple(self._append_indexes))
             yield opened
 
     @contextmanager
