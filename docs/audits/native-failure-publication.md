@@ -64,6 +64,39 @@ startup failure also round-tripped. Production imports and `git diff --check`
 passed. No automated tests were run.
 
 Real ACP/native failure publication, already-open Toad reconciliation, installation
-and live acceptance remain required. Original sessions, UNKNOWN inputs and blocked
+and live acceptance remain required.
+
+## Real-path completion correction
+
+The paired configured-provider CONNECT-refusal run exposed another competing
+reconstruction that the initial source pass missed: `AgentEventUpdates.on_done`
+converted the terminal `Done.text` into a new unrecorded `Error`. The actual ACP
+log `Agent_Comms_2026-10-12T21_45_26_695430.txt`, lines 21 and 25, independently
+confirms native/provider-connection publication followed by generic/unrecorded
+publication of `fetch failed`. The initial checkpoint did not achieve once-only
+publication. This is a confirmed defect, not a presentation-only issue.
+
+The replacement deletes `AgentEventUpdates.on_done` entirely. `TurnOutput.done`
+now yields the completion family: the original `Done`, preceded by an `Error`
+only when failure first arose during terminal settlement rather than through
+its existing error path. No new published flag or deduplication cache is added.
+`TurnSession.finish_result` consumes this owner-generated sequence. The separate
+invalid-launch producer publishes its actual launch error before its terminal
+outcome; automatic retry exhaustion now uses `TurnOutput.error` instead of
+writing terminal failure prose directly. These are the complete terminal-only
+error producers; other Done consumers retain their outcome/goal responsibilities.
+
+Before-edit completion census used NRA `ModuleSyntaxIndex` over the same 834
+production/dependency modules, with zero parse omissions. It covered Done/Error
+producers and consumers, output-error writes and terminal-result publication.
+After-edit search has no Done-to-Error reconstruction in ACP publication and no
+non-None direct write to `session.output.error_message`. Native preparation's
+Done consumer was inspected: it still raises failed preparation outcomes, while
+its caller retains the existing genuine-exception publication path.
+
+Production imports and `git diff --check` pass for this correction. The new
+completion sequence still requires a fresh paired native/ACP/UI run; the previous
+failed input and worker's ongoing fresh-success request are not replayed or
+restarted. Original sessions, UNKNOWN inputs and blocked
 historical goals are untouched. The cause of the original provider disconnect is
 not established by this repair.

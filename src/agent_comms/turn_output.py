@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -78,14 +79,14 @@ class TurnOutput:
         if self.failure and stderr.strip() and not self.sensitive:
             self.failure = self.failure.with_startup_diagnostics(stderr.strip())
 
-    def done(self, session: TurnSession, stderr: str) -> events.Done:
+    def done(self, session: TurnSession, stderr: str) -> Iterator[events.AgentEvent]:
         # Read admission and custody from their actual owners; output never grants either.
         transport_ok = not self.failure_text and (
             session.native_session.custody.retained or session.native.proc.returncode == 0
         )
         self.settle(session, transport_ok)
         success = transport_ok and self.clean and session.inputs.settled
-        return events.Done(
+        terminal = events.Done(
             text=self.terminal_text(success, stderr, session.native.proc.returncode),
             ok=success and session.native.attestation.trustworthy,
             reason_code=self.failure.code if self.failure else None,
@@ -99,6 +100,12 @@ class TurnOutput:
                 ),
             },
         )
+
+        # Completion reports an outcome. Only this output owner can tell whether
+        # its failure already produced an Error or first arose during settlement.
+        if not terminal.ok and self.error_message is None:
+            yield self.error(terminal.text)
+        yield terminal
 
     def settle(self, session: TurnSession, transport_ok: bool) -> None:
         for cause in sorted(

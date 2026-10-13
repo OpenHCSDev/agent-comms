@@ -154,6 +154,7 @@ async def stream_agent_events(
                     session_file=session_file,
                 ))
             except (OSError, ValueError, NativePiUnavailable) as error:
+                yield events.Error(text=str(error), reason_code="native_launch_invalid")
                 yield events.Done(ok=False, reason_code="native_launch_invalid", text=str(error))
                 return
             from .session_fence import session_writer_fence
@@ -690,4 +691,5 @@ class TurnSession:
             yield
 
     async def finish_result(self) -> AsyncIterator[events.AgentEvent]:
-        yield self.output.done(self, self.error_text)
+        for event in self.output.done(self, self.error_text):
+            yield event

@@ -217,12 +217,3 @@ class AcpEventConsumer(MroDispatch):
                 field_meta=encode_updates(PromptCancelledUpdate(event.input_state)),
             ),
         )
-
-    @handles(events.Done)
-    async def on_done(self, event: events.Done) -> None:
-        session_id = self.session_id
-        client = self.client
-        if not event.ok and event.text:
-            # The existing emission owner deduplicates full typed evidence,
-            # including a terminal not-sent transition with unchanged text.
-            await self.agent._emit_event(session_id, events.Error(str(event.text)), client)
