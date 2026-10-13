@@ -453,10 +453,7 @@ class OwnerLifecycle:
             if self._released_same_owner(snapshot, thread, admission_generation):
                 return  # An exact, durably attested release of the signaled owner.
             self._require_same_stop_owner(thread, admission_generation)
-            self.registry.unregister(thread.name)
-            after = self.registry.snapshot().admission_generations[thread.name]
-            receipt = OwnerReleaseReceipt(admission_generation, after, replace(thread, active_turn=None))
-            self.releases.update(lambda receipts: {**receipts, thread.name: receipt})
+            self._retire_owner_unlocked(thread, admission_generation)
 
     def release(self, name: str) -> None:
         """Let the calling participant mark itself stopped without signalling."""
@@ -480,7 +477,12 @@ class OwnerLifecycle:
         ):
             raise RelationViolationError("Only the registered owner may release itself.")
         before = snapshot.admission_generations[canonical]
-        self.registry.unregister(canonical)
-        after = self.registry.snapshot().admission_generations[canonical]
-        receipt = OwnerReleaseReceipt(before, after, replace(owner, active_turn=None))
-        self.releases.update(lambda receipts: {**receipts, canonical: receipt})
+        self._retire_owner_unlocked(owner, before)
+
+    def _retire_owner_unlocked(self, thread: Thread, before: int) -> None:
+        """Share retirement only after the caller's distinct identity checks."""
+        self.registry.unregister(thread.name)
+        after = self.registry.snapshot()
+        receipt = OwnerReleaseReceipt(before, after.admission_generations[thread.name],
+                                      after.threads[thread.name])
+        self.releases.update(lambda receipts: {**receipts, thread.name: receipt})
