@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import turn_failure as failures
+from .acp_failure import FailureSource, UnrecordedFailureSource
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -63,10 +64,14 @@ class TurnOutput:
     def redact(self, text: str) -> str:
         return "Image prompt failed; backend diagnostics withheld." if self.sensitive else text
 
-    def error(self, text: str, diagnostics: tuple[PiDiagnostic, ...] = ()) -> events.Error:
+    def error(
+        self, text: str, diagnostics: tuple[PiDiagnostic, ...] = (),
+        source: FailureSource = UnrecordedFailureSource(),
+    ) -> events.Error:
         self.error_message = self.redact(text)
         return events.Error(
-            text=self.error_message, diagnostics=() if self.sensitive else diagnostics
+            text=self.error_message, diagnostics=() if self.sensitive else diagnostics,
+            source=source.for_publication(self.error_message, self.sensitive),
         )
 
     def startup_error(self, stderr: str) -> None:

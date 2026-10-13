@@ -12,6 +12,7 @@ from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from .activity import ActivityState
+from .acp_failure import FailureSource, UnrecordedFailureSource
 from .declared_family import DeclaredFamily
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
@@ -231,6 +232,7 @@ class Error(AgentEvent):
     reason_code: str | None = None
     command: PiCommand | None = None
     diagnostics: tuple[PiDiagnostic, ...] = ()
+    source: FailureSource = UnrecordedFailureSource()
 
 
 @dataclass(frozen=True)

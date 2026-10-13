@@ -189,8 +189,6 @@ class AcpEventConsumer(MroDispatch):
 
         document = await Coordination.run_worker(self.agent.inputs.dispositions.read)
         failure = replace(failure, input_state=document.shared_state(original_keys))
-        if self.agent.turns.emitted_errors.get(session_id) == failure:
-            return
         failed_input = None
         input_text = original.notice_text if original else None
         if input_text and not document.all_started(original_keys):
@@ -202,7 +200,7 @@ class AcpEventConsumer(MroDispatch):
                 content=TextContentBlock(type="text", text=""),
                 field_meta=encode_updates(
                     TextRouteUpdate(None),
-                    RequestFailedUpdate(failure),
+                    RequestFailedUpdate(failure, event.source),
                     *((failed_input,) if failed_input else ()),
                 ),
             ),

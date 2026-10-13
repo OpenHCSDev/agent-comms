@@ -58,7 +58,6 @@ class TurnProgress(events.AgentEventConsumer):
         inputs,
         effects,
         runtime,
-        emitted_errors,
         session_id,
         turn: OwnedTurn,
         finish_event,
@@ -67,7 +66,7 @@ class TurnProgress(events.AgentEventConsumer):
     ):
         self._comms = comms
         self.sessions, self.inputs, self.effects = sessions, inputs, effects
-        self.runtime, self.emitted_errors = runtime, emitted_errors
+        self.runtime = runtime
         self.session_id, self.turn = session_id, turn
         self.finish_event, self.goals = finish_event, goals
         self.reply_parts: list[str] = []
@@ -124,14 +123,13 @@ class TurnProgress(events.AgentEventConsumer):
 
     async def report_failure(self, error: Exception) -> None:
         """Attempt existing ACP error publication once without hiding the original fault."""
-        prior = self.emitted_errors.get(self.session_id)
         diagnostic = record_terminal_failure(
             self.comms.root, turn_id=self.turn_lease.turn_id, thread=self.thread_name,
             event=asdict(self.result) if self.result is not None else {},
             sequences=tuple(origin.seq for origin in self.routing.requests),
             source_error=error,
         )
-        detail = prior.detail if prior is not None else (
+        detail = (
             "Native turn failed; original input was not retried. "
             f"[Open diagnostic]({diagnostic.as_uri()})"
         )
