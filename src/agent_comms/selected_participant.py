@@ -102,7 +102,10 @@ class SelectedParticipant(MroDispatch):
     @classmethod
     @asynccontextmanager
     async def select(cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None):
-        bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
+        bus = MessageBus(
+            comms.root / "bus.jsonl", comms.registry, private_response_writes=True,
+            private_claim_writes=comms.bus.publisher._private_claim_writes,
+        )
         owner, participant, pending = await Coordination.run_async(
             store.session.path,
             lambda resource: cls.prepare(comms, bus, resource, root_id, name, after_seq),
