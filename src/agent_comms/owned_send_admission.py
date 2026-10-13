@@ -43,7 +43,7 @@ _LOG = logging.getLogger(__name__)
 class OwnedSendAdmission:
     comms: Comms
     inputs: InputDrain
-    goal_store: GoalAttemptStore | None
+    goal_store: GoalAttemptStore
     session_id: str
     thread: Thread
     turn: TurnId
@@ -105,7 +105,6 @@ class OwnedSendAdmission:
             source=source, goal=current.goal, wait=wait, comms=self.comms
         ).require_valid()
         if not source.bypasses_goal_permit and self.goal_permit is not None:
-            assert self.goal_store is not None
             OrdinaryGoalGrantCheck(permit=self.goal_permit, store=self.goal_store).require_valid()
 
     def _refusal(self, rule: ReservationRule, defer: bool) -> bool | None:
