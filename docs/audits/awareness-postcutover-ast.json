@@ -1,0 +1,610 @@
+{
+  "head": "f88ec78d9",
+  "modules": 306,
+  "class_declarations": 2014,
+  "parse_omissions": [],
+  "binding_limits": "Syntax evidence only. Attribute calls and dynamic dispatch require semantic reading; no live binding or equivalence claim. No class or schema declaration is moved by the proposed notification fix.",
+  "sites": [
+    {
+      "path": "src/agent_comms/candidate_maintenance.py",
+      "line": 23,
+      "declaration": "schedule_candidate_catchup",
+      "constructed": [
+        "Thread",
+        "ValueError",
+        "get",
+        "len",
+        "max",
+        "pop",
+        "start",
+        "type",
+        "warning"
+      ]
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 20,
+      "import": "from .cohort_schema import assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 87,
+      "call": "assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 32,
+      "class": "CohortTable",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 36,
+      "class": "AwarenessTable",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 41,
+      "class": "CohortSchemaMeta",
+      "bases": [
+        "CohortTable",
+        "TypedTable",
+        "PrivateRuntimeSchema"
+      ]
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 69,
+      "class": "ClaimBatchReceipts",
+      "bases": [
+        "CohortTable",
+        "TypedTable"
+      ]
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 223,
+      "class": "ClaimBatchMembers",
+      "bases": [
+        "CohortTable",
+        "TypedTable"
+      ]
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 290,
+      "class": "CohortDeliveryReceipts",
+      "bases": [
+        "CohortTable",
+        "TypedTable"
+      ]
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 382,
+      "class": "AwarenessSchemaMeta",
+      "bases": [
+        "AwarenessTable",
+        "TypedTable"
+      ]
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 406,
+      "class": "AwarenessClaimGenerations",
+      "bases": [
+        "AwarenessTable",
+        "TypedTable"
+      ]
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 558,
+      "declaration": "assert_cohort_schema",
+      "constructed": [
+        "CohortSchemaMeta",
+        "SQLiteForeignKeys",
+        "SchemaVersionError",
+        "_cohort_objects",
+        "_digest",
+        "_schema",
+        "execute",
+        "one",
+        "read"
+      ]
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 574,
+      "declaration": "assert_optional_awareness_schema",
+      "constructed": [
+        "AwarenessSchemaMeta",
+        "SchemaVersionError",
+        "_awareness_objects",
+        "_digest",
+        "_schema",
+        "one"
+      ]
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 590,
+      "call": "assert_optional_awareness_schema"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 606,
+      "call": "assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 27,
+      "class": "_SelectedDecision",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 86,
+      "class": "_OpenObligation",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 110,
+      "class": "OptionalAwarenessResult",
+      "bases": [
+        "ABC"
+      ]
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 124,
+      "class": "OmittedAwareness",
+      "bases": [
+        "InstructionSegment",
+        "OptionalAwarenessResult"
+      ]
+    },
+    {
+      "path": "src/agent_comms/context_segments/optional_awareness.py",
+      "line": 153,
+      "class": "CompleteAwareness",
+      "bases": [
+        "ContextSegment",
+        "OptionalAwarenessResult"
+      ]
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 17,
+      "import": "from agent_comms.cohort_schema import AwarenessClaimGenerations, ClaimBatchMembers, ClaimBatchReceipts, CohortDeliveryReceipts, assert_cohort_schema, assert_optional_awareness_schema"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 210,
+      "call": "assert_optional_awareness_schema"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 252,
+      "call": "assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 316,
+      "call": "assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 381,
+      "call": "assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 31,
+      "import": "from agent_comms.cohort_schema import assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 70,
+      "class": "ResponseTable",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 85,
+      "class": "ResponseSchemaMeta",
+      "bases": [
+        "ResponseTable",
+        "TypedTable",
+        "PrivateRuntimeSchema"
+      ]
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 96,
+      "class": "PublicationAppendDispatches",
+      "bases": [
+        "ResponseTable",
+        "TypedTable"
+      ]
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 128,
+      "class": "SelectedResponseRoute",
+      "bases": [
+        "TypedRow"
+      ]
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 235,
+      "class": "LiveResponseOwner",
+      "bases": [
+        "RegistryOwner"
+      ]
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 491,
+      "declaration": "_settle_fenced_response",
+      "constructed": [
+        "Applied",
+        "IdentityConflict",
+        "PublicationAppendDispatches",
+        "PublicationReceipts",
+        "PublicationUncertain",
+        "PublishedResponse",
+        "TypeError",
+        "_assert_response_schema",
+        "_keyed_receipt_unlocked",
+        "_private_marker_unlocked",
+        "_publish_keyed_response_unlocked",
+        "_require_bound_stores",
+        "_require_final_owner",
+        "_response_boundary",
+        "_terminal_replay",
+        "capture",
+        "finish_publications",
+        "get",
+        "insert",
+        "matches",
+        "max",
+        "now",
+        "one",
+        "require_attempt",
+        "require_live",
+        "require_publishing_intent",
+        "transaction",
+        "type",
+        "update"
+      ]
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 577,
+      "declaration": "publish_fenced_response",
+      "constructed": [
+        "_settle_fenced_response"
+      ]
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 591,
+      "declaration": "resolve_existing_response",
+      "constructed": [
+        "_settle_fenced_response"
+      ]
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 321,
+      "call": "assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 586,
+      "call": "_settle_fenced_response"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 600,
+      "call": "_settle_fenced_response"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 278,
+      "call": "publish_fenced_response"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 554,
+      "call": "bus.publisher._publish_keyed_response_unlocked"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 23,
+      "import": "from .cohort_schema import assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 129,
+      "call": "assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 10,
+      "import": "from .candidate_maintenance import schedule_candidate_catchup"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 30,
+      "class": "Messaging",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 32,
+      "write": "self.root"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 33,
+      "write": "self.registry"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 34,
+      "write": "self.bus"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 35,
+      "write": "self._wire_lock_path"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 94,
+      "call": "schedule_candidate_catchup"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 118,
+      "call": "schedule_candidate_catchup"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 203,
+      "call": "schedule_candidate_catchup"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 24,
+      "import": "from .cohort_schema import assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 153,
+      "call": "assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 37,
+      "import": "from .cohort_schema import COHORT_SCHEMA_VERSION, AwarenessClaimGenerations, ClaimBatchMembers, ClaimBatchReceipts, CohortDeliveryReceipts, assert_cohort_schema, assert_optional_awareness_schema"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 58,
+      "import": "from .context_segments.optional_awareness import _SelectedDecision, _OpenObligation, OptionalAwarenessResult, OmittedAwareness, CompleteAwareness"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 64,
+      "class": "_ParticipantOwner",
+      "bases": [
+        "TypedRow"
+      ]
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 71,
+      "class": "_CoordinatorVersions",
+      "bases": [
+        "TypedRow"
+      ]
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 77,
+      "class": "_CohortVersion",
+      "bases": [
+        "TypedRow"
+      ]
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 82,
+      "class": "OptionalAwarenessProjection",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 342,
+      "call": "assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 343,
+      "call": "assert_optional_awareness_schema"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 25,
+      "import": "from .cohort_schema import ClaimBatchReceipts, assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 191,
+      "call": "assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 63,
+      "class": "Publisher",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 518,
+      "declaration": "_publish_keyed_response_unlocked",
+      "constructed": [
+        "RelationViolationError",
+        "_append_private_unlocked",
+        "_keyed_receipt_unlocked",
+        "_prepare_message_unlocked",
+        "_validate_publish_request",
+        "canonical_publication_key",
+        "from_wire",
+        "matches_publication",
+        "max",
+        "record",
+        "require"
+      ]
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 74,
+      "write": "self.log"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 75,
+      "write": "self._registry"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 76,
+      "write": "self._channels"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 77,
+      "write": "self._private_response_writes"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 78,
+      "write": "self._private_initial_writes"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 79,
+      "write": "self._private_claim_writes"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 561,
+      "call": "self.log._append_private_unlocked"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 304,
+      "call": "self.log._append_private_unlocked"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 506,
+      "call": "self.log._append_private_unlocked"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 509,
+      "call": "self.log._append_private_unlocked"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 14,
+      "import": "from .cohort_schema import assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 156,
+      "call": "assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 232,
+      "call": "assert_cohort_schema"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 17,
+      "import": "from .optional_awareness_projection import OptionalAwarenessProjection"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 51,
+      "class": "OpenedWireSnapshot",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 106,
+      "class": "CertifiedOpenedWireSnapshot",
+      "bases": [
+        "OpenedWireSnapshot"
+      ]
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 165,
+      "class": "WireLog",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 413,
+      "declaration": "_append_private_unlocked",
+      "constructed": [
+        "RelationViolationError",
+        "S_IMODE",
+        "S_ISREG",
+        "append_private_bus_checkpoint_unlocked",
+        "certificate_enabled",
+        "close",
+        "dumps",
+        "encode",
+        "fdopen",
+        "fileno",
+        "flush",
+        "from_wire",
+        "fstat",
+        "fsync",
+        "geteuid",
+        "len",
+        "open",
+        "require_append",
+        "sequence_after",
+        "write",
+        "write_metadata_unlocked"
+      ]
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 168,
+      "write": "self.path"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 423,
+      "write": "metadata.last_seq"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 279,
+      "call": "self._append_private_unlocked"
+    }
+  ]
+}

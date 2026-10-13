@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from abc import abstractmethod
 from typing import TYPE_CHECKING, ClassVar
@@ -156,18 +157,20 @@ class ChannelManagement:
     ) -> Thread:
         for tag in add | remove:
             Tag(tag)
-        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
-            return self._update_tags_locked(name, add=add, remove=remove)
+        with ExitStack() as after_publication, guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
+            return self._update_tags_locked(name, after_publication, add=add, remove=remove)
 
     def replace_tags(self, name: str, tags: frozenset[str]) -> Thread:
         for tag in tags:
             Tag(tag)
-        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
+        with ExitStack() as after_publication, guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
-            return self._update_tags_locked(thread.name, add=tags - thread.tags,
+            return self._update_tags_locked(thread.name, after_publication, add=tags - thread.tags,
                                             remove=thread.tags - tags)
 
-    def _update_tags_locked(self, name, *, add, remove) -> Thread:
+    def _update_tags_locked(self, name, after_publication: ExitStack, *, add, remove) -> Thread:
+        from .candidate_maintenance import schedule_candidate_catchup
+
         self._require_available_new_tags(add)
         thread = self.registry.require(name)
         previous_channels = self.catalog.read().views(self.registry.all_threads())
@@ -187,7 +190,7 @@ class ChannelManagement:
                 before, after = channel.matches(thread.tags), channel.matches(updated.tags)
                 if before != after:
                     change = MembershipChange.JOINED if after else MembershipChange.LEFT
-                    self.bus.publisher.publish_ordinary(
+                    committed = self.bus.publisher.publish_ordinary(
                         Message(
                             thread.name,
                             channel.name,
@@ -196,6 +199,9 @@ class ChannelManagement:
                             membership=change,
                         )
                     )
+                    # The outer stack runs after the original wire lock exits,
+                    # including when a later independent notice fails.
+                    after_publication.callback(schedule_candidate_catchup, self.bus, committed.seq)
         return updated
 
     def set_saved_view(self, view: SavedView) -> SavedView:

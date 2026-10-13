@@ -592,9 +592,16 @@ def publish_fenced_response(
     owner_witness: LiveResponseOwner,
 ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
     """Explicit one-time owner append + Tx2. Never call after an uncertain crash."""
-    return _settle_fenced_response(
+    from .candidate_maintenance import schedule_candidate_catchup
+
+    published = _settle_fenced_response(
         store, bus, fence, allow_append=True, exact_target=exact_target, owner_witness=owner_witness
     )
+    # The original wire, bus, registry and SQL boundaries have exited. Notify
+    # only a known durable receipt; refusal/UNKNOWN never reaches this point.
+    _, receipt = published.value.require_published_evidence(exact_target)
+    schedule_candidate_catchup(bus, receipt.seq)
+    return published
 
 
 def resolve_existing_response(
