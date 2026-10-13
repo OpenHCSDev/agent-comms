@@ -38,6 +38,9 @@ class FieldRepresentation(ABC):
     """
 
     accepts_null = False
+    # True when the wire value is one external JSON shape decoded by from_wire
+    # rather than the representation's own validated decode.
+    external_json_shape = False
 
     @classmethod
     @abstractmethod
@@ -93,7 +96,11 @@ class JsonShapeFamily(WireValue):
     its name-decoding contract. Each JsonShapeMember declares
     its external shape through its value annotation; this codec owns primitive
     selection and recursive conversion. Rendering stays with the value owners.
+    Its wire value is the declared shape itself, so it answers
+    ``external_json_shape`` True and decodes through ``from_wire``.
     """
+
+    external_json_shape = True
 
     accepts_null = True
 
@@ -442,17 +449,52 @@ class FieldCodec(Sealed):
 
     @dataclass(frozen=True)
     class _FieldPlan:
-        """One field's decode decisions, resolved once from its declaration."""
+        """One field's decode decisions, resolved once from its declaration.
+
+        Each way a field decodes is one subclass: the plan builder picks the
+        class from the declaration once, and decoding is that object's own
+        ``decode`` — no per-row re-classification and no kind switch.
+        """
 
         name: str
         key: str
         required: bool
         reject_null: bool
         choices: object
-        kind: str  # 'representation' | 'scalar' | 'enum' | 'family' | 'generic'
         target: Any
-        representation: object | None
+
+        def decode(self, value: object) -> object:
+            # The nested/annotation path: the target's own decode rules.
+            return FieldCodec.decode(self.target, value)
+
+    @dataclass(frozen=True)
+    class _RepresentationField(_FieldPlan):
+        """A field decoded through its declared representation capability."""
+
+        representation: object
         accepts_null: bool
+        external_json_shape: bool
+
+        def decode(self, value: object) -> object:
+            if value is None and not self.accepts_null:
+                return FieldCodec.decode(self.target, value)
+            if self.external_json_shape:
+                return self.representation.from_wire(value)
+            return self.representation.decode(value)
+
+    @dataclass(frozen=True)
+    class _ScalarField(_FieldPlan):
+        """A field of an exact JSON primitive declaration."""
+
+        def decode(self, value: object) -> object:
+            return FieldCodec._decode_scalar(self.target, value)
+
+    @dataclass(frozen=True)
+    class _EnumField(_FieldPlan):
+        """A field of an Enum declaration."""
+
+        def decode(self, value: object) -> object:
+            return self.target(value)
 
     @dataclass(frozen=True)
     class _RecordPlan:
@@ -480,27 +522,27 @@ class FieldCodec(Sealed):
         entries = []
         for field, key in declared:
             target, representation = cls._representation(hints[field.name])
-            if representation is not None:
-                kind = "representation"
-            elif target in (str, int, bool, float, type(None)):
-                kind = "scalar"
-            elif isinstance(target, type) and issubclass(target, DeclaredFamily):
-                kind = "family"
-            elif isinstance(target, type) and issubclass(target, Enum):
-                kind = "enum"
-            else:
-                kind = "generic"
-            entries.append(cls._FieldPlan(
+            common = dict(
                 name=field.name,
                 key=key,
                 required=bool(field.metadata.get("wire_required")),
                 reject_null=bool(field.metadata.get("wire_nonnull")),
                 choices=field.metadata.get("wire_choices"),
-                kind=kind,
                 target=target,
-                representation=representation,
-                accepts_null=representation.accepts_null if representation is not None else False,
-            ))
+            )
+            if representation is not None:
+                entries.append(cls._RepresentationField(
+                    representation=representation,
+                    accepts_null=representation.accepts_null,
+                    external_json_shape=representation.external_json_shape,
+                    **common,
+                ))
+            elif target in (str, int, bool, float, type(None)):
+                entries.append(cls._ScalarField(**common))
+            elif isinstance(target, type) and issubclass(target, Enum):
+                entries.append(cls._EnumField(**common))
+            else:
+                entries.append(cls._FieldPlan(**common))
         return cls._RecordPlan(
             fields=tuple(entries),
             required_keys=tuple(entry.key for entry in entries if entry.required),
@@ -511,20 +553,6 @@ class FieldCodec(Sealed):
             reject_null_keys=frozenset(entry.key for entry in entries if entry.reject_null),
             accepted_keys=frozenset(entry.key for entry in entries) | computed,
         )
-
-    @classmethod
-    def _decode_field(cls, field: FieldCodec._FieldPlan, value: object) -> object:
-        if field.kind == "representation":
-            if value is None and not field.accepts_null:
-                return cls.decode(field.target, value)
-            if issubclass(field.representation, JsonShapeFamily):
-                return field.representation.from_wire(value)
-            return field.representation.decode(value)
-        if field.kind == "scalar":
-            return cls._decode_scalar(field.target, value)
-        if field.kind == "enum":
-            return field.target(value)
-        return cls.decode(field.target, value)
 
     @staticmethod
     @lru_cache(maxsize=_declaration_cache_capacity)
@@ -542,7 +570,7 @@ class FieldCodec(Sealed):
     def _decode(cls, target: Any, data: Any) -> Any:
         target, representation = cls._representation(target)
         if representation is not None and (data is not None or representation.accepts_null):
-            if issubclass(representation, JsonShapeFamily):
+            if representation.external_json_shape:
                 # Decode through the representation capability, independently
                 # of the family's public name decoder. Children validate once;
                 # WireValue's pre-validation would traverse each subtree again.
@@ -637,7 +665,7 @@ class FieldCodec(Sealed):
                     raise ValueError(
                         f"Field {entry.key} must be one of: {', '.join(entry.choices())}"
                     )
-                values[entry.name] = cls._decode_field(entry, value)
+                values[entry.name] = entry.decode(value)
             return target(**values)
         if isinstance(target, type) and issubclass(target, Enum):
             return target(data)
