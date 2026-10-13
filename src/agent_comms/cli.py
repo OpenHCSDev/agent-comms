@@ -1,8 +1,7 @@
 """OpenHCS agent communications — JSON CLI.
 
-Every subcommand is one operation on the Comms wire, prints exactly one JSON
-document on stdout, and exits 0 on success or 1 with ``{"error": ...}`` on
-failure. This is the adapter surface for the pi extension and other
+Commands print one JSON result, except watch, which streams messages as JSON
+lines. They exit 0 on success or 1 with ``{"error": ...}`` on failure. This is the adapter surface for the pi extension and other
 process-based clients: they shell out and parse JSON, they do not own
 orchestration semantics.
 """
@@ -19,11 +18,6 @@ from pathlib import Path
 from .cli_commands import CliCommand
 from .comms import wire
 from .owner_restart import StoppedOwnerFailure
-
-
-def _emit(payload: object) -> None:
-    json.dump(payload, sys.stdout, indent=2)
-    sys.stdout.write("\n")
 
 
 def _fail(error: BaseException) -> int:
@@ -61,12 +55,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
         route_guard.enter_context(route.admit_client())
         comms = wire(route)
-        result = command.apply(comms)
-        _emit(command.encode_result(result))
-        return command.result_exit_code(result)
+        return command.run(comms, sys.stdout)
+    except KeyboardInterrupt:
+        return 130
     except StoppedOwnerFailure as exc:
-        # This JSON adapter is one-shot. It cannot silently discard acquired
-        # custody as though the error had preceded retirement.
+        # Do not ignore a failure after starting to stop an owner.
         exc.abandon()
         return _fail(exc)
     except Exception as exc:

@@ -13,11 +13,11 @@ import re
 import shlex
 import time
 import types
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
 from enum import Enum
 from pathlib import Path
-from typing import Any, ClassVar, Literal, Self, get_args, get_origin, get_type_hints
+from typing import Any, ClassVar, Literal, Self, TextIO, get_args, get_origin, get_type_hints
 
 from .activity import ActivityState
 from .channels import Channel
@@ -42,7 +42,7 @@ from .importing import ImportFormat, ImportLimits
 from .turn_context import ContextSegment
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
-from .messages import MessageType
+from .messages import Message, MessageType
 from .message_reference import MessageReference
 from .thread_management import ForkSpec, ThreadDeleted
 from .thread_execution import ThreadExecution, ExternalThreadExecution
@@ -418,6 +418,13 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
     def describe(self, comms: Comms, target: str, project: str) -> TargetAction:
         bound = self.for_editor(comms, target, project)
         return TargetAction((bound,), (target,))
+
+    def run(self, ctx: Comms, output: TextIO) -> int:
+        """Run this command and write its declared result."""
+        result = self.apply(ctx)
+        json.dump(self.encode_result(result), output, indent=2)
+        output.write("\n")
+        return self.result_exit_code(result)
 
     def encode_result(self, result: object) -> object:
         return FieldCodec.encode(result)
@@ -862,6 +869,29 @@ class InboxCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> Any:
         return {"messages": [m.to_wire() for m in ctx.bus.inbox(self.thread)]}
+
+
+@dataclass(frozen=True, kw_only=True)
+class WatchCliCommand(CliCommand, declared_name="watch"):
+    help = "Stream unread and arriving messages as JSON lines"
+    thread: str = option("--thread")
+
+    def apply(self, ctx: Comms) -> AsyncIterator[Message]:
+        return ctx.bus.watch(self.thread)
+
+    def run(self, ctx: Comms, output: TextIO) -> int:
+        import asyncio
+        from contextlib import aclosing
+
+        async def stream() -> None:
+            async with aclosing(self.apply(ctx)) as messages:
+                async for message in messages:
+                    json.dump(message.to_wire(), output, separators=(",", ":"))
+                    output.write("\n")
+                    output.flush()
+
+        asyncio.run(stream())
+        return 0
 
 
 @dataclass(frozen=True, kw_only=True)

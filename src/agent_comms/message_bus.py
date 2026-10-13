@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -127,7 +127,8 @@ class MessageBus:
 
     def _delivery_scope(self, name: str, snapshot: RegistrySnapshot | None = None,
                         *, catalog: CatalogDocument | None = None) -> DeliveryScope:
-        snapshot = snapshot or self._registry.snapshot()
+        if snapshot is None:
+            snapshot = self._registry.snapshot()
         canonical = snapshot.canonical_name(name)
         if canonical not in snapshot.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
@@ -137,13 +138,17 @@ class MessageBus:
             (self._channels.read() if catalog is None else catalog).targets_for(thread.tags)
         )
 
-    def inbox(self, name: str, target: str | None = None) -> Sequence[Message]:
+    def inbox(
+        self, name: str, target: str | None = None, *,
+        snapshot: RegistrySnapshot | None = None,
+    ) -> Sequence[Message]:
         """Unread messages delivered to a thread, read without scanning the log.
 
         The route index lists which deliveries are unread, as it does for the
         pending counts, and the page index reads only those rows.
         """
-        snapshot = self._registry.snapshot()
+        if snapshot is None:
+            snapshot = self._registry.snapshot()
         delivery = self._delivery_scope(name, snapshot)
         selection = delivery.selection(target, snapshot, self._channels.read())
         seen = self.reads.seen_sequences(delivery.actor, snapshot)
@@ -172,6 +177,26 @@ class MessageBus:
                 source.public_records(),
             )
             return list(page.messages)
+
+    async def watch(self, name: str) -> AsyncIterator[Message]:
+        """Yield unread messages, recording only messages the caller takes.
+
+        Notifications and inbox reads use the same owners as native delivery.
+        Closing before the next read leaves the last message unread.
+        """
+        from contextlib import aclosing
+        from .wire_watch import WireWatch
+
+        reader = self._registry.require(name).incarnation
+        async with aclosing(WireWatch.observations(self.log.path.parent)) as changes:
+            async for _ in changes:
+                snapshot = self._registry.snapshot()
+                if not reader.current(snapshot):
+                    raise UnregisteredThreadError("Watched thread was removed or replaced")
+                for message in self.inbox(name, snapshot=snapshot):
+                    displayed = self.reads.capture(name, (message,), snapshot, self.log.path)
+                    yield message
+                    self.reads.mark_displayed(displayed.viewer, displayed)
 
     def pending_count(self, name: str, target: str | None = None) -> int:
         """Count unread messages without retaining their bodies."""
@@ -325,20 +350,21 @@ class MessageBus:
 
     def mark_delivered(self, name: str, target: str | None = None) -> int:
         """Mark unread messages delivered and return the count without retaining them."""
-        messages = self.inbox(name, target)
-        basis = self.reads.capture(name, messages, self._registry.snapshot(), self.log.path)
+        snapshot = self._registry.snapshot()
+        messages = self.inbox(name, target, snapshot=snapshot)
+        basis = self.reads.capture(name, messages, snapshot, self.log.path)
         self.reads.mark_displayed(basis.viewer, basis)
         return len(messages)
 
     def mark_delivered_through(self, name: str, sequence: int) -> None:
         """Advance a thread's global inbox cursor without loading messages."""
-        canonical = self._registry.require(name).name
+        snapshot = self._registry.snapshot()
+        canonical = snapshot.require(name).name
         if sequence < 0:
             raise ValueError("Delivery sequence cannot be negative.")
-        messages = (message for message in self.inbox(canonical) if message.seq <= sequence)
-        displayed = self.reads.capture(
-            canonical, messages, self._registry.snapshot(), self.log.path
-        )
+        messages = (message for message in self.inbox(canonical, snapshot=snapshot)
+                    if message.seq <= sequence)
+        displayed = self.reads.capture(canonical, messages, snapshot, self.log.path)
         self.reads.mark_displayed(canonical, displayed)
         return
 
