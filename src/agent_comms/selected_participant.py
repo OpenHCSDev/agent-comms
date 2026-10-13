@@ -116,7 +116,7 @@ class SelectedParticipant(MroDispatch):
         try:
             leased = await Coordination.run_worker(lambda: next(lease))
             sources = await cls.sources(bus, store, root_id, pending, identity)
-            batch = SelectedSourceBatch(sources)
+            batch = SelectedSourceBatch.first_route(sources)
             selected = cls(
                 comms,
                 bus,
@@ -132,7 +132,7 @@ class SelectedParticipant(MroDispatch):
             )
             await Coordination.run_async(store.session.path, selected.require_current)
             await Coordination.run_worker(lambda: selected.transition(
-                PreparingPhase(f"Preparing {len(batch.sources)} messages in {', '.join(batch.targets)}")
+                PreparingPhase(f"Preparing {len(batch.sources)} messages in {batch.target}")
             ))
             yield selected
         finally:

@@ -265,9 +265,9 @@ class LiveResponseOwner(RegistryOwner):
         self, bus: MessageBus, fence: OwnerFence,
         replies: tuple[Message, ...], store: Coordination,
     ) -> RecoverySnapshot:
-        # SelectedSourceBatch.response_messages already requires complete,
-        # nonempty original routes. Preparation freezes all of them before
-        # the first append, preserving the original multi-route algorithm.
+        # SelectedSourceBatch.response_message already requires a nonempty
+        # original route. Preparation freezes all of them before the first
+        # append, preserving the original multi-route algorithm.
         for reply in replies:
             prepare_fenced_response(
                 store, bus, fence, reply.body,

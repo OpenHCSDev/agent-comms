@@ -62,7 +62,7 @@ def alice_batch(*sent: tuple[str, str]):
                 accept_delivery_cohort(comms.bus, root_id, message.seq, store)
             lookup = stable_thread_lookup(comms.registry.require("Alice").created_at)
             assignments = sealed_cohort_assignments(store, lookup)
-            yield SelectedSourceBatch(tuple(
+            yield SelectedSourceBatch.first_route(tuple(
                 SelectedSource(assignment.assignment_id, store.assignments, delivery)
                 for assignment, delivery in zip(assignments, deliveries, strict=True)
             ))
@@ -70,39 +70,46 @@ def alice_batch(*sent: tuple[str, str]):
 
 def test_plain_answer_to_one_reply_route_is_that_routes_reply() -> None:
     with alice_batch(("Alice", "What did you find?")) as batch:
-        assert batch.targets == ("sender",)
-        reply, = batch.response_messages("Blocked: the edit did not run.\n", "Alice")
+        assert batch.target == "sender"
+        reply = batch.response_message("Blocked: the edit did not run.\n", "Alice")
         assert (reply.sender, reply.target, reply.body, reply.type) == (
             "Alice", "sender", "Blocked: the edit did not run.", MessageType.INFO,
         )
         # A JSON value that is not the requested array is plain text too.
-        reply, = batch.response_messages('{"files": 3}', "Alice")
+        reply = batch.response_message('{"files": 3}', "Alice")
         assert reply.body == '{"files": 3}'
         with pytest.raises(NativePiUnavailable):
-            batch.response_messages("  \n", "Alice")
+            batch.response_message("  \n", "Alice")
 
 
-def test_array_answer_still_has_to_match_the_reply_routes() -> None:
+def test_no_answer_format_is_demanded_of_the_model() -> None:
+    """The routed-answer shape is no longer asked for or decoded.
+
+    Found on GLM 5.3 Flash agents whose batch answer arrived in prose or in a
+    near-miss array; the whole batch was then marked uncertain and never
+    replayed. The turn already fixes sender, targets and type, so Core stamps
+    the one plain answer onto each original route itself.
+    """
     with alice_batch(("Alice", "What did you find?")) as batch:
-        def array(target):
-            return json.dumps(FieldCodec.encode(
-                (Message("Alice", target, "Found it.", MessageType.INFO, timestamp=0),)
-            ))
-
-        reply, = batch.response_messages(array("sender"), "Alice")
-        assert (reply.target, reply.body) == ("sender", "Found it.")
-        with pytest.raises(NativePiUnavailable):
-            batch.response_messages(array("#team"), "Alice")
-        with pytest.raises(NativePiUnavailable):
-            batch.response_messages('["Found it."]', "Alice")
+        array = json.dumps(FieldCodec.encode(
+            (Message("Alice", "sender", "Found it.", MessageType.INFO, timestamp=0),)
+        ))
+        reply = batch.response_message(array, "Alice")
+        assert (reply.target, reply.body) == ("sender", array)
 
 
-def test_plain_answer_to_several_reply_routes_is_refused() -> None:
+def test_one_selected_turn_answers_one_reply_route() -> None:
+    """A mixed direct/channel wave never shares one answer across audiences.
+
+    The batch type itself groups the captured sources by reply route
+    (SelectedSourceBatch.first_route); the gathered batch answers only the
+    earliest route and the later routes stay pending for their own turns.
+    """
     with alice_batch(("Alice", "A private question"), ("#team", "@Alice a team question")) as batch:
-        assert batch.targets == ("sender", "#team")
-        with pytest.raises(NativePiUnavailable) as refused:
-            batch.response_messages("One answer for everyone.", "Alice")
-        assert "cannot be divided between 2 reply routes" in str(refused.value.__cause__)
+        assert batch.target == "sender"
+        assert all(source.delivery.message.target == "Alice" for source in batch.sources)
+        reply = batch.response_message("One answer for everyone.", "Alice")
+        assert (reply.target, reply.body) == ("sender", "One answer for everyone.")
 
 
 @pytest.mark.skipif(

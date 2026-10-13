@@ -80,7 +80,7 @@ class SelectedPrompt:
                 frame,
                 *awareness,
                 SelectedWorkSegment.capture(participant, action, frame.provenance),
-                participant.batch.response_segment(participant.owner.thread.name),
+                participant.batch.response_segment(),
             )
         ).render()
 
@@ -125,7 +125,7 @@ class SelectedAttempt:
         if tuple(row.assignment_id for row in selected) != assignment_ids:
             raise IdentityConflict("full wake lost an original batch assignment")
         participant.transition(
-            PreparingPhase(f"Preparing response to {len(selected)} messages in {', '.join(participant.batch.targets)}")
+            PreparingPhase(f"Preparing response to {len(selected)} messages in {participant.batch.target}")
         )
         return cls(
             participant, FullNativeSend(selected, progress), token,
@@ -206,7 +206,7 @@ class SelectedAttempt:
                 selected_tool_mode=action.mode(tools),
             )
             result.require_publishable()
-            replies = participant.batch.response_messages(result.text, participant.owner.thread.name)
+            replies = (participant.batch.response_message(result.text, participant.owner.thread.name),)
             participant.transition(PublishingPhase())
             action.apply(tools)
             request.admission.commit(participant.store, result.context)
@@ -242,7 +242,7 @@ class SelectedConsideration:
             return await attempt.run(execution, session,
                                      execution.action(session), execution.write_authority)
         participant.transition(
-            PreparingPhase(f"Preparing triage for {len(participant.batch.sources)} messages in {', '.join(participant.batch.targets)}")
+            PreparingPhase(f"Preparing triage for {len(participant.batch.sources)} messages in {participant.batch.target}")
         )
         stage = TriageNativeSend(participant.batch.assignments)
         request = SelectedRequest.reserve(
