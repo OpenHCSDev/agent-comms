@@ -6,8 +6,9 @@ import json
 import pytest
 
 from agent_comms.field_codec import FieldCodec
-from agent_comms.thread_identity import TurnId, TurnIdentity
-from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment
+from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.thread_identity import ThreadIncarnation, TurnId, TurnIdentity
+from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, NativeProvenance, JournalProvenance, TurnContext, TranscriptSegment, UserInputSegment
 from agent_comms.pi_commands import Prompt
 from agent_comms.image_inputs import ImageInput
 from agent_comms.wire_record import WireRecord, ObservationWireRecord, ContextManifestWireObservation
@@ -277,6 +278,62 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     assert len(recorded.encode_result(recorded.apply(reopened))['manifests'])==1
     difference = ContextCliCommand(thread='Alice',diff=True)
     assert difference.encode_result(difference.apply(reopened))['turn']['occurrence']['generation']==2
+
+
+def test_recorded_manifest_row_records_each_shared_fact_once():
+    """One manifest row records each distinct source once; parts reference it.
+
+    A long session re-recorded every contribution's native cut and journal
+    path inside every model request's row. The compact row form records each
+    distinct fact once per manifest, keeps the decoded manifest equal to the
+    original full value, and refuses malformed references like any row.
+    """
+    identity = NativeSessionIdentity("sess-1", "/tmp/native-sessions/sess-1.jsonl")
+    thread = ThreadIncarnation("owner", 17002.0)
+    turn = RecordedContextTurn(TurnId("original-turn"), TurnIdentity(thread, 3))
+    native = NativeProvenance(identity, 3, "0" * 64)
+    manifest = ContextManifest(thread, turn, (
+        SegmentManifest(
+            TranscriptSegment, (native, JournalProvenance(identity.session_file, ("entry-0",))),
+            hashlib.sha256(b"row").hexdigest(), 10, 4,
+            contributors=tuple(
+                SegmentManifest(
+                    TranscriptSegment,
+                    (native, JournalProvenance(identity.session_file, (f"entry-{index}",))),
+                    hashlib.sha256(f"message {index}".encode()).hexdigest(), 5 + index, 1)
+                for index in range(20))),
+    ), "pi.estimateTokens")
+    row = ObservationWireRecord(ContextManifestWireObservation(manifest)).to_wire()
+    encoded = row["observation"]["manifest"]
+    assert len(encoded["sessions"]) == 1 and len(encoded["paths"]) == 1
+    native_sources = [source for source in encoded["sources"] if source["kind"] == "native"]
+    assert len(native_sources) == 1 and native_sources[0]["identity"] == 0
+    journal_sources = [source for source in encoded["sources"] if source["kind"] == "journal"]
+    assert len(journal_sources) == 20 and all(source["path"] == 0 for source in journal_sources)
+    contributors = encoded["segments"][0]["contributors"]
+    assert all(type(index) is int for part in contributors for index in part["sources"])
+    assert len(json.dumps(encoded)) < len(json.dumps(FieldCodec.encode(manifest)))
+    decoded = WireRecord.from_wire(row, "root-id").observation.manifest
+    assert decoded == manifest
+    malformed = json.loads(json.dumps(row))
+    malformed["observation"]["manifest"]["segments"][0]["sources"][0] = 999
+    with pytest.raises(ValueError):
+        WireRecord.from_wire(malformed, "root-id")
+    unknown = json.loads(json.dumps(row))
+    unknown["observation"]["manifest"]["segments"][0]["source"] = []
+    with pytest.raises(ValueError):
+        WireRecord.from_wire(unknown, "root-id")
+    for mutate in (
+        lambda value: value["paths"].append(3),
+        lambda value: value["sessions"].append(None),
+        lambda value: value["segments"][0].__setitem__("utf8_bytes", "10"),
+        lambda value: value["segments"][0].__setitem__("tokens", True),
+        lambda value: value["segments"][0].__setitem__("captured_text", [3]),
+    ):
+        malformed = json.loads(json.dumps(row))
+        mutate(malformed["observation"]["manifest"])
+        with pytest.raises(ValueError):
+            WireRecord.from_wire(malformed, "root-id")
 
 
 def test_observation_family_rejects_message_fields_and_preview(tmp_path):
