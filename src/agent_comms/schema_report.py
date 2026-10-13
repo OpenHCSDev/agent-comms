@@ -6,10 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 import sqlite3
 
-# These are the production declaration owners, not a roster of table names.
-# The coordinator package already discovers its row modules by declaration.
-from . import (cohort_schema, coordination_response, goal_attempts, native_pi,
-               native_prompt_binding, private_bus_checkpoint, todos, triage_native_sources)
 from .native_session_files import NativeSessionFiles
 from .typed_table import SQLiteSchemaDifference, SQLiteSchemaObject, TypedRow, TypedTable
 

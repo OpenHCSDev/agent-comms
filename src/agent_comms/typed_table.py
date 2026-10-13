@@ -412,7 +412,7 @@ class SQLiteUserVersion(TypedRow):
     user_version: int
 
 
-class TypedTable(TypedRow, DeclaredFamily, affix="Row"):
+class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent_comms"):
     """The row declaration owns its table; no separate table/schema registry.
 
     Fields may declare ``metadata={"sql": Column(...)}``. Composite keys derive
