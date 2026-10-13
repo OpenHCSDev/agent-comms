@@ -76,20 +76,10 @@ Context rows were skipped by their checkpoint geometry; no whole-bus copy or
 physical lock was taken, and both SQLite connections were read-only and short.
 All four claims below still existed in that later cut:
 
-| Path under src/agent_comms | Claim generation | Creating seq / message |
-| --- | --- | --- |
-| coordination_response.py | 07b1fb3d630b4f479b14f2aceb54bf5f | 3705 / 6ee62b15582f |
-| coordination_session.py | d61b4ea6b36d4e50b89003f0ef5b1263 | 3693 / 09709644bfda |
-| publisher.py | ac22d6cd2e9848be843a1a56cbe25471 | 3699 / a96200ea681f |
-| coordination_snapshot.py | b72e6ecc6c1245a3872844022d8f638b | 3698 / b04e8abed6b5 |
-
-Each path is rooted at `/home/ts/wt/core-goal-retry`. Each claim records owner
-core-goal-retry, incarnation 1791874999.750499, lookup
-eeff80ed0696b0af2668dc2b5c403646, execution
-wirev124872a29986cdd917e531d16c61d91b06347fa4c06de6a727e8ec4e4ea3b4ddd,
-ordinal 1 / participant generation 1. Original wake: source 3500 / bf210bcd8c46,
-assignment cohort-v1:881461d27e82dfe718fc4e20a8095473c38333a77c0f0b796c3ad25ce2e9112a,
-revision 2. Original owner admission 12273 and turn d9a6c9a7ac15e309c6b30c294ec76b7c.
+The later complete inventory, including these four claims, is recorded once in
+[terminal-claim-inventory.json](terminal-claim-inventory.json). It carries the
+exact owner/incarnation, execution/attempt/scope, path/generation, creating
+message, taken UTC time and terminal time, grouped by original attempt.
 
 Existing `AttemptRecord` decoding confirms revision 55, attempt_failed,
 native_terminal_failure, backend_done/process_dead true and tool_admission_open
@@ -105,3 +95,48 @@ generations through the existing release owner. No foreign release, direct SQL
 mutation, pointer clear, restart, replay or denied-edit shell bypass occurred.
 The diagnosis remains documentation-only until implementation can land; move
 that diagnosis to the PR comment then, not count it as a production repair.
+
+## Failure inventory and unified ending request (4101 / 4149)
+
+Read-only cut 4163 found 57 retained claims: **18 belong to terminal attempts**
+(14 core-goal-retry, 4 core-route-counts), 39 to nonterminal attempts, zero unbound
+or missing/mismatched attempt identities. The JSON inventory is a dated source
+observation, not a current release permit. All 39 nonterminal claims are excluded,
+including three core-batch-reply settling claims and two slop-census compaction
+claims. Closed tool admission alone is not permission to release an active attempt.
+
+The resolver claim was taken 18:09:19.394484 UTC; its attempt ended
+18:16:49.303 UTC with native_terminal_failure. The route-counts attempt ended
+18:01:19.210 UTC. Both precede the 19:08 stop: retained earlier failed claims,
+not claims stranded by that later stop. No claims or stores were changed.
+
+Source relationships at this checkpoint:
+
+- `DurableTurn.fail_terminal`, durable_turn.py:132-147, calls
+  `AttemptStore.settle_nonpublication`, attempt_store.py:306-322, then
+  `RecoverySnapshot.settle`, coordination_snapshot.py:214-281.
+- UNKNOWN and interrupted owner recovery also call that existing snapshot
+  settlement. Current source already calls release_resources on that route
+  (coordination_snapshot.py:231). Retained history alone does not prove that the
+  current deployed producer omitted it; the old producer's runtime pin is not
+  established by the retained launch log. Do not misattribute this to the stop.
+- Publication completion has a separate terminal writer at
+  coordination_snapshot.py:283-320 and a second release call at line 292.
+- Existing AST tooling parsed 307 production modules, zero omissions. It found
+  one release_resources declaration and two consumers; two terminal AttemptRecord
+  update sites, both in RecoverySnapshot. Other AttemptRecord writes are live
+  observation/renewal; goal_attempts.py is a different table owner. Dynamic phase
+  arguments are not statically resolved. Manual releases use Publisher's same
+  envelope primitive and are not competing terminal-settlement implementations.
+
+The proposed coherent change makes RecoverySnapshot._finish_attempt own exact
+finality, resource release, terminal attempt/execution/response/assignment writes
+and current-pointer retirement for both existing entrypoints, deleting both
+copied terminal write blocks and both outcome-local release calls. It preserves
+published response states without rewriting their immutable data. The edit was
+refused in full on **coordination_snapshot.py**, generation
+b72e6ecc6c1245a3872844022d8f638b, held by the same earlier terminal attempt. It
+landed no code. The release implementation and ordered native boundary also
+remain claimed. A different file/helper/store would bypass rather than fix this
+owner, so none was added. There is no after-search or behavioral acceptance to
+claim yet; the exact old owner disposition is the implementation blocker.
