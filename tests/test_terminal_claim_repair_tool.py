@@ -71,7 +71,7 @@ def test_terminal_claim_repair_refuses_live_attempt_then_releases_exact_terminal
         assert actual == expected
         assert trial["trial"] is True and result["trial"] is False
         assert result["released"] == 2
-        assert result["sql_and_registry_unchanged"] is True
+        assert result["protected_stores_unchanged"] is True
         assert dict(WireLog(trial_root / "bus.jsonl").claim_projection()) == {}
         assert dict(WireLog(apply_root / "bus.jsonl").claim_projection()) == {}
         assert set(comms.bus.log.claim_projection()) == {first.resource, second.resource}

@@ -72,6 +72,16 @@ def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _fixed_store_digests(root: Path) -> dict[Path, str]:
+    protected = (
+        root / "coordination.sqlite3",
+        root / "registry.json",
+        root / "input_dispositions.json",
+        root / "owner_release_receipts.json",
+    )
+    return {path: _digest(path) for path in protected if path.exists()}
+
+
 def _manifest(snapshot, claims: tuple[ClaimOwner, ...]) -> TerminalClaimManifest:
     attempt = snapshot.require_attempt()
     if not (
@@ -106,8 +116,7 @@ def repair(
     have every unchanged exact claim before the same owner is invoked there.
     """
     database = root / "coordination.sqlite3"
-    registry = root / "registry.json"
-    fixed = {path: _digest(path) for path in (database, registry)}
+    fixed = _fixed_store_digests(root)
     with Coordination(str(database)) as store, store.session.boundary() as boundary:
         snapshot = store.snapshots.get(execution_id)
         terminal = _manifest(snapshot, ())
@@ -160,16 +169,15 @@ def repair(
             or tuple(sorted(released)) != wanted
         ):
             raise RecoveryBlocked("claim repair appended anything except exact releases")
-    changed = {path: _digest(path) for path in (database, registry)}
-    if changed != fixed:
-        raise RecoveryBlocked("claim repair changed coordinator SQL or registry state")
+    if _fixed_store_digests(root) != fixed:
+        raise RecoveryBlocked("claim repair changed protected private-store state")
     return actual, {
         "execution_id": execution_id,
         "released": len(actual.claims),
         "before_seq": before_seq,
         "after_seq": after_seq,
         "unchanged_claims": len(after),
-        "sql_and_registry_unchanged": True,
+        "protected_stores_unchanged": True,
         "trial": expected is None,
     }
 
