@@ -12,45 +12,46 @@ import pytest
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.bus_source_page import AddressedPage
 from agent_comms.checkpoint_seals import file_revision
-from agent_comms.child_process import Platform
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.private_bus_checkpoint import _directory_sync, install_private_bus_checkpoint
-from agent_comms.store_files import _store_lock_file
+from agent_comms.private_bus_checkpoint import PrefixCertificate, install_private_bus_checkpoint
+from agent_comms.turn_context import ContextManifest, ContextManifestWire
+from unittest.mock import patch
 from agent_comms.wire_log import WireLog
 from test_context_manifest_carry import original_root, hashes
 from tools.cutover.carry_context_manifest_rows import ManifestRowCarry
+
+
+def certified_old_copy(original, destination):
+    shutil.copytree(original.root, destination)
+    log = WireLog(destination / "bus.jsonl")
+    with pytest.raises(RelationViolationError):
+        with log.certified_read():
+            pytest.fail("Copied certificate must not authorize the new inode")
+    # Fixture setup uses the original decoder to certify this private copy;
+    # the product carry never accepts stale/copied certificates as permission.
+    marker = replace(log.read_metadata_unlocked(), checkpoint_version=None, checkpoint_seal=None)
+    log.write_metadata_unlocked(marker)
+    (destination / "private_bus_checkpoint.sqlite3").unlink()
+    with patch.object(ContextManifestWire, "from_wire",
+                      side_effect=lambda data: FieldCodec.decode(ContextManifest, data)):
+        install_private_bus_checkpoint(log)
+    return log
 
 
 def test_final_location_recertifies_carry_and_reads_retained_history(tmp_path):
     original, root_id, manifest, messages = original_root(tmp_path)
     before = hashes(original.root)
     final_root = tmp_path / "final-location"
-    shutil.copytree(original.root, final_root)
-    final_log = WireLog(final_root / "bus.jsonl")
-    # Copying files preserves bytes, not their inode-bound certificates.
-    with pytest.raises(RelationViolationError):
-        with final_log.certified_read():
-            pytest.fail("Copied original certificate must not authorize the new inode")
+    final_log = certified_old_copy(original, final_root)
     candidate = tmp_path / "candidate"
     carried = ManifestRowCarry(original.root, candidate, root_id).run()
-    original_marker = final_log.read_metadata_unlocked()
-    unsealed = replace(original_marker, checkpoint_version=None, checkpoint_seal=None)
-    platform = Platform.current()
-    # This isolated copy has no writers. Borrow the physical canonical lock
-    # directly: its copied certificate cannot admit a normal writer/read lock.
-    # Never execute this fixture recipe against a public or live root.
-    with _store_lock_file(final_log.path) as lock_file:
-        platform.acquire_store_lock(lock_file.fileno(), shared=False, blocking=True)
-        try:
-            os.replace(candidate / "bus.jsonl", final_log.path)
-            _directory_sync(final_root)
-            final_log.write_metadata_unlocked(unsealed)
-            (final_root / "private_bus_checkpoint.sqlite3").unlink()
-            witness = install_private_bus_checkpoint(final_log, _bus_locked=True)
-        finally:
-            platform.release_store_lock(lock_file.fileno())
+    unsealed = replace(final_log.read_metadata_unlocked(), checkpoint_version=None, checkpoint_seal=None)
+    candidate_before = hashes(candidate)
+    with WireLog(candidate / "bus.jsonl").certified_read() as carried_source:
+        witness = carried_source.install_at(final_log)
+    assert hashes(candidate) == candidate_before
     assert witness.revision == file_revision(final_log.path.stat())
     assert witness.digest == carried["candidate_certificate"]["digest"]
     assert witness.revision != tuple(carried["candidate_certificate"]["revision"])
@@ -88,3 +89,42 @@ def test_final_location_recertifies_carry_and_reads_retained_history(tmp_path):
         "live_root_access": False, "application_binary": str(binary),
         "final_certificate": FieldCodec.encode(witness),
     }, indent=2) + "\n")
+
+
+def test_failed_install_keeps_required_seal_and_preserves_candidate(tmp_path, monkeypatch):
+    original, root_id, _, _ = original_root(tmp_path)
+    before = hashes(original.root)
+    destination = certified_old_copy(original, tmp_path / "destination")
+    candidate = tmp_path / "candidate"
+    ManifestRowCarry(original.root, candidate, root_id).run()
+    candidate_before = hashes(candidate)
+    prior_marker = destination.read_metadata_unlocked()
+
+    def fail_install(cls, bus, marker):
+        raise OSError("controlled install failure")
+
+    monkeypatch.setattr(PrefixCertificate, "_install", classmethod(fail_install))
+    with WireLog(candidate / "bus.jsonl").certified_read() as source:
+        with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
+            source.install_at(destination)
+    assert destination.read_metadata_unlocked() == prior_marker
+    assert destination.read_metadata_unlocked().requires_checkpoint
+    with pytest.raises(RelationViolationError):
+        with destination.certified_read():
+            pytest.fail("Interrupted carry must not enter unsealed full-scan admission")
+    assert hashes(candidate) == candidate_before and hashes(original.root) == before
+
+
+def test_install_refuses_different_marker_before_publication(tmp_path):
+    left, right = tmp_path / "left", tmp_path / "right"
+    left.mkdir(mode=0o700)
+    right.mkdir(mode=0o700)
+    original, root_id, _, _ = original_root(left)
+    destination, _, _, _ = original_root(right)
+    before = hashes(destination.root)
+    candidate = tmp_path / "candidate"
+    ManifestRowCarry(original.root, candidate, root_id).run()
+    with WireLog(candidate / "bus.jsonl").certified_read() as source:
+        with pytest.raises(RelationViolationError, match="marker facts"):
+            source.install_at(destination.bus.log)
+    assert hashes(destination.root) == before

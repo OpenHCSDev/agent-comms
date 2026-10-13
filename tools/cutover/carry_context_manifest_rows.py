@@ -1,9 +1,10 @@
 """One-shot manifest-row carry into a separately certified candidate.
 
 Run with the target reader against an immutable, sealed source. This tool never
-publishes into the source root. The release owner must keep writers stopped and
-install/certify the candidate at its final location before restarting readers.
-Rename changes inode revisions: a candidate seal is NOT a live-install seal.
+publishes into the source root. Optional --install-at names a separate, already
+certified offline destination; the checkpoint owner installs and certifies it.
+The release owner must keep destination writers stopped until this completes.
+A candidate seal is NOT a final-install seal.
 Delete this retired-format reader after the authorized carry and acceptance.
 """
 from __future__ import annotations
@@ -167,8 +168,25 @@ def main() -> None:
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--root-id", required=True)
+    parser.add_argument("--install-at", type=Path,
+                        help="Separate certified offline destination; never the immutable source")
     arguments = parser.parse_args()
+    if arguments.install_at is not None:
+        destination = arguments.install_at.resolve(strict=True)
+        original = arguments.source.resolve(strict=True)
+        if destination.is_relative_to(original) or original.is_relative_to(destination):
+            parser.error("Install destination must be separate from the immutable original")
     result = ManifestRowCarry(arguments.source, arguments.candidate, arguments.root_id).run()
+    if arguments.install_at is not None:
+        target = WireLog(destination / "bus.jsonl")
+        with WireLog(arguments.candidate / "bus.jsonl").certified_read() as source:
+            witness = source.install_at(target)
+        with target.certified_read() as installed:
+            installed.require_current()
+            if installed.witness != witness:
+                raise ValueError("Installed certificate changed before result publication")
+        result["installed_at"] = str(destination)
+        result["final_certificate"] = FieldCodec.encode(witness)
     print(json.dumps(result, indent=2))
 
 
