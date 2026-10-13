@@ -129,7 +129,7 @@ async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path):
         pending = pending_sealed_assignments(store, lookup, "receiver")
         assert tuple(row.wire_seq for row in pending) == pending_wires
         async with SelectedParticipant.select(comms, store, root_id, "receiver", 0) as selected:
-            assert selected.batch.targets == ("sender",)
+            assert selected.batch.target == "sender"
             assert tuple(row.wire_seq for row in selected.batch.assignments) == (direct.seq,)
         # The channel original was never claimed by this turn: selection alone
         # settles nothing, so it stays pending for its own turn.

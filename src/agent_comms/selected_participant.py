@@ -22,7 +22,6 @@ from .coordinator import Coordination
 from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .message_reference import MessageReference
-from .wake import derive_exact_reply_target
 from .mro_dispatch import MroDispatch, handles
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_attestation import ObservedAttestation
@@ -117,7 +116,7 @@ class SelectedParticipant(MroDispatch):
         try:
             leased = await Coordination.run_worker(lambda: next(lease))
             sources = await cls.sources(bus, store, root_id, pending, identity)
-            batch = cls.first_route_batch(sources)
+            batch = SelectedSourceBatch.first_route(sources)
             selected = cls(
                 comms,
                 bus,
@@ -133,7 +132,7 @@ class SelectedParticipant(MroDispatch):
             )
             await Coordination.run_async(store.session.path, selected.require_current)
             await Coordination.run_worker(lambda: selected.transition(
-                PreparingPhase(f"Preparing {len(batch.sources)} messages in {', '.join(batch.targets)}")
+                PreparingPhase(f"Preparing {len(batch.sources)} messages in {batch.target}")
             ))
             yield selected
         finally:
@@ -205,23 +204,6 @@ class SelectedParticipant(MroDispatch):
             yield current
         finally:
             comms.agents.finish_turn(lease)
-
-    @staticmethod
-    def first_route_batch(sources: tuple[SelectedSource, ...]) -> SelectedSourceBatch:
-        """One selected turn answers originals of one reply route.
-
-        The answer is one shared text, so a batch mixing a direct and a channel
-        request would post the direct answer into the channel. The captured
-        sources run in wire order, so the earliest route turns first and the
-        later routes stay pending for their own turns.
-        """
-        routes: dict[str | None, list[SelectedSource]] = {}
-        for source in sources:
-            routes.setdefault(derive_exact_reply_target(source.delivery.message), []).append(source)
-        if None in routes:
-            # The original refusal covers the whole wave; no source is answered.
-            return SelectedSourceBatch(sources)
-        return SelectedSourceBatch(tuple(routes[next(iter(routes))]))
 
     @staticmethod
     async def sources(bus, store, root_id, assignments, identity) -> tuple[SelectedSource, ...]:

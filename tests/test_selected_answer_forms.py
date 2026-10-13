@@ -26,7 +26,6 @@ from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohor
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageType
-from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.selected_source_batch import SelectedSource, SelectedSourceBatch
 from agent_comms.threads import Thread
@@ -63,7 +62,7 @@ def alice_batch(*sent: tuple[str, str]):
                 accept_delivery_cohort(comms.bus, root_id, message.seq, store)
             lookup = stable_thread_lookup(comms.registry.require("Alice").created_at)
             assignments = sealed_cohort_assignments(store, lookup)
-            yield SelectedSourceBatch(tuple(
+            yield SelectedSourceBatch.first_route(tuple(
                 SelectedSource(assignment.assignment_id, store.assignments, delivery)
                 for assignment, delivery in zip(assignments, deliveries, strict=True)
             ))
@@ -71,7 +70,7 @@ def alice_batch(*sent: tuple[str, str]):
 
 def test_plain_answer_to_one_reply_route_is_that_routes_reply() -> None:
     with alice_batch(("Alice", "What did you find?")) as batch:
-        assert batch.targets == ("sender",)
+        assert batch.target == "sender"
         reply = batch.response_message("Blocked: the edit did not run.\n", "Alice")
         assert (reply.sender, reply.target, reply.body, reply.type) == (
             "Alice", "sender", "Blocked: the edit did not run.", MessageType.INFO,
@@ -102,14 +101,15 @@ def test_no_answer_format_is_demanded_of_the_model() -> None:
 def test_one_selected_turn_answers_one_reply_route() -> None:
     """A mixed direct/channel wave never shares one answer across audiences.
 
-    The captured sources are grouped by reply route where the batch is
-    assembled (SelectedParticipant.first_route_batch); a batch constructed
-    across routes is refused outright.
+    The batch type itself groups the captured sources by reply route
+    (SelectedSourceBatch.first_route); the gathered batch answers only the
+    earliest route and the later routes stay pending for their own turns.
     """
-    with pytest.raises(IdentityConflict) as refused, \
-            alice_batch(("Alice", "A private question"), ("#team", "@Alice a team question")):
-        pass
-    assert "more than one reply route" in str(refused.value)
+    with alice_batch(("Alice", "A private question"), ("#team", "@Alice a team question")) as batch:
+        assert batch.target == "sender"
+        assert all(source.delivery.message.target == "Alice" for source in batch.sources)
+        reply = batch.response_message("One answer for everyone.", "Alice")
+        assert (reply.target, reply.body) == ("sender", "One answer for everyone.")
 
 
 @pytest.mark.skipif(

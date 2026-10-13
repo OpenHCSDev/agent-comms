@@ -56,11 +56,25 @@ class SelectedSourceBatch:
             raise IdentityConflict("Selected batch changed original source order")
         if len({row.recipient_lookup for row in assignments}) != 1:
             raise IdentityConflict("Selected batch crosses recipient ownership")
-        routes = {derive_exact_reply_target(source.delivery.message) for source in self.sources}
-        if None in routes:
+        if any(derive_exact_reply_target(source.delivery.message) is None for source in self.sources):
             raise IdentityConflict("Selected source lacks an original reply route")
-        if len(routes) != 1:
-            raise IdentityConflict("Selected batch answers more than one reply route")
+
+    @classmethod
+    def first_route(cls, sources: tuple[SelectedSource, ...]) -> "SelectedSourceBatch":
+        """One selected turn answers originals of one reply route.
+
+        The answer is one shared text, so a batch mixing a direct and a channel
+        request would post the direct answer into the channel. The captured
+        sources run in wire order, so the earliest route turns first and the
+        later routes stay pending for their own turns.
+        """
+        routes: dict[str | None, list[SelectedSource]] = {}
+        for source in sources:
+            routes.setdefault(derive_exact_reply_target(source.delivery.message), []).append(source)
+        if None in routes:
+            # The original refusal covers the whole wave; no source is answered.
+            return cls(sources)
+        return cls(tuple(routes[next(iter(routes))]))
 
     @property
     def assignments(self) -> tuple[WakeAssignment, ...]:
@@ -84,11 +98,9 @@ class SelectedSourceBatch:
         return all(row.lifecycle.requires_selected_triage() for row in self.assignments)
 
     @property
-    def targets(self) -> tuple[str, ...]:
-        """Original reply routes in first-source order, never a second route store."""
-        return tuple(dict.fromkeys(
-            derive_exact_reply_target(source.delivery.message) for source in self.sources
-        ))
+    def target(self) -> str:
+        """The batch's one original reply route, never a second route store."""
+        return derive_exact_reply_target(self.sources[0].delivery.message)
 
     def response_segment(self):
         """The reply route belongs to the original owners; no answer format is
@@ -100,7 +112,7 @@ class SelectedSourceBatch:
                 *(WireProvenance(source.delivery.message.reference) for source in self.sources),
             ),
             instruction=instruction,
-            targets=self.targets,
+            targets=(self.target,),
         )
 
     def response_message(self, text: str, sender: str) -> Message:
@@ -114,6 +126,6 @@ class SelectedSourceBatch:
         timestamp, audience and bus row.
         """
         try:
-            return Message(sender, self.targets[0], text.strip(), MessageType.INFO)
+            return Message(sender, self.target, text.strip(), MessageType.INFO)
         except ValueError as error:
             raise NativePiUnavailable("Native turn produced no publishable answer") from error
