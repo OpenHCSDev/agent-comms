@@ -57,7 +57,7 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
         # Optional scheduling hints consume the same canonical reply declaration.
         from agent_comms.wake_candidate_index import WakeCandidateIndex
 
-        candidates = WakeCandidateIndex(case.bus)
+        candidates = WakeCandidateIndex(case.bus.log)
         assert candidates.maintain(rebuild=True)
         page = candidates.page(
             root_id=case.root_id, recipient_lookup=lookup, after_seq=0,

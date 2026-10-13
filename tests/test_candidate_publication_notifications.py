@@ -1,69 +1,82 @@
-"""Every publication owner notifies derived maintenance after its locks exit."""
+"""The append owner schedules optional work after the whole lock lifetime."""
 
+from functools import partial
+from tempfile import TemporaryDirectory
 import sqlite3
 import threading
 
 import pytest
 
-from agent_comms import candidate_maintenance, claim_admission, messaging
-from agent_comms.attempt_start import AttemptStart
-from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms import candidate_maintenance, claim_admission
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_response import (
     prepare_fenced_response, publish_fenced_response, resolve_existing_response,
 )
-from agent_comms.coordination_tables.executions import ExecutionOrigin
-from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeAdmission
-from agent_comms.owner_fence import prepare_fence_token
-from agent_comms.selected_source_batch import SelectedSource
-from agent_comms.store_files import _store_lock
+from agent_comms.context_segments.optional_awareness import OmittedAwareness
+from agent_comms.envelope_claim_transitions import ExistingFileClaim
+from agent_comms.errors import RelationViolationError
+from agent_comms.messages import InfoKind, Message
+from agent_comms.store_files import _async_store_lock, _store_lock
 from agent_comms.wake_candidate_index import WakeCandidateIndex
+from test_claim_bus_read import record_context, selected_turn
 from test_coordination_response import _ready
 from test_optional_awareness_projection import _root, _accepted, _owner, _projection
+
+_SCHEDULE = candidate_maintenance.schedule_candidate_catchup
 
 
 @pytest.fixture
 def notifications(monkeypatch):
-    calls, finished = [], threading.Event()
-    schedule, drain = candidate_maintenance.schedule_candidate_catchup, candidate_maintenance._drain_candidate
+    def activate(comms):
+        calls, finished = [], threading.Event()
+        drain = candidate_maintenance._drain_candidate
 
-    def complete(root):
-        try:
-            drain(root)
-        finally:
-            finished.set()
+        def complete(root):
+            try:
+                drain(root)
+            finally:
+                finished.set()
 
-    def notify(bus, seq):
-        # These physical and SQL writes would refuse while the original
-        # publication boundary still held any of its resources.
-        with _store_lock(bus.log.path.parent / "wire", blocking=False), bus.log.locked(blocking=False):
-            pass
-        with sqlite3.connect(bus.log.path.parent / "coordination.sqlite3", timeout=0) as db:
-            db.execute("BEGIN IMMEDIATE")
-            db.rollback()
-        calls.append(seq)
-        schedule(bus, seq)
+        def notify(log, through_bytes):
+            probed = []
 
-    monkeypatch.setattr(messaging, "schedule_candidate_catchup", lambda *_: None)
-    monkeypatch.setattr(candidate_maintenance, "_drain_candidate", complete)
-    monkeypatch.setattr(candidate_maintenance, "schedule_candidate_catchup", notify)
-    # The baseline has no notification at this owner at all.
-    monkeypatch.setattr(claim_admission, "schedule_candidate_catchup", notify, raising=False)
-    return calls, finished
+            def probe():
+                with (
+                    _store_lock(comms._wire_lock_path, blocking=False),
+                    log.locked(blocking=False),
+                    _store_lock(comms.registry.store.path, blocking=False),
+                ):
+                    with sqlite3.connect(comms.root / "coordination.sqlite3", timeout=0) as db:
+                        db.execute("BEGIN IMMEDIATE")
+                        db.rollback()
+                probed.append(True)
+
+            thread = threading.Thread(target=probe)
+            thread.start()
+            thread.join(2)
+            assert not thread.is_alive() and probed == [True]
+            calls.append(through_bytes)
+            _SCHEDULE(log, through_bytes)
+
+        monkeypatch.setattr(candidate_maintenance, "_drain_candidate", complete)
+        monkeypatch.setattr(candidate_maintenance, "schedule_candidate_catchup", notify)
+        return calls, finished
+
+    return activate
 
 
 def test_response_catches_up_and_supplies_recipient_awareness(tmp_path, notifications):
-    calls, finished = notifications
     case = _ready(tmp_path, direct=True)
     try:
-        index = WakeCandidateIndex(case.bus)
+        index = WakeCandidateIndex(case.bus.log)
         assert index.maintain(rebuild=True)
+        calls, finished = notifications(case.comms)
         prepare_fenced_response(case.store, case.bus, case.fence, "Answer",
                                 exact_target=case.reply_target, owner_witness=case.witness)
         result = publish_fenced_response(case.store, case.bus, case.fence,
                                         exact_target=case.reply_target, owner_witness=case.witness)
         _, receipt = result.value.require_published_evidence(case.reply_target)
-        assert calls == [receipt.seq]
+        assert calls == [case.bus.log.path.stat().st_size]
         assert finished.wait(5)
         initial = case.bus.log.read_delivery_cohort(case.root_id, receipt.seq)
         (assignment,) = accept_delivery_cohort(case.bus, case.root_id, receipt.seq, case.store).value.assignments
@@ -71,66 +84,167 @@ def test_response_catches_up_and_supplies_recipient_awareness(tmp_path, notifica
         awareness = _projection(index, case.store, sender, 0, receipt.seq)(initial, assignment, sender)
         assert awareness.complete
         assert awareness.selected[0].assignment.wire_seq == receipt.seq
+        segments = awareness.segments(16384)
+        assert segments and not any(isinstance(segment, OmittedAwareness) for segment in segments)
         assert len(case.bus.log.full_history()) == 2
-        # Read-only settlement never schedules maintenance or creates a row.
         resolve_existing_response(case.store, case.bus, case.fence,
                                   exact_target=case.reply_target, owner_witness=case.witness)
-        assert calls == [receipt.seq]
+        assert calls == [case.bus.log.path.stat().st_size]
     finally:
         case.close()
 
 
 def test_membership_notices_notify_after_tag_transaction(tmp_path, notifications):
-    calls, finished = notifications
-    comms, store, index, _root_id = _root(tmp_path)
+    comms, store, _index, _root_id = _root(tmp_path)
     try:
+        calls, finished = notifications(comms)
         comms.channels.update_tags("member000", add=frozenset({"new-tag"}))
-        assert calls == [1]
+        first_bytes = comms.bus.log.path.stat().st_size
+        assert calls == [first_bytes]
         assert finished.wait(5)
         finished.clear()
         comms.channels.replace_tags("member000", frozenset({"team"}))
-        assert calls == [1, 2]
+        assert calls == [first_bytes, comms.bus.log.path.stat().st_size]
         assert finished.wait(5)
     finally:
         store.close()
 
 
-def test_selected_claim_and_release_notify_after_their_boundaries(tmp_path, notifications):
-    calls, finished = notifications
-    comms, store, index, root_id = _root(tmp_path, recipients=1)
-    try:
-        initial, assignment = _accepted(comms, store, root_id, "member000", "Investigate")
-        owner = _owner(comms, "member000")
-        person = store.participants.get(stable_thread_lookup(owner.created_at))
-        store.executions.create("claim-exec", ExecutionOrigin.WIRE, person.lookup,
-                                owner.name, 1, sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),))
-        pending = store.executions.mark_pending("claim-exec", expected_revision=1).value
-        store.attempts.start(AttemptStart("claim-exec", 1, owner.name, person.participant_generation,
-                                         prepare_fence_token(), expected_execution_revision=pending.execution.revision,
-                                         expected_pointer_revision=pending.pointer_revision))
-        engaged = store.assignments.get(assignment.assignment_id)
-        admission = WakeAdmission(wire_root_id=root_id, source_seq=initial.message.seq,
-                                  source_message_id=initial.message.message_id, wake_assignment_id=assignment.assignment_id,
-                                  wake_revision=engaged.revision, recipient_lookup=person.lookup, execution_id="claim-exec",
-                                  operation_id="f" * 32, owner_admission_generation=owner.active_turn.admission_generation,
-                                  turn_id=owner.active_turn.id, participant_generation=person.participant_generation,
-                                  attempt_ordinal=1)
-        resource = tmp_path / "module.py"
-        resource.write_text("value = 1\n")
-        claim = claim_admission.publish_selected_resource_claim(comms, store, admission, owner.name, ExistingFileClaim(resource))
-        assert calls == [claim.seq]
+def test_selected_claim_and_terminal_release_notify_after_their_boundaries(tmp_path, monkeypatch, notifications):
+    monkeypatch.setattr("test_claim_bus_read.TemporaryDirectory", partial(TemporaryDirectory, dir=tmp_path))
+    monkeypatch.setattr("test_claim_bus_read.prepare_fence_token", lambda: "notification-token")
+    with selected_turn() as (comms, store, selected, resource):
+        calls, finished = notifications(comms)
+        claim = claim_admission.publish_selected_resource_claim(comms, store, selected, "Alice", ExistingFileClaim(resource))
+        first_bytes = comms.bus.log.path.stat().st_size
+        assert calls == [first_bytes]
         assert finished.wait(5)
         finished.clear()
-        claim_admission.release_selected_resources(comms, store, admission, owner.name, (claim,))
-        assert calls == [claim.seq, claim.seq + 1]
+        from test_claim_bus_read import settle_failed
+        settle_failed(store)
+        assert calls == [first_bytes, comms.bus.log.path.stat().st_size]
         assert finished.wait(5)
         assert not comms.bus.log.claim_projection()
+        release = comms.bus.log.full_history()[-1].claim_transition.releases[0]
+        assert (release.resource, release.generation) == (claim.resource, claim.generation)
+
+
+def test_observations_advance_bytes_without_allocating_sequences(tmp_path, notifications):
+    comms, store, index, root_id = _root(tmp_path, recipients=1)
+    try:
+        calls, finished = notifications(comms)
+        record_context(comms, "member000", 1)
+        first_bytes = comms.bus.log.path.stat().st_size
+        assert calls == [first_bytes]
+        assert finished.wait(5)
+        checkpoint = index._verified_checkpoint(root_id)
+        assert checkpoint.last_seq == 0 and checkpoint.byte_offset == first_bytes
+        finished.clear()
+        record_context(comms, "member000", 2)
+        final_bytes = comms.bus.log.path.stat().st_size
+        assert calls == [first_bytes, final_bytes] and final_bytes > first_bytes
+        assert finished.wait(5)
+        checkpoint = index._verified_checkpoint(root_id)
+        assert checkpoint.last_seq == 0 and checkpoint.byte_offset == final_bytes
+    finally:
+        store.close()
+
+
+def test_successful_append_is_not_lost_when_later_outer_work_fails(tmp_path, notifications):
+    comms, store, _index, _root_id = _root(tmp_path, recipients=1)
+    try:
+        calls, finished = notifications(comms)
+        with pytest.raises(ValueError, match="later work failed"):
+            with _store_lock(comms._wire_lock_path):
+                comms.bus.publisher.publish_ordinary(Message("sender", "member000", "committed", InfoKind))
+                assert not calls
+                raise ValueError("later work failed")
+        assert calls == [comms.bus.log.path.stat().st_size]
+        assert finished.wait(5)
+    finally:
+        store.close()
+
+
+@pytest.mark.asyncio
+async def test_joined_worker_append_waits_for_outer_async_lock(tmp_path, notifications):
+    from contextvars import ContextVar
+    from agent_comms.coordinator import Coordination
+
+    comms, store, _index, _root_id = _root(tmp_path, recipients=1)
+    try:
+        calls, finished = notifications(comms)
+        permission = ContextVar("unrelated_human_permission", default="unbound")
+        permission.set("human-controller")
+
+        def append():
+            assert permission.get() == "unbound"
+            return comms.bus.publisher.publish_ordinary(Message("sender", "member000", "joined", InfoKind))
+
+        async with _async_store_lock(comms._wire_lock_path):
+            await Coordination.run_worker(append)
+            assert calls == []
+        assert calls == [comms.bus.log.path.stat().st_size]
+        assert finished.wait(5)
+    finally:
+        store.close()
+
+
+def test_uncertain_checkpoint_does_not_schedule_or_retry_append(tmp_path, monkeypatch, notifications):
+    comms, store, _index, _root_id = _root(tmp_path, recipients=1)
+    try:
+        calls, _finished = notifications(comms)
+
+        def fail(*_):
+            raise OSError("controlled checkpoint failure")
+
+        monkeypatch.setattr("agent_comms.private_bus_checkpoint.append_private_bus_checkpoint_unlocked", fail)
+        with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
+            comms.messaging.send_initial_cohort("sender", "member000", "one original")
+        assert calls == []
+        # The controlled fault happens AFTER the source fsync. It is not
+        # absence, and no second attempt is made to repair or replay it.
+        assert len(comms.bus.log.path.read_bytes().splitlines()) == 1
+    finally:
+        store.close()
+
+
+def test_retiring_worker_does_not_delete_successor_notification(tmp_path, monkeypatch):
+    comms, store, index, root_id = _root(tmp_path, recipients=1)
+    try:
+        comms.messaging.send_initial_cohort("sender", "member000", "first")
+        assert index.maintain(rebuild=True)
+        root = index.log.path.parent
+        candidate_maintenance._pending[root] = (index.log, index.log.path.stat().st_size)
+        original_guard = candidate_maintenance._guard
+        successor = []
+
+        class InterleavedLock:
+            def __enter__(self):
+                original_guard.acquire()
+                self.present = root in candidate_maintenance._pending
+
+            def __exit__(self, *_):
+                retired = self.present and root not in candidate_maintenance._pending
+                original_guard.release()
+                if retired and not successor:
+                    successor.append(True)
+                    comms.messaging.send_initial_cohort("sender", "member000", "successor")
+
+        monkeypatch.setattr(candidate_maintenance, "_guard", InterleavedLock())
+        monkeypatch.setattr(candidate_maintenance, "schedule_candidate_catchup", _SCHEDULE)
+        monkeypatch.setattr(threading.Thread, "start", lambda _: None)
+        candidate_maintenance._drain_candidate(root)
+        assert successor
+        assert candidate_maintenance._pending[root][1] == index.log.path.stat().st_size
+        # Complete the retained successor without launching another daemon.
+        candidate_maintenance._drain_candidate(root)
+        assert root not in candidate_maintenance._pending
+        assert index._verified_checkpoint(root_id).last_seq == 2
     finally:
         store.close()
 
 
 def test_omission_logs_original_read_error_and_index_path(tmp_path, monkeypatch, caplog):
-    monkeypatch.setattr(messaging, "schedule_candidate_catchup", lambda *_: None)
     comms, store, index, root_id = _root(tmp_path, recipients=1)
     try:
         initial, assignment = _accepted(comms, store, root_id, "member000", "first")

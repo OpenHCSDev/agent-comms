@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import stat
@@ -415,6 +416,8 @@ class WireLog:
 
         A failed append or bus parent sync leaves the outcome UNKNOWN.
         """
+        # Borrow the canonical lock lifetime before any durable mutation.
+        released_actions = StoreLock.released_actions.get()
         metadata.access.require_append()
         encoded = json.dumps(row, allow_nan=False).encode("utf-8") + b"\n"
         if len(encoded) > 8 * 1024 * 1024:
@@ -437,6 +440,7 @@ class WireLog:
                 output.write(encoded)
                 output.flush()
                 os.fsync(output.fileno())
+                through_bytes = os.fstat(output.fileno()).st_size
         finally:
             os.close(descriptor)
         directory_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
@@ -458,6 +462,18 @@ class WireLog:
                 raise RelationViolationError(
                     "Private bus checkpoint publication outcome UNKNOWN."
                 ) from error
+        released_actions.callback(self._notify_candidates, through_bytes)
+
+    def _notify_candidates(self, through_bytes: int) -> None:
+        """A known append cannot become a failed send when optional work fails."""
+        try:
+            from .candidate_maintenance import schedule_candidate_catchup
+
+            schedule_candidate_catchup(self, through_bytes)
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "Candidate notification failed for %s", self.path
+            )
 
     def read_delivery_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedDelivery:
         """Bus-owned attestation of a committed initial row; no live re-routing."""
