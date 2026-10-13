@@ -284,7 +284,8 @@ class Publisher:
             release_records: list[ClaimRelease] = []
             for release in releases:
                 if isinstance(release, ClaimRelease):
-                    _release_resource(worktree, release.resource)
+                    # A recorded claim names its own path and generation; the owner
+                    # may have changed project since. apply_transition fences it.
                     release_records.append(release)
                 else:
                     resource = _release_resource(worktree, release)
