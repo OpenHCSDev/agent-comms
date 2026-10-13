@@ -50,34 +50,38 @@ def test_real_inbox_failures_still_refuse_and_hold_saved_notifications(kind):
 
 
 @pytest.mark.asyncio
-async def test_real_saved_native_failure_then_distinct_fresh_input(native_backend):
-    """Real saved ACP/native process; only localhost provider responses are controlled."""
-    from acp import RequestError
-    from acp.schema import TextContentBlock
-    from agent_comms.activity import NativeInputDrainDiagnostic
+async def test_real_background_native_failure_then_distinct_fresh_input(native_backend):
+    """Only provider replies are controlled; the actual background drain owns the warning."""
+    import asyncio
 
     native = native_backend
     await native.author_history()
-    async with native.open_owner() as (agent, session_id):
-        native.provider.status = 503
-        with pytest.raises(RequestError):
-            await agent.prompt(session_id, [TextContentBlock(type='text', text='isolated failed input')])
-        assert native.provider.posts == 1
+    async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session_id):
         comms = agent._comms
-        owner = comms.registry.snapshot().owner_identity(session_id)
-        # The warning is the original observer's retained diagnostic. Its presence
-        # must not alter the actual saved ACP/native entrypoint for a later input.
-        comms.agents.set_drain_diagnostic(session_id, owner,
-            NativeInputDrainDiagnostic(owner, 'NativePiTerminalFailure', 'controlled HTTP 503'))
+        comms.threads.claim_thread('sender', tags=frozenset(), worktree=str(native.project))
+        native.provider.status = 503
+        failed = comms.messaging.send_message('sender', session_id, 'isolated failed input')
+        async with asyncio.timeout(25):
+            while not isinstance(comms.agents.activity_of(session_id).readiness, NativeInputDrainReadiness):
+                await asyncio.sleep(0.02)
+        assert native.provider.posts == 1
+        original_warning = comms.agents.activity_of(session_id).readiness.source_diagnostic()
+        assert original_warning.error_type == 'NativePiTerminalFailure'
+        task = agent.inputs.drain_tasks[session_id]
+        assert not task.done()
         native.provider.status = 200
+        fresh = comms.messaging.send_message('sender', session_id, 'isolated fresh input')
         native.provider.text = 'Distinct fresh native reply.'
-        fresh = await agent.prompt(session_id, [TextContentBlock(type='text', text='isolated fresh input')])
+        async with asyncio.timeout(25):
+            while not any(message.body == 'Distinct fresh native reply.'
+                          for message in comms.bus.inbox('sender')):
+                await asyncio.sleep(0.02)
         assert native.provider.posts == 2
         saved = [message['content'] for message in native.saved_inputs()]
         assert sum('isolated failed input' in str(content) for content in saved) == 1
         assert sum('isolated fresh input' in str(content) for content in saved) == 1
-        assert fresh.stop_reason == 'end_turn'
-        assert native.provider.text in native.session.read_text()
+        assert comms.bus.log.message_by_id(failed.message_id) == failed
+        assert not task.done()
         comms.agents.activity_of(session_id).readiness.require_available()
 
 
