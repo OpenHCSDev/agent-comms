@@ -3,9 +3,14 @@
 set -euo pipefail
 
 usage() {
-    printf 'Usage: toad-comms [THREAD]\n\nLaunch Agent Comms in Toad. Default thread: agent-comms-ux.\n'
+    printf 'Usage: toad-comms [--serve [THREAD]] [THREAD]\n\nLaunch Agent Comms in Toad. Default thread: agent-comms-ux.\nWith --serve, serve the same session to a local web browser instead.\n'
 }
 
+serve=false
+if [[ "${1:-}" == --serve ]]; then
+    serve=true
+    shift
+fi
 if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then
     usage
     exit 0
@@ -57,6 +62,11 @@ project="$("$python" -c 'import sys; from agent_comms.comms import wire; print(w
 if [[ ! -d "$project" ]]; then
     printf 'Thread project directory is unavailable: %s\n' "$project" >&2
     exit 1
+fi
+
+if $serve; then
+    exec "$toad" serve -- acp "$python -m agent_comms.acp" "$project" \
+        --title 'Agent Comms' --session "$thread"
 fi
 
 exec "$toad" acp "$python -m agent_comms.acp" "$project" \
