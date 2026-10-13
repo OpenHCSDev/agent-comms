@@ -17,6 +17,7 @@ from acp.schema import (
 )
 
 from .image_inputs import prompt_images
+from .following_inputs import OwnerFollowingInputs
 from .queued_input import InitialInput, InputHandoffRefused
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
@@ -514,9 +515,11 @@ class TurnRunner:
                 owner = await Coordination.run_worker(partial(
                     self.comms.registry.require, execution.owner_name,
                 ))
+                self.inputs.sessions.config.turn_started(session_id, owner)
                 result = await execution.run(
                     on_compaction=partial(self.effects._emit_event, session_id),
                     pi_session=self.backend_for(session_id, owner),
+                    following=OwnerFollowingInputs(self.inputs, session_id, owner.name, inbox),
                 )
                 while not inbox.empty():
                     command = inbox.get_nowait()

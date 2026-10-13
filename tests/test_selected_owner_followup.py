@@ -147,6 +147,7 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     try:
         await asyncio.wait_for(entered.wait(), 5)
+        wake = agent.inputs.wake_tasks["beta"]
         response = await asyncio.wait_for(
             agent.prompt("beta", [{"type": "text", "text": "Fresh input"}]), 2
         )
@@ -160,13 +161,14 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
                 agent.inputs.following_sources["beta"][input_id], keys=(old_key,)
             )
         else:
-            turn.cancel()
+            wake.cancel()
         release.set()
+        assert await asyncio.wait_for(turn, 8) == 1
         if change == "cancel":
             with pytest.raises(asyncio.CancelledError):
-                await asyncio.wait_for(turn, 8)
+                await asyncio.wait_for(wake, 8)
         else:
-            await asyncio.wait_for(turn, 8)
+            await asyncio.wait_for(wake, 8)
         rows = agent.inputs.dispositions.read().rows
         assert rows[old_key] == old_row
         assert rows[f"acp:{input_id}"].accepts_reservation
