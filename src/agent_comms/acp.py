@@ -438,7 +438,13 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             candidate = next_sealed_assignment(
                 store, participant.lookup, owner.name, after_seq=admission_after_seq,
             )
-            return candidate is not None and participant.pointer.execution_id is None
+            if candidate is None:
+                return False
+            # An older turn is still running: refuse idle handling and let
+            # the existing drain diagnostic explain the refusal; never retire
+            # or replay that turn here.
+            participant.pointer.require_idle()
+            return True
         runnable = await Coordination.run_async(store_path, select)
         result = None
         if runnable:
