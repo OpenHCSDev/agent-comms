@@ -559,34 +559,17 @@ async def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypa
         assert not any("BEGIN IMMEDIATE" in sql for sql in statements)
 
 
-@pytest.mark.skip(
-    reason="bus-wake owner resolution in progress: every publish also changes the"
-    " shared checkpoint and coordination stores, so the tick must resolve each"
-    " shared store per owner before the full tick"
-)
 async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
     tmp_path, monkeypatch
 ) -> None:
-    """The address owner answers the wake before any row is decoded."""
-    from agent_comms import input_drain, messaging
-    from agent_comms.wake_candidate_index import WakeCandidateIndex
+    """The sealed address record answers the wake before any row is decoded."""
+    from agent_comms import input_drain
 
-    comms, agent, root_id = _session(tmp_path)
+    comms, agent, _root_id = _session(tmp_path)
     comms.registry.declare(
         Thread("gamma", frozenset(), str(tmp_path),
                process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    monkeypatch.setattr(messaging, "schedule_candidate_catchup", lambda *_: None)
-    index = WakeCandidateIndex(comms.bus)
-
-    def catch_up():
-        marker = comms.bus.log._private_marker_unlocked()
-        index.catch_up_committed_append(
-            index.notify_committed_append(
-                root_id=root_id, through_seq=marker.last_seq
-            ),
-            bootstrap_new=True,
-        )
 
     ticks, done = asyncio.Queue(), asyncio.Queue()
 
@@ -625,16 +608,14 @@ async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
         assert drains, "the first tick never drained"
         settled = len(drains)
         comms.messaging.send_message("sender", "gamma", "for gamma")
-        catch_up()
-        await tick()  # only the shared bus grew, and none of it is beta's
+        await tick()  # only shared stores grew, and none of it addresses beta
         assert len(drains) == settled, "another agent's bus append woke an idle owner"
         comms.messaging.send_message("sender", "beta", "for beta")
-        catch_up()
-        await tick()  # the appended region has a row for beta: full tick
+        await tick()  # the address record has an unadmitted row for beta: full tick
         assert len(drains) == settled + 1, "a delivered row for the owner did not wake it"
         comms.messaging.send_message("sender", "gamma", "more for gamma")
-        index.path.unlink()  # the index is unavailable: never invent 'not mine'
-        await tick()
-        assert len(drains) == settled + 2, "an unavailable index answered instead of the full tick"
+        (comms.root / "private_bus_checkpoint.sqlite3").unlink()
+        await tick()  # the address record is unavailable: never invent 'not mine'
+        assert len(drains) == settled + 2, "an unavailable address record answered instead of the full tick"
     finally:
         observer.cancel()
