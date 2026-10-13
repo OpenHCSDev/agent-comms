@@ -12,6 +12,9 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from .transcript_events import TranscriptEvent
+
 from .bus_publication import stable_thread_lookup
 from .routing import MessageRoute, TurnRouting
 from .thread_identity import ThreadIncarnation
@@ -73,10 +76,30 @@ class TranscriptTraversal(ABC):
     @abstractmethod
     def bounds(self, initial, consumed): ...
 
+    def round_edges(self, batch: tuple["TranscriptEvent", ...]) -> tuple[set[str], set[str]]:
+        """The tool-call ids a batch opens and closes, by traversal direction.
+
+        A saved tool round is its call record together with its result record;
+        a page window never stops between them.
+        """
+        from .transcript_events import ToolEndTranscript, ToolStartTranscript
+
+        opening = ToolEndTranscript if self.descending_rounds else ToolStartTranscript
+        closing = ToolStartTranscript if self.descending_rounds else ToolEndTranscript
+        return (
+            {event.tool_call_id for event in batch if isinstance(event, opening)},
+            {event.tool_call_id for event in batch if isinstance(event, closing)},
+        )
+
     def read_records(self, reader, project_native, receipts, initial, frontier,
                      *, max_messages, max_bytes):
         """Consume each original source coordinate only when its record is read."""
         consumed, records, used = initial, [], 0
+        # A tool round opened by an already appended record keeps the window open
+        # until its paired record is appended too; the bounded grace keeps an
+        # interrupted call (its result record never arrives) from growing a page.
+        open_rounds: set[str] = set()
+        round_grace = 0
         native = self.native(reader, initial, frontier) if frontier.offset else (record for record in ())
         projected = project_native(reader.fragments(
             native, max_records=max_messages + 1, max_bytes=max_bytes,
@@ -105,8 +128,13 @@ class TranscriptTraversal(ABC):
                 batch = events if choose_native else receipts.events(message)
                 cost = record.size if choose_native else sum(event.text_size for event in batch)
                 if records and (len(records) >= max_messages or used + cost > max_bytes):
-                    break
+                    if not open_rounds or round_grace >= self.round_grace_limit:
+                        break
+                    round_grace += 1
                 records.append(batch)
+                opened, closed = self.round_edges(batch)
+                open_rounds |= opened
+                open_rounds -= closed
                 used += cost
                 if choose_native:
                     consumed = consumed.at_offset(self.native_position(record))
@@ -124,6 +152,9 @@ class TranscriptTraversal(ABC):
             native.close()
 
     ascending = False
+    # Reading newest-first meets a round's result before its call.
+    descending_rounds = True
+    round_grace_limit = 16
 
 
 class EarlierTranscript(TranscriptTraversal):
@@ -151,6 +182,7 @@ class EarlierTranscript(TranscriptTraversal):
 
 class LaterTranscript(TranscriptTraversal):
     ascending = True
+    descending_rounds = False
 
     def native(self, reader, cursor, through):
         return reader.forward(cursor.offset, through.offset)
