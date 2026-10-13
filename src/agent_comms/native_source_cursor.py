@@ -14,7 +14,6 @@ from functools import partial
 from .bus_publication import stable_thread_lookup
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict, StaleFence
-from .coordination_response import _response_boundary
 from .coordinator import Coordination
 from .cursor_owner import CursorOwner
 from .historical_native_inputs import HistoricalNativeInput
@@ -122,9 +121,10 @@ class NativeSourceCursor:
         )
         evidence = coverage.evidence()
         with (
-            _response_boundary(self.bus, blocking=False, contention=contention) as registry,
+            self.store.session.boundary(self.bus, blocking=False, contention=contention) as boundary,
             self.store.session.transaction() as db,
         ):
+            registry = boundary.registry
             if sources.witness_unlocked() != coverage.source_witness:
                 raise IdentityConflict("current cursor canonical source changed before commit")
             identity.require_live(
@@ -203,7 +203,8 @@ class NativeSourceCursor:
         return cursor
 
     def read(self, *, owner_name: str) -> CurrentNativeCursor | None:
-        with _response_boundary(self.bus, blocking=False) as registry:
+        with self.store.session.boundary(self.bus, blocking=False) as boundary:
+            registry = boundary.registry
             reason = "current native cursor has no matching live owner"
             if self.bus.log._private_marker_unlocked().root_id != self.wire_root_id:
                 raise StaleFence(reason)
@@ -233,7 +234,8 @@ class NativeSourceCursor:
             with NativeEvidenceScope() as source_reads:
                 coverage = self._require_source(identity, cursor, sources, source_reads)
                 witness = coverage.source_witness
-        with _response_boundary(self.bus, blocking=False) as registry:
+        with self.store.session.boundary(self.bus, blocking=False) as boundary:
+            registry = boundary.registry
             if cursor is not None and sources.witness_unlocked() != witness:
                 raise IdentityConflict("current cursor canonical source changed while reading")
             identity.require_live(

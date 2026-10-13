@@ -138,13 +138,13 @@ def selected_turn():
 def settle_failed(store):
     from agent_comms.attempt_states import AttemptFailedAttempt
 
-    with store.session.settlement():
+    with store.session.settlement() as boundary:
         snapshot = store.snapshots.get("execution")
         snapshot.attempt.advance(
             store.session, type(snapshot.attempt.lifecycle), backend_done=True,
             process_dead=True, progress=False, reason_code=None,
         )
-        store.snapshots.get("execution").settle(store.session, AttemptFailedAttempt(), None)
+        store.snapshots.get("execution").settle(store.session, AttemptFailedAttempt(), None, boundary)
 
 
 def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -235,6 +235,6 @@ async def test_write_in_a_direct_message_turn_runs_without_reading_the_whole_bus
                 ("sender", session, "Change the value"),
                 (session, "sender", "Resource claim admitted"),
                 (session, "sender", "Changed it."),
-                (session, "sender", "Terminal attempt file claims released"),
+                (session, "#all", "Terminal attempt file claims released"),
             ]
             assert dict(comms.bus.log.claim_projection()) == {}

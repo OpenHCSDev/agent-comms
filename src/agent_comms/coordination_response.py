@@ -19,13 +19,10 @@ import hashlib
 import json
 import sqlite3
 import time
-from collections.abc import Iterator
-from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from typing import Literal, Type
-from .diagnostics import PublicationMeasurements
 
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import assert_cohort_schema
@@ -55,7 +52,6 @@ from agent_comms.obligation_states import PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import OwnerFence
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 from agent_comms.registry_document import RegistrySnapshot
-from agent_comms.store_files import _store_lock, StoreLockContention
 from agent_comms.typed_table import (
     Column,
     SQLiteForeignKeys,
@@ -204,40 +200,6 @@ def install_private_response_schema(store: Coordination) -> None:
                 db.execute(statement)
             ResponseSchemaMeta(1, 3, _response_digest(schema)).insert(db)
         _assert_response_schema(db)
-
-
-@contextmanager
-def _response_boundary(bus: MessageBus, *, blocking: bool = True,
-                       contention: StoreLockContention | None = None,
-                       measurements: PublicationMeasurements | None = None,
-                       session=None) -> Iterator[RegistrySnapshot]:
-    """Total lock order: shared wire -> bus -> registry -> SQLite.
-
-    Raw keyed appends acquire bus then registry; Comms register takes shared
-    wire then registry. No registry API that reacquires its lock may be used in
-    this boundary: the bus append receives this immutable loaded revision.
-    """
-    observations = measurements if measurements is not None else PublicationMeasurements()
-    with ExitStack() as custody:
-        with observations.operation("wire_exclusion"):
-            custody.enter_context(_store_lock(bus.log.path.parent / "wire", blocking=blocking,
-                                             shared=True, contention=contention))
-        with observations.operation("bus_certified_exclusion"):
-            bus_lock = custody.enter_context(bus.log.locked(blocking=blocking, contention=contention))
-        with observations.operation("registry_exclusion"):
-            custody.enter_context(_store_lock(bus._registry.store.path, blocking=blocking,
-                                             contention=contention))
-        with observations.operation("registry_snapshot"):
-            snapshot = bus._registry.store._read_unlocked().snapshot()
-        if session is not None:
-            if session._settlement_boundary is not None:
-                raise IdentityConflict("settlement boundary is already acquired")
-            session._settlement_boundary = (bus, bus_lock, snapshot)
-        try:
-            yield snapshot
-        finally:
-            if session is not None:
-                session._settlement_boundary = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -413,7 +375,8 @@ def prepare_fenced_response(
         raise TypeError("response requires exact fence, message kind and notice")
     if not isinstance(payload, str) or not payload:
         raise ValueError("response payload must be nonempty")
-    with _response_boundary(bus) as registry_snapshot:
+    with store.session.boundary(bus) as boundary:
+        registry_snapshot = boundary.registry
         owner_witness.require_live(registry_snapshot, fence)
         metadata = bus.log._private_marker_unlocked()
         # The acquired canonical bus barrier verifies its sealed prefix, with
@@ -511,7 +474,8 @@ def _settle_fenced_response(
         raise TypeError("response settlement requires an exact owner fence")
     # One registry revision is held through dispatch, append and Tx2. SQL's
     # current owner generation remains guarded by the transaction fence.
-    with _response_boundary(bus, session=store.session) as registry_snapshot:
+    with store.session.boundary(bus) as boundary:
+        registry_snapshot = boundary.registry
         owner_witness.require_live(registry_snapshot, fence)
         metadata = bus.log._private_marker_unlocked()
         wire_root_id = metadata.root_id
@@ -579,7 +543,7 @@ def _settle_fenced_response(
                 revision=obligation.revision + 1,
                 updated_at_ms=store.session.now(obligation.updated_at_ms),
             )
-            store.snapshots.get(intent.execution_id).finish_publications(store.session)
+            store.snapshots.get(intent.execution_id).finish_publications(store.session, boundary)
             return Applied(store.snapshots.get(intent.execution_id))
 
 

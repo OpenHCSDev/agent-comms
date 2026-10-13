@@ -117,7 +117,7 @@ class DurableTurn(MroDispatch):
         ).value.fence
         return self.fence
 
-    def fail_unknown(self):
+    def fail_unknown(self, boundary):
         """Retire the reaped local backend without granting acceptance or replay.
 
         The caller holds the live registry owner boundary. Native execution has
@@ -127,6 +127,7 @@ class DurableTurn(MroDispatch):
         return self.attempts.fail_unknown(
             self.fence,
             expected_pointer_revision=self.pointer_revision,
+            boundary=boundary,
         ).value
 
     def fail_terminal(self):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 import time
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import (
@@ -19,7 +19,6 @@ class CoordinationSession(CoordinationStore):
     ) -> None:
         super().__init__(path, lock_timeout=lock_timeout)
         self._clock_ms = clock_ms or (lambda: time.time_ns() // 1_000_000)
-        self._settlement_boundary = None
 
     def now(self, floor: int = 0) -> int:
         now = self._clock_ms()
@@ -34,22 +33,13 @@ class CoordinationSession(CoordinationStore):
             yield db
 
     @contextmanager
-    def settlement(self) -> Iterator[sqlite3.Connection]:
-        """Borrow the ordered bus boundary before terminal SQL and claim release.
+    def settlement(self, boundary=None):
+        """Standalone settlement owns SQL only, never native file resources."""
+        with self.transaction():
+            yield None
 
-        Standalone coordinator stores have no bus resources. Native stores use
-        the same boundary as response publication and owner-loss observation.
-        """
-        from .comms import Comms
-        from .coordination_response import _response_boundary
-
-        if self._settlement_boundary is not None or not (self.path.parent / "bus.jsonl").exists():
-            with self.transaction() as db:
-                yield db
-        else:
-            with _response_boundary(Comms(self.path.parent).bus, session=self):
-                with self.transaction() as db:
-                    yield db
+    def release_resources(self, snapshot, boundary) -> None:
+        """Standalone attempts cannot acquire native file claims."""
 
     @contextmanager
     def irreversible_admission(self) -> Iterator[sqlite3.Connection]:
@@ -90,3 +80,74 @@ class CoordinationSession(CoordinationStore):
         finally:
             if db.in_transaction:
                 db.execute("ROLLBACK")
+
+
+class NativeBoundary(ExitStack):
+    """One acquired wire/bus/registry lifetime, explicitly borrowed by SQL."""
+
+    lock_wait_seconds = 2.0
+
+    def __init__(self, bus, *, blocking=True, contention=None, measurements=None):
+        super().__init__()
+        from .diagnostics import PublicationMeasurements
+        from .store_files import StoreLockContention
+
+        self.bus, self.blocking = bus, blocking
+        self.contention = contention if contention is not None else StoreLockContention(
+            self.lock_wait_seconds if blocking else 0.0
+        )
+        self.measurements = measurements if measurements is not None else PublicationMeasurements()
+
+    def __enter__(self):
+        from .store_files import _store_lock
+
+        super().__enter__()
+        try:
+            with self.measurements.operation("wire_exclusion"):
+                self.enter_context(_store_lock(self.bus.log.path.parent / "wire", shared=True,
+                                               blocking=self.blocking, contention=self.contention))
+            with self.measurements.operation("bus_certified_exclusion"):
+                self.bus_lock = self.enter_context(self.bus.log.locked(
+                    blocking=self.blocking, contention=self.contention))
+            with self.measurements.operation("registry_exclusion"):
+                self.enter_context(_store_lock(self.bus._registry.store.path,
+                                               blocking=self.blocking, contention=self.contention))
+            with self.measurements.operation("registry_snapshot"):
+                self.registry = self.bus._registry.store._read_unlocked().snapshot()
+            return self
+        except BaseException:
+            self.close()
+            raise
+
+
+class NativeCoordinationSession(CoordinationSession):
+    """Native sessions declare their bus boundary, independent of file existence."""
+
+    def __init__(self, path, **options):
+        super().__init__(path, **options)
+        from .message_bus import MessageBus
+        from .registration import Registration
+
+        self.bus = MessageBus(self.path.parent / "bus.jsonl",
+                              Registration(self.path.parent / "registry.json"),
+                              private_claim_writes=True)
+
+    def boundary(self, bus=None, **options):
+        selected = self.bus if bus is None else bus
+        if selected.log.path.parent.resolve() != self.path.parent.resolve():
+            raise IntegrityViolationError("native boundary belongs to another coordinator")
+        return NativeBoundary(selected, **options)
+
+    @contextmanager
+    def settlement(self, boundary=None):
+        """Acquire a native boundary, or borrow the caller's already held one."""
+        with self.boundary() if boundary is None else nullcontext(boundary) as acquired:
+            if acquired.bus.log.path.parent.resolve() != self.path.parent.resolve():
+                raise IntegrityViolationError("settlement boundary belongs to another coordinator")
+            with self.transaction():
+                yield acquired
+
+    def release_resources(self, snapshot, boundary) -> None:
+        if not isinstance(boundary, NativeBoundary):
+            raise IntegrityViolationError("native release requires an acquired boundary")
+        snapshot.release_resources(boundary)

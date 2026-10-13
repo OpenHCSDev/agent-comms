@@ -213,13 +213,14 @@ class AttemptStore:
         fence: OwnerFence,
         *,
         expected_pointer_revision: int,
+        boundary=None,
     ) -> Applied[RecoverySnapshot]:
         """Atomically fail a fenced, reaped backend; UNKNOWN is never replayable.
 
         The live runner holds registry owner exclusion and has completed native
         child/tool cleanup. Finality here is local, not provider acceptance.
         """
-        with self.session.settlement():
+        with self.session.settlement(boundary) as acquired:
             snapshot, attempt = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
@@ -238,7 +239,7 @@ class AttemptStore:
                     reason_code="native_unknown",
                 )
             self.snapshots.get(fence.execution_id).settle(
-                self.session, AttemptFailedAttempt(), "native_unknown"
+                self.session, AttemptFailedAttempt(), "native_unknown", acquired
             )
             return Applied(self.snapshots.get(fence.execution_id))
 
@@ -314,9 +315,9 @@ class AttemptStore:
         if not isinstance(outcome, TerminalAttempt):
             raise ValueError("settlement requires a terminal attempt outcome")
         _bounded_reason(reason_code)
-        with self.session.settlement():
+        with self.session.settlement() as acquired:
             snapshot, _ = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
-            snapshot.settle(self.session, outcome, reason_code)
+            snapshot.settle(self.session, outcome, reason_code, acquired)
             return Applied(self.snapshots.get(fence.execution_id))
