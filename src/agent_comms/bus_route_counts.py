@@ -123,9 +123,9 @@ class BusRouteCounts:
         """Decode only appended rows; a replaced source rebuilds the projection.
 
         Another reader can index a later cut of the same file between this
-        reader's opened cut and its sync. That recorded revision already covers
-        every row of this older cut, so it answers without decoding, and the
-        recorded digest stays pinned to the revision it verified.
+        reader's opened cut and its sync. The recorded revision then answers
+        this cut once its digest verifies against the file's bytes; a rewritten
+        or truncated source fails that digest and rebuilds.
         """
         identity, size, tail_digest = None, 0, None
         if source is not None:
@@ -144,20 +144,28 @@ class BusRouteCounts:
         recorded = records[0] if records else None
         rebuild = recorded is None
         if recorded is not None:
-            if (recorded.identity[:2] if recorded.identity else None) != (
-                identity[:2] if identity else None
-            ):
-                rebuild = True
-            elif size < recorded.offset:
-                return True
-            elif size == recorded.offset and recorded.identity != identity:
-                rebuild = True
+            rebuild = (
+                (recorded.identity[:2] if recorded.identity else None)
+                != (identity[:2] if identity else None)
+                or source is None
+                or size == recorded.offset
+                and recorded.identity != identity
+            )
         offset = 0 if rebuild else recorded.offset
-        if source is not None and offset:
+        if not rebuild and offset:
             source.seek(max(0, offset - 4096))
             previous_tail = source.read(offset - max(0, offset - 4096))
             if sha256(previous_tail).hexdigest() != recorded.tail_digest:
                 rebuild, offset = True, 0
+            elif size < offset:
+                # Another reader indexed a later cut of this same file after
+                # this cut was opened, so the recorded offset is ahead of this
+                # cut. Its digest just verified against this inode's bytes:
+                # the append-only writer (wire_log._append_private_unlocked,
+                # os.O_APPEND) leaves them unchanged, so the recorded revision
+                # answers this cut without decoding. A truncated or rewritten
+                # source loses those bytes and rebuilt above instead.
+                return True
         if not rebuild and offset == size:
             return True
         totals: dict[tuple[str, str, str], RouteTotalRow] = {}
