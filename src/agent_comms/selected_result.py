@@ -14,7 +14,6 @@ from .fresh_private_session import FreshPrivateSession
 from .messages import MessageType
 from .native_source_cursor import NativeSourceCursor
 from .private_sidecar import SidecarCommitUnknown
-from .wake import derive_exact_reply_target
 
 
 @dataclass(frozen=True, slots=True)
