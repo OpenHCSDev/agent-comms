@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from .bus_projection import AppendCheckpoint, BusAppendIndex, BusFileRevision
 from .errors import RelationViolationError
@@ -14,6 +14,7 @@ from .errors import RelationViolationError
 if TYPE_CHECKING:
     from .channels import Channel
     from .messages import Message
+    from .wire_log import OpenedWireSnapshot
 
 ActivityFields = tuple[str, str, float, bool, bool]
 ActivitySnapshot = tuple[dict[str, tuple[float, float]], dict[str, float]]
@@ -33,37 +34,33 @@ class ActivityCheckpoint(AppendCheckpoint):
         return (self.source, self.offset) == (revision, revision.size)
 
 
-class BusActivityIndex(BusAppendIndex):
+class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
     record_type = ActivityCheckpoint
 
     def __init__(self, bus_path: Path):
         super().__init__(bus_path, bus_path.with_name("bus_activity_latest.json"))
-        self._retained: ActivityCheckpoint | None = None
 
-    def snapshot(self, source: BusFileRevision | None, stream: BinaryIO | None,
+    def snapshot(self, opened: OpenedWireSnapshot,
                  parse: Callable[[Mapping[str, Any]], Iterable[ActivityFields]]) -> ActivitySnapshot:
+        source, stream = opened.revision, opened.stream
         if source is None:
             return {}, {}
-        retained = self._retained
-        if retained is not None and retained.current_for(source):
-            return retained.snapshot
         if not source.opened_by(stream):
             raise RelationViolationError("Activity source changed before its captured read")
         if source.size:
             stream.seek(source.size - 1)
             if stream.read(1) != b"\n":
                 raise RelationViolationError("Activity source has an incomplete original row")
-        checkpoint = self.checkpoint(stream, source)
+        checkpoint = opened.append_checkpoint(self)
         if checkpoint is None:
             channels, sent, offset = {}, {}, 0
         else:
             channels, sent = dict(checkpoint.channels), dict(checkpoint.sent)
             offset = checkpoint.offset
         if offset == source.size:
-            self._retained = checkpoint or ActivityCheckpoint(
+            return (checkpoint or ActivityCheckpoint(
                 source, source.size, AppendCheckpoint.fingerprint(stream, source.size),
-                channels, sent)
-            return self._retained.snapshot
+                channels, sent)).snapshot
         stream.seek(offset)
         while stream.tell() < source.size:
             raw = stream.readline(source.size - stream.tell())
@@ -82,9 +79,9 @@ class BusActivityIndex(BusAppendIndex):
                     sent[sender] = max(sent.get(sender, 0.0), timestamp)
         projected = ActivityCheckpoint(source, source.size,
                     AppendCheckpoint.fingerprint(stream, source.size), channels, sent)
+        opened.remember_append_checkpoint(self, projected)
         with suppress(OSError):
             self.write(projected, fsync_parent=True)
-        self._retained = projected
         return projected.snapshot
 
 

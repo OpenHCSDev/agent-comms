@@ -56,7 +56,7 @@ class MessageBus:
         self._channels = ChannelCatalog(bus_path.parent / ChannelCatalog.filename)
         self._pending_cache: dict[str, PendingCounts] = {}
         self._view_unread_cache: dict[str, ViewUnread] = {}
-        self._activity = BusActivityIndex(bus_path)
+        self._activity = self.log.register_append_index(BusActivityIndex(bus_path))
         self.publisher = Publisher(
             self.log,
             registry,
@@ -102,10 +102,12 @@ class MessageBus:
         return dict(counts)
 
     def _activity_clocks(self, source: OpenedWireSnapshot | None = None):
-        """The existing index borrows the original captured source after release."""
+        """The existing index borrows the same opened source after release."""
         if source is not None:
-            return self._activity.snapshot(source.revision, source.stream, self._bus_activity_fields)
-        with self.log._opened_wire_snapshot(need_sequence=False) as opened:
+            return self._activity.snapshot(source, self._bus_activity_fields)
+        with self.log._opened_wire_snapshot(
+            need_sequence=False, prepared_indexes=self.log.prepare_append_indexes(),
+        ) as opened:
             return self._activity_clocks(opened)
 
     def channel_activity(self) -> Mapping[str, ChannelActivity]:

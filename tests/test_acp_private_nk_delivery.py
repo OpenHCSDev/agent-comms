@@ -649,7 +649,11 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
         # original drain owns the admission consumes the original assignment.
         await agent.inputs.drain_inbox(session)
         async with asyncio.timeout(30):
-            while native.provider.posts != 1 or agent.turns.turn_state(session).busy:
+            while (
+                native.provider.posts != 1
+                or agent.turns.turn_state(session).busy
+                or agent.inputs.backend_inboxes  # the reply turn retires its inbox after it stops being busy
+            ):
                 await asyncio.sleep(0.01)
         assert native.provider.posts == 1
         with Coordination(str(comms.root / "coordination.sqlite3")) as store, store.session.read():

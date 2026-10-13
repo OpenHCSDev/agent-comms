@@ -5,12 +5,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Generic, TypeVar
 
 from .field_codec import FieldCodec
-from .store_files import _atomic_write_text
+from .store_files import _atomic_write_text, _store_lock
 
 
 @dataclass(frozen=True)
@@ -81,23 +81,62 @@ class AppendCheckpoint:
         return self.tail == self.fingerprint(stream, self.offset)
 
 
-class BusAppendIndex:
+Checkpoint = TypeVar("Checkpoint", bound=AppendCheckpoint)
+
+
+class BusAppendIndex(Generic[Checkpoint]):
     """One strict record decoder and atomic writer for disposable projections."""
 
-    record_type: type[AppendCheckpoint]
+    record_type: type[Checkpoint]
 
     def __init__(self, bus_path: Path, path: Path):
         self.bus_path, self.path = bus_path, path
 
-    def checkpoint(self, stream: BinaryIO, revision: BusFileRevision):
+    def _read(self) -> Checkpoint | None:
         try:
-            record = FieldCodec.decode(self.record_type, json.loads(self.path.read_text()))
+            return FieldCodec.decode(self.record_type, json.loads(self.path.read_text()))
         except FileNotFoundError:
             return None
         except (ValueError, TypeError, KeyError):
-            return None  # Damaged disposable projection: rebuilt from the bus.
-        return record if record.accepts(revision, stream) else None
+            return None  # Damaged disposable index: rebuilt from the bus.
 
-    def write(self, record: AppendCheckpoint, *, fsync_parent: bool = False) -> None:
-        _atomic_write_text(self.path, json.dumps(record.signed_payload()),
-                           fsync_parent=fsync_parent)
+    def prepare(self) -> Checkpoint | None:
+        """Read a candidate before the bus cut is captured and its lock is taken."""
+        return self._read()
+
+    def capture(
+        self, prepared: Checkpoint | None, stream: BinaryIO | None,
+        revision: BusFileRevision | None,
+    ) -> Checkpoint | None:
+        if prepared is None or stream is None or revision is None:
+            return None
+        if prepared.accepts(revision, stream):
+            return prepared
+        return None
+
+    def remember(self, record: Checkpoint) -> Checkpoint:
+        payload = record.signed_payload()
+        return replace(record, integrity=payload["integrity"])
+
+    def write(self, record: Checkpoint, *, fsync_parent: bool = False) -> None:
+        retained = self.remember(record)
+        payload = retained.signed_payload()
+        # A completed historical prefix remains useful after later appends. It
+        # may advance the disk index, but never replace a farther valid prefix.
+        with _store_lock(self.path):
+            try:
+                stream = self.bus_path.open("rb")
+            except FileNotFoundError:
+                return
+            with stream:
+                current = BusFileRevision.capture(stream)
+                if not retained.accepts(current, stream):
+                    return
+                saved = self._read()
+                if (
+                    saved is not None
+                    and saved.accepts(current, stream)
+                    and saved.offset > retained.offset
+                ):
+                    return
+            _atomic_write_text(self.path, json.dumps(payload), fsync_parent=fsync_parent)

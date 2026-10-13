@@ -342,3 +342,16 @@ def test_saved_failed_turn_uses_the_live_turn_end_decision(stop, content, error,
     else:
         with pytest.raises(ValueError, match="did not end its turn as a failure"):
             entry.require_failed_terminal("user")
+
+
+def test_answer_given_before_a_later_input_stands_when_that_input_ends_without_text():
+    from agent_comms.tracked_turn import AnsweredTrackedTerminal, PendingTrackedTerminal
+
+    answered = PendingTrackedTerminal().append("first answer").later_input(["first ", "answer"])
+
+    assert isinstance(answered, AnsweredTrackedTerminal)
+    assert answered.tool_round().append("").require_response([]) == "first answer"
+    assert answered.tool_round().append("second answer").require_response(["second answer"]) == "second answer"
+    assert isinstance(PendingTrackedTerminal().tool_round().later_input([]), PendingTrackedTerminal)
+    unchecked = PendingTrackedTerminal().append("first answer").later_input(["different stream"])
+    assert isinstance(unchecked, PendingTrackedTerminal)

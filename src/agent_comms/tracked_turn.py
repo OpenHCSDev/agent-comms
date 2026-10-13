@@ -99,6 +99,9 @@ class TrackedTerminal(ABC):
     def tool_round(self) -> TrackedTerminal:
         return PendingTrackedTerminal()
 
+    def later_input(self, parts: list[str]) -> TrackedTerminal:
+        return PendingTrackedTerminal()
+
     def raise_failure(self, proof, provider, model) -> None:
         pass
 
@@ -121,9 +124,34 @@ class CompletedTrackedTerminal(TrackedTerminal):
     def append(self, text):
         return AmbiguousTrackedTerminal()
 
+    def later_input(self, parts):
+        return AnsweredTrackedTerminal(self.text) if self.matches(parts) else PendingTrackedTerminal()
+
+    def matches(self, parts: list[str]) -> bool:
+        return bool(self.text) and "".join(parts) == self.text
+
     def require_response(self, parts):
-        if not self.text or "".join(parts) != self.text:
+        if not self.matches(parts):
             raise NativePiUnavailable("Native Pi has no unique authoritative completed response")
+        return self.text
+
+
+@dataclass(frozen=True)
+class AnsweredTrackedTerminal(TrackedTerminal):
+    """The turn answered, then took a later input; that answer stands unless the model writes another."""
+
+    text: str
+
+    def append(self, text):
+        return CompletedTrackedTerminal(text) if text else self
+
+    def tool_round(self):
+        return self
+
+    def later_input(self, parts):
+        return self
+
+    def require_response(self, parts):
         return self.text
 
 
@@ -144,6 +172,9 @@ class FailedTrackedTerminal(TrackedTerminal):
 
     def raise_failure(self, proof, provider, model):
         raise NativePiTerminalFailure(self.text, proof, provider, model)
+
+    def later_input(self, parts):
+        return self
 
     def require_failed(self) -> None:
         return None
@@ -506,9 +537,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         matched, input_id = self.inputs.mark_started(self, event)
         if not matched:
             raise NativePiUnavailable("Native Pi started a user message this turn did not send")
-        # The answer to this turn is whatever the model says last, after the later input.
+        self.terminal = self.terminal.later_input(self.text_parts)
         self.text_parts.clear()
-        self.terminal = PendingTrackedTerminal()
         await self.following.started(input_id)
 
     @handles(pi.ContextCommitted)
