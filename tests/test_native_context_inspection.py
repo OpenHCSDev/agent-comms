@@ -124,7 +124,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
         goal = owner._comms.goals.update_goal(thread.name, SetGoalAction(
             text="Preserve the exact retained source; never replay an uncertain input.",
             expect=GoalPrecondition(expected_owner=thread.require_process())),
-            actor=OwnerInvocable, owner_store=owner.turns.goals.open_goal_store())
+            actor=OwnerInvocable)
         owner._comms.goals.update_goal(thread.name, StandbyGoalAction(
             wait_for=(peer.name,), expect=GoalPrecondition(goal_id=goal.id)),
             actor=RuntimeInvocable)
@@ -267,7 +267,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
             expect=GoalPrecondition(goal_id=goal.id)), actor=RuntimeInvocable)
         replacement = owner._comms.goals.update_goal(thread.name, SetGoalAction(
             text='Replacement acceptance scope', expect=GoalPrecondition(expected_owner=thread.require_process())),
-            actor=OwnerInvocable, owner_store=owner.turns.goals.open_goal_store())
+            actor=OwnerInvocable)
         owner._comms.goals.update_goal(thread.name, StandbyGoalAction(
             wait_for=(peer.name,), expect=GoalPrecondition(goal_id=replacement.id)), actor=RuntimeInvocable)
         assert replacement.id != goal.id

@@ -105,7 +105,7 @@ class TurnGoalAccount:
             with _store_lock(comms._wire_lock_path):
                 generation = store.require_generation(owner.goal.id)
                 generation.lifecycle.require_ready()
-                grant = comms.goals.ready_goal_grant_locked(owner, admission, store, generation)
+                grant = comms.goals.ready_goal_grant_locked(owner, admission, generation)
                 reservation = store.reserve(owner.goal.id, generation.number, ready_grant=grant)
                 return store.claim_launch(reservation)
         except GoalAttemptError as error:
@@ -156,7 +156,7 @@ class TurnGoalAccount:
             generation.lifecycle.require_ready()
             admission = self.comms.registry.snapshot().admission_generations[self.thread_name]
             grant = self.comms.goals.ready_goal_grant_locked(
-                self.owner, admission, store, generation,
+                self.owner, admission, generation,
             )
             permit = store.claim_launch(
                 store.reserve(goal.id, generation.number, ready_grant=grant)

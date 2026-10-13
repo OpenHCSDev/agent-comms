@@ -50,7 +50,7 @@ class Goals:
         return self.goal_store
 
     def ready_goal_grant_locked(
-        self, owner: Thread, admission: int, store: GoalAttemptStore, generation: Generation
+        self, owner: Thread, admission: int, generation: Generation
     ) -> str:
         """Caller holds wire; recover only this owner's original unused READY grant."""
         try:
@@ -61,6 +61,7 @@ class Goals:
             raise StaleAttemptError(
                 "The executing goal owner changed before READY recovery."
             ) from error
+        store = self.open_goal_store()
         try:
             return store.ready_grant(generation.goal_id, generation.number)
         except UnresolvedAttemptError:

@@ -98,7 +98,7 @@ class GoalScheduler:
                 generation.lifecycle.require_ready()
                 admission = self.comms.registry.snapshot().admission_generations[thread.name]
                 with _store_lock(self.comms._wire_lock_path):
-                    self.comms.goals.ready_goal_grant_locked(thread, admission, store, generation)
+                    self.comms.goals.ready_goal_grant_locked(thread, admission, generation)
             except StaleAttemptError:
                 return
             except MissingGoalGenerationError as error:
