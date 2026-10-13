@@ -120,7 +120,13 @@ class BusRouteCounts:
         self, source: BinaryIO | None, revision: BusFileRevision | None,
         decode: Callable[[Mapping], tuple[DeliveryMessage, ...]],
     ) -> bool:
-        """Decode only appended rows; a replaced source rebuilds the projection."""
+        """Decode only appended rows; a replaced source rebuilds the projection.
+
+        Another reader can index a later cut of the same file between this
+        reader's opened cut and its sync. That recorded revision already covers
+        every row of this older cut, so it answers without decoding, and the
+        recorded digest stays pinned to the revision it verified.
+        """
         identity, size, tail_digest = None, 0, None
         if source is not None:
             if not revision.opened_by(source):
@@ -138,13 +144,14 @@ class BusRouteCounts:
         recorded = records[0] if records else None
         rebuild = recorded is None
         if recorded is not None:
-            rebuild = (
-                (recorded.identity[:2] if recorded.identity else None)
-                != (identity[:2] if identity else None)
-                or size < recorded.offset
-                or size == recorded.offset
-                and recorded.identity != identity
-            )
+            if (recorded.identity[:2] if recorded.identity else None) != (
+                identity[:2] if identity else None
+            ):
+                rebuild = True
+            elif size < recorded.offset:
+                return True
+            elif size == recorded.offset and recorded.identity != identity:
+                rebuild = True
         offset = 0 if rebuild else recorded.offset
         if source is not None and offset:
             source.seek(max(0, offset - 4096))

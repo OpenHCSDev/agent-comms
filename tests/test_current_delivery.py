@@ -2,10 +2,11 @@
 
 import sqlite3
 from collections import Counter
+from unittest.mock import patch
 
 import pytest
 
-from agent_comms.bus_route_counts import BusRouteCounts, RouteEntryRow
+from agent_comms.bus_route_counts import BusRouteCounts, RouteEntryRow, RouteSourceRow
 from agent_comms.comms import wire
 from agent_comms.messages import Message, MessageType
 from agent_comms.threads import Thread
@@ -80,6 +81,40 @@ def test_timestamp_index_handles_unordered_times_and_sparse_seen_rows(tmp_path):
 
 
 @pytest.mark.refactor_guard
+def test_index_recorded_ahead_of_the_read_cut_answers_without_decoding(tmp_path):
+    """A reader whose opened cut is behind the recorded index never rebuilds.
+
+    While this reader holds its cut, another reader can index a later cut of
+    the same file. The recorded revision already covers every row of the
+    older cut, so pending counts answer without decoding and the recorded
+    revision does not regress.
+    """
+    comms = wire(tmp_path)
+    for name in ("sender", "recipient"):
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+    for number in range(5):
+        comms.messaging.send_message("sender", "recipient", f"row {number}")
+    assert comms.bus.pending_counts("recipient") == {"sender": 5}
+
+    reader = wire(tmp_path)
+    with reader.bus.log._opened_wire_snapshot(need_sequence=False) as stale:
+        comms.messaging.send_message("sender", "recipient", "after the reader's cut")
+        # Another reader indexes a later cut while this cut is held.
+        assert wire(tmp_path).bus.pending_counts("recipient") == {"sender": 6}
+        snapshot = reader.registry.snapshot()
+        with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
+            counts = reader.bus._pending_counts(
+                stale, snapshot,
+                {"recipient": reader.bus._delivery_scope("recipient", snapshot)},
+                {"recipient": frozenset()},
+            )
+            assert counts == {"recipient": {"sender": 6}}
+            assert decode.call_count == 0
+    with BusRouteCounts(comms.bus.log.path) as index:
+        recorded = RouteSourceRow.select(index.connection)[0]
+    assert recorded.offset > stale.revision.size
+
+
 def test_route_storage_and_decoder_have_one_declaration_owner():
     import ast
     from pathlib import Path
