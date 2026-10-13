@@ -557,3 +557,84 @@ async def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypa
         )
         assert accepted == [message.seq]
         assert not any("BEGIN IMMEDIATE" in sql for sql in statements)
+
+
+@pytest.mark.skip(
+    reason="bus-wake owner resolution in progress: every publish also changes the"
+    " shared checkpoint and coordination stores, so the tick must resolve each"
+    " shared store per owner before the full tick"
+)
+async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
+    tmp_path, monkeypatch
+) -> None:
+    """The address owner answers the wake before any row is decoded."""
+    from agent_comms import input_drain, messaging
+    from agent_comms.wake_candidate_index import WakeCandidateIndex
+
+    comms, agent, root_id = _session(tmp_path)
+    comms.registry.declare(
+        Thread("gamma", frozenset(), str(tmp_path),
+               process_identity=ProcessIdentity.capture(os.getpid()))
+    )
+    monkeypatch.setattr(messaging, "schedule_candidate_catchup", lambda *_: None)
+    index = WakeCandidateIndex(comms.bus)
+
+    def catch_up():
+        marker = comms.bus.log._private_marker_unlocked()
+        index.catch_up_committed_append(
+            index.notify_committed_append(
+                root_id=root_id, through_seq=marker.last_seq
+            ),
+            bootstrap_new=True,
+        )
+
+    ticks, done = asyncio.Queue(), asyncio.Queue()
+
+    async def observations(_root, *_args, **_kwargs):
+        while True:
+            await ticks.get()
+            yield None
+            done.put_nowait(None)
+
+    async def tick():
+        ticks.put_nowait(None)
+        await asyncio.wait_for(done.get(), timeout=10)
+
+    drains = []
+    drain = agent.inputs.drain_inbox
+
+    async def counted(session_id):
+        drains.append(session_id)
+        return await drain(session_id)
+
+    async def no_catalog(session_id):
+        pass
+
+    monkeypatch.setattr(input_drain.WireWatch, "observations", staticmethod(observations))
+    monkeypatch.setattr(agent.inputs, "drain_inbox", counted)
+    monkeypatch.setattr(agent.sessions.config, "sync_thread", no_catalog)
+    observer = asyncio.create_task(agent.inputs.observe("beta"))
+    try:
+        # Tick until the full tick has settled (its scheduled wake completes);
+        # a settled tick answers bus-only changes from the address owner.
+        for _ in range(10):
+            before = len(drains)
+            await tick()
+            if len(drains) == before:
+                break
+        assert drains, "the first tick never drained"
+        settled = len(drains)
+        comms.messaging.send_message("sender", "gamma", "for gamma")
+        catch_up()
+        await tick()  # only the shared bus grew, and none of it is beta's
+        assert len(drains) == settled, "another agent's bus append woke an idle owner"
+        comms.messaging.send_message("sender", "beta", "for beta")
+        catch_up()
+        await tick()  # the appended region has a row for beta: full tick
+        assert len(drains) == settled + 1, "a delivered row for the owner did not wake it"
+        comms.messaging.send_message("sender", "gamma", "more for gamma")
+        index.path.unlink()  # the index is unavailable: never invent 'not mine'
+        await tick()
+        assert len(drains) == settled + 2, "an unavailable index answered instead of the full tick"
+    finally:
+        observer.cancel()

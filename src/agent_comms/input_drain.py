@@ -37,7 +37,9 @@ from .input_attempt import InputAttempt
 from .input_disposition import InputDispositions, InputDocument
 from .input_effects import InputEffects
 from .queued_input import QueuedInput, InputHandoffRefused
+from .errors import RelationViolationError
 from .registry_document import RegistryEntry
+from .wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 from .registry_store import RegistryEntryRevision
 from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
@@ -68,6 +70,9 @@ class TickRevision:
 
     registry: tuple
     coordination: tuple
+    # The shared bus log and its marker: every publisher's appends change
+    # them, so they are compared apart from this owner's own stores.
+    bus: tuple
     other: tuple
 
 
@@ -82,10 +87,16 @@ class PrivateObservation:
 
 @dataclass(frozen=True, slots=True)
 class SettledTick:
-    """The revision a settled tick started from, and this owner's registry entry then."""
+    """The revision a settled tick started from, and this owner's registry entry then.
+
+    The bus facts come from the marker read at settle time: bus_high_water is
+    the settled shared high-water and admission_after_seq this owner's floor.
+    """
 
     revision: TickRevision
     entry: RegistryEntry
+    bus_high_water: int | None = None
+    admission_after_seq: int | None = None
 
 
 class InputDrain:
@@ -259,10 +270,12 @@ class InputDrain:
                 file_revision(root / "coordination.sqlite3"),
                 file_revision(root / "coordination.sqlite3-wal"),
             ),
+            bus=(
+                file_revision(self.comms.bus.log.path),
+                file_revision(self.comms.bus.log.metadata_path),
+            ),
             other=(
                 tuple(file_revision(path) for path in (
-                    self.comms.bus.log.path,
-                    self.comms.bus.log.metadata_path,
                     root / "private_bus_checkpoint.sqlite3",
                     root / GoalWaits.filename,
                     root / "goal-private" / "goal_attempts.sqlite3",
@@ -314,6 +327,10 @@ class InputDrain:
                 # owner's: its own entry and private observation are what it
                 # last settled.
                 revision = await Coordination.run_worker(partial(self._tick_revision, session_id))
+                bus_unchanged = (
+                    settled is not None
+                    and revision.bus == settled.revision.bus
+                )
                 idle = (
                     settled is not None
                     and revision.other == settled.revision.other
@@ -332,9 +349,31 @@ class InputDrain:
                         revision = replace(revision, registry=read.revision)
                         entry, entry_current = read.entry, True
                         idle = entry == settled.entry
-                if idle and revision.coordination == settled.revision.coordination:
-                    settled = SettledTick(revision, entry)
+                if (
+                    idle
+                    and bus_unchanged
+                    and revision.coordination == settled.revision.coordination
+                ):
+                    settled = SettledTick(
+                        revision, entry,
+                        settled.bus_high_water, settled.admission_after_seq,
+                    )
                     continue
+                if (
+                    idle
+                    and not bus_unchanged
+                    and revision.coordination == settled.revision.coordination
+                    and not self._in_standby(session_id)
+                ):
+                    # Only the shared bus grew: the address owner answers
+                    # whether the appended region concerns this owner before
+                    # any row is decoded.
+                    outcome = await self._bus_wake_for_other_agents(
+                        session_id, settled, revision, entry,
+                    )
+                    if outcome is not None:
+                        settled = outcome
+                        continue
                 settled = None
                 thread = self.sessions.require(session_id)
                 if not entry_current:
@@ -346,7 +385,10 @@ class InputDrain:
                 try:
                     # Only the coordination store changed; this owner's rows decide.
                     if idle and await self._own_coordination_unchanged(session_id, entry):
-                        settled = SettledTick(revision, entry)
+                        settled = SettledTick(
+                            revision, entry,
+                            settled.bus_high_water, settled.admission_after_seq,
+                        )
                         continue
                     await self.drain_inbox(session_id)
                     await self.sessions.config.sync_thread(session_id)
@@ -396,12 +438,57 @@ class InputDrain:
                             self.comms.agents.set_drain_diagnostic, thread, owner, None,
                         ))
                         if not current.executing and self._quiescent(session_id):
-                            settled = SettledTick(revision, entry)
+                            marker = await Coordination.run_worker(self._bus_marker)
+                            settled = SettledTick(
+                                revision, entry, marker.last_seq, marker.admission_after_seq,
+                            )
 
     async def drain_inbox(self, session_id: str) -> int:
         """Push undelivered messages to the client; returns count pushed."""
         async with self.drain_locks.setdefault(session_id, asyncio.Lock()):
             return await self.drain_owned_inbox(session_id)
+
+    def _bus_marker(self):
+        return self.comms.bus.log._private_marker_unlocked()
+
+    async def _bus_wake_for_other_agents(
+        self, session_id: str, settled: SettledTick, revision: TickRevision,
+        entry: RegistryEntry,
+    ) -> SettledTick | None:
+        """Answer 'this wake concerns me' before any row is decoded.
+
+        Only the shared bus log and its marker changed since the settled tick,
+        so this owner's floor stands and the recipient-keyed candidate index —
+        the one owner of which appended rows address which recipient — decides
+        whether the appended region contains rows for this owner. An
+        unavailable index (stale, missing, or mid-catch-up) keeps the full
+        tick, never invents an answer.
+        """
+        try:
+            marker = await Coordination.run_worker(self._bus_marker)
+            if marker.admission_after_seq != settled.admission_after_seq:
+                return None
+            page = WakeCandidateIndex(self.comms.bus).page(
+                root_id=marker.root_id,
+                recipient_lookup=stable_thread_lookup(entry.thread.created_at),
+                after_seq=settled.bus_high_water,
+                required_through_seq=marker.last_seq,
+                limit=1,
+            )
+        except (
+            OSError,
+            ValueError,
+            TypeError,
+            sqlite3.Error,
+            CoordinationError,
+            RelationViolationError,
+            ProjectionUnavailableError,
+        ):
+            # Unavailable never means 'not mine'; run the full tick instead.
+            return None
+        if page.entries:
+            return None
+        return SettledTick(revision, entry, marker.last_seq, marker.admission_after_seq)
 
     def _private_observation_revision(
         self, session_id: str, root_id: str, wire: tuple, entry: RegistryEntry,
