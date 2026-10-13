@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 import sqlite3
 
+from agent_comms.field_codec import FieldCodec
 from agent_comms.schema_report import StoreSchemaReport
 from agent_comms.typed_table import TypedTable
 
@@ -30,7 +31,12 @@ def rows_digest(db: sqlite3.Connection, table: str) -> str:
 def carry(source: Path, destination: Path, original: dict[str, str]) -> dict:
     # The destination is always newly created. A failed copy remains evidence,
     # never an automatically retried operation or an installed replacement.
-    changes = StoreSchemaReport.observe(source).differences
+    observed = StoreSchemaReport.observe(source)
+    if observed.undeclared_tables:
+        raise ValueError(f"undeclared tables cannot be carried: {observed.undeclared_tables}")
+    changes = observed.differences
+    if not changes:
+        raise ValueError("store already matches; no CHECK carry is needed")
     owners = []
     for change in changes:
         owner = TypedTable.decode(change.name)
@@ -89,4 +95,5 @@ if __name__ == "__main__":
     parser.add_argument("--copy", type=Path, required=True)
     parser.add_argument("--original-schema", type=Path, required=True)
     args = parser.parse_args()
-    print(json.dumps(carry(args.source, args.copy, json.loads(args.original_schema.read_text())), indent=2))
+    original = FieldCodec.decode(dict[str, str], json.loads(args.original_schema.read_text()))
+    print(json.dumps(carry(args.source, args.copy, original), indent=2))
