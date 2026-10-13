@@ -557,3 +557,65 @@ async def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypa
         )
         assert accepted == [message.seq]
         assert not any("BEGIN IMMEDIATE" in sql for sql in statements)
+
+
+async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
+    tmp_path, monkeypatch
+) -> None:
+    """The sealed address record answers the wake before any row is decoded."""
+    from agent_comms import input_drain
+
+    comms, agent, _root_id = _session(tmp_path)
+    comms.registry.declare(
+        Thread("gamma", frozenset(), str(tmp_path),
+               process_identity=ProcessIdentity.capture(os.getpid()))
+    )
+
+    ticks, done = asyncio.Queue(), asyncio.Queue()
+
+    async def observations(_root, *_args, **_kwargs):
+        while True:
+            await ticks.get()
+            yield None
+            done.put_nowait(None)
+
+    async def tick():
+        ticks.put_nowait(None)
+        await asyncio.wait_for(done.get(), timeout=10)
+
+    drains = []
+    drain = agent.inputs.drain_inbox
+
+    async def counted(session_id):
+        drains.append(session_id)
+        return await drain(session_id)
+
+    async def no_catalog(session_id):
+        pass
+
+    monkeypatch.setattr(input_drain.WireWatch, "observations", staticmethod(observations))
+    monkeypatch.setattr(agent.inputs, "drain_inbox", counted)
+    monkeypatch.setattr(agent.sessions.config, "sync_thread", no_catalog)
+    observer = asyncio.create_task(agent.inputs.observe("beta"))
+    try:
+        # Tick until the full tick has settled (its scheduled wake completes);
+        # a settled tick answers bus-only changes from the address owner.
+        for _ in range(10):
+            before = len(drains)
+            await tick()
+            if len(drains) == before:
+                break
+        assert drains, "the first tick never drained"
+        settled = len(drains)
+        comms.messaging.send_message("sender", "gamma", "for gamma")
+        await tick()  # only shared stores grew, and none of it addresses beta
+        assert len(drains) == settled, "another agent's bus append woke an idle owner"
+        comms.messaging.send_message("sender", "beta", "for beta")
+        await tick()  # the address record has an unadmitted row for beta: full tick
+        assert len(drains) == settled + 1, "a delivered row for the owner did not wake it"
+        comms.messaging.send_message("sender", "gamma", "more for gamma")
+        (comms.root / "private_bus_checkpoint.sqlite3").unlink()
+        await tick()  # the address record is unavailable: never invent 'not mine'
+        assert len(drains) == settled + 2, "an unavailable address record answered instead of the full tick"
+    finally:
+        observer.cancel()
