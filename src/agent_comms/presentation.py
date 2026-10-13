@@ -609,7 +609,6 @@ class ThreadView:
             "activity": self.activity.state.value,
             "activity_detail": self.activity.detail,
             "goal_execution": asdict(self.goal_execution) if self.goal_execution else None,
-            "model": self.runtime.model if self.runtime else self.thread.model,
             "session_name": self.runtime.session_name if self.runtime else None,
             "context_used": self.runtime.context_used if self.runtime else None,
             "context_size": self.runtime.context_size if self.runtime else None,
