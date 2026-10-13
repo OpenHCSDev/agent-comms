@@ -25,6 +25,7 @@ from agent_comms.ui_model.observation import (
     ObserveThreads,
     OwnerRead,
     ReadNotifications,
+    ReadBusy,
     ReadRefused,
     ReadRequest,
     ReadTranscript,
@@ -97,6 +98,11 @@ def test_store_read_keeps_schema_failure_distinct_from_deferred_read(comms, erro
 
     error = error_type("original store read explanation")
     answer = FailingRead(str(comms.root), error).answer(comms)
+    if error_type is CoordinationReadUnavailable:
+        assert isinstance(answer, ReadBusy)
+        assert answer.title == "History loading"
+        assert pickle.loads(pickle.dumps(answer)) == answer
+        return
     assert isinstance(answer, ReadRefused)
     if error_type is SchemaVersionError:
         assert isinstance(answer.error, UnreadableHistory)

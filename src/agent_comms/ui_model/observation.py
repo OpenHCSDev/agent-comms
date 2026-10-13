@@ -25,6 +25,7 @@ import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field, replace
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -153,10 +154,12 @@ class ReadRequest(AwaitedRead):
     @abstractmethod
     def read(self, comms: Comms) -> object: ...
 
-    def answer(self, comms: Comms) -> ReadAnswered | ReadRefused:
+    def answer(self, comms: Comms) -> ReadAnswered | ReadRefused | ReadBusy:
         try:
             self.require_root(comms)
             return ReadAnswered(self.request_id, self.read(comms))
+        except CoordinationReadUnavailable:
+            return ReadBusy(self.request_id)
         except Exception as error:
             return self.refused(error)
 
@@ -386,6 +389,22 @@ class ReadAnswered(ServiceResult):
 
 
 @dataclass(frozen=True)
+class ReadBusy(ServiceResult):
+    """Source busy: the original read remains pending, not a failed input."""
+
+    request_id: int
+
+    @property
+    def title(self) -> str:
+        return "History loading"
+
+    def received(self, process: ObservationProcess, observed: list[Observed]) -> None:
+        # Keep the same waiter. The service owns waiting for the source and
+        # answers this request when its next observation can acquire a read.
+        pass
+
+
+@dataclass(frozen=True)
 class ReadRefused(ServiceResult):
     """The read raised ``error``; the UI caller receives that same exception."""
 
@@ -553,9 +572,17 @@ class ObservationService:
                 self.changed.clear()
                 # Awaited reads first, one at a time; between them the loop
                 # takes new requests and cancellations.
-                while self.pending and not self.closed:
-                    request_id = next(iter(self.pending))
-                    self.connection.send(self.pending.pop(request_id).answer(self.comms))
+                for request_id, request in tuple(self.pending.items()):
+                    if self.closed:
+                        break
+                    if self.pending.get(request_id) is not request:
+                        continue
+                    answer = request.answer(self.comms)
+                    self.connection.send(answer)
+                    if not isinstance(answer, ReadBusy):
+                        self.pending.pop(request_id)
+                    # Busy reads remain for the existing store watch. Other
+                    # reads and cancellations still get their turn.
                     await asyncio.sleep(0)
                 if self.observe_due and not self.closed:
                     self.observe_due = False
@@ -588,6 +615,20 @@ def serve(root: str, connection: Connection) -> None:
 
 class ObservationProcess:
     """The UI side: start the service for a root, send requests, await reads, drain results."""
+
+    @classmethod
+    @contextmanager
+    def awaited(cls, root: Path):
+        """Own pipe readiness and retirement for an attached asynchronous reader."""
+        process = cls(root)
+        loop = asyncio.get_running_loop()
+        descriptor = process.fileno()
+        loop.add_reader(descriptor, process.results)
+        try:
+            yield process
+        finally:
+            loop.remove_reader(descriptor)
+            process.close()
 
     def __init__(self, root: Path):
         context = multiprocessing.get_context("spawn")
