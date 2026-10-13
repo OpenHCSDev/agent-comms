@@ -57,24 +57,8 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
     @abstractmethod
     def accepts(cls, annotation: object) -> bool: ...
 
-    @classmethod
-    def constraints(cls, column: str, annotation: object = None) -> tuple[str, ...]:
-        declared, _ = _base_type(annotation)
-        if get_origin(declared) is Literal:
-            values = get_args(declared)
-        elif (
-            get_origin(annotation) is not Annotated
-            and get_origin(declared) is type and get_args(declared)
-            and issubclass(get_args(declared)[0], DeclaredFamily)
-        ):
-            # A representation owns its own spelling and declares its constraint.
-            values = get_args(declared)[0].names()
-        elif isinstance(declared, type) and issubclass(declared, Enum):
-            if issubclass(declared, IntFlag):
-                return ()  # Combinations belong to the flag declaration's mask constraint.
-            values = tuple(member.value for member in declared)
-        else:
-            return ()
+    @staticmethod
+    def _choice_constraint(column: str, values: tuple) -> str:
         choices = ", ".join(
             (
                 "'" + value.replace("'", "''") + "'"
@@ -85,7 +69,36 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
             )
             for value in values
         )
-        return (f"{_identifier(column)} IN ({choices})",)
+        return f"{_identifier(column)} IN ({choices})"
+
+    @classmethod
+    def family_constraints(cls, column: str, annotation: object) -> tuple[str, ...]:
+        """The generated selector CHECK, also consumed by stopped DDL carries."""
+        if get_origin(annotation) is Annotated:
+            return ()
+        declared, _ = _base_type(annotation)
+        if get_origin(declared) is not type:
+            return ()
+        members = get_args(declared)
+        if not members or not issubclass(members[0], DeclaredFamily):
+            return ()
+        return (cls._choice_constraint(column, members[0].names()),)
+
+    @classmethod
+    def constraints(cls, column: str, annotation: object = None) -> tuple[str, ...]:
+        family = cls.family_constraints(column, annotation)
+        if family:
+            return family
+        declared, _ = _base_type(annotation)
+        if get_origin(declared) is Literal:
+            values = get_args(declared)
+        elif isinstance(declared, type) and issubclass(declared, Enum):
+            if issubclass(declared, IntFlag):
+                return ()  # Combinations belong to the flag declaration's mask constraint.
+            values = tuple(member.value for member in declared)
+        else:
+            return ()
+        return (cls._choice_constraint(column, values),)
 
     @classmethod
     def to_sql(cls, value: object) -> object:

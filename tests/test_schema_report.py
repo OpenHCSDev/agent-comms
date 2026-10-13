@@ -10,18 +10,19 @@ from agent_comms.cli import main
 from agent_comms.cli_commands import SchemaReportCliCommand
 from agent_comms.schema_report import StoreSchemaReport
 from agent_comms.todos import Todo
-from agent_comms.typed_table import SQLiteSchemaObject, SQLiteSchemaDifference
+from agent_comms.typed_table import IntegerStorage, SQLiteSchemaObject, SQLiteSchemaDifference
 from test_private_bus_checkpoint import _root
 from tools.cutover.carry_declared_checks import OriginalDeclaration, carry
 
 
-def _old_todo(path):
+def _old_todo(path, transform=lambda sql: sql):
     target = Todo.schema_objects()[Todo.declared_name]
     # #762 adds constraints from selectors; the existing explicit CHECK stays.
     original = target
     for item in Todo._fields():
-        for constraint in item.storage.constraints(item.name, item.annotation):
+        for constraint in item.storage.family_constraints(item.name, item.annotation):
             original = original.replace(f" CHECK ({constraint})", "", 1)
+    original = transform(original)
     assert original != target
     with closing(sqlite3.connect(path)) as db:
         db.execute(original)
@@ -29,7 +30,10 @@ def _old_todo(path):
                    "VALUES ('one','team/repo','unfinished','Alice',17002,'open',1)")
         db.commit()
     return OriginalDeclaration({Todo.declared_name: original}, {
-        Todo.declared_name: {item.name: () for item in Todo._fields()}})
+        Todo.declared_name: {item.name: tuple(
+            constraint for constraint in item.storage.constraints(item.name, item.annotation)
+            if constraint not in item.storage.family_constraints(item.name, item.annotation))
+            for item in Todo._fields()}})
 
 
 def test_comparison_names_changed_missing_and_extra_objects():
@@ -98,3 +102,82 @@ def test_carry_refuses_wrong_preimage_and_rows_that_violate_new_checks(tmp_path)
         carry(source, tmp_path / "invalid.sqlite3", original)
     assert source.read_bytes() == before
     assert not (tmp_path / "invalid.sqlite3").exists()
+
+
+@pytest.mark.parametrize("transform", [
+    lambda sql: sql.replace(") STRICT", ', UNIQUE ("text")) STRICT'),
+    lambda sql: sql.replace(") STRICT", ', FOREIGN KEY ("id") REFERENCES "todo" ("id")) STRICT'),
+    lambda sql: sql.replace("CHECK (revision>0)", "CHECK (revision>=0)"),
+])
+def test_carry_rejects_authentic_unrelated_table_ddl_even_with_valid_rows(tmp_path, transform):
+    source = tmp_path / "old.sqlite3"
+    original = _old_todo(source, transform)
+    before = source.read_bytes()
+    with pytest.raises(ValueError, match="unrelated DDL difference, not CHECK-only"):
+        carry(source, tmp_path / "refused.sqlite3", original)
+    assert source.read_bytes() == before
+    assert not (tmp_path / "refused.sqlite3").exists()
+
+
+def test_carry_cannot_drop_an_original_nonfamily_generated_check(tmp_path):
+    from typing import Literal
+
+    previous = IntegerStorage.constraints("revision", Literal[1, 2])
+    source = tmp_path / "old.sqlite3"
+    original = _old_todo(source, lambda sql: sql.replace(
+        '"revision" INTEGER NOT NULL',
+        '"revision" INTEGER NOT NULL CHECK (' + previous[0] + ')'))
+    original.constraints[Todo.declared_name]["revision"] = previous
+    with pytest.raises(ValueError, match="unrelated DDL difference, not CHECK-only"):
+        carry(source, tmp_path / "refused.sqlite3", original)
+    assert not (tmp_path / "refused.sqlite3").exists()
+
+
+@pytest.mark.parametrize("extra", [
+    'CREATE INDEX extra_idx ON todo (text)',
+    'CREATE TRIGGER extra_trigger BEFORE UPDATE ON todo BEGIN SELECT 1; END',
+])
+def test_carry_rejects_index_or_trigger_changes(tmp_path, extra):
+    source = tmp_path / "old.sqlite3"
+    original = _old_todo(source)
+    with closing(sqlite3.connect(source)) as db:
+        db.execute(extra)
+    before = source.read_bytes()
+    with pytest.raises(ValueError, match="unrelated schema object"):
+        carry(source, tmp_path / "refused.sqlite3", original)
+    assert source.read_bytes() == before
+    assert not (tmp_path / "refused.sqlite3").exists()
+
+
+def test_report_and_backup_use_one_snapshot_even_when_source_advances(tmp_path, monkeypatch):
+    source = tmp_path / "old.sqlite3"
+    original = _old_todo(source)
+    with closing(sqlite3.connect(source)) as db:
+        db.execute("PRAGMA journal_mode=WAL")
+    reader = StoreSchemaReport.read
+    reads = []
+
+    def advance_after_read(cls, db, path):
+        assert db.in_transaction
+        result = reader(db, path)
+        reads.append(db)
+        # A different writer advances the WAL after the source snapshot is held.
+        with closing(sqlite3.connect(source)) as later:
+            later.execute('CREATE INDEX later_idx ON todo (text)')
+            later.commit()
+        return result
+
+    copy = tmp_path / "carried.sqlite3"
+    # The accepted-copy observation uses the same method, but must not advance
+    # the original again. Record the exact held handle only for the source.
+    def source_only(cls, db, path):
+        return advance_after_read(cls, db, path) if path == source else reader(db, path)
+
+    monkeypatch.setattr(StoreSchemaReport, "read", classmethod(source_only))
+    carry(source, copy, original)
+    assert len(reads) == 1
+    with closing(sqlite3.connect(copy)) as db:
+        assert db.execute("SELECT sql FROM sqlite_master WHERE name='later_idx'").fetchall() == []
+        assert db.execute("SELECT text FROM todo").fetchall() == [("unfinished",)]
+    with closing(sqlite3.connect(source)) as db:
+        assert db.execute("SELECT sql FROM sqlite_master WHERE name='later_idx'").fetchone()

@@ -36,12 +36,12 @@ class OriginalDeclaration:
             raise ValueError(f"{name}: declared fields changed, not CHECK-only")
         for item in fields:
             previous = declared[item.name]
-            current = item.storage.constraints(item.name, item.annotation)
-            if previous == current:
+            current = item.storage.family_constraints(item.name, item.annotation)
+            if not current or previous == current:
                 continue
-            # Remove only the changed generated field constraints, each obtained
-            # from its original/current storage declaration. Explicit column and
-            # table CHECKs remain in the comparison, as does every other DDL byte.
+            # Remove only the changed family-selector CHECKs. Original enum
+            # constraints on migrated selectors come from the old declaration.
+            # Literal/boolean, explicit column and table CHECKs stay untouched.
             for expression in previous:
                 clause = f" CHECK ({expression})"
                 if clause not in old:
@@ -68,21 +68,25 @@ def rows_digest(db: sqlite3.Connection, table: str) -> str:
 def carry(source: Path, destination: Path, original: OriginalDeclaration) -> dict:
     # The destination is always newly created. A failed copy remains evidence,
     # never an automatically retried operation or an installed replacement.
-    observed = StoreSchemaReport.observe(source)
-    if observed.undeclared_tables:
-        raise ValueError(f"undeclared tables cannot be carried: {observed.undeclared_tables}")
-    changes = observed.differences
-    if not changes:
-        raise ValueError("store already matches; no CHECK carry is needed")
-    owners = []
-    for change in changes:
-        owner = TypedTable.decode(change.name)
-        if change.stored != original.objects[change.name] or change.declared != owner.schema_objects()[change.name]:
-            raise ValueError(f"{change.name}: not the authentic original table declaration")
-        original.require_check_only(owner)
-        owners.append(owner)
     with closing(sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True)) as before:
+        before.execute("PRAGMA query_only=ON")
         before.execute("BEGIN")
+        observed = StoreSchemaReport.read(before, source)
+        if observed.undeclared_tables:
+            raise ValueError(f"undeclared tables cannot be carried: {observed.undeclared_tables}")
+        changes = observed.differences
+        if not changes:
+            raise ValueError("store already matches; no CHECK carry is needed")
+        owners = []
+        for change in changes:
+            try:
+                owner = TypedTable.decode(change.name)
+            except ValueError as error:
+                raise ValueError(f"{change.name}: unrelated schema object, not a table CHECK") from error
+            if change.stored != original.objects[change.name] or change.declared != owner.schema_objects()[change.name]:
+                raise ValueError(f"{change.name}: not the authentic original table declaration")
+            original.require_check_only(owner)
+            owners.append(owner)
         objects = SQLiteSchemaObject.read(before.execute(
             "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL"))
         preserved_objects = {item.name: item.sql for item in objects}

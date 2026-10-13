@@ -48,29 +48,34 @@ class StoreSchemaReport:
                                      timeout=1, isolation_level=None)) as db:
             db.execute("PRAGMA query_only=ON")
             db.execute("BEGIN")
-            actual = SQLiteSchemaObject.read(db.execute(
-                "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL"))
-            tables = _StoredTable.read(db.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"))
-            expected = {}
-            compared = set()
-            unknown = []
-            for table in tables:
-                try:
-                    owner = TypedTable.decode(table.name)
-                except ValueError:
-                    unknown.append(table.name)
-                    continue
-                declarations = owner.schema_objects()
-                expected.update(declarations)
-                compared.update(declarations)
-                # Extra triggers or indexes attached to a known table also differ.
-                compared.update(row[0] for row in db.execute(
-                    "SELECT name FROM sqlite_master WHERE tbl_name=? AND sql IS NOT NULL",
-                    (table.name,)))
-            changes = SQLiteSchemaObject.differences(
-                [item for item in actual if item.name in compared], expected)
-            return cls(str(path), changes, tuple(sorted(unknown)))
+            return cls.read(db, path)
+
+    @classmethod
+    def read(cls, db: sqlite3.Connection, path: Path) -> StoreSchemaReport:
+        """Decode the caller's already-open snapshot; never acquire another one."""
+        actual = SQLiteSchemaObject.read(db.execute(
+            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL"))
+        tables = _StoredTable.read(db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"))
+        expected = {}
+        compared = set()
+        unknown = []
+        for table in tables:
+            try:
+                owner = TypedTable.decode(table.name)
+            except ValueError:
+                unknown.append(table.name)
+                continue
+            declarations = owner.schema_objects()
+            expected.update(declarations)
+            compared.update(declarations)
+            # Extra triggers or indexes attached to a known table also differ.
+            compared.update(row[0] for row in db.execute(
+                "SELECT name FROM sqlite_master WHERE tbl_name=? AND sql IS NOT NULL",
+                (table.name,)))
+        changes = SQLiteSchemaObject.differences(
+            [item for item in actual if item.name in compared], expected)
+        return cls(str(path), changes, tuple(sorted(unknown)))
 
 
 @dataclass(frozen=True)
