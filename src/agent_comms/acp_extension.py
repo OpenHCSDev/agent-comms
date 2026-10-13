@@ -13,7 +13,9 @@ from hashlib import sha256
 from typing import TYPE_CHECKING, Annotated, Callable, ClassVar
 
 from .agent_backend import InputId, SendNow
-from .acp_failure import ACPFailure, BackendDeliveryFailure, DeliveryFailure
+from .acp_failure import (
+    ACPFailure, BackendDeliveryFailure, DeliveryFailure, FailureSource, UnrecordedFailureSource,
+)
 from .agent_events import CompactionEvent
 from .declared_family import DeclaredFamily
 from .input_attempt import ACPInputIdText, InputAttempt
@@ -614,6 +616,7 @@ def decode_request(metadata: object = None, **expanded) -> CommsRequest:
 @dataclass(frozen=True)
 class RequestFailedUpdate(AgentCommsUpdate):
     failure: ACPFailure
+    source: FailureSource = UnrecordedFailureSource()
 
 
 @dataclass(frozen=True)

@@ -14,8 +14,33 @@ from typing import ClassVar
 from .declared_family import DeclaredFamily
 from .delivery_presentation import DeliveryPresentation
 from .input_attempt import InputAttempt
-from .pi_payloads import PiDiagnostic
+from .pi_payloads import AssistantMessage, PiDiagnostic
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
+
+
+class FailureSource(DeclaredFamily, affix="FailureSource"):
+    """Native message provenance, distinct from failures without a history source."""
+
+    def for_publication(self, text: str, sensitive: bool) -> FailureSource:
+        return self
+
+
+@dataclass(frozen=True)
+class UnrecordedFailureSource(FailureSource):
+    pass
+
+
+@dataclass(frozen=True)
+class NativeMessageFailureSource(FailureSource):
+    message: AssistantMessage
+
+    def for_publication(self, text: str, sensitive: bool) -> FailureSource:
+        if not sensitive:
+            return self
+        # Retain native provenance without exporting private response content.
+        return replace(
+            self, message=replace(self.message, content=(), diagnostics=(), error_message=text)
+        )
 
 
 class DeliveryFailure(DeliveryPresentation, DeclaredFamily, affix="Failure"):

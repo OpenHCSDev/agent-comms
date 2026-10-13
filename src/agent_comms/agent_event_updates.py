@@ -189,8 +189,6 @@ class AcpEventConsumer(MroDispatch):
 
         document = await Coordination.run_worker(self.agent.inputs.dispositions.read)
         failure = replace(failure, input_state=document.shared_state(original_keys))
-        if self.agent.turns.emitted_errors.get(session_id) == failure:
-            return
         failed_input = None
         input_text = original.notice_text if original else None
         if input_text and not document.all_started(original_keys):
@@ -202,7 +200,7 @@ class AcpEventConsumer(MroDispatch):
                 content=TextContentBlock(type="text", text=""),
                 field_meta=encode_updates(
                     TextRouteUpdate(None),
-                    RequestFailedUpdate(failure),
+                    RequestFailedUpdate(failure, event.source),
                     *((failed_input,) if failed_input else ()),
                 ),
             ),
@@ -219,12 +217,3 @@ class AcpEventConsumer(MroDispatch):
                 field_meta=encode_updates(PromptCancelledUpdate(event.input_state)),
             ),
         )
-
-    @handles(events.Done)
-    async def on_done(self, event: events.Done) -> None:
-        session_id = self.session_id
-        client = self.client
-        if not event.ok and event.text:
-            # The existing emission owner deduplicates full typed evidence,
-            # including a terminal not-sent transition with unchanged text.
-            await self.agent._emit_event(session_id, events.Error(str(event.text)), client)

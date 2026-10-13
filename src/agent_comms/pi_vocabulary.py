@@ -82,9 +82,11 @@ class ErrorStopReason(PiStopReason):
             session.usage.used = session.usage.confirmed
             session.usage.provisional = False
             yield session.context_info()
+        from .acp_failure import NativeMessageFailureSource
+
         error = session.output.error(
             (message.error_message or "").strip() or f"Model request {cls.declared_name}",
-            message.diagnostics,
+            message.diagnostics, source=NativeMessageFailureSource(message),
         )
         if not (session.explicit_interrupt and cls.explicit_abort):
             from .turn_failure import ModelRequestFailed

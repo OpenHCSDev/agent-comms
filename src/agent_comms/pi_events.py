@@ -230,7 +230,7 @@ class AutoRetryEnd(PiEvent):
             session.output.error_message = None
         else:
             session.watchdog.retry_recovery_pending = False
-            session.output.error_message = "Provider retry attempts were exhausted."
+            yield session.output.error("Provider retry attempts were exhausted.")
             yield session.watchdog.state(
                 "failed", "provider_retry_exhausted", 0, phase=ModelWaitPhase()
             )

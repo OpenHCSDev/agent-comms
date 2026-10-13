@@ -318,7 +318,6 @@ class OwnedTurn:
             inputs=self.runner.inputs,
             effects=self.runner.effects,
             runtime=self.runner.runtime,
-            emitted_errors=self.runner.emitted_errors,
             session_id=self.session_id,
             turn=self,
             finish_event=self.finish_event,
@@ -435,8 +434,6 @@ class OwnedTurn:
             await self.prepare_native()
             await self.stream()
             await self.progress.publish_result()
-            if failure := self.runner.emitted_errors.get(self.session_id):
-                raise PromptFailureReceipt(failure, True).request_error()
         except asyncio.CancelledError:
             await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
             await self.backend.abort(self.owner_task)
@@ -452,3 +449,7 @@ class OwnedTurn:
             if failure is not None:
                 raise PromptFailureReceipt(failure, True).request_error() from error
             raise
+        # A published native failure is a completed observation, not a new
+        # exception to feed back through outer-fault publication.
+        if failure := self.runner.emitted_errors.get(self.session_id):
+            raise PromptFailureReceipt(failure, True).request_error()
