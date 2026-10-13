@@ -9,14 +9,14 @@ from agent_comms.activity import ActivityState
 from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.messages import MessageType
+from agent_comms.messages import QuestionKind
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 
 
 class TestMessaging:
     def test_send_routes_through_bus(self, wired):
-        mid = wired.messaging.send("PR111", "fixer", "hello", MessageType.QUESTION)
+        mid = wired.messaging.send("PR111", "fixer", "hello", QuestionKind)
         assert isinstance(mid, str)
         assert wired.bus.pending_count("fixer") == 1
 

@@ -155,14 +155,6 @@ class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):
         )
 
     @classmethod
-    def field_value(cls, value):
-        if isinstance(value, type) and issubclass(value, cls):
-            return value
-        from .field_codec import FieldCodec
-
-        return FieldCodec.decode(type[cls], value)
-
-    @classmethod
     def optional_name(cls, level):
         return None if level is None else level.declared_name
 

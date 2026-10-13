@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
-from enum import Enum, StrEnum
-from typing import TYPE_CHECKING
+from enum import StrEnum
+from pathlib import Path
+from typing import TYPE_CHECKING, Type
 
 from .channel_targets import _TAG_CHARS, BuiltinChannel, is_channel_target
+from .change_report import FileLine, ChangeReport
+from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
@@ -30,12 +34,72 @@ if TYPE_CHECKING:
     from .historical_views import HistoryCursor
 
 
-class MessageType(Enum):
-    INFO = "info"
-    QUESTION = "question"
-    ACK = "ack"
-    HANDOFF = "handoff"
-    ALERT = "alert"
+class MessageKind(DeclaredFamily, affix="Kind"):
+    """A declared message kind; each member owns the validation it requires.
+
+    Members are the kind themselves, never instances: the wire carries the
+    plain declared name (``"type": "info"``), exactly as the previous enum
+    stored it. Publication-time checks run once, from the single commit path.
+    """
+
+    @classmethod
+    def require_publishable(cls, message: Message, worktree: Path) -> None:
+        """Checks a send must pass before publication; base kinds declare none."""
+
+
+class InfoKind(MessageKind):
+    pass
+
+
+class QuestionKind(MessageKind):
+    pass
+
+
+class AckKind(MessageKind):
+    pass
+
+
+class HandoffKind(MessageKind):
+    """A handoff declares its evidence; completion claims carry references."""
+
+    CLAIMS = ("fixed", "single owner", "no other callers")
+    SEARCH_COMMANDS = ("grep", "rg", "git", "sed", "awk", "find", "python", "ast")
+
+    @classmethod
+    def require_publishable(cls, message: Message, worktree: Path) -> None:
+        claims = [
+            claim for claim in cls.CLAIMS
+            if re.search(rf"\b{re.escape(claim)}\b", message.body, re.IGNORECASE)
+        ]
+        if not claims:
+            return
+        if FileLine.scan(message.body) or any(
+            re.search(rf"\b{re.escape(command)}\b", message.body)
+            for command in cls.SEARCH_COMMANDS
+        ):
+            return
+        raise ValueError(
+            "Handoff message claims " + ", ".join(claims)
+            + " without a file:line reference or search command as evidence."
+        )
+
+
+class AlertKind(MessageKind):
+    pass
+
+
+class ChangeReportKind(MessageKind, declared_name="change-report"):
+    """A review request declares each touched fact with its single owner."""
+
+    @classmethod
+    def require_publishable(cls, message: Message, worktree: Path) -> None:
+        if message.report is None:
+            raise ValueError(
+                "A change report requires its report: the branch, each touched fact, "
+                "its one owner and every consumer as file:line, the search command "
+                "showing the declaration is single, and the new-case edit counts."
+            )
+        message.report.require_references_exist(worktree)
 
 
 class MembershipChange(StrEnum):
@@ -54,7 +118,7 @@ class Message:
     sender: str = field(metadata={"wire_name": "from", "wire_order": 2})
     target: str = field(metadata={"wire_name": "to", "wire_order": 3})
     body: str = field(metadata={"wire_name": "text", "wire_order": 6})
-    type: MessageType = field(metadata={"wire_order": 5})
+    type: Type[MessageKind] = field(metadata={"wire_order": 5})
     timestamp: float = field(
         default_factory=time.time, metadata={"wire_name": "ts", "wire_order": 4}
     )
@@ -76,6 +140,9 @@ class Message:
     )
     task: TaskAttachment = field(
         default_factory=NoTaskAttachment, metadata={"wire_omit_default": True, "wire_order": 12}
+    )
+    report: ChangeReport | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_order": 13}
     )
 
     @property

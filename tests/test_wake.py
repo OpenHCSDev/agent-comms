@@ -4,12 +4,13 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from typing import Type
 
 from agent_comms.audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
 from agent_comms.comms import wire
 from agent_comms.coordination_tables.assignments import MessageAudience
 from agent_comms.mentions import ThreadMention
-from agent_comms.messages import MembershipChange, Message, MessageType
+from agent_comms.messages import AckKind, HandoffKind, InfoKind, MembershipChange, Message, MessageKind
 from agent_comms.obligation_states import SilentResponse
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedOnlyPolicy
 from agent_comms.thread_identity import ThreadRole
@@ -34,7 +35,7 @@ def stored(
     *,
     sender_role: ThreadRole = ThreadRole.AGENT,
     mentions: tuple[ThreadMention, ...] = (),
-    type: MessageType = MessageType.INFO,
+    type: Type[MessageKind] = InfoKind,
 ) -> Message:
     return Message(
         sender="sender",
@@ -69,9 +70,9 @@ def decide(
 
 
 @pytest.mark.parametrize("sender_role", [ThreadRole.USER, ThreadRole.AGENT])
-@pytest.mark.parametrize("type", [MessageType.INFO, MessageType.ACK, MessageType.HANDOFF])
+@pytest.mark.parametrize("type", [InfoKind, AckKind, HandoffKind])
 def test_ordinary_unmentioned_channel_reaches_all_members_without_full_turns(
-    sender_role: ThreadRole, type: MessageType
+    sender_role: ThreadRole, type: Type[MessageKind]
 ) -> None:
     message = stored(sender_role=sender_role, type=type)
     decisions = [decide(message, member.recipient_lookup) for member in MEMBERS]
@@ -184,7 +185,7 @@ def test_explicit_control_on_mentioned_row_is_passive_not_unmentioned_observer()
 
 
 def test_system_control_must_be_explicit_not_guessed_from_body_or_ack_type() -> None:
-    ordinary = stored("#team", "system command", type=MessageType.ACK)
+    ordinary = stored("#team", "system command", type=AckKind)
     assert decide(ordinary) == WakeDecision(
         "lookup-alpha", MessageAudience.COLLECTIVE, BoundedTriageWake()
     )
@@ -293,7 +294,7 @@ def test_same_message_id_does_not_override_frozen_full_envelope(field: str) -> N
         "mentions": (),
         "notice": True,
         "membership": MembershipChange.JOINED,
-        "type": MessageType.HANDOFF,
+        "type": HandoffKind,
         "sender_role": ThreadRole.USER,
     }
     changed = replace(message, **{field: replacements[field]})

@@ -24,7 +24,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Type
 from .diagnostics import PublicationMeasurements
 
 from agent_comms.bus_publication import stable_thread_lookup
@@ -48,7 +48,7 @@ from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.message_bus import MessageBus
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import InfoKind, Message, MessageKind
 from agent_comms.native_admission_rules import RunningTurnRegistryCheck
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.obligation_states import PublishedResponse, PublishingResponse
@@ -384,7 +384,7 @@ def prepare_fenced_response(
     payload: str,
     *,
     exact_target: str,
-    message_type: MessageType = MessageType.INFO,
+    message_type: Type[MessageKind] = InfoKind,
     notice: bool = False,
     timestamp: float | None = None,
     owner_witness: LiveResponseOwner,
@@ -398,10 +398,10 @@ def prepare_fenced_response(
     _require_bound_stores(bus, store)
     if (
         type(fence) is not OwnerFence
-        or type(message_type) is not MessageType
+        or not (isinstance(message_type, type) and issubclass(message_type, MessageKind))
         or type(notice) is not bool
     ):
-        raise TypeError("response requires exact fence, message type and notice")
+        raise TypeError("response requires exact fence, message kind and notice")
     if not isinstance(payload, str) or not payload:
         raise ValueError("response payload must be nonempty")
     with _response_boundary(bus) as registry_snapshot:

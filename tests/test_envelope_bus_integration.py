@@ -27,7 +27,7 @@ from agent_comms.exporting import (
     FullLimit,
     JsonlFormat,
 )
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, HandoffKind, InfoKind
 from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
@@ -48,7 +48,7 @@ def marked(tmp_path: Path) -> Comms:
 
 
 def _sample_line(*, complete: bool = True) -> bytes:
-    row = Message("author", "reader", "one", MessageType.INFO, seq=1).to_wire()
+    row = Message("author", "reader", "one", InfoKind, seq=1).to_wire()
     return json.dumps(row).encode() + (b"\n" if complete else b"")
 
 
@@ -140,7 +140,7 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
         "alice",
         "bob",
         "Claim both",
-        MessageType.HANDOFF,
+        HandoffKind,
         claims=[ExistingFileClaim(Path("a.py")), ExistingFileClaim(Path("b.py"))],
     )
     assert sent.claim_transition is not None
@@ -178,7 +178,7 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
             "bob",
             "alice",
             "Cannot claim half",
-            MessageType.HANDOFF,
+            HandoffKind,
             claims=[ExistingFileClaim(Path("a.py")), ExistingFileClaim(Path("b.py"))],
         )
     assert loss.value.existing.owner == "alice"
@@ -234,7 +234,7 @@ def test_durable_raw_alias_claim_cannot_enter_guarded_public_or_projection(
     )
     alias = str(worktree) + "//a.py"
     assert os.path.samefile(str(worktree / "a.py"), alias)
-    second = Message("bob", "alice", "Invalid raw alias", MessageType.INFO, seq=first.seq + 1)
+    second = Message("bob", "alice", "Invalid raw alias", InfoKind, seq=first.seq + 1)
     record = second.to_wire()
     record["claim_transition"] = {
         "owner": "bob",
@@ -604,7 +604,7 @@ def test_large_transition_reopens_and_exports_without_a_second_parser_limit(
 
 def test_invalid_claim_record_cannot_be_exposed_as_plain_message(tmp_path: Path) -> None:
     comms, _ = _participants(tmp_path)
-    public = Message("alice", "bob", "attempt", MessageType.INFO, seq=1).to_wire()
+    public = Message("alice", "bob", "attempt", InfoKind, seq=1).to_wire()
     public["claim_transition"] = {"claims": ["/tmp/a.py"]}
     comms.bus.log.path.write_bytes(json.dumps(public).encode() + b"\n")
     with pytest.raises(RelationViolationError, match="Malformed claim"):

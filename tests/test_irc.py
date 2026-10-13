@@ -6,7 +6,7 @@ from agent_comms import Registration
 from agent_comms.channel_targets import BuiltinChannel
 from agent_comms.comms import wire
 from agent_comms.errors import UnregisteredThreadError
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
 
 
@@ -42,34 +42,34 @@ def chat(wired):
 
 class TestChannelTargets:
     def test_message_to_channel_is_valid(self):
-        message = Message(sender="a", target="#ci", body="x", type=MessageType.INFO)
+        message = Message(sender="a", target="#ci", body="x", type=InfoKind)
         assert message.target == "#ci"
 
     def test_message_to_global_channel_is_valid(self):
         message = Message(
-            sender="a", target=BuiltinChannel.ALL.value, body="x", type=MessageType.INFO
+            sender="a", target=BuiltinChannel.ALL.value, body="x", type=InfoKind
         )
         assert message.target == "#all"
 
     def test_rejects_bad_channel_characters(self):
         with pytest.raises(ValueError, match="Channel"):
-            Message(sender="a", target="#bad channel!", body="x", type=MessageType.INFO)
+            Message(sender="a", target="#bad channel!", body="x", type=InfoKind)
 
     def test_rejects_empty_tag_channel(self):
         with pytest.raises(ValueError, match="Channel"):
-            Message(sender="a", target="#", body="x", type=MessageType.INFO)
+            Message(sender="a", target="#", body="x", type=InfoKind)
 
     def test_rejects_mixed_case_channel(self):
         with pytest.raises(ValueError, match="Channel"):
-            Message(sender="a", target="#CI", body="x", type=MessageType.INFO)
+            Message(sender="a", target="#CI", body="x", type=InfoKind)
 
     def test_self_send_to_channel_allowed(self):
         # Talking in a channel you're in is normal.
-        Message(sender="a", target="#all", body="x", type=MessageType.INFO)
+        Message(sender="a", target="#all", body="x", type=InfoKind)
 
     def test_self_dm_still_rejected(self):
         with pytest.raises(Exception, match="itself"):
-            Message(sender="a", target="a", body="x", type=MessageType.INFO)
+            Message(sender="a", target="a", body="x", type=InfoKind)
 
 
 class TestChannelDelivery:

@@ -79,7 +79,7 @@ class TextFormat(SelectableWireExportFormat):
         attributes = [
             f"seq={message.seq}",
             f"id={message.message_id}",
-            f"type={message.type.value}",
+            f"type={message.type.declared_name}",
             f"role={message.sender_role.value}",
         ]
         if message.notice:

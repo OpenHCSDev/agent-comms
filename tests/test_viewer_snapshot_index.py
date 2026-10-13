@@ -10,7 +10,7 @@ import pytest
 from agent_comms.bus_display_index import BusDisplayIndex
 from agent_comms.errors import RelationViolationError
 from agent_comms.comms import wire
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
 
 
@@ -207,7 +207,7 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
     @contextmanager
     def append_before_open(*args, **kwargs):
         # _display_snapshot already holds the wire lock at this boundary.
-        appended.append(comms.bus.publisher.publish_ordinary(Message("bob", "#team", "raced append", MessageType.INFO)))
+        appended.append(comms.bus.publisher.publish_ordinary(Message("bob", "#team", "raced append", InfoKind)))
         with original(*args, **kwargs) as boundary:
             yield boundary
 

@@ -22,7 +22,7 @@ from agent_comms.errors import (
     RelationViolationError,
     UnregisteredThreadError,
 )
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.threads import Thread
 
@@ -88,7 +88,7 @@ def test_explicit_root_override_preserves_private_user_receipt(
 def test_private_user_requires_typed_origin_and_exact_registered_identity(tmp_path: Path) -> None:
     comms, _, _, _ = _root(tmp_path)
     user = comms.messaging.user_identity(str(tmp_path))
-    message = Message(user.name, "alice", "untrusted", MessageType.INFO)
+    message = Message(user.name, "alice", "untrusted", InfoKind)
     with pytest.raises(RelationViolationError, match="executable"):
         comms.bus.publisher.publish_initial_cohort(message)
     with pytest.raises(RelationViolationError, match="executable"):
@@ -106,7 +106,7 @@ def test_private_user_requires_typed_origin_and_exact_registered_identity(tmp_pa
 def test_duplicate_human_id_denied_before_second_append(tmp_path: Path) -> None:
     comms, _, _, _ = _root(tmp_path)
     user = comms.messaging.user_identity(str(tmp_path))
-    message = Message(user.name, "alice", "one input", MessageType.INFO, timestamp=123456.0)
+    message = Message(user.name, "alice", "one input", InfoKind, timestamp=123456.0)
     origin = HumanOrigin(user.name, user.created_at, user.worktree)
     first = comms.bus.publisher.publish_ordinary(message, _human_origin=origin)
     with pytest.raises(RelationViolationError, match="already exists"):
@@ -142,7 +142,7 @@ def test_post_append_error_is_unknown_and_never_automatically_replayed(
         user.name,
         "alice",
         "uncertain",
-        MessageType.INFO,
+        InfoKind,
         timestamp=initial.message.timestamp,
     )
     with pytest.raises(RelationViolationError, match="already exists"):
@@ -181,7 +181,7 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
     monkeypatch.setattr(os, "open", original_open)
     second = Comms(comms.root)
     user = second.registry.require(captured["from"])
-    same = Message(user.name, "alice", "first input", MessageType.INFO, timestamp=captured["ts"])
+    same = Message(user.name, "alice", "first input", InfoKind, timestamp=captured["ts"])
     with pytest.raises(RelationViolationError, match="reservation has UNKNOWN"):
         second.bus.publisher.publish_ordinary(
             same,

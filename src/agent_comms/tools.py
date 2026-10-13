@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, Type
 
 from .pi_vocabulary import ThinkingLevel
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
@@ -25,7 +25,8 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_states import ActiveGoal
-from .messages import MessageType
+from .change_report import ChangeReport
+from .messages import InfoKind, MessageKind
 from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
@@ -655,10 +656,15 @@ class CommsSendTool(ToolRequest):
     sender: str = tool_field("Sender thread name", wire_name="from")
     target: str = tool_field("Target thread name or channel", wire_name="to")
     body: str = tool_field("Message text")
-    type: MessageType = tool_field("Message type", default=MessageType.INFO)
+    type: Type[MessageKind] = tool_field("Message kind", default=InfoKind)
+    report: ChangeReport | None = tool_field(
+        "Change report fields; required for the change-report kind", default=None
+    )
 
     def apply(self, comms: Comms) -> JsonObject:
-        message = comms.messaging.send_message(self.sender, self.target, self.body, self.type)
+        message = comms.messaging.send_message(
+            self.sender, self.target, self.body, self.type, report=self.report
+        )
         from .pi_payloads import PublishedMessageToolDetails
         from .transcript_events import SentTranscript
 

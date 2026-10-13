@@ -13,7 +13,7 @@ from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.goals import Goal
 from agent_comms.message_bus import MessageBus
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, HandoffKind, InfoKind
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
@@ -119,39 +119,39 @@ class TestThreadDeclaration:
 
 class TestMessageDeclaration:
     def test_constructing_declares(self):
-        message = Message(sender="a", target="b", body="hello", type=MessageType.INFO)
+        message = Message(sender="a", target="b", body="hello", type=InfoKind)
         assert message.sender == "a" and message.target == "b"
 
     def test_rejects_self_message(self):
         with pytest.raises(RelationViolationError, match="itself"):
-            Message(sender="a", target="a", body="hello", type=MessageType.INFO)
+            Message(sender="a", target="a", body="hello", type=InfoKind)
 
     def test_rejects_empty_sender(self):
         with pytest.raises(RelationViolationError, match="sender"):
-            Message(sender="", target="b", body="hello", type=MessageType.INFO)
+            Message(sender="", target="b", body="hello", type=InfoKind)
 
     def test_rejects_empty_target(self):
         with pytest.raises(RelationViolationError, match="target"):
-            Message(sender="a", target="", body="hello", type=MessageType.INFO)
+            Message(sender="a", target="", body="hello", type=InfoKind)
 
     def test_rejects_empty_body(self):
         with pytest.raises(ValueError, match="body"):
-            Message(sender="a", target="b", body="", type=MessageType.INFO)
+            Message(sender="a", target="b", body="", type=InfoKind)
 
     def test_id_is_identity_not_ordering(self):
         # Hash identity: two identical messages share an id, ids are not
         # monotonic in time, so delivery order must come from seq.
-        a = Message(sender="a", target="b", body="x", type=MessageType.INFO, timestamp=1.0)
-        b = Message(sender="a", target="b", body="x", type=MessageType.INFO, timestamp=1.0)
+        a = Message(sender="a", target="b", body="x", type=InfoKind, timestamp=1.0)
+        b = Message(sender="a", target="b", body="x", type=InfoKind, timestamp=1.0)
         assert a.message_id == b.message_id
 
     def test_wire_roundtrip(self):
-        original = Message(sender="a", target="b", body="hello", type=MessageType.HANDOFF, seq=7)
+        original = Message(sender="a", target="b", body="hello", type=HandoffKind, seq=7)
         restored = Message.from_wire(original.to_wire())
         assert restored.sender == original.sender
         assert restored.target == original.target
         assert restored.body == original.body
-        assert restored.type is MessageType.HANDOFF
+        assert restored.type is HandoffKind
         assert restored.seq == 7
 
 

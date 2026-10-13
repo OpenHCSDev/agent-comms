@@ -25,7 +25,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import InfoKind, Message
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.selected_source_batch import SelectedSource, SelectedSourceBatch
 from agent_comms.threads import Thread
@@ -73,7 +73,7 @@ def test_plain_answer_to_one_reply_route_is_that_routes_reply() -> None:
         assert batch.target == "sender"
         reply = batch.response_message("Blocked: the edit did not run.\n", "Alice")
         assert (reply.sender, reply.target, reply.body, reply.type) == (
-            "Alice", "sender", "Blocked: the edit did not run.", MessageType.INFO,
+            "Alice", "sender", "Blocked: the edit did not run.", InfoKind,
         )
         # A JSON value that is not the requested array is plain text too.
         reply = batch.response_message('{"files": 3}', "Alice")
@@ -92,7 +92,7 @@ def test_no_answer_format_is_demanded_of_the_model() -> None:
     """
     with alice_batch(("Alice", "What did you find?")) as batch:
         array = json.dumps(FieldCodec.encode(
-            (Message("Alice", "sender", "Found it.", MessageType.INFO, timestamp=0),)
+            (Message("Alice", "sender", "Found it.", InfoKind, timestamp=0),)
         ))
         reply = batch.response_message(array, "Alice")
         assert (reply.target, reply.body) == ("sender", array)

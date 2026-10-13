@@ -14,7 +14,7 @@ import pytest
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.publications import canonical_publication_key
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_lifecycle import OwnerLifecycle
 from agent_comms.recovery_projection import (
     AvailableRecoveryProjection,
@@ -432,7 +432,7 @@ def test_publication_uncertain_and_recursive_privacy(tmp_path: Path):
             sender="Alice",
             target="private-target",
             body="private-payload",
-            type=MessageType.INFO,
+            type=InfoKind,
             timestamp=1.0,
             notice=False,
         )

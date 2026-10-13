@@ -17,7 +17,7 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
 from enum import Enum
 from pathlib import Path
-from typing import Any, ClassVar, Literal, Self, TextIO, get_args, get_origin, get_type_hints
+from typing import Any, ClassVar, Literal, Self, TextIO, Type, get_args, get_origin, get_type_hints
 
 from .activity import ActivityState
 from .channels import Channel
@@ -42,7 +42,8 @@ from .importing import ImportFormat, ImportLimits
 from .turn_context import ContextSegment
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
-from .messages import Message, MessageType
+from .messages import InfoKind, Message, MessageKind
+from .change_report import ChangeReport
 from .message_reference import MessageReference
 from .thread_management import ForkSpec, ThreadDeleted
 from .thread_execution import ThreadExecution, ExternalThreadExecution
@@ -65,6 +66,11 @@ def _json_object(value: str) -> dict[str, Any]:
     if not isinstance(result, dict):
         raise ValueError("invoke --arguments must be a JSON object")
     return result
+
+
+def _report_fields(value: str | None) -> dict[str, Any] | None:
+    """The report JSON stays a raw object; its declared record decodes once."""
+    return None if value is None else _json_object(value)
 
 
 def _tags(value: str) -> list[str]:
@@ -563,6 +569,11 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                 options["choices"] = [kind.value for kind in scalar]
             elif isinstance(scalar, type) and issubclass(scalar, DeclaredFamily):
                 options["choices"] = scalar.names()
+            elif (
+                get_origin(scalar) is type and get_args(scalar)
+                and issubclass(get_args(scalar)[0], DeclaredFamily)
+            ):
+                options["choices"] = get_args(scalar)[0].names()
             if metadata["parser_default"] is not MISSING:
                 options["default"] = metadata["parser_default"]
             elif metadata["parser_default_factory"] is not MISSING:
@@ -574,6 +585,11 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             else:
                 options["required"] = True
             if isinstance(options.get("default"), DeclaredFamily):
+                options["default"] = options["default"].declared_name
+            elif (
+                isinstance(options.get("default"), type)
+                and issubclass(options["default"], DeclaredFamily)
+            ):
                 options["default"] = options["default"].declared_name
             if any(flag.startswith("-") for flag in metadata["flags"]):
                 options["dest"] = metadata.get("wire_name", declared.name)
@@ -685,10 +701,18 @@ class SendCliCommand(CliCommand):
     sender: str = option("--from")
     target: str = option("--to")
     body: str = option("--body")
-    type: MessageType = option("--type", default=MessageType.INFO)
+    type: Type[MessageKind] = option("--type", default=InfoKind)
+    report: dict[str, Any] | None = option(
+        "--report", help="Change report fields as a JSON object", default=None,
+        normalize=_report_fields,
+    )
 
     def apply(self, ctx: Comms) -> Any:
-        mid = ctx.messaging.send(self.sender, self.target, self.body, self.type)
+        mid = ctx.messaging.send(
+            self.sender, self.target, self.body, self.type,
+            report=None if self.report is None
+            else FieldCodec.decode(ChangeReport, self.report),
+        )
         return {"id": mid}
 
 

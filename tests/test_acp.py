@@ -1687,7 +1687,7 @@ class TestFailureFeedback:
     async def test_agent_origin_failure_notifies_origin_without_waking(
         self, wired, tmp_path, monkeypatch
     ):
-        from agent_comms.messages import Message, MessageType
+        from agent_comms.messages import Message, AlertKind, InfoKind
         from agent_comms.threads import Thread
 
         agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
@@ -1703,7 +1703,7 @@ class TestFailureFeedback:
         wired.registry.declare(
             Thread(name="peer", tags=frozenset({"team"}), worktree=str(tmp_path / "proj"))
         )
-        origin = Message(sender="peer", target="#team", body="do the work", type=MessageType.INFO)
+        origin = Message(sender="peer", target="#team", body="do the work", type=InfoKind)
         await agent.turns.run_agent_turn("proj", "proj", "do the work", origins=(origin,))
         history = wired.views.channel_history("#team")
         assert history, "failed agent delivery must be reported where the request came from"
@@ -1719,7 +1719,7 @@ class TestFailureFeedback:
     async def test_failed_terminal_discards_partial_reply_and_deduplicates_notice(
         self, wired, tmp_path, monkeypatch, channel
     ):
-        from agent_comms.messages import Message, MessageType
+        from agent_comms.messages import Message, AlertKind, InfoKind
         from agent_comms.threads import Thread
 
         agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
@@ -1729,7 +1729,7 @@ class TestFailureFeedback:
             wired.registry.declare(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
         origin_target = "#team" if channel else "proj"
         reply_target = "#team" if channel else human.name
-        origin = Message(human.name, origin_target, "please help", MessageType.INFO)
+        origin = Message(human.name, origin_target, "please help", InfoKind)
         routed: list = []
         monkeypatch.setattr(
             wired.transcripts, "record_turn_publication", lambda **kwargs: routed.append(kwargs)
@@ -1751,7 +1751,7 @@ class TestFailureFeedback:
         )
         assert len(history) == 1
         assert history[0].notice is True
-        assert history[0].type is MessageType.ALERT
+        assert history[0].type is AlertKind
         assert history[0].body.startswith("Request failed: backend turn did not complete. ")
         assert "[Open diagnostic](file://" in history[0].body
         assert "SECRET_PRIVATE_938" not in history[0].body
@@ -1761,12 +1761,12 @@ class TestFailureFeedback:
     async def test_missing_terminal_discards_partial_reply_and_route(
         self, wired, tmp_path, monkeypatch
     ):
-        from agent_comms.messages import Message, MessageType
+        from agent_comms.messages import Message, AlertKind, InfoKind
 
         agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         human = wired.messaging.user_identity(str(tmp_path / "proj"))
-        origin = Message(human.name, "proj", "please help", MessageType.INFO)
+        origin = Message(human.name, "proj", "please help", InfoKind)
         routed: list = []
         monkeypatch.setattr(
             wired.transcripts, "record_turn_publication", lambda **kwargs: routed.append(kwargs)
@@ -1793,7 +1793,7 @@ class TestFailureFeedback:
         self, wired, tmp_path, monkeypatch
     ):
         from agent_comms import backend
-        from agent_comms.messages import Message, MessageType
+        from agent_comms.messages import Message, AlertKind, InfoKind
         from agent_comms.threads import Thread
         from test_backend import _stub
 
@@ -1805,7 +1805,7 @@ class TestFailureFeedback:
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         human = wired.messaging.user_identity(str(tmp_path / "proj"))
         wired.registry.declare(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
-        origin = Message(human.name, "#team", "please help", MessageType.INFO)
+        origin = Message(human.name, "#team", "please help", InfoKind)
         original = backend.stream_agent_events
 
         async def events(*args, **kwargs):
@@ -1829,14 +1829,14 @@ class TestFailureFeedback:
     async def test_failed_turn_notices_unique_reply_and_origin_targets(
         self, wired, tmp_path, monkeypatch
     ):
-        from agent_comms.messages import Message, MessageType
+        from agent_comms.messages import Message, AlertKind, InfoKind
         from agent_comms.threads import Thread
 
         agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         human = wired.messaging.user_identity(str(tmp_path / "proj"))
         wired.registry.declare(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
-        origin = Message(human.name, "#team", "please help", MessageType.INFO)
+        origin = Message(human.name, "#team", "please help", InfoKind)
 
         async def events(*args, **kwargs):
             yield ae.Chunk(text="unfinished")

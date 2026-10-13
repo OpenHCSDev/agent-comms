@@ -25,7 +25,7 @@ from agent_comms.exporting import (
     WireExportLimit,
     WireTranscriptExporter,
 )
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
 
 
@@ -34,7 +34,7 @@ def message(sequence: int, body: str, *, timestamp: float | None = None) -> Mess
         "alice",
         "#team",
         body,
-        MessageType.INFO,
+        InfoKind,
         timestamp=float(sequence if timestamp is None else timestamp),
         seq=sequence,
     )

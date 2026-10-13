@@ -25,7 +25,7 @@ from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.wake import derive_exact_reply_target
 from agent_comms.native_startup import NativeStartupAdmission
 from agent_comms.native_custody import PiSessionChild
@@ -106,7 +106,7 @@ class Provider(LoopbackProvider):
             message=Comms(self.root).bus.log.message_by_id(assignment.message_id)
             assert message.reference==assignment.source
             response=Message(original.owner_thread,derive_exact_reply_target(message),
-                             self.text,MessageType.INFO,timestamp=0)
+                             self.text,InfoKind,timestamp=0)
             yield {'content':json.dumps(FieldCodec.encode((response,)))},None
             yield {},'stop'
 

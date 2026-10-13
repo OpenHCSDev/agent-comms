@@ -62,6 +62,13 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
         declared, _ = _base_type(annotation)
         if get_origin(declared) is Literal:
             values = get_args(declared)
+        elif (
+            get_origin(annotation) is not Annotated
+            and get_origin(declared) is type and get_args(declared)
+            and issubclass(get_args(declared)[0], DeclaredFamily)
+        ):
+            # A representation owns its own spelling and declares its constraint.
+            values = get_args(declared)[0].names()
         elif isinstance(declared, type) and issubclass(declared, Enum):
             if issubclass(declared, IntFlag):
                 return ()  # Combinations belong to the flag declaration's mask constraint.

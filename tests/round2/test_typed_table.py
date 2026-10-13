@@ -4,8 +4,9 @@ import sqlite3
 from dataclasses import dataclass, field, replace
 
 import pytest
+from typing import Type
 
-from agent_comms.messages import MessageType
+from agent_comms.messages import InfoKind, MessageKind
 from agent_comms.typed_table import (
     Column,
     ExactStorage,
@@ -94,7 +95,7 @@ def test_new_row_declaration_needs_no_other_edit():
     class AddedTableRow(TypedTable):
         label: str = field(metadata={"sql": Column(unique=True, index=True)})
         child: TableChildRow
-        event: MessageType = MessageType.INFO
+        event: Type[MessageKind] = InfoKind
         representation: type[SqlStorage] = IntegerStorage
         exact: int = field(default=7, metadata={"sql": Column(storage=ExactStorage)})
         ordinal: int | None = field(
@@ -121,7 +122,7 @@ def test_new_row_declaration_needs_no_other_edit():
         assert AddedTableRow.select(db) == [value]
         stored = AddedTableRow.one(db, label="new")
         assert stored.ordinal == 1 and stored.label_size == 3
-        assert stored.representation is IntegerStorage and stored.event is MessageType.INFO
+        assert stored.representation is IntegerStorage and stored.event is InfoKind
         with pytest.raises(ValueError, match="Generated columns"):
             AddedTableRow.update(db, where="label=?", parameters=("new",), label_size=4)
         with pytest.raises(sqlite3.IntegrityError):

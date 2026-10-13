@@ -9,7 +9,7 @@ from agent_comms.comms import Comms
 from agent_comms.historical_views import ChannelDisplayHistory, HistoryCursor
 from agent_comms.mentions import ThreadMention
 from agent_comms.message_page import MessagePageRequest
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.read_basis import ChannelDisplayScope, MessageDisplayScope
 from agent_comms.threads import Thread
 
@@ -25,7 +25,7 @@ def history(tmp_path):
     rows = []
     for seq in range(1, 241):
         message = Message(
-            "bob", "#noise", f"unrelated {seq}", MessageType.INFO, seq=seq, timestamp=100 + seq
+            "bob", "#noise", f"unrelated {seq}", InfoKind, seq=seq, timestamp=100 + seq
         )
         if seq % 50 == 0:
             message = replace(message, target="#api")

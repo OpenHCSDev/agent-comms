@@ -23,14 +23,14 @@ from agent_comms.exporting import (
     WireTranscriptExporter,
 )
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 
 FIXTURES = Path(__file__).parent / "fixtures" / "wire_exports"
 
 
 def rows():
     return [
-        Message("alice", "#team", "hello\ncafé", MessageType.INFO, timestamp=float(i), seq=i)
+        Message("alice", "#team", "hello\ncafé", InfoKind, timestamp=float(i), seq=i)
         for i in range(1, 5)
     ]
 

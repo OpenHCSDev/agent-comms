@@ -9,7 +9,7 @@ from agent_comms.channel_input_batch import InputBatch
 from agent_comms.input_attempt import NotSentInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_origin import InputProvenance
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.routing import ScheduledTurn
 from agent_comms.threads import Thread
@@ -21,7 +21,7 @@ def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path):
     owner = Thread("owner", frozenset(), str(tmp_path))
     ledger = InputDispositions(tmp_path / InputDispositions.filename)
     origins = tuple(
-        Message("peer", "#comms", f"text {seq}", MessageType.INFO, seq=seq) for seq in (1, 2)
+        Message("peer", "#comms", f"text {seq}", InfoKind, seq=seq) for seq in (1, 2)
     )
     keys = tuple(ledger.bus_key(message, owner) for message in origins)
     for key, message in zip(keys, origins, strict=True):

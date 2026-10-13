@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from .bus_publication import CommittedDelivery
 from .coordination_errors import IdentityConflict
 from .coordination_tables.assignments import WakeAssignment
-from .messages import Message, MessageType
+from .messages import InfoKind, Message
 from .native_pi import NativePiUnavailable
 from .wake import derive_exact_reply_target
 from .turn_context import InstructionFile, ReplyRouteSegment, WireProvenance
@@ -126,6 +126,6 @@ class SelectedSourceBatch:
         timestamp, audience and bus row.
         """
         try:
-            return Message(sender, self.target, text.strip(), MessageType.INFO)
+            return Message(sender, self.target, text.strip(), InfoKind)
         except ValueError as error:
             raise NativePiUnavailable("Native turn produced no publishable answer") from error

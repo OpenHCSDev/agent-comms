@@ -6,7 +6,7 @@ from pathlib import Path
 
 from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 
 
 def test_wire_formats_derive_field_names_optional_values_and_sorted_tags():
@@ -25,7 +25,7 @@ def test_wire_formats_derive_field_names_optional_values_and_sorted_tags():
     }
     assert FieldCodec.encode(view) == expected
     assert FieldCodec.decode(SavedView, expected) == view
-    message = Message("sender", "peer", "body", MessageType.INFO, timestamp=7.0, seq=1)
+    message = Message("sender", "peer", "body", InfoKind, timestamp=7.0, seq=1)
     assert message.to_wire() == {
         "from": "sender",
         "to": "peer",

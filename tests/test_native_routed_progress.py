@@ -13,7 +13,7 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
 
 
@@ -136,7 +136,7 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
             await agent.new_session(str(project))
             comms.registry.declare(Thread("member", frozenset({"team"}), str(project)))
             human = comms.messaging.user_identity(str(project))
-            origin = Message(human.name, "#team", "Please help", MessageType.INFO)
+            origin = Message(human.name, "#team", "Please help", InfoKind)
             await asyncio.wait_for(
                 agent.turns.run_agent_turn(
                     "worker",

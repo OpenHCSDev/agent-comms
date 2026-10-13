@@ -21,7 +21,7 @@ from compaction_loopback import LoopbackProvider
 from agent_comms.comms import Comms
 from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import decode_updates
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.runtime import socket_path
 from agent_comms.runtime_requests import SubscribeRuntimeRequest
@@ -198,7 +198,7 @@ async def configured_pure_channel(arguments):
                 f'{stage.name} original {ordinal}: New isolated user channel question to all participants: '
                 'please answer here with the value of 10+2. This is a fresh question, '
                 'not continuation or retry of any previous input. No project edits are requested.',
-                MessageType.INFO),
+                InfoKind),
                 _human_origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
                 for ordinal in range(arguments.wave_size)]
         assert originals and len({row.message_id for row in originals}) == arguments.wave_size
@@ -384,7 +384,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
             return service.bus.publisher.publish_ordinary(Message(sender.name, '#openhcs',
                 f'{stage.name} {label}: Fresh isolated acceptance question, not a retry. '
                 'Please answer here with 10+2 only; do not resume inherited work or edit files.',
-                MessageType.INFO),
+                InfoKind),
                 _human_origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))
 
     def observe(original):
@@ -480,7 +480,7 @@ async def configured_mixed_routes(arguments):
     sender = service.registry.require('human')
     with _store_lock(service._wire_lock_path):
         originals = [service.bus.publisher.publish_ordinary(Message(sender.name, target, body,
-            MessageType.INFO), _human_origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
+            InfoKind), _human_origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
             for target, body in (
                 ('#team', f'{stage.name}: @{name} Read batch-values.txt with the normal read tool and report PUBLIC_VALUE.'),
                 ('#team', f'{stage.name}: @{name} Also compute 10+2. Combine this with the other channel request.'),
@@ -514,7 +514,7 @@ async def configured_mixed_routes(arguments):
                         assert len(membership) == len(originals), "First native input did not capture the whole wave"
                         with _store_lock(service._wire_lock_path):
                             late = service.bus.publisher.publish_ordinary(Message(sender.name,name,
-                                f'{stage.name}: Separate late batch: compute 20+3; reply directly and once.',MessageType.INFO),
+                                f'{stage.name}: Separate late batch: compute 20+3; reply directly and once.',InfoKind),
                                 _human_origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
                         print('ORIGINAL_WAVE_RESERVED_LATE_BATCH_PUBLISHED',flush=True)
                     assignments = WakeAssignment.select(db,order_by=('wire_seq',))
@@ -712,12 +712,12 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
                 Message(sender.name, '#team',
                         f'Batch wave original {index}: compute 10+{index}.'
                         if self.wave_size > 1 else 'New collective channel original: test',
-                        MessageType.INFO),
+                        InfoKind),
                 _human_origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))
                 for index in range(self.wave_size)]
             return
         self.originals = [self.service.bus.publisher.publish_initial_cohort(Message(
-            'fixture-sender', name, f'Unique new inbox input for {name}: reply ONCE.', MessageType.INFO))
+            'fixture-sender', name, f'Unique new inbox input for {name}: reply ONCE.', InfoKind))
             for name in self.names]
 
     def publish_cancel_and_pending(self):
@@ -728,7 +728,7 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
         with _store_lock(self.service._wire_lock_path):
             sender = self.service.registry.require('human')
             self.originals = [self.service.bus.publisher.publish_ordinary(
-                Message(sender.name, '#team', body, MessageType.INFO),
+                Message(sender.name, '#team', body, InfoKind),
                 _human_origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))
                 for body in ('Cancel THIS original before grant.',
                              'Independent saved channel original: reply ONCE.')]
@@ -975,7 +975,7 @@ async def run(arguments):
                 sender = service.registry.require('human')
                 cutover.originals = [service.bus.publisher.publish_ordinary(
                     Message(sender.name, '#team',
-                        'New isolated retained-source triage: ignore THIS original once.', MessageType.INFO),
+                        'New isolated retained-source triage: ignore THIS original once.', InfoKind),
                     _human_origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))]
             from agent_comms.coordination_cohort import accept_delivery_cohort
             initial = service.bus.log.read_delivery_cohort(root_id, cutover.originals[0].seq)
@@ -1043,7 +1043,7 @@ async def run(arguments):
                         assert len(members) == arguments.wave_size
                     sender = service.registry.require('human')
                     late_original = service.bus.publisher.publish_ordinary(Message(
-                        sender.name, '#team', 'Batch wave late original: compute 20+3.', MessageType.INFO),
+                        sender.name, '#team', 'Batch wave late original: compute 20+3.', InfoKind),
                         _human_origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
                     concurrent_native = True
                     provider.response_gate.set()

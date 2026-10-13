@@ -6,6 +6,7 @@ import hashlib
 import math
 from dataclasses import dataclass, fields
 from dataclasses import field as dataclass_field
+from typing import Type
 
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
@@ -18,7 +19,7 @@ from agent_comms.coordination_errors import CoordinationError, IntegrityViolatio
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.field_codec import projected
 from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, MessageKind
 from agent_comms.typed_table import (
     Column,
     ExactStorage,
@@ -91,7 +92,7 @@ class PublicationIntents(CoordinatorTable, TypedTable):
             ),
         }
     )
-    message_type: MessageType = dataclass_field(
+    message_type: Type[MessageKind] = dataclass_field(
         metadata={
             "snapshot_exclude": True,
             "sql": Column(storage=ExactStorage, check="typeof(message_type) = 'text'"),
@@ -167,7 +168,7 @@ class PublicationIntents(CoordinatorTable, TypedTable):
             ("expected_message_id", self.expected_message_id),
         ):
             require_bounded(value, field, MAX_IDENTIFIER_CHARS)
-        object.__setattr__(self, "message_type", MessageType(self.message_type))
+        object.__setattr__(self, "message_type", MessageKind.field_value(self.message_type))
         timestamp = float(self.timestamp)
         object.__setattr__(self, "timestamp", 0.0 if timestamp == 0.0 else timestamp)
         if not math.isfinite(self.timestamp) or self.timestamp < 0:
@@ -277,7 +278,7 @@ class PublicationReceipt(TypedRow):
     message_id: str
     sender: str = dataclass_field(metadata={"snapshot_exclude": True})
     exact_target: str = dataclass_field(metadata={"snapshot_exclude": True})
-    message_type: MessageType = dataclass_field(metadata={"snapshot_exclude": True})
+    message_type: Type[MessageKind] = dataclass_field(metadata={"snapshot_exclude": True})
     notice: bool = dataclass_field(metadata={"snapshot_exclude": True})
     timestamp: float = dataclass_field(metadata={"snapshot_exclude": True})
     payload_digest: str = dataclass_field(metadata={"snapshot_exclude": True})
@@ -299,7 +300,7 @@ class PublicationReceipt(TypedRow):
             ("payload_digest", self.payload_digest),
         ):
             require_bounded(value, field, MAX_IDENTIFIER_CHARS)
-        object.__setattr__(self, "message_type", MessageType(self.message_type))
+        object.__setattr__(self, "message_type", MessageKind.field_value(self.message_type))
         if self.publication_key != canonical_publication_key(self.execution_id, self.exact_target):
             raise IntegrityViolationError("receipt publication key is not canonical")
         timestamp = float(self.timestamp)

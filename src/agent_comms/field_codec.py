@@ -526,10 +526,23 @@ class FieldCodec(Sealed):
             if not isinstance(data, dict):
                 raise ValueError("Expected a record object.")
             declared = cls._fields(target)
-            if any(
-                field.metadata.get("wire_required") and key not in data for field, key in declared
-            ):
-                raise ValueError(f"Missing required fields for {target.__name__}")
+            missing = [
+                key for field, key in declared
+                if key not in data and field.metadata.get("wire_required")
+            ]
+            if missing:
+                raise ValueError(
+                    f"Missing required fields for {target.__name__}: {', '.join(missing)}"
+                )
+            init_missing = [
+                key for field, key in declared
+                if key not in data and field.default is MISSING
+                and field.default_factory is MISSING
+            ]
+            if init_missing:
+                raise TypeError(
+                    f"Missing required fields for {target.__name__}: {', '.join(init_missing)}"
+                )
             computed = {member.wire_name for member in cls._projections(target, "wire").values()}
             unknown = set(data) - {key for _, key in declared} - computed
             if unknown:

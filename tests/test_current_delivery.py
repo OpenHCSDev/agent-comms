@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.bus_route_counts import BusRouteCounts, RouteEntryRow
 from agent_comms.comms import wire
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
 
 
@@ -60,7 +60,7 @@ def test_timestamp_index_handles_unordered_times_and_sparse_seen_rows(tmp_path):
     birth = comms.registry.require("recipient").created_at
     messages = [
         comms.bus.publisher.publish_ordinary(
-            Message("sender", "recipient", f"row {index}", MessageType.INFO, timestamp=timestamp)
+            Message("sender", "recipient", f"row {index}", InfoKind, timestamp=timestamp)
         )
         for index, timestamp in enumerate((birth + 2, birth - 1, birth + 1, birth - 2))
     ]

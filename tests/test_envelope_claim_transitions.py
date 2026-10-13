@@ -19,7 +19,7 @@ from agent_comms.envelope_claim_transitions import (
     project_verified_transitions,
 )
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import Message, MessageType
+from agent_comms.messages import Message, InfoKind
 
 G1 = "a" * 32
 G2 = "b" * 32
@@ -47,7 +47,7 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
     assert decoded == claimed
     assert apply_transition(ClaimProjection(), decoded)[resource].admission == admission
 
-    message = Message("owner", "peer", "Claim file", MessageType.INFO, seq=8, timestamp=1.0)
+    message = Message("owner", "peer", "Claim file", InfoKind, seq=8, timestamp=1.0)
     bound = replace(
         message,
         claim_transition=replace(claimed, message_id=message.message_id),

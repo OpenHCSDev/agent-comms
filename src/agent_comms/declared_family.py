@@ -108,6 +108,15 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
         return tuple(member.declared_name for member in cls.members_with(cls))
 
     @classmethod
+    def field_value(cls, value) -> type[Self]:
+        """Coerce one declared selector spelling to its member class."""
+        if isinstance(value, type) and issubclass(value, cls):
+            return value
+        from .field_codec import FieldCodec
+
+        return FieldCodec.decode(type[cls], value)
+
+    @classmethod
     def sql_choices(cls) -> str:
         """The members' names as an SQL ``IN`` list, derived from the declarations."""
         return "(" + ",".join("'" + name.replace("'", "''") + "'" for name in cls.names()) + ")"
