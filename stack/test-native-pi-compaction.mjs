@@ -8,7 +8,7 @@ import {join,resolve} from 'node:path';
 import {randomBytes} from 'node:crypto';
 
 const mode=process.argv[2] ?? 'threshold';
-assert.ok(['threshold','overflow','manual','wip'].includes(mode));
+assert.ok(['threshold','overflow','manual','wip','cap'].includes(mode));
 const pkg=process.env.PI_COMPACTION_TEST_PACKAGE;
 assert.ok(pkg,'Prepared native package required');
 const artifacts=resolve('.artifacts');mkdirSync(artifacts,{recursive:true,mode:0o700});
@@ -18,6 +18,9 @@ process.env.AGENT_COMMS_NATIVE_CONFIG_DIR=root;
 process.env.PI_TASK='TASK_BRIEF_FIXTURE';
 const requests=[];
 let overflowSent=false;
+let replyCount=0;
+// The declared cap reads each response's own usage right after it completes.
+const replyUsage=()=> mode!=='cap' ? 1200 : (++replyCount===2 ? 319995 : 1200);
 const chunk=(text,promptTokens)=>'data: '+JSON.stringify({id:'local',object:'chat.completion.chunk',created:1,
     model:'pi-compaction',choices:[{index:0,delta:{content:text},finish_reason:'stop'}],
     usage:{prompt_tokens:promptTokens,completion_tokens:5,total_tokens:promptTokens+5}})+'\n\ndata: [DONE]\n\n';
@@ -37,7 +40,7 @@ const server=createServer(async(request,response)=>{
         return response.end(JSON.stringify({error:{message:"This model's maximum context length is 100000 tokens",type:'invalid_request_error'}}));
     }
     response.writeHead(200,{'content-type':'text/event-stream'});
-    response.end(chunk('TRACKED_REPLY',1200));
+    response.end(chunk('TRACKED_REPLY',replyUsage()));
 });
 await new Promise(done=>server.listen(0,'127.0.0.1',done));
 const fetch=globalThis.fetch;
@@ -52,7 +55,8 @@ try {
     const {writeFileSync}=await import('node:fs');
     writeFileSync(join(root,'models.json'),JSON.stringify({providers:{'compaction-local':{
         baseUrl:`http://127.0.0.1:${server.address().port}/v1`,api:'openai-completions',
-        models:[{id:'pi-compaction',name:'Compaction local',contextWindow:100000,maxTokens:2048}]}}}));
+        models:[{id:'pi-compaction',name:'Compaction local',
+            contextWindow:mode==='cap'?1000000:100000,maxTokens:2048}]}}}));
     const runtime=await pi.ModelRuntime.create({authPath:join(root,'auth.json'),modelsPath:join(root,'models.json'),modelsStorePath:join(root,'models-store.json')});
     await runtime.setRuntimeApiKey('compaction-local','local-only');
     const model=runtime.getModel('compaction-local','pi-compaction');
@@ -64,7 +68,7 @@ try {
     manager.appendModelChange(model.provider,model.id);
     // Old history (summarized) followed by a recent turn (kept). The last
     // assistant usage puts the context past Pi's threshold (window - reserve).
-    const used=(mode==='threshold'||mode==='wip') ? 90000 : 30000;
+    const used=(mode==='threshold'||mode==='wip') ? 90000 : (mode==='cap' ? 250000 : 30000);
     const statedLines='Now: adding an event class\nUncommitted: stack/patch test edits\nNext: run the focused tests';
     for(let turn=0;turn<4;turn++){
         manager.appendMessage({role:'user',content:`OLD_FACT_${turn} `+'old history '.repeat(1500),timestamp:2*turn+1});
@@ -81,15 +85,30 @@ try {
         execFileSync('git',['init','-q'],{cwd:root});
         writeFileSync(join(root,'uncommitted.txt'),'dirty');
     }
-    ({session}=await pi.createAgentSession({cwd:root,agentDir:root,modelRuntime:runtime,model,
-        sessionManager:manager,settingsManager:settings,resourceLoader:loader,noTools:'all'}));
+    const agentSessionConfig={cwd:root,agentDir:root,modelRuntime:runtime,model,
+        sessionManager:manager,settingsManager:settings,resourceLoader:loader,noTools:'all'};
+    ({session}=await pi.createAgentSession(agentSessionConfig));
     const events=[];
     session.subscribe(event=>events.push(event));
     const kinds=()=>events.map(event=>event.type);
     const compactions=()=>[...manager.entryStore.branch(manager.getLeafId())].filter(entry=>entry.type==='compaction');
     const inputId=randomBytes(16).toString('hex');
     let result;
-    if(mode==='manual'){
+    if(mode==='cap'){
+        // Under the declared cap with a 1,000,000-token window: no compaction.
+        await session.prompt('UNDER_CAP',{inputId:randomBytes(16).toString('hex')});
+        assert.equal(compactions().length,0,'context under the declared cap does not compact');
+        assert.ok(!requests.at(-1).text.includes('SUMMARY_FIXTURE'),'the request used the full session');
+        // The second reply's own usage crosses the declared cap (still far
+        // below the window); the cap compacts right after that response.
+        await session.prompt('OVER_CAP',{inputId:randomBytes(16).toString('hex')});
+        assert.equal(compactions().length,1,'the declared cap compacts right after the crossing response');
+        assert.ok(compactions()[0].summary.trimEnd().endsWith('SUMMARY_FIXTURE'),'the generated summary follows whatever the cap carries');
+        // The next turn resumes from the compaction summary.
+        await session.prompt('RESUME',{inputId:randomBytes(16).toString('hex')});
+        assert.ok(requests.at(-1).text.includes('SUMMARY_FIXTURE'),'the next request resumed from the compaction summary');
+        assert.ok(!requests.at(-1).text.includes('OLD_FACT_0'),'summarized history left the context');
+    } else if(mode==='manual'){
         result=await session.compact('USER_FOCUS');
         assert.equal(requests.length,1);
         assert.ok(requests[0].summary);
@@ -102,7 +121,7 @@ try {
     }
     const prompts=requests.filter(request=>!request.summary);
     const summaries=requests.filter(request=>request.summary);
-    assert.equal(compactions().length,1,'Pi wrote exactly one compaction entry');
+    if(mode!=='cap') assert.equal(compactions().length,1,'Pi wrote exactly one compaction entry');
     assert.equal(summaries.length,1,'one summary request');
     assert.ok(summaries[0].text.includes('Additional focus: TASK_BRIEF_FIXTURE'),'task brief reaches the summary');
     if(mode==='wip'){
