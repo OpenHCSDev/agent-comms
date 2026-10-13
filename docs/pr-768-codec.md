@@ -73,10 +73,37 @@ consumers inherit the same implementation; tables and nested parts are derived
 from their declarations. JavaScript and dynamic annotation resolution are not
 claimed as Python AST proofs.
 
-Remaining acceptance gap: the available complete frozen histories have no
-context observations. End-to-end carry of a complete saved history containing
-historical manifests still needs an approved bounded certified sample. Do not
-merge/deploy or claim the original once-per-digest text-retention goal complete.
+## Bounded original-prefix carry: request 4006
+
+The previous request for an approved sample was unnecessarily broad. A safe
+bounded source can be constructed without another approval: the first indexed
+actual manifest ends at byte 977,156. Captured the contiguous original byte
+prefix [0, 977156) under the existing CertifiedSourceRead shared lock, without
+copying the complete bus or modifying its bytes/metadata. The prefix contains
+283 original rows: 282 messages and one full-form manifest, through sequence
+282. It is a complete contiguous prefix, not a synthetic fixture or selected
+rows reassembled into invented history, and not a complete live-bus clone.
+
+The existing installed full-form reader and install_private_bus_checkpoint
+certified that isolated WireLog as immutable ArchivedAccess. Thus the existing
+checkpoint owner, not a new exporter/publisher or production legacy reader,
+constructs its final certificate. The installed #768 carry executable then
+converted and installed it at a separately certified final location:
+977,156 -> 947,688 bytes, 283 rows, one real historical observation.
+
+Installed verification passed: all 282 original message fields match; the exact
+original manifest, owner and index geometry match; the final seal validates;
+HistoryArchive.attach and its installed history CLI return all 282 messages in
+0.95 s. The immutable original prefix hash is unchanged. No provider/input
+replay, live history command, full-bus copy, live mutation or package change.
+3518 and UNKNOWN originals remain untouched. Initial verification setup errors
+(list-versus-iterator and absent copied registry guard) were known failures,
+not uncertain writes: corrected the former and used PrivateRegistryGuard to
+initialize the isolated final registry. Original/candidate evidence preserved.
+
+This closes the bounded retained-manifest carry verification gap. Full live
+cutover and coach review remain outstanding; once-per-digest captured-text
+retention is still unfinished. Do not autonomously merge or deploy.
 
 Owned package/export: .artifacts/pr768-install-3754; older
 .artifacts/pr768-install-3518 is superseded. Owned disposable checks/output:
@@ -84,4 +111,8 @@ codec-3754*, context-socket-3754, current-main-3754*, exact-target-3754 and
 installed-history-3518/3754 under
 /home/ts/.cache/agent-scratch/core-route-counts. Concise JSON results describe
 these actual installed checks. Retire generated files after borrower checks;
-retain source, concise results and UNKNOWN evidence.
+retain source, concise results and UNKNOWN evidence. The additional owned
+bounded-prefix-4006 directory under the same scratch root holds original-prefix,
+candidate, final and viewer, with prefix-result.json, carry-result.json and
+verification-result.json. The complete bounded export is under 1 MiB of bus
+bytes, rather than a multi-GB copy; keep its original until review/acceptance.
