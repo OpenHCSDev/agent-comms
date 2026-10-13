@@ -1,11 +1,13 @@
 """Retained history never becomes work for a different thread incarnation."""
 
+import os
 import sqlite3
 from collections import Counter
+from unittest.mock import patch
 
 import pytest
 
-from agent_comms.bus_route_counts import BusRouteCounts, RouteEntryRow
+from agent_comms.bus_route_counts import BusRouteCounts, RouteEntryRow, RouteSourceRow
 from agent_comms.comms import wire
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
@@ -80,6 +82,70 @@ def test_timestamp_index_handles_unordered_times_and_sparse_seen_rows(tmp_path):
 
 
 @pytest.mark.refactor_guard
+def test_index_recorded_ahead_of_the_read_cut_answers_without_decoding(tmp_path):
+    """A reader whose opened cut is behind the recorded index never rebuilds.
+
+    While this reader holds its cut, another reader can index a later cut of
+    the same file. The recorded revision already covers every row of the
+    older cut, so pending counts answer without decoding and the recorded
+    revision does not regress.
+    """
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    for number in range(5):
+        comms.messaging.send_message("sender", viewer, f"row {number}")
+    assert comms.bus.pending_counts(viewer) == {"sender": 5}
+
+    reader = wire(tmp_path)
+    with reader.views.presentation.snapshot(viewer=viewer) as (basis, stale):
+        comms.messaging.send_message("sender", viewer, "after the reader's cut")
+        # Another reader indexes a later cut while this cut is held.
+        assert wire(tmp_path).bus.pending_counts(viewer) == {"sender": 6}
+        with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
+            assert reader.bus.pending_counts_opened(stale, basis) == {"sender": 6}
+            assert decode.call_count == 0
+    with BusRouteCounts(comms.bus.log.path) as index:
+        recorded = RouteSourceRow.select(index.connection)[0]
+    assert recorded.offset > stale.revision.size
+
+
+def test_truncated_source_fails_the_recorded_digest_and_rebuilds(tmp_path):
+    """A source truncated in place below the recorded offset cannot answer.
+
+    The append-only writer (wire_log._append_private_unlocked, os.O_APPEND)
+    never truncates, so a digest-verified recorded revision is safe to answer
+    from. A source that loses the bytes that digest covers fails it and
+    rebuilds, the same way a replaced source does.
+    """
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    for number in range(5):
+        comms.messaging.send_message("sender", viewer, f"row {number}")
+    assert comms.bus.pending_counts(viewer) == {"sender": 5}
+
+    reader = wire(tmp_path)
+    with reader.views.presentation.snapshot(viewer=viewer) as (basis, stale):
+        comms.messaging.send_message("sender", viewer, "after the reader's cut")
+        comms.messaging.send_message("sender", viewer, "one more after it")
+        assert wire(tmp_path).bus.pending_counts(viewer) == {"sender": 7}
+        path = comms.bus.log.path
+        with open(path, "rb") as scan:
+            scan.seek(stale.revision.size)
+            boundary = stale.revision.size + len(scan.readline())
+        with BusRouteCounts(path) as index:
+            recorded_offset = RouteSourceRow.select(index.connection)[0].offset
+        assert stale.revision.size < boundary < recorded_offset
+        os.truncate(path, boundary)
+        with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
+            assert reader.bus.pending_counts_opened(stale, basis) == {"sender": 5}
+            assert decode.call_count > 0
+    with BusRouteCounts(comms.bus.log.path) as index:
+        recorded = RouteSourceRow.select(index.connection)[0]
+    assert recorded.offset == stale.revision.size
+
+
 def test_route_storage_and_decoder_have_one_declaration_owner():
     import ast
     from pathlib import Path
