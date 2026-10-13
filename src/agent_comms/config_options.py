@@ -181,15 +181,12 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         return ThinkingLevel.optional_name(thread.thinking_level)
 
     async def discover(self, thread: Thread) -> list[SessionConfigSelectOption]:
-        if os.environ.get("AGENT_COMMS_AGENT_MODELS"):
-            levels = [member.declared_name for member in ThinkingLevel.members_with(ThinkingLevel) if member.ordinary_choice]
-        else:
-            from .pi_commands import GetAvailableThinkingLevels
+        from .pi_commands import GetAvailableThinkingLevels
 
-            data = await GetAvailableThinkingLevels().discover(
-                self.agent_bin, self.agent_args.with_model(thread.model).argv
-            )
-            levels = [member.declared_name for member in data.levels]
+        data = await GetAvailableThinkingLevels().discover(
+            self.agent_bin, self.agent_args.with_model(thread.model).argv
+        )
+        levels = [member.declared_name for member in data.levels]
         return [SessionConfigSelectOption(value=level, name=level.title()) for level in levels]
 
     async def apply(

@@ -52,6 +52,35 @@ Owner: core-goal-retry. Reviewer: codex-shepherd. Stop at draft review.
 - Before: CLI vocabulary membership and session catalog membership competed; default launch arguments lived in TurnRunner. After: CatalogConfigOption owns catalog membership/refusal for all three affected consumers; NativeArguments owns argument selection. No new family, cache or codec.
 - Installation state: not merged or installed. Tests import source from this isolated checkout and borrow unchanged dependencies from the current runtime. No pip install/uninstall or edits occurred inside product runtimes; nothing was relinked.
 
+## Override follow-up (2026-10-13)
+
+- Cause: `src/agent_comms/config_options.py:182-191` let
+  `AGENT_COMMS_AGENT_MODELS` replace model-specific thinking support with the
+  global vocabulary. The model-list override belongs to `ModelConfigOption`;
+  `ThinkingLevelConfigOption.discover` now always queries the native model's
+  catalog. No second validation implementation or policy switch remains.
+- AST census before deletion: 306 production modules, zero parse omissions;
+  one thinking option declaration, CLI constructor at `cli_commands.py:761`,
+  and declaration-derived session consumers through `ConfigOptions.catalog_for`.
+- Three override regressions fail against the original `discover` method
+  extracted from `dfec73363` (DID NOT RAISE); all eight thinking checks plus the
+  declaration-based RPC-argument check pass (nine total, 0.22 seconds).
+- The RPC fixture now derives the refusal from the class's own C3-selected
+  `validate_rpc` method rather than assuming every one-shot capability overrides
+  session selection. Absent short flags are not passed as `None` tokens.
+- Actual source CLI + configured installed native catalog on an isolated private
+  root, with the model-list override set: GLM `off` exited 1, listed `low, high,
+  max`, and preserved the thread; `low` exited 0 and persisted. No provider input.
+  Two initial fixture setup checks were refused before configuration (missing
+  private marker, then inherited live root ID); the final distinct root used the
+  initializer and removed inherited owner routing variables. No live mutation.
+- The small sequential run reused installed dependencies under critical host
+  pressure. Owned disposable output:
+  `/home/ts/.cache/agent-scratch/core-goal-retry/thinking-override-check`;
+  retired after checks and borrower inspection. No uncertain inputs there.
+- This follow-up remains draft, unmerged and uninstalled. It does not claim the
+  skipped saved-native-selection journey or the blocked response resolver passed.
+
 ## Retention
 
 - Owned source/test environment: `/home/ts/wt/core-goal-retry/.venv`, needed for this continuing piece. Only pytest and pytest-asyncio plus their dependencies installed there.

@@ -13,8 +13,12 @@ from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize("change", ["thinking", "model"])
-def test_configure_refuses_unsupported_result_without_writing(comms, tmp_path, monkeypatch, change):
-    monkeypatch.delenv("AGENT_COMMS_AGENT_MODELS", raising=False)
+@pytest.mark.parametrize("overridden", [False, True])
+def test_configure_refuses_unsupported_result_without_writing(comms, tmp_path, monkeypatch, change, overridden):
+    if overridden:
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "fixture/reasoning,fixture/plain")
+    else:
+        monkeypatch.delenv("AGENT_COMMS_AGENT_MODELS", raising=False)
     comms.registry.declare(Thread(
         name="worker", tags=frozenset(), worktree=str(tmp_path),
         model="fixture/reasoning", thinking_level="high",
@@ -29,7 +33,7 @@ def test_configure_refuses_unsupported_result_without_writing(comms, tmp_path, m
 
     monkeypatch.setattr(GetAvailableThinkingLevels, "discover", discover)
     command = ConfigureCliCommand(
-        name="worker", **({"thinking": "max"} if change == "thinking" else {"model": "fixture/plain"})
+        name="worker", **({"thinking": "high"} if change == "thinking" else {"model": "fixture/plain"})
     )
     with pytest.raises(ValueError, match="unavailable; choose one of: off"):
         command.apply(comms)
@@ -61,13 +65,17 @@ def test_native_arguments_configured_has_one_default(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_session_description_and_change_share_refusal(tmp_path, monkeypatch):
+@pytest.mark.parametrize("overridden", [False, True])
+async def test_session_description_and_change_share_refusal(tmp_path, monkeypatch, overridden):
     import os
     from agent_comms.native_pi import NativePiUnavailable
     from acp import RequestError
 
-    monkeypatch.delenv("AGENT_COMMS_AGENT_MODELS", raising=False)
-    thread = Thread(name="worker", tags=frozenset(), worktree=str(tmp_path), model="fixture/plain", thinking_level="max")
+    if overridden:
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "fixture/plain")
+    else:
+        monkeypatch.delenv("AGENT_COMMS_AGENT_MODELS", raising=False)
+    thread = Thread(name="worker", tags=frozenset(), worktree=str(tmp_path), model="fixture/plain", thinking_level="high")
     option = ThinkingLevelConfigOption("unused", NativeArguments.parse([]), RestartEnvironment.inherit(os.environ))
 
     async def discover(self, binary, arguments):
@@ -77,5 +85,5 @@ async def test_session_description_and_change_share_refusal(tmp_path, monkeypatc
     with pytest.raises(NativePiUnavailable, match="choose one of: off"):
         await option.describe(thread)
     with pytest.raises(RequestError) as refused:
-        await option.change(None, thread, "max")
+        await option.change(None, thread, "high")
     assert "choose one of: off" in refused.value.data["reason"]

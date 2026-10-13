@@ -1,6 +1,7 @@
 """Launch selection has one grammar, then typed consumers and native validation."""
 
 import ast
+import re
 from pathlib import Path
 
 from native_proof_cases import read_proof_rows
@@ -66,8 +67,10 @@ def test_option_declaration_extends_consumption_rendering_and_mode_validation():
     with pytest.raises(ValueError, match="fixture denied"):
         NativeArguments.parse(("--fixture-value=denied",)).rpc()
     for member in OptionArgument.members_with(OneShotArgument):
-        for flag in (member.flag(), member.short):
-            with pytest.raises(ValueError, match="one-shot"):
+        with pytest.raises(ValueError) as declared:
+            member().validate_rpc()
+        for flag in (value for value in (member.flag(), member.short) if value is not None):
+            with pytest.raises(ValueError, match=re.escape(str(declared.value))):
                 NativeArguments.parse((flag,)).rpc()
     for mode in (("--mode", "text"), ("--mode=json",), ("--mode",)):
         with pytest.raises(ValueError):
