@@ -28,7 +28,11 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.coordination_errors import CoordinationError, CoordinationReadUnavailable, StaleRevision
+from agent_comms.coordination_errors import (
+    CoordinationError,
+    CoordinationReadUnavailable,
+    StaleRevision,
+)
 
 if TYPE_CHECKING:
     from multiprocessing.connection import Connection
@@ -87,6 +91,11 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
     deleted just as newer records can fail in an older reader.
     """
 
+    # Currentness and contention defer the existing read; they do not show
+    # broken saved data. Every store-read consumer uses this same boundary.
+    DEFERRED_READS = (CoordinationReadUnavailable, StaleRevision)
+    READ_ERRORS = (OSError, ValueError, RuntimeError)
+
     def __init__(self, reader_runtime: str, reason: str):
         self.reader_runtime = reader_runtime
         self.reason = reason
@@ -95,6 +104,8 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
 
     @classmethod
     def capture(cls, error: Exception) -> UnreadableHistory:
+        if isinstance(error, cls):
+            return error
         reasons = []
         cause: BaseException | None = error
         while cause is not None:
@@ -124,8 +135,11 @@ class AwaitedRead(ObservationRequest):
             raise StaleRevision("The read belongs to another Comms root than the observed one")
 
     def refused(self, error: Exception) -> ReadRefused:
-        # The read's own exception, re-raised to the UI caller exactly as an
-        # in-process read raised it; the caller's handling decides.
+        # Store reads and owner replies share this boundary. Keep currentness
+        # and contention unchanged; neither means the saved data is broken.
+        if (isinstance(error, UnreadableHistory.READ_ERRORS)
+                and not isinstance(error, UnreadableHistory.DEFERRED_READS)):
+            error = UnreadableHistory.capture(error)
         return ReadRefused(self.request_id, error, traceback.format_exc())
 
 
@@ -143,8 +157,6 @@ class ReadRequest(AwaitedRead):
         try:
             self.require_root(comms)
             return ReadAnswered(self.request_id, self.read(comms))
-        except (OSError, ValueError) as error:
-            return self.refused(UnreadableHistory.capture(error))
         except Exception as error:
             return self.refused(error)
 
@@ -306,6 +318,20 @@ class ObserveSidebar(InterestRequest):
     def apply(self, interest: Interest) -> Interest:
         return replace(interest, sidebar=self)
 
+    def answer(
+        self, comms: Comms, revision: WireRevision
+    ) -> SidebarObserved | SidebarUnreadable | None:
+        from agent_comms.ui_model.sidebar import SidebarModel
+
+        try:
+            snapshot = comms.views.viewer_snapshot(
+                self.worktree, show_stopped=self.show_stopped, show_archived=self.show_archived)
+            return SidebarObserved(revision, self, snapshot, SidebarModel.derive(snapshot))
+        except UnreadableHistory.DEFERRED_READS:
+            return None  # No new snapshot; keep the original interest for the next observation.
+        except UnreadableHistory.READ_ERRORS as error:
+            return SidebarUnreadable(revision, self, UnreadableHistory.capture(error))
+
 
 @dataclass(frozen=True)
 class StopSidebar(InterestRequest):
@@ -439,10 +465,6 @@ class ObserverDied(CoordinationError):
 class ObservationService:
     """The child process side: one Comms service, the UI's interest, and what was sent."""
 
-    # Core's read failures a status line shows as "unavailable"; Core has no
-    # common base for them yet, so these are the families its reads raise.
-    UNAVAILABLE = (OSError, ValueError, RuntimeError)
-
     def __init__(self, comms, connection: Connection):
         self.comms = comms
         self.connection = connection
@@ -485,8 +507,6 @@ class ObservationService:
             self.changed.set()
 
     def observe(self) -> None:
-        from agent_comms.ui_model.sidebar import SidebarModel
-
         views = self.comms.views
         revision = views.revision()
         stores = self.revision is None or revision.stores_changed_since(self.revision)
@@ -497,25 +517,19 @@ class ObservationService:
         if sidebar is not None:
             key = (sidebar, revision.expiry_tick // EXPIRY_PERIOD)
             if stores or key != self.sent_sidebar:
-                try:
-                    snapshot = views.viewer_snapshot(
-                        sidebar.worktree, show_stopped=sidebar.show_stopped, show_archived=sidebar.show_archived)
-                    result = SidebarObserved(
-                        revision, sidebar, snapshot, SidebarModel.derive(snapshot)
-                    )
-                except self.UNAVAILABLE as error:
-                    result = SidebarUnreadable(revision, sidebar, UnreadableHistory.capture(error))
-                self.connection.send(result)
-                self.sent_sidebar = key
+                result = sidebar.answer(self.comms, revision)
+                if result is not None:
+                    self.connection.send(result)
+                    self.sent_sidebar = key
         threads = self.interest.threads
         if threads and (stores or threads != self.sent_threads or self.retry_threads):
             presentations, unavailable, busy = {}, {}, set()
             for name in threads:
                 try:
                     presentations[name] = views.thread_presentation(name)
-                except CoordinationReadUnavailable:
+                except UnreadableHistory.DEFERRED_READS:
                     busy.add(name)
-                except self.UNAVAILABLE as error:
+                except UnreadableHistory.READ_ERRORS as error:
                     unavailable[name] = UnreadableHistory.capture(error)
             self.connection.send(ThreadsObserved(
                 revision, presentations, unavailable, frozenset(busy)

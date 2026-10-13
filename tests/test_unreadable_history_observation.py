@@ -7,18 +7,26 @@ manifest whose declaration name is intentionally unavailable in this reader.
 import asyncio
 import json
 import pickle
+from dataclasses import dataclass
 
 import pytest
 
 from agent_comms.context_segments.response import SelectedResponseSegment
+from agent_comms.coordination_errors import (
+    CoordinationReadUnavailable,
+    SchemaVersionError,
+    StaleRevision,
+)
 from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.ui_model.observation import (
     ObservationProcess,
     ObserveSidebar,
     ObserveThreads,
+    OwnerRead,
     ReadNotifications,
     ReadRefused,
+    ReadRequest,
     ReadTranscript,
     SidebarUnreadable,
     ThreadsObserved,
@@ -68,11 +76,66 @@ def test_read_failure_and_thread_status_keep_the_explanation_across_the_pipe(com
     assert "unavailable_future_segment" in str(answer.error)
     round_trip = pickle.loads(pickle.dumps(answer))
     assert str(round_trip.error) == str(answer.error)
+    assert UnreadableHistory.capture(answer.error) is answer.error
     observed = ThreadsObserved(None, {}, {"saved": answer.error}, frozenset())
     status = OpenThreadStatus(lambda callback: callback())
     status.observed(observed)
     assert not status.rows.rows["saved"].available
     assert "unavailable_future_segment" in status.rows.rows["saved"].lines[0]
+
+
+@pytest.mark.parametrize(
+    "error_type", [SchemaVersionError, CoordinationReadUnavailable, StaleRevision]
+)
+def test_store_read_keeps_schema_failure_distinct_from_deferred_read(comms, error_type):
+    @dataclass(frozen=True)
+    class FailingRead(ReadRequest):
+        error: Exception
+
+        def read(self, comms):
+            raise self.error
+
+    error = error_type("original store read explanation")
+    answer = FailingRead(str(comms.root), error).answer(comms)
+    assert isinstance(answer, ReadRefused)
+    if error_type is SchemaVersionError:
+        assert isinstance(answer.error, UnreadableHistory)
+        assert str(error) in str(pickle.loads(pickle.dumps(answer)).error)
+    else:
+        assert answer.error is error  # The original deferred operation, not broken history.
+
+
+@pytest.mark.parametrize(
+    "error_type", [SchemaVersionError, CoordinationReadUnavailable, StaleRevision]
+)
+async def test_owner_reply_uses_the_same_refusal_boundary(comms, error_type):
+    @dataclass(frozen=True)
+    class FailingOwnerRead(OwnerRead):
+        async def read(self, owner):
+            raise NotImplementedError
+
+        async def ask(self, comms):
+            raise error_type("original owner read explanation")
+
+    saved_row(comms)
+    answer = await FailingOwnerRead(
+        str(comms.root), comms.registry.require("saved").incarnation
+    ).answer(comms)
+    assert isinstance(answer, ReadRefused)
+    expected_type = UnreadableHistory if error_type is SchemaVersionError else error_type
+    assert isinstance(answer.error, expected_type)
+
+
+@pytest.mark.parametrize("error_type", [CoordinationReadUnavailable, StaleRevision])
+def test_sidebar_deferred_read_does_not_replace_its_original_interest(
+    comms, monkeypatch, error_type
+):
+    def deferred(*args, **kwargs):
+        raise error_type("original sidebar read deferred")
+
+    monkeypatch.setattr(comms.views, "viewer_snapshot", deferred)
+    request = ObserveSidebar(str(comms.root.parent), True, True)
+    assert request.answer(comms, comms.views.revision()) is None
 
 
 async def test_unknown_saved_member_does_not_kill_the_real_observation_process(comms):
