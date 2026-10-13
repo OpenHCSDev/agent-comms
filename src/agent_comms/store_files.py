@@ -93,6 +93,12 @@ class StoreLock:
                 verified_sequence = record.sequence_after(verified_sequence)
                 messages.extend(record.messages())
         else:
+            if self.source.marker != metadata:
+                # A publisher may append while retaining this physical lock.
+                # Its original certified cut is immutable; borrow the new
+                # verified cut rather than read beyond the original proof.
+                with log.verify_before_read_unlocked() as source:
+                    return StoreLock(self.descriptor, source).claim_transitions(log, metadata)
             self.source.require_marker(metadata)
             messages = list(self.source.messages())
             verified_sequence = self.source.committed_sequence()

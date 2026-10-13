@@ -17,11 +17,11 @@ from acp.schema import (
 )
 
 from .image_inputs import prompt_images
-from .queued_input import InitialInput, InputHandoffRefused
+from .following_inputs import OwnerFollowingInputs
+from .queued_input import InitialInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
-from .acp_failure import ACPFailure
-from .agent_backend import AgentBackend, InputRequest, SendNow
+from .agent_backend import AgentBackend, InputRequest, SendNow, TurnInboxItem
 from .channel_targets import BuiltinChannel
 from .comms import Comms
 from .coordinator import Coordination
@@ -119,7 +119,6 @@ class TurnRunner:
         # One backend per ACP session, of the bound thread's declared kind.
         self.persistent_backends: dict[str, AgentBackend] = {}
         self.turn_locks: dict[str, asyncio.Lock] = {}
-        self.emitted_errors: dict[str, ACPFailure] = {}
         self.goals = GoalScheduler(comms, effects)
         self.reply_window = (
             reply_window
@@ -468,7 +467,7 @@ class TurnRunner:
         update = await Coordination.run_worker(partial(self.current_turn_update, session_id))
         await self.effects._emit_event(session_id, update, client=client)
 
-    async def active_backend_inbox(self, session_id: str) -> asyncio.Queue[InputRequest | SendNow] | None:
+    async def active_backend_inbox(self, session_id: str) -> asyncio.Queue[TurnInboxItem] | None:
         state = await Coordination.run_worker(partial(self.turn_state, session_id))
         return self.inputs.backend_inboxes.get(session_id) if state.accepts_followup else None
 
@@ -507,7 +506,7 @@ class TurnRunner:
         async with self.turn_locks.setdefault(session_id, asyncio.Lock()):
             task = asyncio.current_task()
             assert task is not None
-            inbox: asyncio.Queue[InputRequest | SendNow] = asyncio.Queue()
+            inbox: asyncio.Queue[TurnInboxItem] = asyncio.Queue()
             self.turn_tasks[session_id] = task
             self.inputs.backend_inboxes[session_id] = inbox
             try:
@@ -517,22 +516,9 @@ class TurnRunner:
                 result = await execution.run(
                     on_compaction=partial(self.effects._emit_event, session_id),
                     pi_session=self.backend_for(session_id, owner),
+                    following=(following := OwnerFollowingInputs(self.inputs, session_id, owner, inbox)),
                 )
-                while not inbox.empty():
-                    command = inbox.get_nowait()
-                    if not command.carried_inputs:
-                        continue  # A send-now control carries no input of its own.
-                    (input_id,) = (carried.value for carried in command.carried_inputs)
-                    item = self.inputs.queued_inputs.get(session_id, {}).get(input_id)
-                    if item is None:
-                        await self.inputs.input_refused(session_id, input_id)
-                        continue
-                    try:
-                        await item.dispatch(self, session_id, execution.owner_name)
-                    except InputHandoffRefused:
-                        await self.inputs.input_refused(session_id, input_id)
-                        continue
-                    break  # The existing native forwarder consumes the remaining live inbox.
+                await following.pass_on_unread(self)
                 return result
             finally:
                 await self.inputs.finish_turn_inputs(session_id, inbox)

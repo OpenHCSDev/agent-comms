@@ -16,7 +16,6 @@ from agent_comms.coordinator import Coordination
 
 from .claim_admission import (
     publish_selected_resource_claim,
-    release_selected_resources,
     verify_selected_wake,
 )
 from .comms import Comms
@@ -119,21 +118,6 @@ class CodingToolOwner:
             )
             self.claims[canonical] = claimed
 
-    async def finish(self) -> None:
-        """Only an owned claim set needs a worker and its SQLite resource."""
-        if not self.claims:
-            return
-        await Coordination.run_async(
-            self.store.session.path, self.release,
-            clock_ms=self.store.session.now,
-        )
-
-    def release(self, store: Coordination) -> None:
-        release_selected_resources(
-            self.comms, store, self.admission, self.owner_name, tuple(self.claims.values())
-        )
-        self.claims.clear()
-
 
 @dataclass(frozen=True)
 class CodingToolMode(NativeToolMode):
@@ -148,10 +132,6 @@ class CodingToolMode(NativeToolMode):
 
     def socket(self, directory: Path, token: str) -> OwnerToolSocket:
         return CodingToolSocket(directory, token, self.owner)
-
-    async def finish(self) -> None:
-        await self.owner.finish()
-
 
 class CodingToolSocket(OwnerToolSocket[CodingCall]):
     """Multi-call native policy on the same peer-authenticated owner transport."""

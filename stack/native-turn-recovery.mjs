@@ -1,0 +1,180 @@
+/** Safe recovery belongs to the native run, not the caller or the input journal. */
+import { setTimeout as sleep } from 'node:timers/promises';
+
+class RecoveryBudget {
+    static retries = 3;
+    // Sustained provider outages survive only if the wait stretches to minutes.
+    static backoffMs = [1_000, 10_000, 60_000];
+    static get attempts() { return this.retries + 1; }
+    static delay(attempt) { return this.backoffMs[Math.min(attempt - 1, this.backoffMs.length - 1)]; }
+}
+
+class NativeRunState {
+    constructor(owner, attempt = 1) { this.owner = owner; this.attempt = attempt; }
+    get retrying() { return false; }
+    refusal() { return undefined; }
+    produced() { return this; }
+    finished() { return this; }
+    close() {}
+    cancel() { this.close(); }
+}
+
+class NothingProduced extends NativeRunState {
+    produced() { return new OutputProduced(this.owner, this.attempt); }
+    terminal() { return new ClosedNothingProduced(this.owner, this.attempt); }
+    finished(message) {
+        // One decision constructs the state for this refusal. Retryable and
+        // exhausted states then own disjoint behavior without checking a flag.
+        if (!this.owner.tracked) return this;
+        if (!this.owner.retryable(message)) return this.terminal(message);
+        const reason = message.errorMessage || 'Provider request failed';
+        return (this.attempt < RecoveryBudget.attempts
+            ? new RefusedNothingProduced(this.owner, this.attempt, reason)
+            : new ExhaustedNothingProduced(this.owner, this.attempt, reason)
+        ).enter(message);
+    }
+}
+
+/** Every live recovery state shares completion and retirement behavior. */
+class RecoveringNothingProduced extends NothingProduced {
+    produced() {
+        this.owner.finishRetry(true);
+        return super.produced();
+    }
+    terminal(message) {
+        this.owner.finishRetry(false, message?.errorMessage);
+        return super.terminal();
+    }
+    close() { this.owner.state = this.terminal(); }
+}
+
+class OutputProduced extends NativeRunState {}
+class ClosedNothingProduced extends NativeRunState {}
+
+class RefusedNothingProduced extends RecoveringNothingProduced {
+    constructor(owner, attempt, reason) { super(owner, attempt); this.reason = reason; }
+    refusal() { return this; }
+    enter() {
+        this.owner.emit({ type: 'native_retry_start', attempt: this.attempt,
+            maxAttempts: RecoveryBudget.retries, delayMs: RecoveryBudget.delay(this.attempt),
+            errorMessage: this.reason });
+        return this;
+    }
+    async recover(message) {
+        const backoff = new BackoffNothingProduced(this.owner, this.attempt, this.reason);
+        this.owner.state = backoff;
+        return backoff.recover(message);
+    }
+}
+
+class ExhaustedNothingProduced extends RecoveringNothingProduced {
+    enter(message) { return this.terminal(message); }
+}
+
+class BackoffNothingProduced extends RefusedNothingProduced {
+    constructor(owner, attempt, reason) {
+        super(owner, attempt, reason);
+        this.controller = new AbortController();
+    }
+    get retrying() { return true; }
+    cancel() { this.controller.abort(); }
+    close() {
+        this.controller.abort();
+        super.close();
+    }
+    async recover(message) {
+        const delayMs = RecoveryBudget.delay(this.attempt);
+        try { await sleep(delayMs, undefined, { signal: this.controller.signal }); }
+        catch (error) {
+            if (error.name !== 'AbortError') throw error;
+            // Retirement already closed the window if it aborted this wait.
+            if (this.owner.state === this) {
+                this.owner.state = this.terminal({ errorMessage: 'Retry cancelled' });
+            }
+            return false;
+        }
+        // A late production/retirement owns the run now, not this old wait.
+        if (this.owner.state !== this) return false;
+        // Continue the already committed context; retain the failed assistant in
+        // the native journal and remove ONLY that exact assistant from model context.
+        // The refusal was already announced and counted at recognition; the
+        // attempt increments exactly once, here.
+        const messages = this.owner.agent.state.messages;
+        if (messages.at(-1) !== message) throw new Error('Native recovery context changed');
+        this.owner.agent.state.messages = messages.slice(0, -1);
+        this.owner.state = new RecoveringNothingProduced(this.owner, this.attempt + 1);
+        return true;
+    }
+}
+
+/** Explicit absence of a native run; never a partially initialized active run. */
+export class InactiveNativeTurnRun {
+    static shared = new InactiveNativeTurnRun();
+    get tracked() { return false; }
+    get retrying() { return false; }
+    include() { return this; }
+    observe() {}
+    stream(original, ...request) { return original(...request); }
+    willRetry() { return false; }
+    async recover() { return false; }
+    cancel() {}
+    close() {}
+}
+
+/** Replaces the native tracked-input flag and owns monotonic whole-run production. */
+export class NativeTurnRun {
+    constructor(agent, emit, retryable) {
+        this.agent = agent;
+        this.emit = emit;
+        // AgentSession supplies its existing classifier, including context-
+        // overflow exclusion. Tracked and untracked runs share that authority.
+        this.retryable = retryable;
+        this.inputs = new Set();
+        this.state = new NothingProduced(this);
+    }
+    finishRetry(success, finalError) {
+        // The request index increments only after an admitted backoff. A
+        // cancelled first backoff therefore reports zero actual re-requests.
+        this.emit({ type: 'native_retry_end', success,
+            attempt: this.state.attempt - 1, ...(finalError ? { finalError } : {}) });
+    }
+    get tracked() { return this.inputs.size > 0; }
+    get retrying() { return this.state.retrying; }
+    include(messages, claims) {
+        for (const message of messages) {
+            if (message.role === 'user' && claims.has(message.inputId)) this.inputs.add(message.inputId);
+        }
+        return this;
+    }
+    observe(event, claims) {
+        if (event.type === 'message_start') this.include([event.message], claims);
+        // Observe the original assistant event BEFORE extension callbacks or UI projection.
+        if (event.type === 'tool_execution_start') this.state = this.state.produced();
+        if (event.type === 'message_update') {
+            const delta = event.assistantMessageEvent;
+            if (delta?.type === 'toolcall_start' ||
+                (delta?.type?.endsWith('_delta') && delta.delta?.length)) this.state = this.state.produced();
+        }
+        if (event.type === 'message_end' && event.message.role === 'assistant') {
+            const content = event.message.content;
+            if (content.some(block => block.type === 'toolCall' || block.text?.length || block.thinking?.length)) {
+                this.state = this.state.produced();
+            }
+            this.state = this.state.finished(event.message);
+        }
+    }
+    stream(original, model, context, options) {
+        return original(model, context,
+            this.tracked ? { ...options, maxRetries: 0 } : options);
+    }
+    willRetry() { return this.tracked && this.state.refusal() !== undefined; }
+    async recover(message) {
+        if (!this.tracked || this.agent.state.messages.at(-1) !== message) return false;
+        const refusal = this.state.refusal(message);
+        if (!refusal) return false;
+        this.state = refusal;
+        return refusal.recover(message);
+    }
+    cancel() { this.state.cancel(); }
+    close() { this.state.close(); }
+}

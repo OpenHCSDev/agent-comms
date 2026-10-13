@@ -30,6 +30,7 @@ from .pi_vocabulary import ThinkingLevel
 from .private_path import FileRevision
 from .native_session_reopen import NativeSessionIdentity
 from .text_digest import TextDigest
+from .following_inputs import FollowingInputs
 from .tracked_turn import TrackedTurnSession
 from .turn_context import RenderedInput
 
@@ -131,6 +132,7 @@ class PrivateSendAdmission:
         model: str,
         selected_tool_mode: NativeToolMode | None = None,
         observe_event: Callable[[PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]] | None = None,
+        following: FollowingInputs = FollowingInputs(),
     ) -> NativeTurnResult:
         """Return only live corroborated proof, or settle a proved terminal failure.
 
@@ -164,6 +166,7 @@ class PrivateSendAdmission:
                     prompt_send_boundary=self,
                     acquisition_measurements=self._measurements,
                     launch_owner=execution,
+                    following=following,
                 )
             except NativePiTerminalFailure as error:
                 self.verify(store, error.context)

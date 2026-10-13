@@ -84,7 +84,6 @@ async def test_goal_actions_check_revision_and_preserve_owner_pause(goal_owner):
     goal = comms.goals.update_goal(
         session,
         SetGoalAction(text="Review child output"),
-        owner_store=owner.turns.goals.open_goal_store(),
     )
     paused = await proxy.request(
         "update_goal", status="paused", goal_id=goal.id, expected_revision=goal.revision
@@ -120,7 +119,7 @@ async def test_goal_actions_check_revision_and_preserve_owner_pause(goal_owner):
         "_meta": encode_updates(TurnChangedUpdate(comms.registry.require(session).turn_state)),
     }
     assert scheduled == [session]
-    assert owner.turns.goals.goal_store.snapshot(goal.id).lifecycle == CancelledGeneration()
+    assert comms.goals.open_goal_store().snapshot(goal.id).lifecycle == CancelledGeneration()
 
 
 async def test_goal_update_cannot_bypass_blocked_retry_or_replace_owner(goal_owner, monkeypatch):

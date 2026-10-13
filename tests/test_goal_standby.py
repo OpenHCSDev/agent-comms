@@ -34,8 +34,8 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     agent = canonical_agent(comms, agent_bin="pi")
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "parent"))
-    store = agent.turns.goals.open_goal_store()
-    goal = comms.goals.update_goal("parent", SetGoalAction(text="Work"), owner_store=store)
+    store = comms.goals.open_goal_store()
+    goal = comms.goals.update_goal("parent", SetGoalAction(text="Work"))
     owner = comms.registry.require("parent")
     admission = comms.registry.snapshot().admission_generations["parent"]
     if changed == "admission":
@@ -47,13 +47,14 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     else:
         comms.registry.rename("parent", "renamed")
     old_grant = store.ready_grant(goal.id, 1)
+    comms.goals.goal_store = GoalAttemptStore(store.root)
     try:
         with (
             _store_lock(comms._wire_lock_path),
             pytest.raises(StaleAttemptError, match="owner changed") if changed != "rename" else nullcontext(),
         ):
-            agent.turns.goals.ready_goal_grant_locked(
-                owner, admission, GoalAttemptStore(store.root), store.snapshot(goal.id)
+            comms.goals.ready_goal_grant_locked(
+                owner, admission, store.snapshot(goal.id)
             )
         if changed != "rename":
             assert store.ready_grant(goal.id, 1) == old_grant

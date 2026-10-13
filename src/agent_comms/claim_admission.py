@@ -131,7 +131,7 @@ def _committed_source(
 def _selected_claim_boundary(
     comms: Comms, store: Coordination, admission: WakeAdmission, owner_name: str
 ):
-    """One wire/bus/registry boundary for claim acquisition and exact release."""
+    """One wire/bus/registry boundary for selected claim acquisition."""
     if type(comms) is not Comms or type(store) is not Coordination:
         raise TypeError("Wake claim requires the actual wire and coordinator stores")
     if type(admission) is not WakeAdmission or type(owner_name) is not str:
@@ -224,51 +224,6 @@ def publish_selected_resource_claim(
             committed.seq,
             committed.message_id,
             admission,
-        )
-
-
-def release_selected_resources(
-    comms: Comms,
-    store: Coordination,
-    admission: WakeAdmission,
-    owner_name: str,
-    claims: tuple[ClaimOwner, ...],
-) -> None:
-    """Release only these observed generations under their current selected owner."""
-    # No resource was acquired, so there is no claim mutation to authorize.
-    # Input/turn settlement retains its own independent current-owner fences.
-    if not claims:
-        return
-    with _selected_claim_boundary(comms, store, admission, owner_name) as (
-        bus,
-        bus_lock,
-        metadata,
-        registry,
-        owner,
-        initial,
-    ):
-        transitions, _ = bus_lock.claim_transitions(bus.log, metadata)
-        projection = project_verified_transitions(transitions)
-        if any(projection.get(assignment.resource) != assignment for assignment in claims):
-            raise IdentityConflict("Coding claim changed before release")
-        target = (
-            initial.message.sender
-            if initial.message.sender != owner.name
-            else BuiltinChannel.ALL.value
-        )
-        bus.publisher.publish_claim_envelope(
-            Message(
-                owner.name,
-                target,
-                "Completed coding tool claims released",
-                InfoKind,
-                notice=True,
-            ),
-            worktree=Path(owner.worktree),
-            incarnation=str(owner.created_at),
-            releases=tuple(assignment.resource for assignment in claims),
-            _locked_registry_snapshot=registry,
-            _bus_lock=bus_lock,
         )
 
 

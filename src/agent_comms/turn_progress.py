@@ -15,6 +15,7 @@ from acp.schema import (
 
 from . import agent_events as events
 from .acp_extension import QueueScope, TranscriptChangedUpdate, encode_updates
+from .acp_failure import RequestFailure
 from .thread_identity import AdmissionIdentity
 from .channel_targets import is_channel_target
 from .comms import Comms
@@ -41,7 +42,6 @@ class TurnEventPublication(MroDispatch):
     effects: TurnEffects
     sync_goal_execution: Callable[[str, str], Awaitable[None]]
     session_id: str
-
     @handles(events.InputStarted, events.Done, events.StreamSettled, events.ToolEnd)
     async def sync_goals(self, event: events.InputStarted) -> None:
         await self.sync_goal_execution(self.session_id, self.sessions.bindings[self.session_id])
@@ -71,6 +71,7 @@ class TurnProgress(events.AgentEventConsumer):
         self.finish_event, self.goals = finish_event, goals
         self.reply_parts: list[str] = []
         self.result: events.Done | None = None
+        self.terminal_error: events.Error | None = None
         self.publication_measurements = PublicationMeasurements()
         self.publication = TurnEventPublication(
             comms=comms,
@@ -121,7 +122,7 @@ class TurnProgress(events.AgentEventConsumer):
     def thread_name(self) -> str:
         return self.sessions.bindings[self.session_id]
 
-    async def report_failure(self, error: Exception) -> None:
+    async def report_failure(self, error: Exception) -> RequestFailure | None:
         """Attempt existing ACP error publication once without hiding the original fault."""
         diagnostic = record_terminal_failure(
             self.comms.root, turn_id=self.turn_lease.turn_id, thread=self.thread_name,
@@ -130,16 +131,16 @@ class TurnProgress(events.AgentEventConsumer):
             source_error=error,
         )
         detail = (
-            "Native turn failed; original input was not retried. "
+            "Native turn failed. "
             f"[Open diagnostic]({diagnostic.as_uri()})"
         )
+        if self.result is not None:
+            # A transport/cleanup fault cannot reconstruct an already resolved
+            # native failure. Keep the reported failure and separate diagnostic.
+            return self.result.outcome.request_failure
         try:
-            await self.effects._emit_event(
-                self.session_id,
-                events.Error(detail),
-                turn_id=self.turn_lease.turn_id,
-                route=self.routing.reply,
-            )
+            await self.consume(events.Done(text=detail, ok=False))
+            return self.result.outcome.request_failure
         except Exception as delivery_error:
             self.effects._debug_log(
                 f"turn:error-publication failed: {delivery_error!r}; original: {error!r}"
@@ -178,6 +179,13 @@ class TurnProgress(events.AgentEventConsumer):
                     self.comms.messaging.send(self.thread_name, target, progress, notice=True)
                 self.reply_parts.clear()
 
+    @handles(events.Error)
+    async def error(self, event: events.Error) -> object:
+        # Raw terminal evidence resolves the later Done; it is not itself a
+        # publishable completed outcome.
+        self.terminal_error = event
+        return self.DISCARD
+
     @handles(events.Done)
     async def done(self, event: events.Done) -> events.Done:
         document = await Coordination.run_worker(self.inputs.dispositions.read)
@@ -194,6 +202,9 @@ class TurnProgress(events.AgentEventConsumer):
             )
         if self.result is not None:
             event = replace(event, ok=False, text="Duplicate native terminal result")
+        event = event.resolve(self.terminal_error, document, self.original)
+        # Retain the resolved outcome before transport publication. If delivery
+        # throws, failure handling must not classify or resolve it a second time.
         self.result = event
         await Coordination.run_worker(partial(self.goals.done, event))
         return event
@@ -251,12 +262,19 @@ class TurnProgress(events.AgentEventConsumer):
         self.finish_event.set()
 
     async def consume(self, event: events.AgentEvent) -> None:
-        event = await self.dispatch(event)
+        publication = await self.dispatch(event)
+        if publication is None:
+            return
         with self.publication_measurements.measuring():
-            await self.effects._emit_event(
-                self.session_id, event, turn_id=self.turn_lease.turn_id, route=self.routing.reply
+            published = await self.effects._emit_event(
+                self.session_id, publication,
+                turn_id=self.turn_lease.turn_id, route=self.routing.reply,
             )
-        await self.publication.dispatch(event)
+        if isinstance(published, events.Done):
+            # ACP publication may replace Done with its notification receipt;
+            # terminal consumers retain that exact completed outcome.
+            self.result = published
+        await self.publication.dispatch(published)
 
     def publish_success(self) -> None:
         """Join each acquired original send before releasing the turn lease."""
@@ -319,6 +337,8 @@ class TurnProgress(events.AgentEventConsumer):
         return self.comms.transcripts.transcript_checkpoint(self.thread_name)
 
     async def publish_result(self):
+        if self.result is None:
+            await self.consume(events.Done(text="Native turn ended without a result", ok=False))
         # Cancellation must join original sends, their annotation and the
         # checkpoint before OwnedTurn can settle or release its lease.
         checkpoint = await Coordination.run_worker(self.publish_checkpoint)
@@ -332,3 +352,4 @@ class TurnProgress(events.AgentEventConsumer):
                 ),
             ),
         )
+        self.result.outcome.raise_if_failed()

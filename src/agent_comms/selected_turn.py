@@ -204,6 +204,8 @@ class SelectedAttempt:
                 model=participant.model,
                 observe_event=self.observe_event,
                 selected_tool_mode=action.mode(tools),
+                # Only the full answer takes later inputs; a triage call answers one question.
+                following=execution.following,
             )
             result.require_publishable()
             replies = (participant.batch.response_message(result.text, participant.owner.thread.name),)

@@ -506,15 +506,9 @@ class TestAgentTurn:
         return canonical_agent(wired, agent_bin="pi", agent_args=[])
 
     def _authorize_test_goal(self, agent: CommsAgent, wired, goal) -> None:
-        """Provide the private owner grant used by goal-turn tests with fake Pi events."""
-        from agent_comms.goal_attempts import GoalAttemptStore
-
+        """Check the generation created by Goals; tests never add launch records."""
         agent.turns.agent_bin = "pi"
-        private = wired.root / "goal-private"
-        private.mkdir(mode=448, exist_ok=True)
-        store = GoalAttemptStore.initialize(private)
-        store.create_goal(goal.id)
-        agent.turns.goals.goal_store = store
+        wired.goals.open_goal_store().require_generation(goal.id)
 
     async def test_pi_session_name_stays_runtime_metadata(self, wired, tmp_path, monkeypatch):
         agent = self._agent_with_events(tmp_path, wired)
@@ -639,53 +633,8 @@ class TestAgentTurn:
                 result.progress == "Backend turn ended without a result; inspect local diagnostics."
             )
         assert secret not in result.progress
-        assert "proj" not in agent.turns.emitted_errors
         await agent.turns.goals.schedule_goal("proj")
         assert not agent.inputs.pending_turns.get("proj")
-
-    async def test_error_dedup_is_scoped_to_one_turn_and_cancel_clears_it(
-        self, wired, tmp_path, monkeypatch
-    ):
-        agent = self._agent_with_events(tmp_path, wired)
-        sent: list = []
-
-        class FakeClient:
-            async def session_update(self, session_id=None, update=None, **kw):
-                sent.append(update)
-                if _update_text(update) == "busy":
-                    seen_error.set()
-
-        seen_error = asyncio.Event()
-        agent.sessions.client = FakeClient()
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        turns = 0
-
-        async def events(*args, **kwargs):
-            nonlocal turns
-            turns += 1
-            if turns == 1:
-                yield ae.Error(text="busy")
-                yield ae.Done(ok=True, text="A succeeded")
-            elif turns == 2:
-                yield ae.Done(ok=False, text="busy")
-            else:
-                yield ae.Error(text="busy")
-                await asyncio.Event().wait()
-
-        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        await agent.turns.run_agent_turn("proj", "proj", "A")
-        assert "proj" not in agent.turns.emitted_errors
-        seen_error.clear()
-        await agent.turns.run_agent_turn("proj", "proj", "B")
-        assert [_update_text(item) for item in sent].count("busy") == 2
-        assert "proj" not in agent.turns.emitted_errors
-        seen_error.clear()
-        cancelled = asyncio.create_task(agent.turns.run_agent_turn("proj", "proj", "C"))
-        await asyncio.wait_for(seen_error.wait(), 2)
-        cancelled.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await cancelled
-        assert "proj" not in agent.turns.emitted_errors
 
     async def test_successful_turn_without_a_goal_report_authorizes_next_attempt(
         self, wired, tmp_path, monkeypatch
@@ -957,11 +906,7 @@ class TestAgentTurn:
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.goals.update_goal("proj", SetGoalAction(text="Ship the release"))
-        private = wired.root / "goal-private"
-        private.mkdir(mode=448)
-        store = GoalAttemptStore.initialize(private)
-        store.create_goal(goal.id)
-        agent.turns.goals.goal_store = store
+        store = wired.goals.open_goal_store()
 
         async def events(*args, **kwargs):
             wired.goals.update_goal(
@@ -1039,7 +984,7 @@ class TestAgentTurn:
         assert store.snapshot(goal.id).number == 2
         assert ProviderUsageTotal.for_goal(store, goal.id).responses == 2
         assert str(ProviderUsageTotal.for_goal(store, goal.id).cost_total) == "0.03"
-        grant = agent.turns.goals.goal_store.ready_grant(goal.id, 2)
+        grant = wired.goals.open_goal_store().ready_grant(goal.id, 2)
         assert grant not in repr(updates)
         assert grant not in repr(goal)
         await agent.shutdown()
@@ -1059,11 +1004,7 @@ class TestAgentTurn:
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.goals.update_goal("proj", SetGoalAction(text="Finish safely"))
-        private = wired.root / "goal-private"
-        private.mkdir(mode=448)
-        store = GoalAttemptStore.initialize(private)
-        store.create_goal(goal.id)
-        agent.turns.goals.goal_store = store
+        store = wired.goals.open_goal_store()
 
         async def events(*args, **kwargs):
             wired.goals.update_goal(
@@ -1133,8 +1074,7 @@ class TestAgentTurn:
         agent.on_connect(FakeClient())
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.goals.update_goal("proj", SetGoalAction(text="Keep working"))
-        store = agent.turns.goals.open_goal_store()
-        store.create_goal(goal.id)
+        store = wired.goals.open_goal_store()
         reservation = store.reserve(goal.id, 1)
         store.claim_launch(reservation)
         reservation.fail(store, "The previous turn failed")
@@ -1177,8 +1117,7 @@ class TestAgentTurn:
         monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.goals.update_goal("proj", SetGoalAction(text="Recover a retry"))
-        store = agent.turns.goals.open_goal_store()
-        store.create_goal(goal.id)
+        store = wired.goals.open_goal_store()
         reservation = store.reserve(goal.id, 1)
         store.claim_launch(reservation)
         reservation.fail(store, "Previous turn failed")
@@ -1194,16 +1133,16 @@ class TestAgentTurn:
             attempt_id=reservation.attempt_id,
             user_decision_id="first-ui-retry-before-crash",
         )
-        agent.turns.goals.goal_store = GoalAttemptStore(wired.root / "goal-private")
+        wired.goals.goal_store = GoalAttemptStore(wired.root / "goal-private")
         proxy = RuntimeProxy(agent, "proj", socket_path(wired.root, os.getpid()))
         try:
             result = await proxy.request(
                 "retry_goal", goal_id=goal.id, expected_revision=blocked.revision
             )
             assert FieldCodec.decode(Goal, result["goal"]).state.declared_name == "active"
-            generation = agent.turns.goals.goal_store.snapshot(goal.id)
+            generation = wired.goals.open_goal_store().snapshot(goal.id)
             assert (generation.number, generation.lifecycle) == (3, ReadyGeneration())
-            assert agent.turns.goals.goal_store.ready_grant(goal.id, 3)
+            assert wired.goals.open_goal_store().ready_grant(goal.id, 3)
         finally:
             await agent.shutdown()
 
@@ -1223,7 +1162,7 @@ class TestAgentTurn:
         agent.sessions.client = Client()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = await agent.turns.goals.set_goal("proj", "Keep working")
-        store = agent.turns.goals.goal_store
+        store = wired.goals.open_goal_store()
         assert store is not None
         if failed:
             reservation = store.reserve(goal.id, 1)
@@ -1275,12 +1214,10 @@ class TestAgentTurn:
             name = next(iter(agent.sessions.bindings))
             goal = wired.goals.update_goal(name, SetGoalAction(text="No replay after crash"))
             private = root / "goal-private"
-            private.mkdir(mode=448)
-            store = GoalAttemptStore.initialize(private)
-            store.create_goal(goal.id)
+            store = wired.goals.open_goal_store()
             reservation = store.reserve(goal.id, 1)
             store.claim_launch(reservation)
-            agent.turns.goals.goal_store = GoalAttemptStore(private)
+            wired.goals.goal_store = GoalAttemptStore(private)
 
             async def forbidden_backend(*args, **kwargs):
                 raise AssertionError("A claimed attempt must never launch again")

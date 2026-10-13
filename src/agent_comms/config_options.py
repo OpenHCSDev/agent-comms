@@ -21,6 +21,7 @@ from acp.schema import (
 
 from .pi_vocabulary import ThinkingLevel
 from .comms import Comms
+from .agent_backend import UseSettings
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
@@ -126,7 +127,7 @@ class CatalogConfigOption(ConfigOption):
 
 class ModelConfigOption(CatalogConfigOption):
     title = "Model"
-    description = "Model selected for the next turn; the running turn keeps its captured model"
+    description = "Model for this thread; a running turn switches at its next model call"
     category = "model"
 
     def current_value(self, thread: Thread) -> str | None:
@@ -163,7 +164,7 @@ class ModelConfigOption(CatalogConfigOption):
 
 class ThinkingLevelConfigOption(CatalogConfigOption):
     title = "Thinking level"
-    description = "Thinking level selected for the next turn; the running turn keeps its captured effort"
+    description = "Thinking level for this thread; a running turn switches at its next model call"
     category = "thought_level"
 
     def current_value(self, thread: Thread) -> str | None:
@@ -207,6 +208,9 @@ class ConfigOptions:
         self.catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = {}
         self.catalog_publish_lock = asyncio.Lock()
         self.publications: dict[str, ConfigOptionUpdate] = {}
+        # The stored settings each session's owner last saw, to notice a change.
+        # The model and thinking level each running turn currently uses.
+        self.settings_in_use: dict[str, UseSettings] = {}
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
         if member not in self.catalogs:
@@ -268,6 +272,7 @@ class ConfigOptions:
         except (NativePiUnavailable, ValueError) as error:
             raise RequestError.invalid_params({"reason": str(error)}) from error
         await self.effects.turns.close_idle_backend(session_id, thread)
+        await self.use_stored_settings(session_id, name)
         async with self.session_options(name) as options:
             await self._publish(session_id, options)
             return SetSessionConfigOptionResponse(config_options=options)
@@ -275,7 +280,7 @@ class ConfigOptions:
     async def configure_thread(
         self, thread: Thread, command: SettingCommand,
     ) -> None:
-        """Persist the native owner's complete next-turn result, never steer a turn."""
+        """Store the model and thinking level Pi itself reports for this change."""
         arguments = self.agent_args.with_model(thread.model).with_thinking(
             ThinkingLevel.optional_name(thread.thinking_level)
         )
@@ -292,9 +297,28 @@ class ConfigOptions:
             thread, model=model, thinking_level=level,
         ))
 
+    @staticmethod
+    def stored_settings(thread: Thread) -> UseSettings:
+        return UseSettings(thread.model, ThinkingLevel.optional_name(thread.thinking_level))
+
+    def turn_started(self, session_id: str, thread: Thread) -> None:
+        self.settings_in_use.setdefault(session_id, self.stored_settings(thread))
+
+    async def use_stored_settings(self, session_id: str, name: str) -> None:
+        """A running turn switches at its next model call, whichever process stored the change."""
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        settings = self.stored_settings(thread)
+        if self.settings_in_use.get(session_id, settings) == settings:
+            return
+        inbox = await self.effects.turns.active_backend_inbox(session_id)
+        if inbox is not None:
+            self.settings_in_use[session_id] = settings
+            inbox.put_nowait(settings)
+
     async def sync_thread(self, session_id: str) -> None:
         name = await self.sessions.sync_identity(session_id)
         await self.effects.turns.goals.sync_goal_execution(session_id, name)
+        await self.use_stored_settings(session_id, name)
         await self.publish_configuration(session_id, name)
 
     async def publish_configuration(self, session_id: str, thread_name: str) -> None:

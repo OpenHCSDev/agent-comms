@@ -20,10 +20,10 @@ async def test_native_settlement_selects_only_original_goal(native_backend, repl
     history = native.session.read_bytes()
     async with native.open_owner(runtime_enabled=True, auto_wake=False) as (agent, session):
         comms = agent._comms
-        store = agent.turns.goals.open_goal_store()
+        store = comms.goals.open_goal_store()
         original = await Coordination.run_worker(lambda: comms.goals.update_goal(
             session, SetGoalAction(text="One genuine native goal turn"),
-            actor=OwnerInvocable, owner_store=store,
+            actor=OwnerInvocable,
         ))
         changed = []
 

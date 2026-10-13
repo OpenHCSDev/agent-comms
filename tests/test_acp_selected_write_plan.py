@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import select
 import signal
 import subprocess
@@ -15,6 +16,7 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms import cohort_foreground, coordinated_runtime
+from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     SelectedWriteAcceptedUpdate,
@@ -33,11 +35,11 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.message_bus import MessageBus
-from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.selected_write_plan import SelectedWritePlans
 from agent_comms.threads import Thread
+from delivery_owner_fixture import drain_diagnostic, reply_turn_finished
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model
 
@@ -207,8 +209,11 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         )
         monkeypatch.setattr(TrackedTurnSession, "execute", fake)
         if scenario == "native_failure":
-            with pytest.raises(NativePiUnavailable):
-                await agent._drain_private_nk("beta", root_id)
+            assert await agent._drain_private_nk("beta", root_id) == 1
+            await reply_turn_finished(agent, "beta")
+            failure = drain_diagnostic(comms, "beta")
+            assert isinstance(failure, NativeInputDrainDiagnostic)
+            assert failure.error_type == "NativePiUnavailable"
             assert len(calls) == 1 and resource.read_bytes() == b"before\n"
             assert not list(Comms(root).bus.log.claim_projection())
             await agent.shutdown()
@@ -220,14 +225,19 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
                 )  # different ACP controller, same owner process
             else:
                 agent._selected_write_controllers.clear()  # owner-process crash loses binding
-            with pytest.raises(IdentityConflict, match="controller changed|no longer bound"):
-                await agent._drain_private_nk("beta", root_id)
+            assert await agent._drain_private_nk("beta", root_id) == 1
+            await reply_turn_finished(agent, "beta")
+            failure = drain_diagnostic(comms, "beta")
+            assert isinstance(failure, UnavailableDrainDiagnostic)
+            assert failure.error_type == "IdentityConflict"
+            assert re.search("controller changed|no longer bound", failure.reason)
             assert not calls and resource.read_bytes() == b"before\n"
             rows = list((root / "selected-write-plans").glob("*.json"))
             assert len(rows) == 1 and json.loads(rows[0].read_text())["status"] == "accepted"
             await agent.shutdown()
             return
         assert await agent._drain_private_nk("beta", root_id) == 1
+        await reply_turn_finished(agent, "beta")
         assert len(calls) == 1 and resource.read_bytes() == b"after selected\n"
         claim = Comms(root).bus.log.claim_projection()[str(resource)]
         assert claim.admission is not None and claim.admission.operation_id == receipt.operation_id

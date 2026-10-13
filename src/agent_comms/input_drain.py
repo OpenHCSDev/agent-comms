@@ -22,11 +22,10 @@ from .acp_extension import (
     QueueProjection,
     encode_updates,
 )
-from .activity import StoppedDrainDiagnostic, UnavailableDrainDiagnostic
-from .agent_backend import InputContent, InputId, InputRequest, SendNow, WhenBusy
+from .agent_backend import InputContent, InputId, InputRequest, SendNow, TurnInboxItem
 from .comms import Comms
 from .coordination_errors import CoordinationError, IdentityConflict
-from .native_pi import NativePiUnavailable
+from .drain_failures import drain_failures
 from .coordination_cohort import next_sealed_assignment
 from .coordinator import Coordination
 from .bus_publication import stable_thread_lookup
@@ -36,7 +35,7 @@ from .native_input_owner import RegistryOwner
 from .input_attempt import InputAttempt
 from .input_disposition import InputDispositions, InputDocument
 from .input_effects import InputEffects
-from .queued_input import QueuedInput, InputHandoffRefused
+from .queued_input import InputHandoffRefused, QueuedInput
 from .errors import RelationViolationError
 from .registry_document import RegistryEntry
 from .registry_store import RegistryEntryRevision
@@ -113,7 +112,7 @@ class InputDrain:
         self.runtime = runtime
         self.effects = effects
         self.drain_tasks: dict[str, asyncio.Task[None]] = {}
-        self.backend_inboxes: dict[str, asyncio.Queue[InputRequest | SendNow]] = {}
+        self.backend_inboxes: dict[str, asyncio.Queue[TurnInboxItem]] = {}
         self.queued_inputs: dict[str, dict[str, QueuedInput]] = {}
         self.restored_inputs: dict[str, dict[str, QueuedInput]] = {}
         self.queue_revisions: dict[str, int] = {}
@@ -375,9 +374,10 @@ class InputDrain:
                     revision = replace(revision, registry=read.revision)
                     entry = read.entry
                 owner = entry.owner_identity
-                try:
-                    await self.drain_inbox(session_id)
+                async with drain_failures(self.comms, thread, owner):
+                    # A stored model change precedes the messages the same tick hands over.
                     await self.sessions.config.sync_thread(session_id)
+                    await self.drain_inbox(session_id)
                     if self._in_standby(session_id):
                         # Recovery reads only stores in the revision, so it runs
                         # when one of them changed, not on a clock.
@@ -388,32 +388,6 @@ class InputDrain:
                         session_id=session_id, inputs=self, turns=self.effects.turns,
                     ).schedule()
                     await self.effects.turns.goals.schedule_goal(session_id)
-                except asyncio.CancelledError:
-                    raise
-                except (
-                    OSError,
-                    ValueError,
-                    sqlite3.Error,
-                    CoordinationError,
-                    RequestError,
-                    # A failed native input has already been settled and
-                    # published by its request owner; it is never replayed, so
-                    # the owner keeps taking later inputs, as a restart would.
-                    NativePiUnavailable,
-                ) as error:
-                    await Coordination.run_worker(partial(
-                        self.comms.agents.set_drain_diagnostic, thread, owner,
-                        UnavailableDrainDiagnostic(owner, type(error).__name__, str(error)),
-                        source_error=error,
-                    ))
-                except Exception as error:
-                    await Coordination.run_worker(partial(
-                        self.comms.agents.set_drain_diagnostic, thread, owner,
-                        StoppedDrainDiagnostic(owner, type(error).__name__, str(error)),
-                        source_error=error,
-                    ))
-                    raise
-                else:
                     current = await Coordination.run_worker(partial(self.comms.registry.require, thread))
                     if (
                         not current.executing
@@ -619,19 +593,11 @@ class InputDrain:
             echo=request.defer_display, images=images, controller=controller,
             input_id=request.input_id, origin=request.origin,
         ) as (item, owner, source, custody):
-            if self.backend_inboxes.get(session_id) is not inbox:
-                raise InputHandoffRefused("Original native inbox retired before follow-up handoff")
             item = request.accepted(item, source, owner)
             followup = replace(followup, provenance=(*followup.provenance, source.context_provenance()))
             rendered = TurnContext.render_segments((followup,), images=images)
-            self.following_sources.setdefault(session_id, {})[item.input_id] = item.source()
-            self.queued_inputs.setdefault(session_id, {})[item.input_id] = item
-            inbox.put_nowait(InputRequest(
-                input_id=InputId(item.input_id),
-                content=InputContent(
-                    text=item.prompt, images=tuple(images), contributions=rendered.contributions,
-                ),
-                when_busy=WhenBusy.STEER,
+            item.place(self, session_id, inbox, InputContent(
+                text=item.prompt, images=tuple(images), contributions=rendered.contributions,
             ))
             request.enqueue_control(inbox, item.input_id)
             custody.pop_all()
@@ -641,11 +607,16 @@ class InputDrain:
             field_meta=encode_updates(InputDeliveryChangedUpdate(item.input_id)),
         )
 
+    def require_inbox(self, session_id: str, inbox: asyncio.Queue[TurnInboxItem]) -> None:
+        if self.backend_inboxes.get(session_id) is not inbox:
+            raise InputHandoffRefused("Running turn inbox retired before input placement")
+
     def bind_native_turn(
         self, session_id: str, owner: Thread, admission: int, turn_id: str
-    ) -> asyncio.Queue[InputRequest | SendNow]:
+    ) -> asyncio.Queue[TurnInboxItem]:
         """Transfer existing live inputs to the new lease, never read them from disk."""
         inbox = self.backend_inboxes.setdefault(session_id, asyncio.Queue())
+        self.sessions.config.turn_started(session_id, owner)
         for input_id, item in self.queued_inputs.get(session_id, {}).items():
             self.queued_inputs[session_id][input_id] = item.bind_turn(
                 owner, admission, turn_id
@@ -696,7 +667,7 @@ class InputDrain:
         if input_id is None and original.notice_keys:
             input_id = row.public_id
         item = self.queued_inputs.get(session_id, {}).get(input_id or "")
-        text = item.text if item else original.notice_text if input_id == row.public_id else None
+        text = await item.started(self) if item else original.notice_text if input_id == row.public_id else None
         await self.emit_input_started(
             session_id,
             text,
@@ -714,7 +685,9 @@ class InputDrain:
         if source is not None:
             # Native write was refused; keep the durable notice, never replay it.
             await self.emit_input_delivery_changed(session_id)
-        if self.queued_inputs.get(session_id, {}).pop(input_id, None):
+        item = self.queued_inputs.get(session_id, {}).pop(input_id, None)
+        if item is not None:
+            await item.not_started(self)
             await self.emit_queue_state(session_id)
 
     def finish_original_inputs(self, keys: tuple[str, ...]) -> InputDocument:
@@ -723,11 +696,12 @@ class InputDrain:
             return self.dispositions.settle_unbound(keys)
 
     async def finish_turn_inputs(
-        self, session_id: str, inbox: asyncio.Queue[InputRequest | SendNow]
+        self, session_id: str, inbox: asyncio.Queue[TurnInboxItem]
     ) -> None:
         """Retire this turn's live capabilities; retain UNKNOWN only as notices."""
         if self.backend_inboxes.get(session_id) is inbox:
             self.backend_inboxes.pop(session_id, None)
+            self.sessions.config.settings_in_use.pop(session_id, None)
         while not inbox.empty():
             inbox.get_nowait()
         try:
@@ -740,6 +714,8 @@ class InputDrain:
             # retain accepted queued input for the next distinct turn.
             self.following_sources.pop(session_id, None)
             remaining = self.queued_inputs.pop(session_id, {})
+            for item in remaining.values():
+                await item.not_started(self)
             if remaining:
                 self.restored_inputs.setdefault(session_id, {}).update(
                     {
