@@ -105,7 +105,7 @@ def test_catch_up_always_admits_one_record_beyond_the_batch_budget(
     # checkpoint by admitting that one record; it never refuses progress.
     outcome = index.catch_up_committed_append(hint, max_bytes=128, bootstrap_new=True)
     assert outcome.caught_up
-    assert index._verified_checkpoint(root_id) == message.seq
+    assert index._verified_checkpoint(root_id).last_seq == message.seq
     assert [row.source_seq for row in _page(index, root_id, lookup, message.seq).entries] == [1]
     assert index.catch_up_committed_append(hint, max_bytes=128) == outcome
 

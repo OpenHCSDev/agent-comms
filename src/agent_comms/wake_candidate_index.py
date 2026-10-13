@@ -215,15 +215,15 @@ class WakeCandidateIndex:
         root_id: str,
         *,
         rebuild: bool,
-    ) -> tuple[int, int]:
+    ) -> CandidateCheckpoint:
         """Check the committed source identity and its bounded prefix fingerprint."""
         checkpoint = CandidateCheckpoint.one(db, singleton=1)
         if checkpoint is None and not rebuild:
             raise ProjectionRebuildRequiredError("candidate index requires initial rebuild")
         if rebuild:
-            return 0, 0
+            return CandidateCheckpoint(1, 3, root_id, stat.st_dev, stat.st_ino, 0, "", 0)
         checkpoint.require_source(stream, stat, root_id)
-        return checkpoint.byte_offset, checkpoint.last_seq
+        return checkpoint
 
     @staticmethod
     def _parse_row(record: dict[str, Any], root_id: str, last_seq: int) -> _ParsedRow:
@@ -358,9 +358,10 @@ class WakeCandidateIndex:
                     # Rebuild replays current-format projections only; old schemas
                     # require the explicit store reset outside runtime code.
                     self._schema(db, create=True)
-                    offset, last_seq = self._checkpoint_start(
+                    checkpoint = self._checkpoint_start(
                         db, stream, stat, root_id, rebuild=rebuild
                     )
+                    offset, last_seq = checkpoint.byte_offset, checkpoint.last_seq
                     batch = self._replay_prefix(
                         stream,
                         offset,
@@ -400,8 +401,8 @@ class WakeCandidateIndex:
         return CommittedAppendHint.capture(root_id, through_seq)
 
 
-    def _verified_checkpoint(self, root_id: str) -> int:
-        """Check one WAL checkpoint against its bounded source prefix-tail witness."""
+    def _verified_checkpoint(self, root_id: str) -> CandidateCheckpoint:
+        """Check one WAL checkpoint row against its bounded source prefix-tail witness."""
         try:
             marker = self.bus.log._private_marker_unlocked()
             if marker.root_id != root_id:
@@ -411,10 +412,8 @@ class WakeCandidateIndex:
                 db.execute("BEGIN")
                 with self.bus.log.path.open("rb") as stream:
                     stat = os.fstat(stream.fileno())
-                    offset, last_seq = self._checkpoint_start(
-                        db, stream, stat, root_id, rebuild=False
-                    )
-                    self._source_end(stream, offset)
+                    checkpoint = self._checkpoint_start(db, stream, stat, root_id, rebuild=False)
+                    self._source_end(stream, checkpoint.byte_offset)
                     # _checkpoint_start verifies the saved prefix; the source
                     # may have newer complete rows not yet in this projection.
                     if stat.st_size:
@@ -423,7 +422,7 @@ class WakeCandidateIndex:
                             raise ProjectionUnavailableError(
                                 "candidate source has an incomplete tail"
                             )
-                return last_seq
+                return checkpoint
         except (OSError, RelationViolationError, sqlite3.DatabaseError) as error:
             raise ProjectionUnavailableError("candidate checkpoint unavailable") from error
 
@@ -453,13 +452,14 @@ class WakeCandidateIndex:
         self._validate_limits(max_rows, max_bytes)
         if self.bus.log._private_marker_unlocked().root_id != hint.root_id:
             raise ProjectionRebuildRequiredError("candidate append hint belongs to another root")
+        prior_bytes = 0
         if self.path.exists():
             prior = self._verified_checkpoint(hint.root_id)
-            if prior >= hint.through_seq:
-                return CandidateCatchUp(prior, True, False)
+            prior_bytes = prior.byte_offset
+            if prior.last_seq >= hint.through_seq:
+                return CandidateCatchUp(prior.last_seq, True, False)
             rebuild = False
         elif bootstrap_new:
-            prior = 0
             rebuild = True
         else:
             raise ProjectionRebuildRequiredError("candidate index needs explicit initial build")
@@ -467,15 +467,21 @@ class WakeCandidateIndex:
             rebuild=rebuild, max_rows=max_rows, max_bytes=max_bytes
         )
         checkpoint = self._verified_checkpoint(hint.root_id)
-        if checkpoint <= prior and more_source_bytes:
+        if checkpoint.byte_offset <= prior_bytes and more_source_bytes:
+            # The checkpoint row owns the byte position: a batch that consumed
+            # no source bytes while the source has more is the only true
+            # no-progress state; observation rows can advance bytes without
+            # moving last_seq, which is progress, not failure.
             raise ProjectionUnavailableError(
-                "candidate batch made no checkpoint progress; explicit larger budget required"
+                "candidate batch consumed no source bytes while source bytes remain"
             )
-        if checkpoint < hint.through_seq and not more_source_bytes:
+        if checkpoint.last_seq < hint.through_seq and not more_source_bytes:
             raise ProjectionUnavailableError(
                 "candidate notification exceeds verified bus high-water"
             )
-        return CandidateCatchUp(checkpoint, checkpoint >= hint.through_seq, more_source_bytes)
+        return CandidateCatchUp(
+            checkpoint.last_seq, checkpoint.last_seq >= hint.through_seq, more_source_bytes
+        )
 
     def page(
         self,

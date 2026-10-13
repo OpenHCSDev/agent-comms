@@ -16,7 +16,6 @@ from .wake_candidate_index import WakeCandidateIndex
 
 _LOG = logging.getLogger(__name__)
 _MAX_ACTIVE_ROOTS = 32
-_MAX_BATCHES = 32
 _guard = threading.Lock()
 _pending: dict[Path, tuple[MessageBus, int]] = {}
 
@@ -57,7 +56,11 @@ def _drain_candidate(root: Path) -> None:
             metadata = bus.log._private_marker_unlocked()
         root_id = metadata.root_id
         index = WakeCandidateIndex(bus)
-        for _ in range(_MAX_BATCHES):
+        # Drain the derived index in the background until it is caught up with
+        # the latest notified delivery; each batch stays bounded (64 rows,
+        # 256KB, 0.2s) but a stalled index must not wait for future deliveries
+        # to advance.
+        while True:
             with _guard:
                 target = _pending[root][1]
             hint = index.notify_committed_append(root_id=root_id, through_seq=target)
@@ -71,7 +74,6 @@ def _drain_candidate(root: Path) -> None:
                         return
             elif not result.more_source_bytes:
                 return
-        _LOG.warning("Candidate maintenance stopped at its bounded batch budget")
     except Exception:
         # The worker thread has no caller: record the defect with its traceback
         # and let the thread fail through threading.excepthook.

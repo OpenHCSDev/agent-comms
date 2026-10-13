@@ -205,14 +205,20 @@ def test_byte_budget_never_publishes_a_partial_candidate(tmp_path: Path) -> None
     comms, root_id, lookup = _private(tmp_path)
     message = comms.messaging.send_initial_cohort("sender", "Alice", "a" * 4096)
     index = WakeCandidateIndex(comms.bus)
-    assert not index.maintain(rebuild=True, max_bytes=128)
-    with pytest.raises(ProjectionUnavailableError, match="stale"):
-        index.page(
-            root_id=root_id,
-            recipient_lookup=lookup["Alice"],
-            after_seq=0,
-            required_through_seq=message.seq,
+    # A batch budget smaller than the next record admits that one record
+    # alone; it never publishes a partial candidate.
+    assert index.maintain(rebuild=True, max_bytes=128)
+    assert (
+        len(
+            index.page(
+                root_id=root_id,
+                recipient_lookup=lookup["Alice"],
+                after_seq=0,
+                required_through_seq=message.seq,
+            ).entries
         )
+        == 1
+    )
     assert index.maintain(max_bytes=16 * 1024)
     assert (
         len(
