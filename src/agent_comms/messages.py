@@ -63,7 +63,8 @@ class HandoffKind(MessageKind):
     """A handoff declares its evidence; completion claims carry references."""
 
     CLAIMS = ("fixed", "single owner", "no other callers")
-    SEARCH_COMMANDS = ("grep", "rg", "git", "sed", "awk", "find", "python", "ast")
+    # Evidence command: a command literal inside backticks, not a bare word.
+    COMMANDS = re.compile(r"`[^`]*\b(grep|rg|git|sed|awk|find|python|ast)\b[^`]*`")
 
     @classmethod
     def require_publishable(cls, message: Message, worktree: Path) -> None:
@@ -71,16 +72,11 @@ class HandoffKind(MessageKind):
             claim for claim in cls.CLAIMS
             if re.search(rf"\b{re.escape(claim)}\b", message.body, re.IGNORECASE)
         ]
-        if not claims:
-            return
-        if FileLine.scan(message.body) or any(
-            re.search(rf"\b{re.escape(command)}\b", message.body)
-            for command in cls.SEARCH_COMMANDS
-        ):
+        if not claims or FileLine.scan(message.body) or cls.COMMANDS.search(message.body):
             return
         raise ValueError(
             "Handoff message claims " + ", ".join(claims)
-            + " without a file:line reference or search command as evidence."
+            + " without a file:line reference or a command in backticks as evidence."
         )
 
 
