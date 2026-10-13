@@ -95,10 +95,11 @@ class CatalogConfigOption(ConfigOption):
             choices = [SessionConfigSelectOption(
                 value=selected, name="Not configured"
             ), *choices]
-        elif selected not in {choice.value for choice in choices}:
-            raise NativePiUnavailable(
-                f"Configured {self.title.lower()} {selected!r} is absent from its native catalog"
-            )
+        else:
+            try:
+                self.require_value(selected, choices)
+            except ValueError as error:
+                raise NativePiUnavailable(str(error)) from error
         return SessionConfigOptionSelect(
             id=FieldCodec.encode(type(self)),
             name=self.title,
@@ -117,12 +118,21 @@ class CatalogConfigOption(ConfigOption):
     async def change(
         self, owner: ConfigOptions, thread: Thread, value: str
     ) -> None:
-        choices = await self.choices(thread)
-        if value not in {choice.value for choice in choices}:
-            raise RequestError.invalid_params(
-                {"reason": f"Unknown {self.title.lower()}: {value!r}"}
-            )
+        try:
+            await self.validate(thread, value)
+        except ValueError as error:
+            raise RequestError.invalid_params({"reason": str(error)}) from error
         await self.apply(owner, thread, value)
+
+    def require_value(self, value: str, choices: list[SessionConfigSelectOption]) -> None:
+        if value not in {choice.value for choice in choices}:
+            valid = ", ".join(choice.value for choice in choices)
+            raise ValueError(
+                f"{self.title} {value!r} is unavailable; choose one of: {valid}"
+            )
+
+    async def validate(self, thread: Thread, value: str) -> None:
+        self.require_value(value, await self.choices(thread))
 
 
 class ModelConfigOption(CatalogConfigOption):

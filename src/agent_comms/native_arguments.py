@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import shlex
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
@@ -151,6 +153,16 @@ class VersionArgument(NamedOption, OneShotArgument):
 @dataclass(frozen=True)
 class NativeArguments:
     entries: tuple[NativeArgument, ...]
+    default: ClassVar[tuple[str, ...]] = (
+        "--provider", "openrouter", "--model", "z-ai/glm-5.3-flash",
+    )
+
+    @classmethod
+    def configured(cls, arguments: Sequence[str] | None = None) -> NativeArguments:
+        if arguments is None:
+            configured = os.environ.get("AGENT_COMMS_AGENT_ARGS")
+            arguments = cls.default if configured is None else shlex.split(configured)
+        return cls.parse(arguments)
 
     @classmethod
     def parse(cls, arguments: Sequence[str]) -> NativeArguments:

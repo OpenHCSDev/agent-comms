@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import shlex
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING, Any
@@ -60,12 +59,6 @@ if TYPE_CHECKING:
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
 DEFAULT_AGENT_BIN = "pi"
-DEFAULT_AGENT_ARGS = [
-    "--provider",
-    "openrouter",
-    "--model",
-    "z-ai/glm-5.3-flash",
-]
 NO_REPLY_WINDOW = 2.5  # silence: end the turn after this long with nothing
 REPLY_WINDOW = 8.0  # once replies flow, keep collecting at most this long
 REPLY_QUIET = 1.5  # after the last reply, wait this long then end the turn
@@ -110,12 +103,7 @@ class TurnRunner:
         self.runtime = runtime
         self.effects = effects
         self.agent_bin = agent_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", DEFAULT_AGENT_BIN)
-        arg_env = os.environ.get("AGENT_COMMS_AGENT_ARGS")
-        self.agent_args = NativeArguments.parse(
-            agent_args
-            if agent_args is not None
-            else (shlex.split(arg_env) if arg_env is not None else list(DEFAULT_AGENT_ARGS))
-        )
+        self.agent_args = NativeArguments.configured(agent_args)
         self.turn_tasks: dict[str, asyncio.Task[Any]] = {}
         # One backend per ACP session, of the bound thread's declared kind.
         self.persistent_backends: dict[str, AgentBackend] = {}

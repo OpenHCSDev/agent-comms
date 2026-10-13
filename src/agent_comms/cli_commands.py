@@ -738,6 +738,11 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
     thinking: str | None = option("--thinking", default=None)
 
     def apply(self, ctx: Comms) -> Any:
+        import asyncio
+
+        from .config_options import ThinkingLevelConfigOption
+        from .native_arguments import NativeArguments
+        from .owner_launch import RestartEnvironment
         from .pi_vocabulary import ThinkingLevel
         from .errors import RelationViolationError
 
@@ -746,6 +751,18 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
             raise RelationViolationError(
                 f"{thread.name} is running; change its settings through its session")
         level = ThinkingLevel.decode(self.thinking).declared_name if self.thinking is not None else None
+        candidate = replace(
+            thread,
+            model=thread.model if self.model is None else self.model.strip(),
+            thinking_level=thread.thinking_level if level is None else level,
+        )
+        selected = ThinkingLevel.optional_name(candidate.thinking_level)
+        if selected is not None:
+            catalog = ThinkingLevelConfigOption(
+                os.environ.get("AGENT_COMMS_AGENT_BIN", "pi"),
+                NativeArguments.configured(), RestartEnvironment.inherit(os.environ),
+            )
+            asyncio.run(catalog.validate(candidate, selected))
         updated = ctx.threads.set_thread_configuration(thread, model=self.model, thinking_level=level)
         return {"configured": updated.name, "model": updated.model,
                 "thinking_level": ThinkingLevel.optional_name(updated.thinking_level)}
