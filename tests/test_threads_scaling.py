@@ -136,6 +136,37 @@ def test_activity_clocks_reuse_the_original_boundary_and_extend_on_append(wired,
     assert parsed == [appended.seq]
 
 
+def test_captured_viewer_cut_keeps_its_admitted_append_checkpoints(wired, monkeypatch):
+    first = wired.messaging.send_message("PR111", "#base", "original captured activity")
+    viewer = wired.messaging.user_identity("/isolated-checkpoint-viewer").name
+    # Prepare both actual index owners before taking a cold observer's cut.
+    wired.views.viewer_snapshot("/isolated-checkpoint-viewer")
+    cold = wire(wired.root)
+    with cold.views.presentation.snapshot(viewer=viewer) as (basis, source):
+        appended = wired.messaging.send_message("fixer", "#base", "later activity")
+        wired.views.viewer_snapshot("/isolated-checkpoint-viewer")
+        parsed = []
+        original = Message.from_wire
+
+        def measured(row):
+            parsed.append(row["seq"])
+            return original(row)
+
+        monkeypatch.setattr(Message, "from_wire", measured)
+        activity, unread = cold.views.presentation.display_view_metrics(
+            source, basis.scopes, basis.scopes, basis.viewer, basis.viewer_names)
+        clocks = cold.bus.last_sent_timestamps(source=source)
+        assert clocks["PR111"] == first.timestamp
+        assert clocks.get("fixer", 0) < appended.timestamp
+        assert activity["#base"].last_message == first.timestamp
+        assert parsed == []
+    # The historical reader did not overwrite the newer published checkpoint.
+    parsed.clear()
+    fresh = wire(wired.root)
+    assert fresh.bus.last_sent_timestamps()["fixer"] == appended.timestamp
+    assert parsed == []
+
+
 def test_mounted_activity_rebuilds_after_bus_replacement_or_damaged_checkpoint(wired):
     wired.messaging.send("PR111", "#base", "first")
     wired.messaging.send("fixer", "#base", "second")
