@@ -35,7 +35,7 @@ async def run(stage: Path, extension: Path):
     async with native_backend_fixture(stage / 'native') as native:
         await native.author_history()
         original = native.session.read_bytes()
-        options = ('--no-tools', '--extension', str(extension))
+        options = ('--extension', str(extension))
         async with native.open_owner(runtime_enabled=True, auto_wake=True,
                                      native_options=options) as (owner, session):
             comms = owner._comms
@@ -77,7 +77,7 @@ async def run(stage: Path, extension: Path):
                 view = app.selected_session.conversation
                 await until(lambda: 'Original saved answer' in '\n'.join(
                     strip.text for strip in app.screen._compositor.render_strips()))
-                view.prompt.text = 'Set your own persistent goal, then block it for my explicit Retry.'
+                view.prompt.text = f'[{stage.name}] Set your own persistent goal, then block it for my explicit Retry.'
                 view.prompt.focus()
                 await pilot.press('enter')
                 await until(lambda: comms.registry.require(session).goal is not None
@@ -117,6 +117,7 @@ async def run(stage: Path, extension: Path):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--stage', type=Path, required=True)
-    parser.add_argument('--extension', type=Path, required=True)
+    parser.add_argument('--extension', type=Path, required=True,
+                        help='Approved compiled comms entry from the native deployment manifest')
     args = parser.parse_args()
     asyncio.run(run(args.stage.resolve(), args.extension.resolve(strict=True)))
