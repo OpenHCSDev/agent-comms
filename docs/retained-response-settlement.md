@@ -34,3 +34,27 @@ modules with zero omissions before implementation, enumerating declarations,
 imports, checks, inheritance and consumers of response/finality/recovery. Dynamic
 runtime monkeypatches and native JavaScript are outside this Python AST evidence.
 Final targeted and isolated installed-process checks come after implementation.
+
+## Actual checkpoint / blocker
+
+The complete producer/resolver edit to src/agent_comms/coordination_response.py
+was refused: Resource already claimed by 'core-goal-retry'. It made no changes.
+The owner change is not implemented and no alternate resolver or caller was added.
+Review needs to authorize settlement of that exact retained file claim before the
+coherent shared implementation and normal recovery caller can land. No shell
+bypass, provider replay, restart or direct pointer/database mutation was attempted.
+
+Read-only checkpoint pointers and the existing DeliverySources decoder independently
+confirm exactly one durable reply: seq 3782, id 19d2072582f5, core-batch-reply to
+claude-code, with the frozen publication key for the retained execution. Only that
+indexed byte range was read; no whole-bus scan/copy or physical locks were needed.
+The SQL publication record is still missing. The exact attempt remains unresolved.
+
+The proposed change makes PublicationAppendDispatches own common recording and
+completion, used by both the live publisher and existing-row resolver; it deletes
+the allow_append dual-mode function. The resolver consumes the recorded immutable
+attempt, not a fabricated secret live fence. RecoveryMonitorCapability then resolves
+the original routes before SelectedParticipant checks whether it can admit fresh
+work. Absent/mismatched durable replies continue to refuse without append or input.
+No new tests run because production implementation was prevented; the requested
+concurrent fresh-event and installed settlement acceptance is still outstanding.
