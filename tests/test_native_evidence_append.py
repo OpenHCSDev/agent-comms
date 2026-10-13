@@ -19,10 +19,12 @@ def append_to(path):
         stream.write(APPEND)
 
 
-@pytest.mark.parametrize("phase", ["capture", "hash"])
+@pytest.mark.parametrize("phase", ["capture", "hash_before", "hash_after"])
+@pytest.mark.parametrize("padding", [0, 300_000])
 @pytest.mark.parametrize("change", ["append", "prefix_and_append", "truncate", "replace", "permissions", "rewrite"])
-def test_source_change_during_original_read(tmp_path, monkeypatch, phase, change):
+def test_source_change_during_original_read(tmp_path, monkeypatch, phase, padding, change):
     session = _evidence(tmp_path)
+    session.write_bytes(session.read_bytes().replace(b"separate", b"x" * padding + b"separate"))
     original = session.read_bytes()
     entered, finished = threading.Event(), threading.Event()
     failures = []
@@ -57,14 +59,16 @@ def test_source_change_during_original_read(tmp_path, monkeypatch, phase, change
         def reading(size):
             nonlocal reads
             reads += 1
-            # Complete capture first. During hash, alter the source before its
-            # fresh read so bytes must be checked, not reused from a read buffer.
-            trigger = reads == (1 if phase == "capture" else 2)
-            if trigger and phase == "hash":
+            if reads == 2 and phase == "hash_before":
                 entered.set()
                 assert finished.wait(5)
             data = real_read(size)
-            if trigger and phase == "capture":
+            # The shepherd's case: return old bytes only AFTER the writer has
+            # rewritten the prefix and grown the file, including a multi-chunk
+            # hash whose prefix was read well before this final read.
+            if (reads == 1 and phase == "capture" or
+                    reads > 1 and phase == "hash_after" and
+                    source.stream.tell() == len(original) and not entered.is_set()):
                 entered.set()
                 assert finished.wait(5)
             return data
@@ -85,6 +89,30 @@ def test_source_change_during_original_read(tmp_path, monkeypatch, phase, change
             entered.set()
             thread.join(5)
         assert not thread.is_alive() and not failures
+
+
+def test_consecutive_appends_rehash_only_the_captured_prefix(tmp_path, monkeypatch):
+    session = _evidence(tmp_path)
+    original = session.read_bytes()
+    with PrivateEvidenceRead.open(session) as source:
+        real_read = source.stream.read
+        reads = []
+
+        def reading(size):
+            start = source.stream.tell()
+            data = real_read(size)
+            reads.append((start, size))
+            # Three consecutive hashing passes see growth after reading their
+            # last byte. None can certify the old digest at the new revision.
+            if 2 <= len(reads) <= 4:
+                append_to(session)
+            return data
+
+        monkeypatch.setattr(source.stream, "read", reading)
+        assert len(tuple(source.rows())) == 2
+        assert reads == [(0, len(original))] * 5  # capture + four hash passes
+        assert source.size == len(original)
+        assert len(tuple(source.rows())) == 3  # later bytes decoded only now
 
 
 async def test_actual_saved_native_tool_start_uses_prefix_reader(native_backend, monkeypatch):

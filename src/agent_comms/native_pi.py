@@ -692,7 +692,7 @@ class PrivateEvidenceRead:
             if len(appended) != info.st_size - self.size or (appended and not appended.endswith(b"\n")):
                 raise NativePiUnavailable("Native Pi evidence file is incomplete")
             digest.update(appended)
-            self._require_append_since(revision)
+            self._observe_revision_after(revision)
             return info.st_size, digest, appended
         except (OSError, ValueError) as error:
             raise NativePiUnavailable("Native Pi evidence file is unavailable or not private") from error
@@ -726,34 +726,39 @@ class PrivateEvidenceRead:
     def verify_snapshot(self, size, expected_digest):
         """Validate the captured prefix after decoding, allowing later appends.
 
-        Hash exactly the captured byte range. Native appends may race both
-        acquisition and hashing; their size/timestamps do not identify a change
-        to that prefix. The digest checks its bytes, while descriptor and named
-        source checks reject replacement, shrinkage and same-size rewrites.
+        Growth is not proof of an append: a writer may also change bytes after
+        the final read. Rehash the same captured range after growth, accepting
+        only a matching digest read under one unchanged private-file revision.
+        Later bytes remain for the next observation; no rows are decoded again.
         """
         before = os.fstat(self.stream.fileno())
         PrivateFileRole.require(before)
         revision = FileRevision.from_stat(before)
         if revision.identity != self.identity or revision.size < size:
             raise NativePiUnavailable("Native Pi evidence snapshot source changed")
-        self.stream.seek(0)
-        digest = hashlib.sha256()
-        remaining = size
-        while remaining:
-            raw = self.stream.read(min(remaining, 128 * 1024))
-            if not raw:
-                raise NativePiUnavailable("Native Pi evidence prefix is incomplete")
-            remaining -= len(raw)
-            digest.update(raw)
-        if digest.digest() != expected_digest:
-            raise NativePiUnavailable("Native Pi evidence original prefix changed")
-        self._require_append_since(revision)
+        while True:
+            self.stream.seek(0)
+            digest = hashlib.sha256()
+            remaining = size
+            while remaining:
+                raw = self.stream.read(min(remaining, 128 * 1024))
+                if not raw:
+                    raise NativePiUnavailable("Native Pi evidence prefix is incomplete")
+                remaining -= len(raw)
+                digest.update(raw)
+            if digest.digest() != expected_digest:
+                raise NativePiUnavailable("Native Pi evidence original prefix changed")
+            observed = self._observe_revision_after(revision)
+            if observed == revision:
+                return
+            revision = observed
 
-    def _require_append_since(self, revision):
-        """Retain the opened private inode; only growth may change its revision.
+    def _observe_revision_after(self, revision):
+        """Check original private inode and monotonic growth, not byte integrity.
 
-        This is not byte-integrity proof: verify_snapshot checks the captured
-        prefix digest. FileRevision equality alone would reject valid appends.
+        Return the last observation so hashing cannot accept a digest from an
+        earlier revision. Each observation also fences the next: growth seen on
+        the descriptor cannot be hidden by shrinking the named file back.
         """
         for info in (os.fstat(self.stream.fileno()), self.path.lstat()):
             PrivateFileRole.require(info)
@@ -761,7 +766,9 @@ class PrivateEvidenceRead:
             if observed.identity != self.identity or (
                 observed != revision and observed.size <= revision.size
             ):
-                raise NativePiUnavailable("Native Pi evidence source changed without append")
+                raise NativePiUnavailable("Native Pi evidence source changed without growth")
+            revision = observed
+        return revision
 
 
 def _trusted_package(package: Path) -> Path:
