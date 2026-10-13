@@ -22,6 +22,8 @@ from agent_comms.assignment_states import DeliveredAssignment
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
+from agent_comms.config_options import ModelConfigOption
+from agent_comms.field_codec import FieldCodec
 from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
@@ -270,6 +272,64 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(native
             # Nothing is left to wake for once the turn ends.
             assert await owner._drain_private_nk(session, root_id) == 0
             assert native.provider.posts == 2
+        finally:
+            held.set()
+            turn.cancel()
+            await asyncio.gather(turn, return_exceptions=True)
+
+
+async def test_waiting_messages_and_a_model_change_reach_the_next_model_call_together(
+    native_backend,
+):
+    native = native_backend
+    await native.author_history()
+    held = asyncio.Event()
+    native.provider.response_gate = held
+    async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+        comms = owner._comms
+        receiver = await Coordination.run_worker(partial(comms.registry.require, session))
+        lookup = stable_thread_lookup(receiver.created_at)
+
+        def prepare():
+            comms.registry.register(
+                Thread(
+                    name="sender", tags=frozenset(), worktree=str(native.project),
+                    created_at=61001.0,
+                )
+            )
+            with Coordination(str(native.root / "coordination.sqlite3")) as store:
+                install_private_cohort_schema(store)
+                store.participants.register(lookup, session, session, committed=True)
+
+        await Coordination.run_worker(prepare)
+        turn = asyncio.create_task(
+            owner.prompt(session, [TextContentBlock(type="text", text="first")])
+        )
+        try:
+            await wait_for(lambda: native.provider.posts == 1)
+            assert native.provider.requests[0]["model"] == "fixture"
+            sender = Comms(native.root, private_initial_writes=True).messaging
+            for body in ("first question", "second question"):
+                await Coordination.run_worker(partial(
+                    sender.send_message, "sender", session, body
+                ))
+            native.provider.response_gate = None
+            await owner.set_config_option(
+                FieldCodec.encode(ModelConfigOption), session, "response-local/fixture-second"
+            )
+            await wait_for(lambda: len(owner.inputs.dispositions.read().rows) == 3)
+            held.set()
+            assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
+            # One further model call took both messages, on the new model.
+            assert native.provider.posts == 2
+            request = native.provider.requests[1]
+            assert request["model"] == "fixture-second"
+            assert all(
+                body in json.dumps(request["messages"])
+                for body in ("first question", "second question")
+            )
+            rows = owner.inputs.dispositions.read().rows
+            assert all(row.has_started for row in rows.values())
         finally:
             held.set()
             turn.cancel()

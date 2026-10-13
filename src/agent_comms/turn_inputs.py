@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import asyncio
 import secrets
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from uuid import uuid4
 from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import pi_commands as commands
 from . import turn_failure as failures
-from .agent_backend import InputRequest, SendNow, WhenBusy
+from .agent_backend import InputRequest, SendNow, UseSettings, WhenBusy, TurnInboxItem
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -27,7 +28,7 @@ _PI_STREAMING_BEHAVIOR = {WhenBusy.STEER: "steer", WhenBusy.FOLLOW_UP: "followUp
 
 @dataclass
 class InputForwarding:
-    queue: asyncio.Queue[InputRequest | SendNow] | None = None
+    queue: asyncio.Queue[TurnInboxItem] | None = None
     # (public input ID, sent text, native input ID) for each written, unstarted input.
     pending: list[tuple[str, str, str]] = field(default_factory=list)
     accepted: set[str] = field(default_factory=set)
@@ -58,8 +59,26 @@ class InputForwarding:
         self.changed.set()
 
     async def forward(self, session: TurnSession) -> None:
+        # Inputs that wait through one tool batch reach the model together,
+        # not one model call apiece.
+        await self.write(session, commands.SetSteeringMode(mode="all"))
         while await (await self.queue.get()).deliver_to(self, session):
             pass
+
+    async def write(self, session: TurnSession, *written: commands.PiCommand) -> None:
+        for command in written:
+            session.stdin.write(session.native.reader.encode(replace(command, id=uuid4().hex)))
+        await session.stdin.drain()
+
+    async def use_settings(self, session: TurnSession, item: UseSettings) -> bool:
+        provider, model_id = item.model.split("/", 1)
+        # Pi resets thinking to the new model's default, so the level follows the model.
+        await self.write(
+            session,
+            commands.SetModel(provider=provider, model_id=model_id),
+            commands.SetThinkingLevel(level=item.thinking_level),
+        )
+        return True
 
     async def send_now(self, session: TurnSession, item: SendNow) -> bool:
         selected = {input_id.value for input_id in item.input_ids}

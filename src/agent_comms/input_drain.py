@@ -27,7 +27,7 @@ from .activity import (
     StoppedDrainDiagnostic,
     UnavailableDrainDiagnostic,
 )
-from .agent_backend import InputContent, InputId, InputRequest, SendNow
+from .agent_backend import InputContent, InputId, InputRequest, SendNow, TurnInboxItem
 from .comms import Comms
 from .message_bus import MessageBus
 from .coordination_errors import CoordinationError, IdentityConflict
@@ -118,7 +118,7 @@ class InputDrain:
         self.runtime = runtime
         self.effects = effects
         self.drain_tasks: dict[str, asyncio.Task[None]] = {}
-        self.backend_inboxes: dict[str, asyncio.Queue[InputRequest | SendNow]] = {}
+        self.backend_inboxes: dict[str, asyncio.Queue[TurnInboxItem]] = {}
         self.queued_inputs: dict[str, dict[str, QueuedInput]] = {}
         self.restored_inputs: dict[str, dict[str, QueuedInput]] = {}
         self.queue_revisions: dict[str, int] = {}
@@ -692,7 +692,7 @@ class InputDrain:
 
     def bind_native_turn(
         self, session_id: str, owner: Thread, admission: int, turn_id: str
-    ) -> asyncio.Queue[InputRequest | SendNow]:
+    ) -> asyncio.Queue[TurnInboxItem]:
         """Transfer existing live inputs to the new lease, never read them from disk."""
         inbox = self.backend_inboxes.setdefault(session_id, asyncio.Queue())
         for input_id, item in self.queued_inputs.get(session_id, {}).items():
@@ -779,7 +779,7 @@ class InputDrain:
             return self.dispositions.settle_unbound(keys)
 
     async def finish_turn_inputs(
-        self, session_id: str, inbox: asyncio.Queue[InputRequest | SendNow]
+        self, session_id: str, inbox: asyncio.Queue[TurnInboxItem]
     ) -> None:
         """Retire this turn's live capabilities; retain UNKNOWN only as notices."""
         if self.backend_inboxes.get(session_id) is inbox:

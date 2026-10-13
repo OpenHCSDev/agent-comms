@@ -123,6 +123,29 @@ class SendNow:
         return receiver.send_now(turn, self)
 
 
+@dataclass(frozen=True)
+class UseSettings:
+    """Ask the running turn to use the thread's stored model and thinking level.
+
+    The backend applies them from its next model call; the call in flight
+    finishes on the settings it started with.
+    """
+
+    model: str
+    thinking_level: str
+
+    @property
+    def carried_inputs(self) -> tuple[InputId, ...]:
+        return ()
+
+    def deliver_to(self, receiver: Any, turn: Any) -> Awaitable[bool]:
+        return receiver.use_settings(turn, self)
+
+
+# Everything a running turn's inbox carries.
+TurnInboxItem = InputRequest | SendNow | UseSettings
+
+
 class UnansweredReason(DeclaredFamily, affix="Reason"):
     """Why an input ended without an answer."""
 
@@ -324,7 +347,7 @@ class TurnDelivery:
 
     worktree: str
     environment: dict[str, str]
-    inbox: asyncio.Queue[InputRequest | SendNow]
+    inbox: asyncio.Queue[TurnInboxItem]
     finish_event: asyncio.Event
     send_boundary: Callable[..., Any]
     interrupt_boundary: Callable[..., Any]

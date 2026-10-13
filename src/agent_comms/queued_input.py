@@ -32,7 +32,7 @@ from .threads import Thread
 
 if TYPE_CHECKING:
     from asyncio import Queue
-    from .agent_backend import InputContent, InputRequest, SendNow
+    from .agent_backend import InputContent, InputRequest, SendNow, TurnInboxItem
     from .bus_publication import CommittedDelivery
     from .coordination_tables.assignments import WakeAssignment
     from .messages import Message
@@ -187,7 +187,7 @@ class QueuedInput:
 
     def place(
         self, inputs: InputDrain, session_id: str,
-        inbox: Queue[InputRequest | SendNow], content: InputContent,
+        inbox: Queue[TurnInboxItem], content: InputContent,
     ) -> None:
         """The accepted input owns transfer into this turn's existing native queue."""
         from .agent_backend import InputId, InputRequest, WhenBusy
