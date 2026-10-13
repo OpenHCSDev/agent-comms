@@ -365,7 +365,7 @@ class OwnedTurn:
         admission = OwnedSendAdmission(
             comms=self.runner.comms,
             inputs=self.runner.inputs,
-            goal_store=self.runner.comms.goals.goal_store,
+            goal_store=await Coordination.run_worker(self.runner.comms.goals.open_goal_store),
             session_id=self.session_id,
             thread=self.thread,
             turn=TurnId(self.turn_id),
