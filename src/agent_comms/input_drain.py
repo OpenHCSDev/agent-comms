@@ -354,10 +354,13 @@ class InputDrain:
                 if idle and shared_unchanged:
                     settled = SettledTick(revision, entry, settled.admission_after_seq)
                     continue
-                if idle and not shared_unchanged and not self._in_standby(session_id):
+                if idle and not shared_unchanged:
                     # Only shared stores grew (every publisher's appends change
                     # them); each shared store answers per owner before any row
-                    # is decoded for this owner.
+                    # is decoded for this owner. Standby owners resolve the same
+                    # per-owner answers: their wait graph needs a full tick only
+                    # when their own part (addressed rows, floor or coordination
+                    # rows) changed.
                     outcome = await self._shared_changes_concern_other_owners(
                         session_id, settled, revision, entry,
                     )
@@ -447,7 +450,7 @@ class InputDrain:
         with self.comms.bus.log.locked():
             marker = self.comms.bus.log._private_marker_unlocked()
             return marker, addressed_source_pointers_unlocked(
-                self.comms.bus.log, marker, lookup,
+                self.comms.bus.log, marker, lookup, limit=1,
             )
 
     async def _shared_changes_concern_other_owners(

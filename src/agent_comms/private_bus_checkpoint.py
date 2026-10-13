@@ -1045,10 +1045,14 @@ def append_private_bus_checkpoint_unlocked(
 def addressed_source_pointers_unlocked(
     bus: WireLog, marker: WireMetadata, lookup: str, *, limit: int = 4
 ) -> tuple[DeliverySources, ...]:
-    """Latest source pointers for natural-turn awareness, never delivery evidence.
+    """Latest source pointers for natural-turn awareness, and the observation
+    tick's wake answer: an empty result under the current seal means the owner
+    has no unadmitted addressed rows.
 
     Caller holds the bus lock. Read only the current sealed index: no payload
     decode, historical scan, index repair, recovery, or native cursor advancement.
+    The returned pointers are never delivery, read or acceptance evidence; the
+    seal-checked emptiness is the address fact the tick consumes.
     Frozen audience membership includes unmentioned NoWake observers.
     """
     path = _path(bus.path)
