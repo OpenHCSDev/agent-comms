@@ -1,4 +1,4 @@
-"""The one-shot carry preserves history and certifies a separate candidate."""
+"""The one-shot migration preserves history and certifies a separate candidate."""
 from dataclasses import replace
 import hashlib
 import json
@@ -24,8 +24,8 @@ from agent_comms.wire_log import WireLog
 from agent_comms.wire_record import WireRecord
 from test_private_bus_checkpoint import _root
 from agent_comms.bus_publication import stable_thread_lookup
-from tools.cutover.carry_context_manifest_rows import (
-    ManifestRowCarry, OriginalManifestObservation, OriginalManifestRow,
+from tools.cutover.migrate_context_manifest_rows import (
+    ManifestRowMigration, RetiredManifestObservation, RetiredManifestRow,
 )
 
 
@@ -51,8 +51,8 @@ def original_root(tmp_path):
     for raw in raw_rows:
         record = WireRecord.from_wire(json.loads(raw), root_id)
         if record.context_manifests():
-            raw = json.dumps(FieldCodec.encode(OriginalManifestRow(
-                OriginalManifestObservation("context_manifest", manifest)))).encode() + b"\n"
+            raw = json.dumps(FieldCodec.encode(RetiredManifestRow(
+                RetiredManifestObservation("context_manifest", manifest)))).encode() + b"\n"
         original.append(raw)
     # Only this synthetic fixture uses the original full-form reader while
     # the canonical installer certifies it. The reader is then restored.
@@ -75,11 +75,11 @@ def hashes(root):
     return result
 
 
-def test_carry_preserves_history_and_rebuilds_sealed_offsets(tmp_path):
+def test_migration_preserves_history_and_rebuilds_sealed_offsets(tmp_path):
     comms, root_id, original, messages = original_root(tmp_path)
     before = hashes(comms.root)
     candidate = tmp_path / "candidate"
-    result = ManifestRowCarry(comms.root, candidate, root_id).run()
+    result = ManifestRowMigration(comms.root, candidate, root_id).run()
     assert hashes(comms.root) == before
     assert result["rows"] == 3 and result["manifests"] == 1
     assert result["published"] is False and result["source_unchanged"] is True
@@ -96,10 +96,11 @@ def test_carry_preserves_history_and_rebuilds_sealed_offsets(tmp_path):
         _, delivered, _ = source.addressed_page(reopened, request)
         assert tuple(item.message for item in delivered) == messages
     assert result["source_certificate"]["digest"] != result["candidate_certificate"]["digest"]
-    assert json.loads((candidate / "carry-result.json").read_text()) == result
+    assert json.loads((candidate / "migration-result.json").read_text()) == result
     # Actual command boundary, still entirely on isolated roots.
     completed = subprocess.run([
-        sys.executable, str(Path(__file__).resolve().parents[1] / "tools/cutover/carry_context_manifest_rows.py"),
+        sys.executable,
+        str(Path(__file__).resolve().parents[1] / "tools/cutover/migrate_context_manifest_rows.py"),
         "--source", str(comms.root), "--candidate", str(tmp_path / "cli-candidate"),
         "--root-id", root_id,
     ], capture_output=True, text=True, env={key: value for key, value in os.environ.items()
@@ -109,28 +110,28 @@ def test_carry_preserves_history_and_rebuilds_sealed_offsets(tmp_path):
     assert hashes(comms.root) == before
 
 
-def test_carry_refuses_wrong_identity_or_existing_candidate(tmp_path):
+def test_migration_refuses_wrong_identity_or_existing_candidate(tmp_path):
     comms, root_id, _, _ = original_root(tmp_path)
     before = hashes(comms.root)
     candidate = tmp_path / "candidate"
     redirected = tmp_path / "redirected-wire"
     redirected.symlink_to(comms.root, target_is_directory=True)
     with pytest.raises(ValueError, match="ancestry"):
-        ManifestRowCarry(redirected, candidate, root_id).run()
+        ManifestRowMigration(redirected, candidate, root_id).run()
     with pytest.raises(ValueError, match="separate"):
-        ManifestRowCarry(comms.root, comms.root / "candidate", root_id).run()
+        ManifestRowMigration(comms.root, comms.root / "candidate", root_id).run()
     with pytest.raises(ValueError, match="root identity"):
-        ManifestRowCarry(comms.root, candidate, "0" * 32).run()
+        ManifestRowMigration(comms.root, candidate, "0" * 32).run()
     assert not candidate.exists()
     candidate.mkdir()
     retained = candidate / "retained"
     retained.write_text("keep")
     with pytest.raises(FileExistsError, match="fresh"):
-        ManifestRowCarry(comms.root, candidate, root_id).run()
+        ManifestRowMigration(comms.root, candidate, root_id).run()
     assert retained.read_text() == "keep" and hashes(comms.root) == before
 
 
-def test_carry_refuses_changed_original_prefix_without_repair(tmp_path):
+def test_migration_refuses_changed_source_prefix_without_repair(tmp_path):
     comms, root_id, _, _ = original_root(tmp_path)
     raw = comms.bus.log.path.read_bytes()
     changed = raw.replace(b"entry-0", b"entry-x", 1)
@@ -138,12 +139,12 @@ def test_carry_refuses_changed_original_prefix_without_repair(tmp_path):
     comms.bus.log.path.write_bytes(changed)
     before = hashes(comms.root)
     with pytest.raises(CheckpointNeedsRepair, match="does not cover"):
-        ManifestRowCarry(comms.root, tmp_path / "candidate", root_id).run()
+        ManifestRowMigration(comms.root, tmp_path / "candidate", root_id).run()
     assert hashes(comms.root) == before
 
 
-def test_carry_does_not_admit_incomplete_or_unknown_observations():
+def test_migration_does_not_admit_incomplete_or_unknown_observations():
     with pytest.raises(RelationViolationError, match="incomplete"):
-        ManifestRowCarry.convert(b"{}")
+        ManifestRowMigration.convert(b"{}")
     with pytest.raises(ValueError):
-        ManifestRowCarry.convert(b'{"observation":{"kind":"unknown","manifest":{}}}\n')
+        ManifestRowMigration.convert(b'{"observation":{"kind":"unknown","manifest":{}}}\n')

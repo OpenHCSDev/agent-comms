@@ -1,11 +1,11 @@
-"""One-shot manifest-row carry into a separately certified candidate.
+"""Migrate retired manifest rows into a separately certified candidate.
 
 Run with the target reader against an immutable, sealed source. This tool never
 publishes into the source root. Optional --install-at names a separate, already
 certified offline destination; the checkpoint owner installs and certifies it.
 The release owner must keep destination writers stopped until this completes.
 A candidate seal is NOT a final-install seal.
-Delete this retired-format reader after the authorized carry and acceptance.
+Delete this retired-format reader after the authorized migration and acceptance.
 """
 from __future__ import annotations
 
@@ -32,19 +32,19 @@ from agent_comms.wire_record import (
 
 
 @dataclass(frozen=True)
-class OriginalManifestObservation:
+class RetiredManifestObservation:
     """The retired row declaration, confined to this one-shot tool."""
     kind: Literal["context_manifest"]
     manifest: ContextManifest
 
 
 @dataclass(frozen=True)
-class OriginalManifestRow:
-    observation: OriginalManifestObservation
+class RetiredManifestRow:
+    observation: RetiredManifestObservation
 
 
 @dataclass(frozen=True)
-class ManifestRowCarry:
+class ManifestRowMigration:
     source: Path
     candidate: Path
     root_id: str
@@ -52,19 +52,19 @@ class ManifestRowCarry:
     @staticmethod
     def convert(raw: bytes) -> tuple[bytes, ContextManifest | None]:
         if len(raw) > WireScan.max_row_bytes or not raw.endswith(b"\n"):
-            raise RelationViolationError("Original row is oversized or incomplete")
+            raise RelationViolationError("Source row is oversized or incomplete")
         value = FieldCodec.decode(dict[str, Any], json.loads(
             raw, object_pairs_hook=unique_wire_object))
         if "observation" not in value:
             return raw, None
-        original = FieldCodec.decode(OriginalManifestRow, value).observation.manifest
-        encoded = ObservationWireRecord(ContextManifestWireObservation(original)).to_wire()
-        return json.dumps(encoded, allow_nan=False).encode("utf-8") + b"\n", original
+        manifest = FieldCodec.decode(RetiredManifestRow, value).observation.manifest
+        encoded = ObservationWireRecord(ContextManifestWireObservation(manifest)).to_wire()
+        return json.dumps(encoded, allow_nan=False).encode("utf-8") + b"\n", manifest
 
     def run(self) -> dict[str, Any]:
         source_root = self.source.absolute()
         if source_root.resolve(strict=True) != source_root:
-            raise ValueError("Original root ancestry must not redirect the carry")
+            raise ValueError("Source root ancestry must not redirect the migration")
         candidate_root = self.candidate.absolute()
         if candidate_root.is_relative_to(source_root) or source_root.is_relative_to(candidate_root):
             raise ValueError("Candidate must be separate from the original root")
@@ -76,12 +76,12 @@ class ManifestRowCarry:
         # Do not create even a lock file in a retained source.
         for name in (".bus.jsonl.lock", ".bus_meta.json.lock"):
             if not (source_root / name).is_file():
-                raise ValueError("Original canonical lock files are required")
+                raise ValueError("Source canonical lock files are required")
         with _store_lock(source_log.path, shared=True) as lock:
             source = lock.certified_read()
             source.require_current()
             if source.marker.root_id != self.root_id:
-                raise ValueError("Original root identity differs from the requested carry")
+                raise ValueError("Source root identity differs from the requested migration")
             source.require_marker(source_log._private_marker_unlocked())
             candidate_root.mkdir(mode=0o700)
             candidate_log = WireLog(candidate_root / "bus.jsonl")
@@ -92,11 +92,11 @@ class ManifestRowCarry:
             with candidate_log.path.open("xb") as output:
                 os.chmod(candidate_log.path, 0o600)
                 while raw := source.stream.readline(WireScan.max_row_bytes + 1):
-                    converted, original = self.convert(raw)
+                    converted, manifest = self.convert(raw)
                     record = scan.read(converted)
-                    if original is not None:
-                        if record.context_manifests() != (original,):
-                            raise ValueError("Carry changed original manifest facts")
+                    if manifest is not None:
+                        if record.context_manifests() != (manifest,):
+                            raise ValueError("Migration changed source manifest facts")
                         manifests += 1
                     output.write(converted)
                     digest = _chain(digest, raw)
@@ -104,9 +104,9 @@ class ManifestRowCarry:
                 output.flush()
                 os.fsync(output.fileno())
             if digest.hex() != source.witness.digest:
-                raise RelationViolationError("Original bytes differ from their sealed certificate")
+                raise RelationViolationError("Source bytes differ from their sealed certificate")
             if scan.previous_sequence != source.marker.last_seq:
-                raise RelationViolationError("Carry changed the committed sequence")
+                raise RelationViolationError("Migration changed the committed sequence")
             source.require_current()
             source.require_marker(source_log._private_marker_unlocked())
             _directory_sync(candidate_log.path)
@@ -118,7 +118,7 @@ class ManifestRowCarry:
                 installed = candidate_lock.certified_read()
                 installed.require_current()
                 if replace(installed.marker, checkpoint_version=None, checkpoint_seal=None) != unsealed:
-                    raise ValueError("Carry changed original marker facts")
+                    raise ValueError("Migration changed source marker facts")
                 source.stream.seek(0)
                 installed.stream.seek(0)
                 candidate_digest = _SEED
@@ -127,20 +127,20 @@ class ManifestRowCarry:
                     before = source.stream.readline(WireScan.max_row_bytes + 1)
                     offset = installed.stream.tell()
                     after = installed.stream.readline(WireScan.max_row_bytes + 1)
-                    expected, original = self.convert(before)
+                    expected, manifest = self.convert(before)
                     if after != expected:
-                        raise ValueError("Installed row differs from the original carry")
+                        raise ValueError("Installed row differs from the migrated row")
                     record = candidate_scan.read(after)
-                    if original is not None:
+                    if manifest is not None:
                         pointer = ContextManifestSources.one(installed.connection, offset=offset)
                         if pointer is None or pointer.length != len(after):
                             raise ValueError("Installed manifest offset/length differs from its row")
-                        if pointer.decode_bytes(pointer.read_bytes(installed.stream), self.root_id) != original:
-                            raise ValueError("Indexed manifest differs from its original facts")
+                        if pointer.decode_bytes(pointer.read_bytes(installed.stream), self.root_id) != manifest:
+                            raise ValueError("Indexed manifest differs from its source facts")
                         installed.stream.seek(offset + len(after))
                     candidate_digest = _chain(candidate_digest, after)
                 if source.stream.read(1) or installed.stream.read(1):
-                    raise ValueError("Carry added or removed history rows")
+                    raise ValueError("Migration added or removed history rows")
                 if candidate_digest.hex() != witness.digest:
                     raise ValueError("Installed certificate differs from the candidate bytes")
                 installed.require_current()
@@ -158,7 +158,7 @@ class ManifestRowCarry:
                 "manifest_offsets_verified": True, "source_unchanged": True,
                 "published": False,
             }
-            _atomic_write_text(candidate_root / "carry-result.json",
+            _atomic_write_text(candidate_root / "migration-result.json",
                                json.dumps(result, indent=2) + "\n", fsync_parent=True)
             return result
 
@@ -176,7 +176,9 @@ def main() -> None:
         original = arguments.source.resolve(strict=True)
         if destination.is_relative_to(original) or original.is_relative_to(destination):
             parser.error("Install destination must be separate from the immutable original")
-    result = ManifestRowCarry(arguments.source, arguments.candidate, arguments.root_id).run()
+    result = ManifestRowMigration(
+        arguments.source, arguments.candidate, arguments.root_id
+    ).run()
     if arguments.install_at is not None:
         target = WireLog(destination / "bus.jsonl")
         with WireLog(arguments.candidate / "bus.jsonl").certified_read() as source:

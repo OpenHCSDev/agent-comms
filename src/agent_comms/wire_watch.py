@@ -1,8 +1,7 @@
-"""Optional local file notification for idle wire owners.
+"""Local file notification for idle wire owners.
 
-The bus and registry remain authoritative. A notification only prompts a
-normal read; the periodic polling recovers missed events and checks model
-configuration that can change outside the wire directory.
+A native notification only prompts a normal read. Polling is used only when
+native directory notification is unavailable or loses its watched directory.
 """
 
 from __future__ import annotations
@@ -28,12 +27,12 @@ _IN_Q_OVERFLOW = 0x00004000
 _IN_IGNORED = 0x00008000
 _MASK = _IN_CLOSE_WRITE | _IN_MOVED_TO | _IN_DELETE_SELF | _IN_MOVE_SELF
 _HEADER = struct.Struct("=iIII")
-_AUTHORITY_FILES = {
+_AUTHORITY_FILES = frozenset({
     b"bus.jsonl",
     b"registry.json",
     b".registry-owner-guard",
     GoalWaits.filename.encode(),
-}
+})
 
 
 @dataclass(frozen=True)

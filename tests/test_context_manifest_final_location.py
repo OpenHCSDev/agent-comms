@@ -19,8 +19,8 @@ from agent_comms.private_bus_checkpoint import PrefixCertificate, install_privat
 from agent_comms.turn_context import ContextManifest, ContextManifestWire
 from unittest.mock import patch
 from agent_comms.wire_log import WireLog
-from test_context_manifest_carry import original_root, hashes
-from tools.cutover.carry_context_manifest_rows import ManifestRowCarry
+from test_context_manifest_migration import original_root, hashes
+from tools.cutover.migrate_context_manifest_rows import ManifestRowMigration
 
 
 def certified_old_copy(original, destination):
@@ -29,8 +29,8 @@ def certified_old_copy(original, destination):
     with pytest.raises(RelationViolationError):
         with log.certified_read():
             pytest.fail("Copied certificate must not authorize the new inode")
-    # Fixture setup uses the original decoder to certify this private copy;
-    # the product carry never accepts stale/copied certificates as permission.
+    # Fixture setup uses the retired decoder to certify this private copy;
+    # the product migration never accepts stale/copied certificates as permission.
     marker = replace(log.read_metadata_unlocked(), checkpoint_version=None, checkpoint_seal=None)
     log.write_metadata_unlocked(marker)
     (destination / "private_bus_checkpoint.sqlite3").unlink()
@@ -40,21 +40,21 @@ def certified_old_copy(original, destination):
     return log
 
 
-def test_final_location_recertifies_carry_and_reads_retained_history(tmp_path):
+def test_final_location_recertifies_migration_and_reads_retained_history(tmp_path):
     original, root_id, manifest, messages = original_root(tmp_path)
     before = hashes(original.root)
     final_root = tmp_path / "final-location"
     final_log = certified_old_copy(original, final_root)
     candidate = tmp_path / "candidate"
-    carried = ManifestRowCarry(original.root, candidate, root_id).run()
+    migrated = ManifestRowMigration(original.root, candidate, root_id).run()
     unsealed = replace(final_log.read_metadata_unlocked(), checkpoint_version=None, checkpoint_seal=None)
     candidate_before = hashes(candidate)
-    with WireLog(candidate / "bus.jsonl").certified_read() as carried_source:
-        witness = carried_source.install_at(final_log)
+    with WireLog(candidate / "bus.jsonl").certified_read() as migrated_source:
+        witness = migrated_source.install_at(final_log)
     assert hashes(candidate) == candidate_before
     assert witness.revision == file_revision(final_log.path.stat())
-    assert witness.digest == carried["candidate_certificate"]["digest"]
-    assert witness.revision != tuple(carried["candidate_certificate"]["revision"])
+    assert witness.digest == migrated["candidate_certificate"]["digest"]
+    assert witness.revision != tuple(migrated["candidate_certificate"]["revision"])
     reopened = Comms(final_root)
     assert reopened.bus.log.full_history() == list(messages)
     assert reopened.bus.log.context_manifests("Alice", reopened.registry) == (manifest,)
@@ -96,7 +96,7 @@ def test_failed_install_keeps_required_seal_and_preserves_candidate(tmp_path, mo
     before = hashes(original.root)
     destination = certified_old_copy(original, tmp_path / "destination")
     candidate = tmp_path / "candidate"
-    ManifestRowCarry(original.root, candidate, root_id).run()
+    ManifestRowMigration(original.root, candidate, root_id).run()
     candidate_before = hashes(candidate)
     prior_marker = destination.read_metadata_unlocked()
 
@@ -111,7 +111,7 @@ def test_failed_install_keeps_required_seal_and_preserves_candidate(tmp_path, mo
     assert destination.read_metadata_unlocked().requires_checkpoint
     with pytest.raises(RelationViolationError):
         with destination.certified_read():
-            pytest.fail("Interrupted carry must not enter unsealed full-scan admission")
+            pytest.fail("Interrupted migration must not enter unsealed full-scan admission")
     assert hashes(candidate) == candidate_before and hashes(original.root) == before
 
 
@@ -123,7 +123,7 @@ def test_install_refuses_different_marker_before_publication(tmp_path):
     destination, _, _, _ = original_root(right)
     before = hashes(destination.root)
     candidate = tmp_path / "candidate"
-    ManifestRowCarry(original.root, candidate, root_id).run()
+    ManifestRowMigration(original.root, candidate, root_id).run()
     with WireLog(candidate / "bus.jsonl").certified_read() as source:
         with pytest.raises(RelationViolationError, match="marker facts"):
             source.install_at(destination.bus.log)
