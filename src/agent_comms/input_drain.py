@@ -8,9 +8,9 @@ import sqlite3
 from dataclasses import dataclass, replace
 from contextlib import aclosing
 from functools import partial
+from pathlib import Path
 from typing import Any
 
-from acp import RequestError
 from acp.schema import PromptResponse
 
 from .acp_extension import (
@@ -75,6 +75,57 @@ class TickRevision:
     checkpoint: tuple
     other: tuple
 
+    @classmethod
+    def paths(
+        cls, root, *, registry: Path, registry_guard: Path,
+        bus: Path, bus_marker: Path, auth: Path,
+    ) -> TickRevisionPaths:
+        """Declare every physical file read by a tick in its comparison groups."""
+        return TickRevisionPaths(
+            registry=(registry, registry_guard),
+            coordination=(
+                root / "coordination.sqlite3",
+                root / "coordination.sqlite3-wal",
+            ),
+            bus=(bus, bus_marker),
+            checkpoint=root / "private_bus_checkpoint.sqlite3",
+            other=(
+                root / GoalWaits.filename,
+                root / "goal-private" / "goal_attempts.sqlite3",
+                root / "goal-private" / "goal_attempts.sqlite3-wal",
+                auth,
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class TickRevisionPaths:
+    """Physical tick dependencies, shared by revision capture and file watching."""
+
+    registry: tuple[Path, ...]
+    coordination: tuple[Path, ...]
+    bus: tuple[Path, ...]
+    checkpoint: Path
+    other: tuple[Path, ...]
+
+    @property
+    def watch_sources(self) -> tuple[WatchSource, ...]:
+        paths = (*self.registry, *self.coordination, *self.bus, self.checkpoint, *self.other)
+        return tuple(
+            WatchSource.file(path, modified=path.name.endswith((".sqlite3", ".sqlite3-wal")))
+            for path in paths
+        )
+
+    def capture(self, local: tuple) -> TickRevision:
+        revisions = lambda paths: tuple(file_revision(path) for path in paths)
+        return TickRevision(
+            registry=revisions(self.registry),
+            coordination=revisions(self.coordination),
+            bus=revisions(self.bus),
+            checkpoint=file_revision(self.checkpoint),
+            other=(revisions(self.other), *local),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class PrivateObservation:
@@ -124,6 +175,7 @@ class InputDrain:
         self.drain_locks: dict[str, asyncio.Lock] = {}
         self.closing = False
         self.wake_tasks: dict[str, asyncio.Task[None]] = {}
+        self._observation_watchers: dict[str, WireWatch] = {}
         # Only a completed, quiescent observation can suppress another scan.
         # These revisions never authorize delivery, acceptance or a native send.
         self._idle_private_revisions: dict[str, PrivateObservation] = {}
@@ -250,46 +302,60 @@ class InputDrain:
         if session_id in self.drain_tasks and not self.drain_tasks[session_id].done():
             return
 
-        self.drain_tasks[session_id] = self.runtime.background(self.observe(session_id))
+        task = self.runtime.background(self.observe(session_id))
+        self.drain_tasks[session_id] = task
+        task.add_done_callback(
+            lambda completed: self._retire_observer(session_id, completed)
+        )
 
-    def _tick_revision(self, session_id: str) -> TickRevision:
-        """Stat revisions of every store an observation tick reads, plus its inputs.
+    def _tick_paths(self) -> TickRevisionPaths:
+        configuration = self.sessions.config.configuration
+        return TickRevision.paths(
+            self.comms.root,
+            registry=self.comms.registry.store.path,
+            registry_guard=self.comms.registry.store.guard_path,
+            bus=self.comms.bus.log.path,
+            bus_marker=self.comms.bus.log.metadata_path,
+            auth=configuration.native_config / "auth.json",
+        )
+
+    def _tick_revision(
+        self, session_id: str, paths: TickRevisionPaths | None = None,
+    ) -> TickRevision:
+        """Stat every declared physical dependency plus process-local inputs.
 
         The stores are compared by their existing file revisions only; nothing
-        is decoded. A tick reads the registry, the bus log and its private
-        marker and checkpoint, the coordination store, goal waits and goal
-        attempts, and credentials. It reads no channel catalog, bus history,
-        runtime info or read markers: those serve views. Its only activity read
-        is its own drain diagnostic, which only this owner's tick writes
-        (set_drain_diagnostic is fenced to this owner; every other activity
-        write carries the current diagnostic forward), so no activity append
-        changes what a settled tick would do.
+        is decoded. It reads no channel catalog, bus history, runtime info or
+        read markers: those serve views. Its only activity read is its own
+        drain diagnostic, which only this owner's tick writes, so no activity
+        append changes what a settled tick would do.
         """
-        root = self.comms.root
-        return TickRevision(
-            registry=self.comms.registry.store.revision_unlocked(),
-            coordination=(
-                file_revision(root / "coordination.sqlite3"),
-                file_revision(root / "coordination.sqlite3-wal"),
-            ),
-            bus=(
-                file_revision(self.comms.bus.log.path),
-                file_revision(self.comms.bus.log.metadata_path),
-            ),
-            checkpoint=file_revision(root / "private_bus_checkpoint.sqlite3"),
-            other=(
-                tuple(file_revision(path) for path in (
-                    root / GoalWaits.filename,
-                    root / "goal-private" / "goal_attempts.sqlite3",
-                    root / "goal-private" / "goal_attempts.sqlite3-wal",
-                )),
-                self.sessions.config.configuration.auth_revision(),
-                self.sessions.bindings.get(session_id),
-                self.auto_wake,
-                self.sessions.runtime_enabled,
-                self.effects._private_nk_native_package,
-            ),
-        )
+        return (paths or self._tick_paths()).capture((
+            self.sessions.bindings.get(session_id),
+            self.auto_wake,
+            self.sessions.runtime_enabled,
+            self.effects._private_nk_native_package,
+        ))
+
+    def _retire_observer(self, session_id: str, task: asyncio.Task[None]) -> None:
+        if self.drain_tasks.get(session_id) is task:
+            self._observation_watchers.pop(session_id, None)
+
+    def wake_observer(self, session_id: str) -> None:
+        """Wake this session's current file observer for process-local work."""
+        watcher = self._observation_watchers.get(session_id)
+        if watcher is not None:
+            watcher.notify()
+
+    async def retry_observer(self, session_id: str) -> None:
+        """Retry a recoverable failure without restoring an idle polling clock."""
+        await asyncio.sleep(0.05)
+        self.wake_observer(session_id)
+
+    def register_wake(self, session_id: str, task: asyncio.Task[None]) -> None:
+        """Record one wake task and one observer notification on its completion."""
+        self.wake_tasks[session_id] = task
+        task.add_done_callback(lambda _task: self.wake_observer(session_id))
 
     def _in_standby(self, session_id: str) -> bool:
         """The published goal execution waits on other threads.
@@ -322,17 +388,18 @@ class InputDrain:
 
     async def observe(self, session_id: str) -> None:
         settled: SettledTick | None = None
-        auth = self.sessions.config.configuration.native_config / "auth.json"
-        async with aclosing(WireWatch.observations(
-            WatchSource.wire(self.comms.root), WatchSource.file(auth),
-        )) as observations:
+        paths = self._tick_paths()
+        async with aclosing(WireWatch.observations(*paths.watch_sources)) as observations:
             async for watcher in observations:
+                self._observation_watchers[session_id] = watcher
                 # A tick whose stores and inputs are unchanged since a settled
                 # tick has nothing new to observe; any change runs it in full.
                 # Another owner's registry or coordination change is not this
                 # owner's: its own entry and private observation are what it
                 # last settled.
-                revision = await Coordination.run_worker(partial(self._tick_revision, session_id))
+                revision = await Coordination.run_worker(
+                    partial(self._tick_revision, session_id, paths)
+                )
                 idle = (
                     settled is not None
                     and revision.other == settled.revision.other
@@ -381,7 +448,9 @@ class InputDrain:
                     revision = replace(revision, registry=read.revision)
                     entry = read.entry
                 owner = entry.owner_identity
-                async with drain_failures(self.comms, thread, owner):
+                async with drain_failures(
+                    self.comms, thread, owner, partial(self.retry_observer, session_id)
+                ):
                     # A stored model change precedes the messages the same tick hands over.
                     await self.sessions.config.sync_thread(session_id)
                     drained = await self.drain_inbox(session_id)
@@ -418,10 +487,10 @@ class InputDrain:
                             # own durable cursor. Re-read that transition now;
                             # healthy file notification remains event-driven.
                             watcher.notify()
-                        else:
-                            wake = self.wake_tasks.get(session_id)
-                            if wake is not None and not wake.done():
-                                wake.add_done_callback(lambda _task: watcher.notify())
+                        elif self.effects.cursors.delivery(session_id).needs_refresh:
+                            # Cursor publication has process-local work even when
+                            # no wake task exists to produce another file change.
+                            watcher.notify()
 
     async def drain_inbox(self, session_id: str) -> int:
         """Push undelivered messages to the client; returns count pushed."""
@@ -672,6 +741,7 @@ class InputDrain:
         finally:
             self.drain_tasks.clear()
             self.wake_tasks.clear()
+            self._observation_watchers.clear()
             self._idle_private_revisions.clear()
             self._repeat_private_observations.clear()
 

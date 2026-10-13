@@ -67,7 +67,9 @@ class WakeScheduleCheck(SessionScheduleCheck):
             self.require_valid()
         except ReservationViolationError:
             return
-        self.inputs.wake_tasks[self.session_id] = self.inputs.runtime.background(self.run())
+        self.inputs.register_wake(
+            self.session_id, self.inputs.runtime.background(self.run())
+        )
 
     async def run(self) -> None:
         inputs, session_id = self.inputs, self.session_id
@@ -139,13 +141,18 @@ class SelectedWakeCheck(SessionScheduleCheck):
             self.require_valid()
         except ReservationViolationError:
             return  # The wake already running drains again when it ends.
-        self.inputs.wake_tasks[self.session_id] = self.inputs.runtime.background(self.run())
+        self.inputs.register_wake(
+            self.session_id, self.inputs.runtime.background(self.run())
+        )
 
     async def run(self) -> None:
         inputs, session_id = self.inputs, self.session_id
         effects = inputs.effects
         root_id = effects._configured_root_id()
-        async with drain_failures(inputs.comms, self.thread, self.owner):
+        async with drain_failures(
+            inputs.comms, self.thread, self.owner,
+            partial(inputs.retry_observer, session_id),
+        ):
             try:
                 before = await inputs._observe_private_revision(session_id, root_id)
                 result = await effects.turns.run_selected(session_id, self.execution)

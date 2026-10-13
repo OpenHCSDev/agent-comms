@@ -21,6 +21,7 @@ from .goal_waits import GoalWaits
 _IN_MODIFY = 0x00000002
 _IN_CLOSE_WRITE = 0x00000008
 _IN_MOVED_TO = 0x00000080
+_IN_CREATE = 0x00000100
 _IN_DELETE_SELF = 0x00000400
 _IN_MOVE_SELF = 0x00000800
 _IN_Q_OVERFLOW = 0x00004000
@@ -48,8 +49,8 @@ class WatchSource:
         return cls(root, _AUTHORITY_FILES)
 
     @classmethod
-    def file(cls, path: Path) -> WatchSource:
-        return cls(path.parent, frozenset({os.fsencode(path.name)}))
+    def file(cls, path: Path, *, modified: bool = False) -> WatchSource:
+        return cls(path.parent, frozenset({os.fsencode(path.name)}), modified)
 
 
 class WireWatch(ABC):
@@ -95,9 +96,13 @@ class PollingWireWatch(WireWatch):
 class WireChangeWatch(WireWatch):
     def __init__(
         self, fd: int, loop: asyncio.AbstractEventLoop,
+        sources: tuple[WatchSource, ...],
         names_by_watch: dict[int, frozenset[bytes]],
+        reopen_by_watch: dict[int, frozenset[bytes]],
     ):
+        self.sources = sources
         self.names_by_watch = names_by_watch
+        self.reopen_by_watch = reopen_by_watch
         self.fd = fd
         self.loop = loop
         self.changed = asyncio.Event()
@@ -110,7 +115,7 @@ class WireChangeWatch(WireWatch):
     async def wait(self) -> WireWatch:
         if self.invalid:
             self.close()
-            return PollingWireWatch()
+            return open_wire_watcher(*self.sources)
         await self.changed.wait()
         return self
 
@@ -130,7 +135,10 @@ class WireChangeWatch(WireWatch):
                         _IN_Q_OVERFLOW | _IN_IGNORED | _IN_DELETE_SELF | _IN_MOVE_SELF
                     ):
                         self.changed.set()
-                    if mask & (_IN_IGNORED | _IN_DELETE_SELF | _IN_MOVE_SELF):
+                    if (
+                        name in self.reopen_by_watch.get(watch, ())
+                        or mask & (_IN_IGNORED | _IN_DELETE_SELF | _IN_MOVE_SELF)
+                    ):
                         self.invalid = True
         except BlockingIOError:
             pass
@@ -169,21 +177,39 @@ def open_wire_watcher(*sources: WatchSource) -> WireWatch:
     fd = init(os.O_NONBLOCK | os.O_CLOEXEC)
     if fd < 0:
         return PollingWireWatch()
-    grouped: dict[Path, tuple[frozenset[bytes], bool]] = {}
+    grouped: dict[Path, tuple[frozenset[bytes], bool, frozenset[bytes]]] = {}
     for source in sources:
-        names, modified = grouped.get(source.directory, (frozenset(), False))
-        grouped[source.directory] = (names | source.names, modified or source.modified)
+        directory = source.directory
+        names, reopen = source.names, frozenset()
+        while not directory.is_dir() and directory != directory.parent:
+            names = frozenset({os.fsencode(directory.name)})
+            reopen = names
+            directory = directory.parent
+        current_names, modified, current_reopen = grouped.get(
+            directory, (frozenset(), False, frozenset())
+        )
+        grouped[directory] = (
+            current_names | names,
+            modified or (source.modified and not reopen),
+            current_reopen | reopen,
+        )
     names_by_watch = {}
-    for directory, (names, modified) in grouped.items():
+    reopen_by_watch = {}
+    for directory, (names, modified, reopen) in grouped.items():
         watch = add(
-            fd, os.fsencode(directory), _MASK | (_IN_MODIFY if modified else 0)
+            fd, os.fsencode(directory),
+            _MASK | (_IN_MODIFY if modified else 0) | (_IN_CREATE if reopen else 0),
         )
         if watch < 0:
             os.close(fd)
             return PollingWireWatch()
         names_by_watch[watch] = names
+        reopen_by_watch[watch] = reopen
     try:
-        return WireChangeWatch(fd, asyncio.get_running_loop(), names_by_watch)
+        return WireChangeWatch(
+            fd, asyncio.get_running_loop(), tuple(sources),
+            names_by_watch, reopen_by_watch,
+        )
     except (NotImplementedError, OSError):
         os.close(fd)
         return PollingWireWatch()

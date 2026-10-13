@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock
 
 import asyncio
 import os
+import sqlite3
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,6 +15,27 @@ from agent_comms.comms import Comms, wire
 from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.threads import Thread
 from agent_comms.wire_watch import WatchSource, WireChangeWatch, open_wire_watcher
+
+
+def test_tick_revision_paths_are_the_watched_sources(tmp_path, monkeypatch):
+    config = tmp_path / "native-config"
+    config.mkdir()
+    monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(config))
+    agent = CommsAgent(wire(tmp_path), runtime_enabled=False)
+    paths = agent.inputs._tick_paths()
+    declared = {
+        *paths.registry,
+        *paths.coordination,
+        *paths.bus,
+        paths.checkpoint,
+        *paths.other,
+    }
+    watched = {
+        source.directory / os.fsdecode(name)
+        for source in paths.watch_sources
+        for name in source.names
+    }
+    assert watched == declared
 
 
 @pytest.mark.asyncio
@@ -84,6 +107,10 @@ async def test_idle_owner_wakes_on_declared_sources_without_polling(tmp_path, mo
     monkeypatch.setattr(agent.inputs, "drain_inbox", drain)
     monkeypatch.setattr(agent.sessions.config, "sync_thread", noop)
     monkeypatch.setattr(agent.turns.goals, "schedule_goal", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        agent.inputs.effects.cursors, "delivery",
+        lambda _session_id: SimpleNamespace(needs_refresh=False),
+    )
     agent.inputs.ensure_live_drain("owner")
     task = agent.inputs.drain_tasks["owner"]
     try:
@@ -93,21 +120,114 @@ async def test_idle_owner_wakes_on_declared_sources_without_polling(tmp_path, mo
         await require_calls(2)
         with (tmp_path / "thread_read_markers.json").open("wb") as output:
             output.write(b"{}")
-        for name in (
-            "coordination.sqlite3",
-            ".registry.json.lock",
-            "private_bus_checkpoint.sqlite3",
-        ):
-            with (tmp_path / name).open("ab"):
-                pass
+        with (tmp_path / ".registry.json.lock").open("ab"):
+            pass
         await asyncio.sleep(0.1)
-        assert calls == 2  # A viewer cursor is not new work for the owner.
+        assert calls == 2  # Viewer and lock files are not tick dependencies.
+        with (tmp_path / "coordination.sqlite3").open("ab"):
+            pass
+        await require_calls(3)
+        with (tmp_path / "private_bus_checkpoint.sqlite3").open("ab"):
+            pass
+        await require_calls(4)
         with (tmp_path / "bus.jsonl").open("ab") as output:
             output.write(b"{}\n")
-        await require_calls(3)
+        await require_calls(5)
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_recoverable_drain_failure_retries_without_another_file_change(
+    tmp_path, monkeypatch,
+):
+    config = tmp_path / "native-config"
+    config.mkdir()
+    monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(config))
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread(
+        "owner", frozenset(), str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    ))
+    agent = CommsAgent(comms, runtime_enabled=False)
+    agent.sessions.bindings["owner"] = "owner"
+    attempts = 0
+    retried = asyncio.Event()
+
+    async def drain(_session_id):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise sqlite3.OperationalError("controlled transient lock")
+        retried.set()
+        return 0
+
+    async def noop(_session_id=None):
+        return None
+
+    monkeypatch.setattr(agent.inputs, "drain_inbox", drain)
+    monkeypatch.setattr(agent.sessions.config, "sync_thread", noop)
+    monkeypatch.setattr(agent.turns.goals, "schedule_goal", AsyncMock(return_value=None))
+    agent.inputs.ensure_live_drain("owner")
+    task = agent.inputs.drain_tasks["owner"]
+    try:
+        await asyncio.wait_for(retried.wait(), 1)
+        assert attempts == 2
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_failed_cursor_publish_retries_without_a_wake_task(tmp_path, monkeypatch):
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread(
+        "owner", frozenset(), str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    ))
+    agent = CommsAgent(comms, runtime_enabled=False)
+    agent.sessions.bindings["owner"] = "owner"
+    attempts = 0
+    retried = asyncio.Event()
+
+    async def drain(_session_id):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 2:
+            retried.set()
+        return 0
+
+    async def noop(_session_id=None):
+        return None
+
+    monkeypatch.setattr(agent.inputs, "drain_inbox", drain)
+    monkeypatch.setattr(agent.sessions.config, "sync_thread", noop)
+    monkeypatch.setattr(agent.turns.goals, "schedule_goal", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        agent.inputs.effects.cursors, "delivery",
+        lambda _session_id: SimpleNamespace(needs_refresh=attempts < 2),
+    )
+    agent.inputs.ensure_live_drain("owner")
+    task = agent.inputs.drain_tasks["owner"]
+    try:
+        await asyncio.wait_for(retried.wait(), 1)
+        assert not agent.inputs.wake_tasks
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_wake_completion_notifies_its_observer_once(tmp_path, monkeypatch):
+    agent = CommsAgent(wire(tmp_path), runtime_enabled=False)
+    notifications = []
+    monkeypatch.setattr(agent.inputs, "wake_observer", notifications.append)
+    task = asyncio.create_task(asyncio.sleep(0))
+    agent.inputs.register_wake("owner", task)
+    await task
+    await asyncio.sleep(0)
+    assert notifications == ["owner"]
 
 
 @pytest.mark.asyncio
@@ -165,33 +285,34 @@ async def test_shutdown_cancels_idle_file_wait(tmp_path, monkeypatch):
     await asyncio.wait_for(agent.shutdown(), timeout=1)
 
 
-async def test_native_watch_invalidation_and_polling_own_resource_cleanup(tmp_path):
-    from agent_comms.wire_watch import PollingWireWatch
-
+async def test_native_watch_reopens_when_a_source_directory_is_recreated(tmp_path):
     root = tmp_path / "wire"
     root.mkdir()
     watch = open_wire_watcher(WatchSource.wire(root))
     if not isinstance(watch, WireChangeWatch):
         pytest.skip("Native file notifications are unavailable")
-    descriptor = watch.fd
+    reopened = restored = None
     try:
         await watch.prepare()
         root.rename(tmp_path / "moved")
         await asyncio.wait_for(watch.changed.wait(), 1)
         assert watch.invalid
-        polling = await watch.wait()
-        assert isinstance(polling, PollingWireWatch)
-        with pytest.raises(OSError):
-            os.fstat(descriptor)
-        # The actual unavailable-root factory has the same concrete behavior.
-        absent = open_wire_watcher(WatchSource.wire(root))
-        assert isinstance(absent, PollingWireWatch)
-        for source in (polling, absent):
-            await asyncio.wait_for(source.prepare(), 1)
-            assert await source.wait() is source
-            source.close()
+        reopened = await watch.wait()
+        assert isinstance(reopened, WireChangeWatch)
+        assert watch.fd == -1
+
+        await reopened.prepare()
+        root.mkdir()
+        await asyncio.wait_for(reopened.changed.wait(), 1)
+        assert reopened.invalid
+        restored = await reopened.wait()
+        assert isinstance(restored, WireChangeWatch)
     finally:
         watch.close()
+        if reopened is not None:
+            reopened.close()
+        if restored is not None:
+            restored.close()
 
 
 async def test_observation_cancellation_releases_actual_descriptor(tmp_path, monkeypatch):
