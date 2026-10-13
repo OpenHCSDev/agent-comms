@@ -42,7 +42,7 @@ pytestmark = pytest.mark.skipif(
 def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    with TemporaryDirectory(prefix="ac-claim-verify-", dir="/var/tmp") as dirname:
+    with TemporaryDirectory(prefix="ac-claim-verify-") as dirname:
         root = Path(dirname) / "wire"
         root.mkdir(mode=0o700)
         worktree = Path(dirname) / "work"

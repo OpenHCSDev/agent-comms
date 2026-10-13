@@ -201,6 +201,26 @@ class RecoveryMonitorCapability:
         self._store = store
 
     @classmethod
+    def settle_stopped_owner(cls, root: Path, owner) -> None:
+        """An explicit stop retires only the exited owner's original local attempt."""
+        from .bus_publication import stable_thread_lookup
+        from .coordination_tables.executions import CurrentExecutions
+        from .comms import Comms
+
+        path = root / "coordination.sqlite3"
+        if not path.exists():
+            return  # No native coordinator, hence no selected attempt claims.
+        with Coordination(str(path)) as store:
+            pointer = CurrentExecutions.one(store.session._connection,
+                                            owner_lookup=stable_thread_lookup(owner.created_at))
+            if pointer is None or pointer.execution_id is None:
+                return
+            receipt = Comms(root).owners.releases.read().get(owner.name)
+            if receipt is None or receipt.thread.process_identity != owner.process_identity:
+                raise RecoveryBlocked("stopped attempt requires the exact exited owner release")
+            cls.abandon_released_native_attempt(store, pointer.execution_id)
+
+    @classmethod
     def abandon_released_native_attempt(
         cls, store: Coordination, execution_id: str
     ) -> Applied[RecoverySnapshot]:

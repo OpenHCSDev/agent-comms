@@ -72,7 +72,7 @@ def record_context(comms: Comms, name: str, generation: int) -> None:
 @contextmanager
 def selected_turn():
     """Alice runs a selected turn for one message; context rows surround it."""
-    with TemporaryDirectory(prefix="ac-claim-read-", dir="/var/tmp") as dirname:
+    with TemporaryDirectory(prefix="ac-claim-read-") as dirname:
         root = Path(dirname) / "wire"
         root.mkdir(mode=0o700)
         worktree = Path(dirname) / "work"
@@ -217,9 +217,7 @@ async def test_write_in_a_direct_message_turn_runs_without_reading_the_whole_bus
             comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
             comms.messaging.send_message("sender", session, "Change the value")
             native.provider.tool_call = ("write", {"path": str(target), "content": "value = 2\n"})
-            native.provider.text = json.dumps(FieldCodec.encode(
-                (Message(session, "sender", "Changed it.", InfoKind, timestamp=0),)
-            ))
+            native.provider.text = "Changed it."
 
             def whole_bus(*_, **__):
                 raise AssertionError("the turn read every row of the bus")

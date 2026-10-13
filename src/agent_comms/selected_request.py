@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from asyncio import CancelledError
 from contextlib import contextmanager
 from dataclasses import dataclass
 
@@ -45,9 +46,9 @@ class SelectedRequest:
         except NativePiUnavailable as error:
             self._native_failure(error)
             raise
-        except BaseException:
+        except CancelledError:
             # Native execution has unwound child/tool cleanup before the
-            # reserved request sees cancellation or another abandoned result.
+            # reserved request sees cancellation of its abandoned result.
             self._settle_unknown()
             raise
 
