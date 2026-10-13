@@ -692,10 +692,7 @@ class PrivateEvidenceRead:
             if len(appended) != info.st_size - self.size or (appended and not appended.endswith(b"\n")):
                 raise NativePiUnavailable("Native Pi evidence file is incomplete")
             digest.update(appended)
-            for observed in (os.fstat(self.stream.fileno()), self.path.lstat()):
-                PrivateFileRole.require(observed)
-                if revision != FileRevision.from_stat(observed):
-                    raise NativePiUnavailable("Native Pi evidence changed during observation")
+            self._require_append_since(revision)
             return info.st_size, digest, appended
         except (OSError, ValueError) as error:
             raise NativePiUnavailable("Native Pi evidence file is unavailable or not private") from error
@@ -729,9 +726,10 @@ class PrivateEvidenceRead:
     def verify_snapshot(self, size, expected_digest):
         """Validate the captured prefix after decoding, allowing later appends.
 
-        The current revision must stay fixed during this short hash read. It
-        need not equal the older capture revision: native appends during typed
-        decoding are legitimate, while altered captured bytes are refused.
+        Hash exactly the captured byte range. Native appends may race both
+        acquisition and hashing; their size/timestamps do not identify a change
+        to that prefix. The digest checks its bytes, while descriptor and named
+        source checks reject replacement, shrinkage and same-size rewrites.
         """
         before = os.fstat(self.stream.fileno())
         PrivateFileRole.require(before)
@@ -749,10 +747,21 @@ class PrivateEvidenceRead:
             digest.update(raw)
         if digest.digest() != expected_digest:
             raise NativePiUnavailable("Native Pi evidence original prefix changed")
-        for observed in (os.fstat(self.stream.fileno()), self.path.lstat()):
-            PrivateFileRole.require(observed)
-            if revision != FileRevision.from_stat(observed):
-                raise NativePiUnavailable("Native Pi evidence changed during snapshot verification")
+        self._require_append_since(revision)
+
+    def _require_append_since(self, revision):
+        """Retain the opened private inode; only growth may change its revision.
+
+        This is not byte-integrity proof: verify_snapshot checks the captured
+        prefix digest. FileRevision equality alone would reject valid appends.
+        """
+        for info in (os.fstat(self.stream.fileno()), self.path.lstat()):
+            PrivateFileRole.require(info)
+            observed = FileRevision.from_stat(info)
+            if observed.identity != self.identity or (
+                observed != revision and observed.size <= revision.size
+            ):
+                raise NativePiUnavailable("Native Pi evidence source changed without append")
 
 
 def _trusted_package(package: Path) -> Path:
