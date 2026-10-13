@@ -57,7 +57,7 @@ async def test_failed_origin_claim_retires_unlaunched_origin_and_blocks_goal(
     execution, progress = owner_turn
     runner = execution.runner
     goal = runner.comms.goals.update_goal(execution.thread_name, SetGoalAction(text="new work"))
-    store = runner.goals.open_goal_store()
+    store = runner.comms.goals.open_goal_store()
 
     def lost_claim(_reservation):
         raise GoalAttemptError("claim outcome unavailable")
@@ -89,7 +89,7 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
     name = owner.sessions.bindings[session.session_id]
     goal = await owner.turns.goals.set_goal(session.session_id, "preserve failed original")
     execution = OwnedTurn(owner.turns, session.session_id, name, "work", autonomous_goal=True)
-    store = owner.turns.goals.open_goal_store()
+    store = comms.goals.open_goal_store()
     pending_before = tuple(owner.inputs.pending_turns.get(session.session_id, ()))
 
     def fail(*args, **kwargs):
