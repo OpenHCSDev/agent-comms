@@ -396,6 +396,9 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     def tracked_end(self, session) -> None:
         """Non-assistant messages cannot supply a tracked final response."""
 
+    async def tracked_start(self, session, event) -> None:
+        """Only a user message can be an input the tracked turn was handed."""
+
     @property
     def parts(self) -> tuple[PiContent, ...]:
         return (TextContent(self.content),) if isinstance(self.content, str) else self.content or ()
@@ -581,6 +584,10 @@ class UserMessage(PiMessage):
 
     def matches_input(self, text, native_id, require_id):
         return self.text == text and (not require_id or self.input_id == native_id)
+
+    async def tracked_start(self, session, event) -> None:
+        if not self.matches_input(session.command.message, session.command.input_id, True):
+            await session.later_input_started(event)
 
     async def apply_start(self, session, event):
         async for update in session.admit_user_message(self, event):

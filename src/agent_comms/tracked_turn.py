@@ -346,7 +346,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         await self.stop_forwarding()
         identity = self.native.attestation.identity
         # An input written but never started may still run in the child; it is not idle.
-        if self.retainable and self.inputs.settled and identity is not None and self.native_session.retain(self.native, identity):
+        self.retainable = self.retainable and self.inputs.settled
+        if self.retainable and identity is not None and self.native_session.retain(self.native, identity):
             return
         await self.native_session.close()
 
@@ -499,9 +500,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     @handles(pi.MessageStart)
     async def message_start(self, event: pi.MessageStart) -> None:
-        message = event.message
-        if not message.user or message.matches_input(self.command.message, self.command.input_id, True):
-            return
+        await event.message.tracked_start(self, event)
+
+    async def later_input_started(self, event: pi.MessageStart) -> None:
         matched, input_id = self.inputs.mark_started(self, event)
         if not matched:
             raise NativePiUnavailable("Native Pi started a user message this turn did not send")
@@ -578,7 +579,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     @handles(pi.AgentSettled)
     async def settled(self, event: pi.AgentSettled) -> None:
         # Pi runs an input it was handed before settling; the turn ends after that run.
-        if event.settles(self) and not self.inputs.pending:
+        if event.settles(self) and not self.inputs.awaits_start:
             with self.startup.measurements.operation("native_agent_settled"):
                 self.finished = True
 

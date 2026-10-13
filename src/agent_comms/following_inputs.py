@@ -11,10 +11,13 @@ from .acp_extension import QueueScope
 from .agent_backend import TurnInboxItem
 from .coordinator import Coordination
 from .owned_send_admission import OwnedSendAdmission
+from .queued_input import InputHandoffRefused
 from .thread_identity import AdmissionIdentity, TurnId
 from .turn_input_source import SelectedOriginalInput
 
 if TYPE_CHECKING:
+    from .threads import Thread
+    from .turn_runner import TurnRunner
     from .input_drain import InputDrain
     from .tracked_turn import TrackedTurnSession
 
@@ -38,13 +41,35 @@ class OwnerFollowingInputs(FollowingInputs):
 
     inputs: InputDrain
     session_id: str
-    owner_name: str
+    owner: Thread
     inbox: asyncio.Queue[TurnInboxItem]
     scope: QueueScope = field(init=False)
 
+    def __post_init__(self) -> None:
+        self.inputs.sessions.config.turn_started(self.session_id, self.owner)
+
+    async def pass_on_unread(self, turns: TurnRunner) -> None:
+        """Inputs the ended turn never read start the next turn or are refused, never replayed."""
+        inputs, session_id = self.inputs, self.session_id
+        while not self.inbox.empty():
+            command = self.inbox.get_nowait()
+            if not command.carried_inputs:
+                continue  # A send-now control carries no input of its own.
+            (input_id,) = (carried.value for carried in command.carried_inputs)
+            item = inputs.queued_inputs.get(session_id, {}).get(input_id)
+            if item is None:
+                await inputs.input_refused(session_id, input_id)
+                continue
+            try:
+                await item.dispatch(turns, session_id, self.owner.name)
+            except InputHandoffRefused:
+                await inputs.input_refused(session_id, input_id)
+                continue
+            break  # The existing native forwarder consumes the remaining live inbox.
+
     async def open(self, session: TrackedTurnSession) -> None:
         inputs = self.inputs
-        thread = await Coordination.run_worker(partial(inputs.comms.registry.require, self.owner_name))
+        thread = await Coordination.run_worker(partial(inputs.comms.registry.require, self.owner.name))
         lease = thread.require_turn_lease()
         inputs.bind_native_turn(self.session_id, thread, lease.admission_generation, lease.turn_id)
         original = SelectedOriginalInput.answering(session.command.message)

@@ -50,6 +50,11 @@ class InputForwarding:
         return bool(self.pending) or (self.queue is not None and not self.queue.empty())
 
     @property
+    def awaits_start(self) -> bool:
+        """The child holds an input it has not started yet."""
+        return bool(self.pending)
+
+    @property
     def settled(self) -> bool:
         return not self.uncertain and not self.unresolved
 
