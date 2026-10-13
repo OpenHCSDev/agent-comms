@@ -161,10 +161,12 @@ class BusRouteCounts:
                 # Another reader indexed a later cut of this same file after
                 # this cut was opened, so the recorded offset is ahead of this
                 # cut. Its digest just verified against this inode's bytes:
-                # the append-only writer (wire_log._append_private_unlocked,
-                # os.O_APPEND) leaves them unchanged, so the recorded revision
-                # answers this cut without decoding. A truncated or rewritten
-                # source loses those bytes and rebuilt above instead.
+                # the canonical writer opens bus.jsonl O_APPEND-only
+                # (wire_log.py:1, _append_private_unlocked wire_log.py:413/:429;
+                # no in-place shortening path exists), so those bytes are
+                # unchanged and the recorded revision answers this cut without
+                # decoding. A truncated or rewritten source loses the bytes
+                # that digest covers and rebuilt above instead.
                 return True
         if not rebuild and offset == size:
             return True
