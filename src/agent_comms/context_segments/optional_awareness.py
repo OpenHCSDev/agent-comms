@@ -140,9 +140,9 @@ class OmittedAwareness(InstructionSegment, OptionalAwarenessResult):
         return {"reason": self.reason}
 
     def segments(self, max_text_bytes: int) -> tuple[ContextSegment, ...]:
-        logging.getLogger(__name__).warning(
-            "Optional awareness omitted; original delivered alone (%s)", self.reason
-        )
+        # The instruction file owns the omission wording; the log and the
+        # delivered input derive from that one declaration.
+        logging.getLogger(__name__).warning(self.text().strip())
         return (self,)
 
     def render(self, max_text_bytes: int) -> str:
