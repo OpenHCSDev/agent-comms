@@ -2,7 +2,8 @@
 
 The old schema JSON must be exported by the original writer's declarations.
 Only changed table DDL is accepted; columns, indexes, triggers and all row values
-stay unchanged. Coach applies the accepted copies during the stopped cutover.
+stay unchanged. Coach repeats the carry from a fresh stopped snapshot; these
+verification copies must never replace a live store that has since advanced.
 Delete this tool after that carry is accepted.
 """
 from __future__ import annotations
