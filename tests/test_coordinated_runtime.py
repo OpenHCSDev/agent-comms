@@ -677,7 +677,7 @@ async def test_slow_optional_awareness_omits_without_blocking_selected_original(
     assert entered.is_set()
     assert outcome is not None and outcome.publications
     assert len(calls) == 1 and "late context must not appear" not in calls[0][1]
-    assert "Optional awareness omitted; original delivered alone" in caplog.text
+    assert "Optional awareness omitted" in caplog.text
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(

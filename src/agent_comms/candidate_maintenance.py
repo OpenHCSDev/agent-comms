@@ -56,10 +56,9 @@ def _drain_candidate(root: Path) -> None:
             metadata = bus.log._private_marker_unlocked()
         root_id = metadata.root_id
         index = WakeCandidateIndex(bus)
-        # Drain the derived index in the background until it is caught up with
-        # the latest notified delivery; each batch stays bounded (64 rows,
-        # 256KB, 0.2s) but a stalled index must not wait for future deliveries
-        # to advance.
+        # Each batch owns its own bounds; the drain itself runs until the
+        # derived index is caught up with the latest notified delivery — a
+        # stalled index must not wait for future deliveries to advance.
         while True:
             with _guard:
                 target = _pending[root][1]
