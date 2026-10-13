@@ -50,22 +50,23 @@ class OwnerFollowingInputs(FollowingInputs):
 
     async def pass_on_unread(self, turns: TurnRunner) -> None:
         """Inputs the ended turn never read start the next turn or are refused, never replayed."""
-        inputs, session_id = self.inputs, self.session_id
         while not self.inbox.empty():
-            command = self.inbox.get_nowait()
-            if not command.carried_inputs:
-                continue  # A send-now control carries no input of its own.
-            (input_id,) = (carried.value for carried in command.carried_inputs)
-            item = inputs.queued_inputs.get(session_id, {}).get(input_id)
+            # A send-now control carries no input of its own.
+            for carried in self.inbox.get_nowait().carried_inputs:
+                if await self.pass_on(turns, carried.value):
+                    return  # The next turn's forwarder reads the rest of the live inbox.
+
+    async def pass_on(self, turns: TurnRunner, input_id: str) -> bool:
+        inputs, session_id = self.inputs, self.session_id
+        item = inputs.queued_inputs.get(session_id, {}).get(input_id)
+        try:
             if item is None:
-                await inputs.input_refused(session_id, input_id)
-                continue
-            try:
-                await item.dispatch(turns, session_id, self.owner.name)
-            except InputHandoffRefused:
-                await inputs.input_refused(session_id, input_id)
-                continue
-            break  # The existing native forwarder consumes the remaining live inbox.
+                raise InputHandoffRefused("The input was retired before its turn read it")
+            await item.dispatch(turns, session_id, self.owner.name)
+        except InputHandoffRefused:
+            await inputs.input_refused(session_id, input_id)
+            return False
+        return True
 
     async def open(self, session: TrackedTurnSession) -> None:
         inputs = self.inputs

@@ -579,7 +579,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     @handles(pi.AgentSettled)
     async def settled(self, event: pi.AgentSettled) -> None:
         # Pi runs an input it was handed before settling; the turn ends after that run.
-        if event.settles(self) and not self.inputs.awaits_start:
+        if event.settles(self) and self.inputs.all_written_started:
             with self.startup.measurements.operation("native_agent_settled"):
                 self.finished = True
 
