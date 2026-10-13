@@ -55,9 +55,9 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
                            update.model_dump(by_alias=True, exclude_none=True))
 
     owner.on_connect(Client())
-    store = owner.turns.goals.open_goal_store()
+    store = comms.goals.open_goal_store()
     goal = comms.goals.update_goal(
-        session, SetGoalAction(text="Finish the blocked objective"), owner_store=store
+        session, SetGoalAction(text="Finish the blocked objective")
     )
     reservation = store.reserve(goal.id, 1)
     store.claim_launch(reservation)
@@ -204,9 +204,9 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(native_backe
     async with native.open_owner(runtime_enabled=True) as (owner, session):
         comms = owner._comms
         async with native.original_input(owner, session, "Unrelated turn") as turn:
-            store = owner.turns.goals.open_goal_store()
+            store = comms.goals.open_goal_store()
             goal = comms.goals.update_goal(
-                session, SetGoalAction(text="Keep attempt authority"), owner_store=store
+                session, SetGoalAction(text="Keep attempt authority")
             )
             reservation = store.reserve(goal.id, 1)
             if fence != "reserved":

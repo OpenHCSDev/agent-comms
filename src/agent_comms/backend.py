@@ -25,7 +25,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from .agent_backend import InputRequest, SendNow
+from .agent_backend import InputRequest, SendNow, TurnInboxItem
 from .child_process import ProcessIdentity
 from .request_progress import RequestProgress
 
@@ -114,7 +114,7 @@ async def stream_agent_events(
     cwd: str,
     env_extra: dict[str, str] | None = None,
     session_file: str | None = None,
-    steering_queue: asyncio.Queue[InputRequest | SendNow] | None = None,
+    steering_queue: asyncio.Queue[TurnInboxItem] | None = None,
     finish_event: asyncio.Event | None = None,
     images: Sequence[ImageInput] = (),
     model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
@@ -202,7 +202,7 @@ class TurnSession:
         self,
         launch: NativePiRpcLaunch,
         task: str,
-        steering_queue: asyncio.Queue[InputRequest | SendNow] | None = None,
+        steering_queue: asyncio.Queue[TurnInboxItem] | None = None,
         finish_event: asyncio.Event | None = None,
         images: Sequence[ImageInput] = (),
         model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,

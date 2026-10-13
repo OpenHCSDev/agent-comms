@@ -151,10 +151,7 @@ def test_owner_resume_refusal_persists_bounded_reason_and_prior_progress(tmp_pat
         "worker", PausedGoalAction(progress="Half verified by the owner")
     )
     assert progressed is not None
-    private = tmp_path / "goal-private"
-    private.mkdir(mode=0o700)
-    store = GoalAttemptStore.initialize(private)
-    store.create_goal(original.id)
+    store = comms.goals.open_goal_store()
     reservation = store.reserve(original.id, 1)
     reservation.fail(store, "Previous goal attempt failed")
 
@@ -169,7 +166,6 @@ def test_owner_resume_refusal_persists_bounded_reason_and_prior_progress(tmp_pat
                 expect=GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()), goal_id=original.id)
             ),
             actor=OwnerInvocable,
-            owner_store=store,
         )
     reloaded = wire(tmp_path).registry.require("worker").goal
     assert reloaded is not None and reloaded.state.declared_name == "blocked"

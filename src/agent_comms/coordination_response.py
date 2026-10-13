@@ -177,7 +177,7 @@ def _assert_response_schema(db: sqlite3.Connection) -> None:
         raise PublicationActivationBlocked("private response schema is not installed") from error
     if meta != ResponseSchemaMeta(1, 3, _response_digest(schema)):
         raise PublicationActivationBlocked("private response schema version is unsupported")
-    if {row.name: row.sql for row in actual} != schema or SQLiteForeignKeys.read(
+    if SQLiteSchemaObject.differences(actual, schema) or SQLiteForeignKeys.read(
         db.execute("PRAGMA foreign_keys")
     ) != [SQLiteForeignKeys(True)]:
         raise PublicationActivationBlocked("private response schema has drifted")

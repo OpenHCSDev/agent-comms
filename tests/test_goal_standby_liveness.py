@@ -491,7 +491,7 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
     activate_empty_source(agent)
     goal = comms.goals.update_goal(
-        owner, SetGoalAction(text="Review child work"), owner_store=agent.turns.goals.open_goal_store()
+        owner, SetGoalAction(text="Review child work")
     )
     assert goal is not None
     wakes = []

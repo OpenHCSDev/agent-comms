@@ -27,7 +27,6 @@ from .goals import Goal
 from .threads import Thread
 
 if TYPE_CHECKING:
-    from .goal_attempts import GoalAttemptStore
     from .goal_presentation import GoalSnapshot
     from .goal_management import Goals
 
@@ -80,7 +79,6 @@ class GoalActionContext:
     goals: Goals
     thread: Thread
     actor: type = RuntimeInvocable
-    owner_store: GoalAttemptStore | None = None
 
     @property
     def report_turn(self) -> str:
@@ -98,7 +96,6 @@ class GoalActionContext:
 class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
     expect: GoalPrecondition = GoalPrecondition()
     preserve_wait: ClassVar[bool] = False
-    owner_grant: ClassVar[bool] = False
     schedules_goal: ClassVar[bool] = False
 
     @classmethod
@@ -127,15 +124,10 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
             goal_id=goal.id, expected_revision=goal.revision,
         )
 
-    def check_grant(self, ctx: GoalActionContext) -> None:
-        if ctx.owner_store is not None:
-            raise ValueError("Owner goal authority requires goal creation or explicit resume.")
-
     def apply(self, ctx: GoalActionContext) -> Goal | None:
         self.expect.check(ctx)
         if not isinstance(self, ctx.actor):
             raise ValueError(f"This actor cannot take goal action {self.declared_name!r}.")
-        self.check_grant(ctx)
         if ctx.model_report and any(
             entry.reports_turn(ctx.report_turn)
             for entry in ctx.goals.registry.goal_history(ctx.thread.name)
@@ -189,46 +181,32 @@ class TransitionGoalAction(GoalAction):
 class ActiveGoalAction(
     TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable
 ):
-    owner_grant = True
     schedules_goal = True
-
-    def check_grant(self, ctx: GoalActionContext) -> None:
-        if ctx.owner_store is not None and (
-            ctx.actor is not OwnerInvocable or self.expect.expected_owner is None
-        ):
-            super().check_grant(ctx)
 
     def next_state(self, ctx: GoalActionContext) -> GoalState:
         return ActiveGoal()
 
     def before_transition(self, ctx: GoalActionContext) -> None:
         goal, thread = ctx.require_goal(), ctx.thread
-        if ctx.owner_store is not None:
-            generation = ctx.owner_store.snapshot(goal.id)
-            if generation is None:
-                raise ValueError("Goal launch authority is missing; inspect it before Retry.")
-            if generation.lifecycle.failed and generation.attempt_id:
-                # A failed/uncertain attempt needs the explicit Retry
-                # decision, not a status-only Resume. Expose that state
-                # immediately so the UI offers the correct control.
-                # Persist the bounded refusal explanation so a reload
-                # never shows 'reason unavailable' on a fresh row.
-                refusal = required_block_reason(
-                    "The interrupted goal attempt is unresolved. Inspect it, then use "
-                    "Retry to authorize a new attempt. Your messages can still be sent."
-                )
-                blocked = replace(
-                    goal,
-                    state=BlockedGoal(refusal),
-                    progress=goal.progress,
-                    revision=goal.revision + 1,
-                )
-                ctx.goals.registry.register(
-                    replace(thread, goal=blocked), ctx.goals.registry.status(thread.name)
-                )
-                raise ValueError(refusal)
-            elif not generation.lifecycle.allows_resume(thread.executing):
-                raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
+        generation = ctx.goals.open_goal_store().require_generation(goal.id)
+        if generation.lifecycle.failed and generation.attempt_id:
+            # A status-only Resume cannot authorize an uncertain attempt.
+            refusal = required_block_reason(
+                "The interrupted goal attempt is unresolved. Inspect it, then use "
+                "Retry to authorize a new attempt. Your messages can still be sent."
+            )
+            blocked = replace(
+                goal,
+                state=BlockedGoal(refusal),
+                progress=goal.progress,
+                revision=goal.revision + 1,
+            )
+            ctx.goals.registry.register(
+                replace(thread, goal=blocked), ctx.goals.registry.status(thread.name)
+            )
+            raise ValueError(refusal)
+        elif not generation.lifecycle.allows_resume(thread.executing):
+            raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -376,18 +354,14 @@ class ReplacementGoalAction(GoalAction):
             # Revoke a protected goal before removing or replacing its
             # registry identity. If the registry write then fails, the
             # remaining visible goal is safely unlaunchable.
-            from .goal_attempts import GoalAttemptStore
-
-            private = ctx.goals.root / "goal-private"
-            if (private / "goal_attempts.sqlite3").exists():
-                attempts = GoalAttemptStore(private)
-                generation = attempts.snapshot(goal.id)
-                if generation is not None and not generation.lifecycle.terminal:
-                    attempts.retire_goal(
-                        goal.id,
-                        expected_generation=generation.number,
-                        attempt_id=generation.attempt_id,
-                    )
+            attempts = ctx.goals.open_goal_store()
+            generation = attempts.snapshot(goal.id)
+            if generation is not None and not generation.lifecycle.terminal:
+                attempts.retire_goal(
+                    goal.id,
+                    expected_generation=generation.number,
+                    attempt_id=generation.attempt_id,
+                )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -401,9 +375,6 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
 
         return await invoke(FieldCodec.encode(SetGoalRuntimeRequest), text=text)
 
-    def check_grant(self, ctx: GoalActionContext) -> None:
-        pass
-
     def change(self, ctx: GoalActionContext) -> Goal:
         goal = Goal(text=self.text.strip(), id=uuid4().hex, revision=1)
         goal = replace(
@@ -412,8 +383,7 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
                 goal.text, goal.id, goal.revision, ctx.thread, ctx.goals.registry.snapshot()
             ),
         )
-        if ctx.owner_store is not None:
-            ctx.owner_store.create_goal(goal.id)
+        ctx.goals.open_goal_store().create_goal(goal.id)
         return goal
 
 
@@ -470,18 +440,13 @@ class RetryGoalAction(GoalAction, OwnerInvocable):
             goal_id=goal.id, expected_revision=goal.revision,
         )
 
-    def check_grant(self, ctx: GoalActionContext) -> None:
-        if ctx.owner_store is None or self.expect.expected_owner is None:
-            raise ValueError("Retry requires the executing owner's private goal authority.")
-
     def change(self, ctx: GoalActionContext) -> Goal:
+        if self.expect.expected_owner is None:
+            raise ValueError("Retry requires the executing owner's private goal authority.")
         goal = ctx.require_goal()
         if not isinstance(goal.state, BlockedState):
             raise ValueError("The blocked goal changed; refresh its state.")
-        store = ctx.owner_store
-        assert store is not None
-        generation = store.snapshot(goal.id)
-        if generation is None:
-            raise ValueError("Goal launch authority is missing; Retry cannot create a grant.")
+        store = ctx.goals.open_goal_store()
+        generation = store.require_generation(goal.id)
         generation.lifecycle.authorize_retry(store, generation, uuid4().hex)
         return replace(goal, state=ActiveGoal(), revision=goal.revision + 1)

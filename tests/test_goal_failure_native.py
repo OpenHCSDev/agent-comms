@@ -104,8 +104,7 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
             goal = comms.goals.update_goal(
                 sid, SetGoalAction(text="One journaled autonomous continuation")
             )
-            store = agent.turns.goals.open_goal_store()
-            store.create_goal(goal.id)
+            store = comms.goals.open_goal_store()
             admission = comms.registry.snapshot().admission_generations[sid]
             preserved = "acp:unrelated-unattempted"
             agent.inputs.dispositions.record(
@@ -194,8 +193,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             assert response.stop_reason == "end_turn"
             assert len(native.saved_inputs()) == 2
             goal = comms.goals.update_goal(sid, SetGoalAction(text="Exercise one explicit failed attempt"))
-            store = agent.turns.goals.open_goal_store()
-            store.create_goal(goal.id)
+            store = comms.goals.open_goal_store()
             admission = comms.registry.snapshot().admission_generations[sid]
             key = "acp:retained-unknown"
             agent.inputs.dispositions.record(

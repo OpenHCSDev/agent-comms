@@ -125,9 +125,7 @@ def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkey
 def test_clearing_goal_releases_its_reserved_attempt(comms, monkeypatch):
     goal = _goal(comms, monkeypatch)
     private = comms.root / "goal-private"
-    private.mkdir(mode=0o700)
-    store = GoalAttemptStore.initialize(private)
-    store.create_goal(goal["id"])
+    store = comms.goals.open_goal_store()
     reservation = store.reserve(goal["id"], 1)
 
     comms.goals.update_goal("owner", ClearGoalAction(expect=GoalPrecondition(goal_id=goal["id"])))
@@ -177,9 +175,7 @@ def test_completed_goal_cannot_be_reactivated_by_ui_registry_action(comms, monke
 def test_terminal_goal_cannot_reactivate_through_pause(comms, monkeypatch, terminal):
     started = _goal(comms, monkeypatch)
     private = comms.root / "goal-private"
-    private.mkdir(mode=0o700)
-    store = GoalAttemptStore.initialize(private)
-    store.create_goal(started["id"])
+    store = comms.goals.open_goal_store()
     reservation = store.reserve(started["id"], 1)
     if terminal == "blocked":
         reservation.fail(store, "uncertain turn")

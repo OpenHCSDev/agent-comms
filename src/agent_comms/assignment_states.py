@@ -421,12 +421,48 @@ class DeferredAssignment(InterruptedAssignment):
 
     @classmethod
     def successors(cls):
-        return TriagePendingAssignment, FullPendingAssignment, EngagedAssignment, FailedAssignment
+        return (
+            TriagePendingAssignment,
+            FullPendingAssignment,
+            EngagedAssignment,
+            DeliveredAssignment,
+            FailedAssignment,
+        )
 
     def permits_engagement_change(self, after):
         return super().permits_engagement_change(after) and not (
             self.execution_id is not None and (after.triage_pending or after.full_pending)
         )
+
+
+@dataclass(frozen=True)
+class DeliveredAssignment(AssignmentDecision, AssignmentState):
+    """The recipient's running turn took this message as one of its inputs.
+
+    No execution answers it: the agent replies with its own tools. Only the
+    proved start of that input in the running turn reaches this state.
+    """
+
+    decision: PendingDecision
+
+    notification_priority = 2
+    notification_state = "Delivered"
+    notification_detail = "Delivered into the agent's running turn."
+
+    terminal = True
+    preengagement_target = True
+
+    @classmethod
+    def binding_expression(cls) -> str:
+        return AssignmentState.binding_expression()
+
+    @classmethod
+    def build(cls, mode, execution_id, target):
+        return cls(PendingDecision(mode))
+
+    @classmethod
+    def successors(cls):
+        return ()
 
 
 class FailedAssignment(InterruptedAssignment):
