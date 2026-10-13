@@ -24,7 +24,6 @@ from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.claim_admission import (
     publish_selected_resource_claim,
-    release_selected_resources,
     write_selected_claimed_file,
 )
 from agent_comms.cohort_schema import install_private_cohort_schema
@@ -136,6 +135,18 @@ def selected_turn():
             yield comms, store, admission, resource
 
 
+def settle_failed(store):
+    from agent_comms.attempt_states import AttemptFailedAttempt
+
+    with store.session.settlement():
+        snapshot = store.snapshots.get("execution")
+        snapshot.attempt.advance(
+            store.session, type(snapshot.attempt.lifecycle), backend_done=True,
+            process_dead=True, progress=False, reason_code=None,
+        )
+        store.snapshots.get("execution").settle(store.session, AttemptFailedAttempt(), None)
+
+
 def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     with selected_turn() as (comms, store, admission, resource):
         log = comms.bus.log
@@ -154,7 +165,7 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
             ) == claimed
             write_selected_claimed_file(comms, store, admission, "Alice", claimed, b"value = 2\n")
             record_context(comms, "Alice", 3)
-            release_selected_resources(comms, store, admission, "Alice", (claimed,))
+            settle_failed(store)
         assert resource.read_bytes() == b"value = 2\n"
         # The strict whole-bus reader agrees with what the claim path left.
         assert dict(log.claim_projection()) == {}
@@ -170,7 +181,8 @@ def test_claim_operation_is_refused_after_its_claim_was_released() -> None:
             comms, store, admission, "Alice", ExistingFileClaim(resource)
         )
         assert dict(comms.bus.log.claim_projection()) == {str(resource): claimed}
-        release_selected_resources(comms, store, admission, "Alice", (claimed,))
+        comms.messaging.send_message("Alice", "sender", "Explicit release",
+                                     releases=(str(resource),))
         with pytest.raises(IdentityConflict, match="already consumed"):
             publish_selected_resource_claim(
                 comms, store, admission, "Alice", ExistingFileClaim(resource)
@@ -224,7 +236,7 @@ async def test_write_in_a_direct_message_turn_runs_without_reading_the_whole_bus
             ] == [
                 ("sender", session, "Change the value"),
                 (session, "sender", "Resource claim admitted"),
-                (session, "sender", "Completed coding tool claims released"),
                 (session, "sender", "Changed it."),
+                (session, "sender", "Terminal attempt file claims released"),
             ]
             assert dict(comms.bus.log.claim_projection()) == {}

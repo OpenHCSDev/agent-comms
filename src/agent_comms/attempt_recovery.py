@@ -72,7 +72,7 @@ class VerifiedOwnerLoss:
         if store.session.path.name != "coordination.sqlite3":
             raise RecoveryBlocked("native recovery requires the canonical coordination store")
         comms = Comms(store.session.path.parent)
-        with _response_boundary(comms.bus) as registry:
+        with _response_boundary(comms.bus, session=store.session) as registry:
             assert_native_runtime_schema(store.session._connection)
             snapshot = store.snapshots.get(execution_id)
             attempt = snapshot.attempt
@@ -329,7 +329,7 @@ class RecoveryMonitorCapability:
             raise RecoveryBlocked("monitor cannot record a live Pi RPC subprocess as dead")
         store = self._store
         replay_facts = ReplayFact(replay_facts)
-        with store.session.transaction() as db:
+        with store.session.settlement() as db:
             snapshot = store.snapshots.get(execution_id)
             attempt = snapshot.attempt
             if (

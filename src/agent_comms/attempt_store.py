@@ -219,7 +219,7 @@ class AttemptStore:
         The live runner holds registry owner exclusion and has completed native
         child/tool cleanup. Finality here is local, not provider acceptance.
         """
-        with self.session.transaction():
+        with self.session.settlement():
             snapshot, attempt = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
@@ -314,7 +314,7 @@ class AttemptStore:
         if not isinstance(outcome, TerminalAttempt):
             raise ValueError("settlement requires a terminal attempt outcome")
         _bounded_reason(reason_code)
-        with self.session.transaction():
+        with self.session.settlement():
             snapshot, _ = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")

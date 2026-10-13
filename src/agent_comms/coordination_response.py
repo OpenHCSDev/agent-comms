@@ -209,7 +209,8 @@ def install_private_response_schema(store: Coordination) -> None:
 @contextmanager
 def _response_boundary(bus: MessageBus, *, blocking: bool = True,
                        contention: StoreLockContention | None = None,
-                       measurements: PublicationMeasurements | None = None) -> Iterator[RegistrySnapshot]:
+                       measurements: PublicationMeasurements | None = None,
+                       session=None) -> Iterator[RegistrySnapshot]:
     """Total lock order: shared wire -> bus -> registry -> SQLite.
 
     Raw keyed appends acquire bus then registry; Comms register takes shared
@@ -222,13 +223,21 @@ def _response_boundary(bus: MessageBus, *, blocking: bool = True,
             custody.enter_context(_store_lock(bus.log.path.parent / "wire", blocking=blocking,
                                              shared=True, contention=contention))
         with observations.operation("bus_certified_exclusion"):
-            custody.enter_context(bus.log.locked(blocking=blocking, contention=contention))
+            bus_lock = custody.enter_context(bus.log.locked(blocking=blocking, contention=contention))
         with observations.operation("registry_exclusion"):
             custody.enter_context(_store_lock(bus._registry.store.path, blocking=blocking,
                                              contention=contention))
         with observations.operation("registry_snapshot"):
             snapshot = bus._registry.store._read_unlocked().snapshot()
-        yield snapshot
+        if session is not None:
+            if session._settlement_boundary is not None:
+                raise IdentityConflict("settlement boundary is already acquired")
+            session._settlement_boundary = (bus, bus_lock, snapshot)
+        try:
+            yield snapshot
+        finally:
+            if session is not None:
+                session._settlement_boundary = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -502,7 +511,7 @@ def _settle_fenced_response(
         raise TypeError("response settlement requires an exact owner fence")
     # One registry revision is held through dispatch, append and Tx2. SQL's
     # current owner generation remains guarded by the transaction fence.
-    with _response_boundary(bus) as registry_snapshot:
+    with _response_boundary(bus, session=store.session) as registry_snapshot:
         owner_witness.require_live(registry_snapshot, fence)
         metadata = bus.log._private_marker_unlocked()
         wire_root_id = metadata.root_id

@@ -45,8 +45,13 @@ class SelectedRequest:
         except NativePiUnavailable as error:
             self._native_failure(error)
             raise
+        except BaseException:
+            # Native execution has unwound child/tool cleanup before the
+            # reserved request sees cancellation or another abandoned result.
+            self._settle_unknown()
+            raise
 
-    def _native_failure(self, error):
+    def _settle_unknown(self) -> bool:
         try:
             self.admission.stage.fail_unknown(
                 self.participant.bus,
@@ -57,6 +62,11 @@ class SelectedRequest:
         except StaleFence:
             # A revoked owner cannot settle/publish for its successor. Recovery
             # retains the original UNKNOWN; this path never reconstructs input.
+            return False
+        return True
+
+    def _native_failure(self, error):
+        if not self._settle_unknown():
             return
         publish_native_failure(
             self.participant,

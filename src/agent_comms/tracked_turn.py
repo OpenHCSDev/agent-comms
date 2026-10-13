@@ -550,8 +550,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             if self.tool_socket is not None:
                 self.tool_socket.assert_complete()
             response = self.terminal.require_response(self.text_parts)
-            if self.selected_tool_mode is not None:
-                await self.selected_tool_mode.finish()
             return NativeTurnResult(
                 response.strip(),
                 proof,
