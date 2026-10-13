@@ -80,7 +80,7 @@ class SelectedPrompt:
                 frame,
                 *awareness,
                 SelectedWorkSegment.capture(participant, action, frame.provenance),
-                participant.batch.response_segment(participant.owner.thread.name),
+                participant.batch.response_segment(),
             )
         ).render()
 

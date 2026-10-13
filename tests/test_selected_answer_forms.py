@@ -82,27 +82,30 @@ def test_plain_answer_to_one_reply_route_is_that_routes_reply() -> None:
             batch.response_messages("  \n", "Alice")
 
 
-def test_array_answer_still_has_to_match_the_reply_routes() -> None:
+def test_no_answer_format_is_demanded_of_the_model() -> None:
+    """The routed-answer shape is no longer asked for or decoded.
+
+    Found on GLM 5.3 Flash agents whose batch answer arrived in prose or in a
+    near-miss array; the whole batch was then marked uncertain and never
+    replayed. The turn already fixes sender, targets and type, so Core stamps
+    the one plain answer onto each original route itself.
+    """
     with alice_batch(("Alice", "What did you find?")) as batch:
-        def array(target):
-            return json.dumps(FieldCodec.encode(
-                (Message("Alice", target, "Found it.", MessageType.INFO, timestamp=0),)
-            ))
-
-        reply, = batch.response_messages(array("sender"), "Alice")
-        assert (reply.target, reply.body) == ("sender", "Found it.")
-        with pytest.raises(NativePiUnavailable):
-            batch.response_messages(array("#team"), "Alice")
-        with pytest.raises(NativePiUnavailable):
-            batch.response_messages('["Found it."]', "Alice")
+        array = json.dumps(FieldCodec.encode(
+            (Message("Alice", "sender", "Found it.", MessageType.INFO, timestamp=0),)
+        ))
+        reply, = batch.response_messages(array, "Alice")
+        assert (reply.target, reply.body) == ("sender", array)
 
 
-def test_plain_answer_to_several_reply_routes_is_refused() -> None:
+def test_plain_answer_to_several_reply_routes_is_delivered_to_every_route() -> None:
     with alice_batch(("Alice", "A private question"), ("#team", "@Alice a team question")) as batch:
         assert batch.targets == ("sender", "#team")
-        with pytest.raises(NativePiUnavailable) as refused:
-            batch.response_messages("One answer for everyone.", "Alice")
-        assert "cannot be divided between 2 reply routes" in str(refused.value.__cause__)
+        replies = batch.response_messages("One answer for everyone.", "Alice")
+        assert [(reply.target, reply.body, reply.type) for reply in replies] == [
+            ("sender", "One answer for everyone.", MessageType.INFO),
+            ("#team", "One answer for everyone.", MessageType.INFO),
+        ]
 
 
 @pytest.mark.skipif(
