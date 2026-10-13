@@ -220,9 +220,13 @@ def test_claim_and_keyed_response_append_share_certificate(tmp_path: Path) -> No
         )
         assert claim.claim_transition is not None
         intent = prepare_fenced_response(
-            case.store, case.bus, case.fence, "done", owner_witness=case.witness
+            case.store, case.bus, case.fence, "done",
+            exact_target=case.reply_target, owner_witness=case.witness
         ).value
-        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        publish_fenced_response(
+            case.store, case.bus, case.fence,
+            exact_target=case.reply_target, owner_witness=case.witness,
+        )
         response = case.bus.log.read_keyed_response(intent)
         assert response.seq == claim.seq + 1
         with comms.bus.log.certified_read() as source:
