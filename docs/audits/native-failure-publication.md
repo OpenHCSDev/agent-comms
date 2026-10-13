@@ -127,6 +127,30 @@ stored in its JSON report. No original failed/UNKNOWN input was replayed.
 
 This establishes corrected candidate once-only publication and retained temporal
 placement. Default-runtime installation and the installed final UI/log-access
-journey remain distinct delivery steps with the existing Toad implementation owner. Original sessions, UNKNOWN inputs and blocked
+journey remain distinct delivery steps with the existing Toad implementation owner.
+
+## Dependency-valid delivery tuple
+
+Core #746 is merged. Packaging inspection found that Toad #592 still declared
+Core `09f70a0ca`, which lacks the new provenance types. Its owner must advance
+that existing dependency declaration/lock before merge; a manually paired wheel
+is not sufficient for a normal fresh source install.
+
+The accepted private candidate also contains `metaclass-registry 0.2.1`, while
+current Core declares `>=0.4.0`. This does not undo the observed native/ACP/UI
+behavior, but it is not a dependency-valid final prefix. Preserve the active
+candidate rather than mutating it. The final staged runtime must use normal
+resolution of the current declarations and pass the package dependency check.
+
+Draft Core #747 advances the existing stack source tuple to merged Core47f,
+accepted Toad e488 and the unchanged Toad-declared Textual e4a. Its generated
+lock was checked offline: 86 entries versus 74 historical entries, adding the
+current formbridge/objectstate declared dependency graph; the only existing
+package-version change is metaclass-registry 0.2.1→0.4.0. The initial offline
+resolution correctly refused unavailable Git commits; the successful normal
+resolution reused the existing 116 MiB Toad Git cache rather than creating a
+new source clone. The new graph is not claimed installed or behaviorally accepted
+from the frozen private candidate. Toad's merged pin replacement and final
+normal-dependency staging/installed journey remain owned delivery steps. Original sessions, UNKNOWN inputs and blocked
 historical goals are untouched. The cause of the original provider disconnect is
 not established by this repair.
