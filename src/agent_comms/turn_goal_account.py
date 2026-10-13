@@ -6,7 +6,6 @@ owns only the live turn's permits and observations, never a reconstructed grant.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from contextlib import ExitStack, suppress
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING
@@ -92,7 +91,6 @@ class TurnGoalAccount:
     turn: TurnId
     lease: TurnLeaseFence
     permit: LaunchPermit | None
-    open_store: Callable[[], GoalAttemptStore]
     pending_origins: dict[str, str]
     claims: ExitStack
     originated: dict[str, LaunchPermit | None] = field(default_factory=dict, init=False)
@@ -100,18 +98,14 @@ class TurnGoalAccount:
     productive_tool: events.ToolEnd | None = field(default=None, init=False)
 
     @staticmethod
-    def reserve(*, owner, comms, store, open_store, ready_grant, autonomous):
-        if store is None and (comms.root / "goal-private" / "goal_attempts.sqlite3").exists():
-            store = open_store()
+    def reserve(*, owner, comms, autonomous):
         try:
-            if store is None:
-                raise GoalAttemptError("No goal attempt store")
+            store = comms.goals.open_goal_store()
             admission = comms.registry.snapshot().admission_generations[owner.name]
             with _store_lock(comms._wire_lock_path):
-                generation = store.snapshot(owner.goal.id)
-                if generation is None or not generation.lifecycle.ready:
-                    raise GoalAttemptError("No ready goal generation")
-                grant = ready_grant(owner, admission, store, generation)
+                generation = store.require_generation(owner.goal.id)
+                generation.lifecycle.require_ready()
+                grant = comms.goals.ready_goal_grant_locked(owner, admission, store, generation)
                 reservation = store.reserve(owner.goal.id, generation.number, ready_grant=grant)
                 return store.claim_launch(reservation)
         except GoalAttemptError as error:
@@ -142,7 +136,7 @@ class TurnGoalAccount:
             permit = self.permit
         if permit is not None:
             permit.record_provider_usage(
-                self.open_store(), str(event.response_id), event.usage.to_wire()
+                self.comms.goals.open_goal_store(), str(event.response_id), event.usage.to_wire()
             )
         else:
             self.unattributed_usage.append((str(event.response_id), event.usage))
@@ -153,15 +147,20 @@ class TurnGoalAccount:
         if event.name != "comms_set_goal" or event.ok is not True:
             return
         goal = self.comms.registry.require(self.thread_name).goal
-        if goal is None:
+        if goal is None or goal.id in self.originated:
             return
-        store = self.open_store()
-        if store.snapshot(goal.id) is not None:
-            return
-        store.create_goal(goal.id)
+        store = self.comms.goals.open_goal_store()
         self.originated[goal.id] = None
-        grant = store.ready_grant(goal.id, 1)
-        permit = store.claim_launch(store.reserve(goal.id, 1, ready_grant=grant))
+        with _store_lock(self.comms._wire_lock_path):
+            generation = store.require_generation(goal.id)
+            generation.lifecycle.require_ready()
+            admission = self.comms.registry.snapshot().admission_generations[self.thread_name]
+            grant = self.comms.goals.ready_goal_grant_locked(
+                self.owner, admission, store, generation,
+            )
+            permit = store.claim_launch(
+                store.reserve(goal.id, generation.number, ready_grant=grant)
+            )
         self.claims.callback(permit.retire_unverified, store)
         self.originated[goal.id] = permit
         for response_id, usage in self.unattributed_usage:
@@ -199,7 +198,7 @@ class TurnGoalAccount:
             return
         if terminal is None and self.current_active_goal() is not None:
             self.block_current("Backend turn ended without a result; inspect local diagnostics.")
-        store = self.open_store()
+        store = self.comms.goals.open_goal_store()
         current = self.comms.registry.require(self.thread_name).goal_for(self.owner.goal.id)
         if terminal is not None and terminal.ok:
             if current is not None:
@@ -235,7 +234,7 @@ class TurnGoalAccount:
         self.settle_original(terminal)
         for goal_id, permit in self.originated.items():
             current = self.comms.registry.require(self.thread_name).goal_for(goal_id)
-            store = self.open_store()
+            store = self.comms.goals.open_goal_store()
             if terminal is not None and terminal.ok:
                 if current is not None:
                     result = OriginGoalSettlement(store, permit, current, self.turn)
