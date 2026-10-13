@@ -75,9 +75,7 @@ class OpenedWireSnapshot:
 
     def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | None:
         """Validate the captured candidate only when a consumer reads this cut."""
-        if index not in self._append_checkpoints:
-            raise ValueError("Append index was not registered before source capture")
-        record = index.capture(self._append_checkpoints[index], self.stream, self.revision)
+        record = index.capture(self._append_checkpoints.get(index), self.stream, self.revision)
         self._append_checkpoints[index] = record
         return record
 
@@ -85,8 +83,6 @@ class OpenedWireSnapshot:
         self, index: BusAppendIndex[Checkpoint], record: Checkpoint,
     ) -> None:
         """Keep a computed exact-cut value with this existing source resource."""
-        if index not in self._append_checkpoints:
-            raise ValueError("Append index was not registered before source capture")
         if record.source != self.revision:
             raise ValueError("Computed append checkpoint belongs to another source cut")
         self._append_checkpoints[index] = index.remember(record)
