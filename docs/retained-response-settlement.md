@@ -26,8 +26,14 @@ Transaction incident: f7b7d724's one-time cleanup held CoordinationSession.read
 across backup copying and release appends. In rollback-journal mode that read can
 block another writer's COMMIT; the pending writer can then block BEGIN IMMEDIATE.
 Backup bus mtime 18:00:57 UTC, SQL 18:01:15, result 18:01:19; reported drain failures
-18:01:21. This is a concrete overlapping lifetime risk, not proof of each exact
-failure's cause. No more whole-bus copies under locks or live cleanup.
+18:01:21. Coach confirmed this caused five agents' database-lock failures. No more
+whole-bus copies under locks or live cleanup. The large completed backup is
+retired at coach request; the small backup files remain. Its append-only live
+prefix observation: 4,280,444,519 bytes, SHA-256
+4cb35a98ed0614f3e0977d75acf50332d5faf0f3d2401efe90bb8d2dacaae0ef.
+The copy was hashed without live locks before retirement. Released count: 54;
+15 other claims preserved. Writing a scratch manifest was refused as outside the
+project; this existing evidence document retains the observation instead.
 
 Existing refactor-audit Package/ParsedModule parsed all 307 current production
 modules with zero omissions before implementation, enumerating declarations,
