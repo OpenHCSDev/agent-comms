@@ -244,6 +244,14 @@ class AutoRetryEnd(PiEvent):
 class NativeRetryEnd(AutoRetryEnd):
     """Close native recovery; the retained assistant reports its final failure."""
 
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        async for event in super().apply(session):
+            yield event
+        if self.success:
+            yield session.watchdog.state(
+                "recovered", "provider_auto_retry_progress", 0, phase=ModelWaitPhase()
+            )
+
     async def exhausted(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if False:
             yield
@@ -282,11 +290,12 @@ class RetryAttemptEvent(PiEvent):
 
 class AutoRetryStart(RetryAttemptEvent):
     retry_reason_code = "provider_auto_retry"
+    recovery_on_progress = True
 
     def prepare_retry(self, session: TurnSession) -> None:
         session.output.final_assistant_stop = False
         session.watchdog.prompt_accepted = True
-        session.watchdog.retry_recovery_pending = True
+        session.watchdog.retry_recovery_pending = self.recovery_on_progress
         session.watchdog.retry_recovery_reason = "provider_auto_retry_progress"
 
 
@@ -298,6 +307,8 @@ class NativeRetryStart(AutoRetryStart):
     before the refused assistant message, so Core reports only the recovery's
     final outcome and never counts a refusal itself.
     """
+
+    recovery_on_progress = False
 
 
 class ReasonedCompaction(PiEvent):

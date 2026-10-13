@@ -18,11 +18,11 @@ interface ToolDeclaration {
 	parameters: Record<string, unknown>;
 }
 
-function run(args: string[]): Record<string, unknown> {
+function run(args: string[], timeout = 30_000): Record<string, unknown> {
 	try {
 		const stdout = execFileSync(CLI, args, {
 			encoding: "utf-8",
-			timeout: 30_000,
+			timeout,
 		});
 		return JSON.parse(stdout) as Record<string, unknown>;
 	} catch (error) {
@@ -81,6 +81,23 @@ export default function (pi: ExtensionAPI) {
 					sessionFile,
 					...(managed ? [] : ["--pid", String(process.pid)]),
 				]);
+			}
+		});
+	}
+
+	if (forkThread) {
+		// Before compaction starts (manual, threshold or overflow), the thread's
+		// uncommitted worktree changes become a pushed branch checkpoint. The
+		// command's named state is logged; the checkpoint never blocks or skips
+		// the compaction that follows.
+		pi.on("session_before_compact", async (_event, _ctx) => {
+			try {
+				const result = run(["checkpoint", "--name", forkThread], 150_000);
+				console.error(`agent-comms checkpoint: ${JSON.stringify(result)}`);
+			} catch (error) {
+				console.error(
+					`agent-comms checkpoint: ${error instanceof Error ? error.message : error}`,
+				);
 			}
 		});
 	}

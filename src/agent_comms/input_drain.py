@@ -22,7 +22,11 @@ from .acp_extension import (
     QueueProjection,
     encode_updates,
 )
-from .activity import StoppedDrainDiagnostic, UnavailableDrainDiagnostic
+from .activity import (
+    NativeInputDrainDiagnostic,
+    StoppedDrainDiagnostic,
+    UnavailableDrainDiagnostic,
+)
 from .agent_backend import InputContent, InputId, InputRequest, SendNow, WhenBusy
 from .comms import Comms
 from .coordination_errors import CoordinationError, IdentityConflict
@@ -390,16 +394,23 @@ class InputDrain:
                     await self.effects.turns.goals.schedule_goal(session_id)
                 except asyncio.CancelledError:
                     raise
+                except NativePiUnavailable as error:
+                    # A failed native input has already been settled and
+                    # published by its request owner; it is never replayed, so
+                    # the owner keeps taking later inputs, as a restart would.
+                    # This is not an inbox read failure and must not borrow the
+                    # Inbox unavailable presentation.
+                    await Coordination.run_worker(partial(
+                        self.comms.agents.set_drain_diagnostic, thread, owner,
+                        NativeInputDrainDiagnostic(owner, type(error).__name__, str(error)),
+                        source_error=error,
+                    ))
                 except (
                     OSError,
                     ValueError,
                     sqlite3.Error,
                     CoordinationError,
                     RequestError,
-                    # A failed native input has already been settled and
-                    # published by its request owner; it is never replayed, so
-                    # the owner keeps taking later inputs, as a restart would.
-                    NativePiUnavailable,
                 ) as error:
                     await Coordination.run_worker(partial(
                         self.comms.agents.set_drain_diagnostic, thread, owner,

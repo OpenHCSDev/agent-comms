@@ -146,7 +146,7 @@ async def test_exhausted_native_retries_report_the_existing_failure_once(tmp_pat
 
     states = [event for event in events if isinstance(event, ae.TurnState)]
     assert [event.state for event in states] == [
-        "retrying", "recovered", "retrying", "recovered", "retrying", "recovered", "failed",
+        "retrying", "retrying", "retrying", "failed",
     ]
     failed = states[-1]
     assert failed.reason_code == "provider_retry_exhausted"

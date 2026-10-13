@@ -14,7 +14,9 @@ class RecoveryBudget {
 class ProviderRefusal {
     static decode(message) {
         if (message?.stopReason !== 'error') return undefined;
-        const match = /^(?:(?:Codex|OpenAI|Anthropic) error: )?(Our servers are currently overloaded\. Please try again later\.?|An error occurred while processing your request\. You can retry your request\.?)$/i.exec(message.errorMessage ?? '');
+        // Provider formatters can retain HTTP status and JSON bodies around the
+        // original sentence. Decode the known refusal here, not in Core or UI.
+        const match = /(?:^|[\s":])(Our servers are currently overloaded\. Please try again later\.?|An error occurred while processing your request\. You can retry your request\.?|Internal (?:server )?error\.?)(?=$|[\s"},])/i.exec(message.errorMessage ?? '');
         return match?.[1];
     }
 }
