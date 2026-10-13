@@ -47,7 +47,7 @@ from .store_files import _async_store_lock, _store_lock, file_revision
 from .thread_identity import AdmissionIdentity
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
-from .wire_watch import WireWatch
+from .wire_watch import WatchSource, WireWatch
 from .goal_presentation import GoalExecutionState
 from .goal_waits import GoalWaits
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -127,6 +127,9 @@ class InputDrain:
         # Only a completed, quiescent observation can suppress another scan.
         # These revisions never authorize delivery, acceptance or a native send.
         self._idle_private_revisions: dict[str, PrivateObservation] = {}
+        # The private observation owner records only a read that changed while
+        # it was being established. Its next stable read consumes this fact.
+        self._repeat_private_observations: set[str] = set()
 
     async def clear_queued_inputs(self, session_id: str) -> None:
         """Drop prompts queued against the backend for this session.
@@ -309,6 +312,7 @@ class InputDrain:
         wake = self.wake_tasks.get(session_id)
         return (
             session_id in self._idle_private_revisions
+            and session_id not in self._repeat_private_observations
             and not self.effects.cursors.delivery(session_id).needs_refresh
             and not self.pending_turns.get(session_id)
             and session_id not in self.effects.turns.turn_tasks
@@ -318,8 +322,11 @@ class InputDrain:
 
     async def observe(self, session_id: str) -> None:
         settled: SettledTick | None = None
-        async with aclosing(WireWatch.observations(self.comms.root)) as observations:
-            async for _ in observations:
+        auth = self.sessions.config.configuration.native_config / "auth.json"
+        async with aclosing(WireWatch.observations(
+            WatchSource.wire(self.comms.root), WatchSource.file(auth),
+        )) as observations:
+            async for watcher in observations:
                 # A tick whose stores and inputs are unchanged since a settled
                 # tick has nothing new to observe; any change runs it in full.
                 # Another owner's registry or coordination change is not this
@@ -377,7 +384,7 @@ class InputDrain:
                 async with drain_failures(self.comms, thread, owner):
                     # A stored model change precedes the messages the same tick hands over.
                     await self.sessions.config.sync_thread(session_id)
-                    await self.drain_inbox(session_id)
+                    drained = await self.drain_inbox(session_id)
                     if self._in_standby(session_id):
                         # Recovery reads only stores in the revision, so it runs
                         # when one of them changed, not on a clock.
@@ -400,6 +407,21 @@ class InputDrain:
                         if not current.executing and self._quiescent(session_id):
                             marker = await Coordination.run_worker(self._bus_marker)
                             settled = SettledTick(revision, entry, marker.admission_after_seq)
+                        elif (
+                            drained == 0
+                            and session_id in self._repeat_private_observations
+                            and not self.pending_turns.get(session_id)
+                            and session_id not in self.effects.turns.turn_tasks
+                            and session_id not in self.backend_inboxes
+                        ):
+                            # The first empty private observation may advance its
+                            # own durable cursor. Re-read that transition now;
+                            # healthy file notification remains event-driven.
+                            watcher.notify()
+                        else:
+                            wake = self.wake_tasks.get(session_id)
+                            if wake is not None and not wake.done():
+                                wake.add_done_callback(lambda _task: watcher.notify())
 
     async def drain_inbox(self, session_id: str) -> int:
         """Push undelivered messages to the client; returns count pushed."""
@@ -548,14 +570,21 @@ class InputDrain:
         # ordinary loop still synchronizes configuration and schedules goals.
         before = await self._observe_private_revision(session_id, root_id)
         if self._idle_private_revisions.get(session_id) == before:
+            self._repeat_private_observations.discard(session_id)
             await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))
             return 0
         self._idle_private_revisions.pop(session_id, None)
         result = await self.effects._drain_private_nk(session_id, root_id)
         # Never absorb a message/owner/recovery change during a suspended read,
         # or skip queued independent work after a completed native turn.
-        if result == 0 and before == await self._observe_private_revision(session_id, root_id):
-            self._idle_private_revisions[session_id] = before
+        if result == 0:
+            if before == await self._observe_private_revision(session_id, root_id):
+                self._idle_private_revisions[session_id] = before
+                self._repeat_private_observations.discard(session_id)
+            else:
+                self._repeat_private_observations.add(session_id)
+        else:
+            self._repeat_private_observations.discard(session_id)
         return result
 
     async def drain_owned_inbox(self, session_id: str) -> int:
@@ -644,6 +673,7 @@ class InputDrain:
             self.drain_tasks.clear()
             self.wake_tasks.clear()
             self._idle_private_revisions.clear()
+            self._repeat_private_observations.clear()
 
     async def input_started(
         self,

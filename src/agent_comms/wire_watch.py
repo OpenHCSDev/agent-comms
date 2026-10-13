@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
-from contextlib import suppress
+from dataclasses import dataclass
 import ctypes
 import os
 import struct
@@ -36,8 +36,25 @@ _AUTHORITY_FILES = {
 }
 
 
+@dataclass(frozen=True)
+class WatchSource:
+    """Files in one directory whose physical changes wake a reader."""
+
+    directory: Path
+    names: frozenset[bytes]
+    modified: bool = False
+
+    @classmethod
+    def wire(cls, root: Path) -> WatchSource:
+        return cls(root, _AUTHORITY_FILES)
+
+    @classmethod
+    def file(cls, path: Path) -> WatchSource:
+        return cls(path.parent, frozenset({os.fsencode(path.name)}))
+
+
 class WireWatch(ABC):
-    """One observation cadence and its resources, including notification loss."""
+    """One change-driven observation lifetime, including notification loss."""
 
     @abstractmethod
     async def prepare(self) -> None: ...
@@ -45,17 +62,20 @@ class WireWatch(ABC):
     @abstractmethod
     async def wait(self) -> WireWatch: ...
 
+    @abstractmethod
+    def notify(self) -> None:
+        """Wake for a process-local transition owned by the observer."""
+
     def close(self) -> None:
         pass
 
     @staticmethod
-    async def observations(root: Path, names: frozenset[bytes] = _AUTHORITY_FILES,
-                           *, modified: bool = False) -> AsyncIterator[None]:
-        watcher = open_wire_watcher(root, names, modified=modified)
+    async def observations(*sources: WatchSource) -> AsyncIterator[WireWatch]:
+        watcher = open_wire_watcher(*sources)
         try:
             while True:
                 await watcher.prepare()
-                yield None
+                yield watcher
                 watcher = await watcher.wait()
         finally:
             watcher.close()
@@ -68,10 +88,17 @@ class PollingWireWatch(WireWatch):
     async def wait(self) -> WireWatch:
         return self
 
+    def notify(self) -> None:
+        # This fallback already advances on its polling cadence.
+        pass
+
 
 class WireChangeWatch(WireWatch):
-    def __init__(self, fd: int, loop: asyncio.AbstractEventLoop, names: frozenset[bytes] = _AUTHORITY_FILES):
-        self.names = names
+    def __init__(
+        self, fd: int, loop: asyncio.AbstractEventLoop,
+        names_by_watch: dict[int, frozenset[bytes]],
+    ):
+        self.names_by_watch = names_by_watch
         self.fd = fd
         self.loop = loop
         self.changed = asyncio.Event()
@@ -85,21 +112,22 @@ class WireChangeWatch(WireWatch):
         if self.invalid:
             self.close()
             return PollingWireWatch()
-        with suppress(TimeoutError):
-            async with asyncio.timeout(1.0):
-                await self.changed.wait()
+        await self.changed.wait()
         return self
+
+    def notify(self) -> None:
+        self.changed.set()
 
     def _on_ready(self) -> None:
         try:
             while raw := os.read(self.fd, 65536):
                 offset = 0
                 while offset + _HEADER.size <= len(raw):
-                    _, mask, _, length = _HEADER.unpack_from(raw, offset)
+                    watch, mask, _, length = _HEADER.unpack_from(raw, offset)
                     offset += _HEADER.size
                     name = raw[offset : offset + length].partition(b"\0")[0]
                     offset += length
-                    if name in self.names or mask & (
+                    if name in self.names_by_watch.get(watch, ()) or mask & (
                         _IN_Q_OVERFLOW | _IN_IGNORED | _IN_DELETE_SELF | _IN_MOVE_SELF
                     ):
                         self.changed.set()
@@ -118,13 +146,15 @@ class WireChangeWatch(WireWatch):
             self.fd = -1
 
 
-def open_wire_watcher(root: Path, names: frozenset[bytes] = _AUTHORITY_FILES,
-                      *, modified: bool = False) -> WireWatch:
-    """Use Linux notifications when available; callers retain periodic polling.
+def open_wire_watcher(*sources: WatchSource) -> WireWatch:
+    """Use Linux notifications for every declared physical change source.
 
-    ``names`` are the store files in ``root`` that prompt a read; ``modified``
-    also reports writes to files that stay open (SQLite's write-ahead log).
+    A healthy native watcher reports queue loss and watched-directory removal,
+    so it needs no periodic speculative read. Platforms or source directories
+    without native notification use the existing polling owner.
     """
+    if not sources:
+        raise ValueError("Wire watcher requires at least one source")
     if sys.platform != "linux":
         return PollingWireWatch()
     try:
@@ -140,11 +170,21 @@ def open_wire_watcher(root: Path, names: frozenset[bytes] = _AUTHORITY_FILES,
     fd = init(os.O_NONBLOCK | os.O_CLOEXEC)
     if fd < 0:
         return PollingWireWatch()
-    if add(fd, os.fsencode(root), _MASK | (_IN_MODIFY if modified else 0)) < 0:
-        os.close(fd)
-        return PollingWireWatch()
+    grouped: dict[Path, tuple[frozenset[bytes], bool]] = {}
+    for source in sources:
+        names, modified = grouped.get(source.directory, (frozenset(), False))
+        grouped[source.directory] = (names | source.names, modified or source.modified)
+    names_by_watch = {}
+    for directory, (names, modified) in grouped.items():
+        watch = add(
+            fd, os.fsencode(directory), _MASK | (_IN_MODIFY if modified else 0)
+        )
+        if watch < 0:
+            os.close(fd)
+            return PollingWireWatch()
+        names_by_watch[watch] = names
     try:
-        return WireChangeWatch(fd, asyncio.get_running_loop(), names)
+        return WireChangeWatch(fd, asyncio.get_running_loop(), names_by_watch)
     except (NotImplementedError, OSError):
         os.close(fd)
         return PollingWireWatch()
