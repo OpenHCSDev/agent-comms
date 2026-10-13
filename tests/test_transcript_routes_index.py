@@ -17,7 +17,10 @@ def _session(path: Path, count: int) -> None:
                     {
                         "type": "message",
                         "id": f"entry-{index}",
-                        "message": {"role": "assistant", "content": f"answer {index}"},
+                        "message": {
+                            "role": "assistant",
+                            "content": [{"type": "text", "text": f"answer {index}"}],
+                        },
                     }
                 )
                 + "\n"

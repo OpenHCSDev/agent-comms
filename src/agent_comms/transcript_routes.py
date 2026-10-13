@@ -47,13 +47,9 @@ class InputDisplay(RouteAnnotationTable, TypedTable):
         )
 
 
-def _schema(connection: sqlite3.Connection) -> dict[str, str]:
-    return {
-        row.name: row.sql
-        for row in SQLiteSchemaObject.read(
-            connection.execute("SELECT name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
-        )
-    }
+def _schema(connection: sqlite3.Connection) -> list[SQLiteSchemaObject]:
+    return SQLiteSchemaObject.read(connection.execute(
+        "SELECT name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'"))
 
 
 def _declared_schema() -> dict[str, str]:
@@ -65,7 +61,7 @@ def _declared_schema() -> dict[str, str]:
 
 
 def _assert_schema(connection: sqlite3.Connection) -> None:
-    if _schema(connection) != _declared_schema():
+    if SQLiteSchemaObject.differences(_schema(connection), _declared_schema()):
         raise ValueError("Transcript annotations require the one-shot durable migration")
 
 
