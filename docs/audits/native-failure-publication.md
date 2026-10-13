@@ -154,3 +154,33 @@ from the frozen private candidate. Toad's merged pin replacement and final
 normal-dependency staging/installed journey remain owned delivery steps. Original sessions, UNKNOWN inputs and blocked
 historical goals are untouched. The cause of the original provider disconnect is
 not established by this repair.
+
+### Dependency refresh and failed handoff correction
+
+Toad #592 is now independently confirmed merged at b8bda1ba. Draft #747 pins
+that merge, and normal `uv lock --upgrade` plus offline lock checking succeeds.
+It refreshes aiohttp 3.14.3→3.14.5, MarkupSafe 3.0.3→3.0.4 and multidict
+6.9.1→7.1.0. The merged Toad declaration still forces formbridge0.1.0,
+objectstate2.1.1 and python-introspect0.2.8: this lock is NOT the completed
+library refresh. Current published releases are formbridge0.1.5,
+objectstate4.0.1, python-introspect0.3.0, zmqruntime0.6.5 and
+metaclass-registry0.4.0. The required Toad declaration/API migration belongs
+to its existing owner, not a competing stack override.
+
+The refactor-audit source9a98 is already the current tip of its actual packaged
+branch, `feat/original-family-flattened-collector`. NRA maincb694 lacks
+`skills/refactor-audit`, so substituting main would remove the required package.
+Textual and UI-theme pins already match their current mains. The newer
+diff-view388dd69 revision changes retained evidence only, not production.
+
+The sender's claim that newer directives had been received was wrong. Non-ACK
+peer inbox acquisition still returned the dependency-update messages; the typed
+coordinator showed the active worker processing an older captured batch through
+seq1578. Retained native tool records nevertheless proved real later work,
+including the03:41UTC #592 merge result. These are distinct facts, not delivery
+proof. #748 records the source-supported presentation defect: an earlier native
+failure diagnostic persists through later activity, whose visible description
+is replaced by `Inbox unavailable`. The correction remains undelivered work;
+no warning, cursor, execution custody or UNKNOWN was cleared to manufacture
+recovery. Final library-update installation and installed acceptance remain
+unfinished.
