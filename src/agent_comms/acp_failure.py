@@ -7,9 +7,14 @@ from __future__ import annotations
 
 import json
 import re
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
-from typing import ClassVar
+from typing import ClassVar, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .agent_events import Done, Error
+    from .input_disposition import InputDocument
+    from .turn_input_source import OriginalTurnInput
 
 from .declared_family import DeclaredFamily
 from .delivery_presentation import DeliveryPresentation
@@ -147,7 +152,10 @@ class PromptFailureReceipt:
     def error_data(self):
         from .field_codec import FieldCodec
 
-        return {"agentCommsFailure": FieldCodec.encode(self)}
+        # The request wire shape is the receipt, not a richer native outcome.
+        return {"agentCommsFailure": FieldCodec.encode(
+            PromptFailureReceipt(self.failure, self.notification_published)
+        )}
 
     def request_error(self):
         from acp import RequestError
@@ -157,6 +165,92 @@ class PromptFailureReceipt:
     @classmethod
     def from_error(cls, code, message, data):
         return FieldCodec.decode(ErrorValue, data).original_root().failure_receipt(code, message)
+
+
+class NativeTurnOutcome(ABC):
+    """Resolved completion owns failure presentation and publication custody."""
+
+    @abstractmethod
+    async def publish(self, client, session_id: str) -> NativeTurnOutcome: ...
+
+    @abstractmethod
+    def raise_if_failed(self) -> None: ...
+
+    @property
+    def failure_receipt(self) -> PromptFailureReceipt | None:
+        return None
+
+
+@dataclass(frozen=True)
+class UnresolvedNativeTurnOutcome(NativeTurnOutcome):
+    async def publish(self, client, session_id: str) -> NativeTurnOutcome:
+        raise RuntimeError("Native completion has not been resolved at its input boundary")
+
+    def raise_if_failed(self) -> None:
+        raise RuntimeError("Native completion has not been resolved at its input boundary")
+
+
+@dataclass(frozen=True)
+class SuccessfulNativeTurnOutcome(NativeTurnOutcome):
+    async def publish(self, client, session_id: str) -> NativeTurnOutcome:
+        return self
+
+    def raise_if_failed(self) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class FailedNativeTurnOutcome(PromptFailureReceipt, NativeTurnOutcome):
+    source: FailureSource = UnrecordedFailureSource()
+    failed_input_text: str | None = None
+
+    @classmethod
+    def resolve(
+        cls, terminal: Done, error: Error | None,
+        document: InputDocument, original: OriginalTurnInput,
+    ) -> FailedNativeTurnOutcome:
+        # Classification and original-input facts are resolved exactly once,
+        # from the same disposition snapshot used to settle this native Done.
+        failure = replace(
+            ACPFailure.from_error(-32603, terminal.text or "Backend failed",
+                                  diagnostics=error.diagnostics if error is not None else ()),
+            input_state=document.shared_state(original.notice_keys),
+        )
+        return cls(
+            failure=failure, notification_published=False,
+            source=error.source if error is not None else UnrecordedFailureSource(),
+            failed_input_text=(original.notice_text
+                               if not document.all_started(original.notice_keys) else None),
+        )
+
+    async def publish(self, client, session_id: str) -> NativeTurnOutcome:
+        from acp.schema import AgentMessageChunk, TextContentBlock
+        from .acp_extension import (
+            InputFailedUpdate, RequestFailedUpdate, TextRouteUpdate, encode_updates,
+        )
+
+        accepted = await client.session_update(
+            session_id=session_id,
+            update=AgentMessageChunk(
+                session_update="agent_message_chunk",
+                content=TextContentBlock(type="text", text=""),
+                field_meta=encode_updates(
+                    TextRouteUpdate(None), RequestFailedUpdate(self.failure, self.source),
+                    *((InputFailedUpdate(self.failed_input_text, self.failure),)
+                      if self.failed_input_text else ()),
+                ),
+            ),
+        )
+        # ACP SDK clients return None after acknowledgement; Core's transport
+        # returns False when nobody accepted the notification.
+        return replace(self, notification_published=accepted is not False)
+
+    @property
+    def failure_receipt(self) -> PromptFailureReceipt:
+        return self
+
+    def raise_if_failed(self) -> None:
+        raise self.request_error()
 
 
 class RequestACPFailure(ACPFailure):

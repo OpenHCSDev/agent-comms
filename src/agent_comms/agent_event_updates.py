@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
+from dataclasses import replace
 from functools import partial
 from .coordinator import Coordination
 
@@ -21,14 +22,10 @@ from . import agent_events as events
 from .acp_extension import (
     CompactionChangedUpdate,
     GoalChangedUpdate,
-    InputFailedUpdate,
     McpClientReceiptUpdate,
     PromptCancelledUpdate,
-    RequestFailedUpdate,
-    TextRouteUpdate,
     encode_updates,
 )
-from .acp_failure import ACPFailure
 from .mro_dispatch import MroDispatch, handles
 from .tool_results import tool_result_content
 
@@ -177,34 +174,10 @@ class AcpEventConsumer(MroDispatch):
             ),
         )
 
-    @handles(events.Error)
-    async def on_error(self, event: events.Error) -> None:
-        session_id = self.session_id
-        client = self.client
-        text = str(event.text or "Backend failed")
-        failure = ACPFailure.from_error(-32603, text, diagnostics=event.diagnostics)
-        original = self.agent.inputs.original_sources.get(session_id)
-        original_keys = original.notice_keys if original else ()
-        from dataclasses import replace
-
-        document = await Coordination.run_worker(self.agent.inputs.dispositions.read)
-        failure = replace(failure, input_state=document.shared_state(original_keys))
-        failed_input = None
-        input_text = original.notice_text if original else None
-        if input_text and not document.all_started(original_keys):
-            failed_input = InputFailedUpdate(input_text, failure)
-        await client.session_update(
-            session_id=session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(
-                    TextRouteUpdate(None),
-                    RequestFailedUpdate(failure, event.source),
-                    *((failed_input,) if failed_input else ()),
-                ),
-            ),
-        )
+    @handles(events.Done)
+    async def on_done(self, event: events.Done) -> events.Done:
+        # Notification and the request receipt consume the same resolved outcome.
+        return replace(event, outcome=await event.outcome.publish(self.client, self.session_id))
 
     @handles(events.PromptCancelled)
     async def on_cancelled(self, event):
