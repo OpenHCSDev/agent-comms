@@ -71,14 +71,30 @@ class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
     def recovery(self) -> str: ...
 
     @property
+    def headline(self) -> str:
+        return "Inbox unavailable"
+
+    @property
     def summary(self) -> str:
-        return f"Inbox unavailable · {self.error_type}: {self.reason} · {self.recovery}"
+        return f"{self.headline} · {self.error_type}: {self.reason} · {self.recovery}"
 
 
 class UnavailableDrainDiagnostic(DrainDiagnostic):
     @property
     def recovery(self) -> str:
         return "Waiting for recovery"
+
+
+class NativeInputDrainDiagnostic(DrainDiagnostic):
+    """A failed native input: already settled by its request owner, never replayed."""
+
+    @property
+    def headline(self) -> str:
+        return "Native input unavailable"
+
+    @property
+    def recovery(self) -> str:
+        return "Settled by its request owner; the owner keeps taking later inputs"
 
 
 class StoppedDrainDiagnostic(DrainDiagnostic):
