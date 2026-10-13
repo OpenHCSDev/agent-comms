@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .activity import ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
-from .bus_display_index import BusDisplayIndex, DisplayCheckpoint, DisplayMetricScope
+from .bus_display_index import BusDisplayIndex, DisplayMetricScope
 from .channel_targets import is_channel_target
 from .channels import Channel
 from .display_order import ChannelSort
@@ -24,7 +24,7 @@ from .messages import Message
 from .read_basis import ChannelDisplayScope, DMDisplayScope
 from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
-from .store_files import StoreRevision, _store_lock, file_revision
+from .store_files import StoreRevision, _store_lock
 from .thread_presentation import ThreadPresentation, ThreadOwnerBinding, UnavailableThreadOwnerBinding
 from .thread_status import ThreadStatus
 from .thread_identity import ThreadIncarnation
