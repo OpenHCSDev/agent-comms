@@ -102,10 +102,12 @@ class MessageBus:
         return dict(counts)
 
     def _activity_clocks(self, source: OpenedWireSnapshot | None = None):
-        """The existing index borrows the original captured source after release."""
+        """The existing index borrows the same opened source after release."""
         if source is not None:
             return self._activity.snapshot(source, self._bus_activity_fields)
-        with self.log._opened_wire_snapshot(need_sequence=False) as opened:
+        with self.log._opened_wire_snapshot(
+            need_sequence=False, capture_indexes=True,
+        ) as opened:
             return self._activity_clocks(opened)
 
     def channel_activity(self) -> Mapping[str, ChannelActivity]:

@@ -25,9 +25,9 @@ from .bus_publication import (
 )
 from .bus_source_page import AddressedPage
 from .bus_projection import (
+    AppendCheckpoint,
     BusAppendIndex,
     BusFileRevision,
-    CapturedCheckpoint,
     Checkpoint,
 )
 from .envelope_claim_transitions import (
@@ -64,19 +64,26 @@ class OpenedWireSnapshot:
     through: int
     stream: BinaryIO | None
     revision: BusFileRevision | None
-    _append_checkpoints: dict[BusAppendIndex, CapturedCheckpoint] = field(
+    _append_checkpoints: dict[BusAppendIndex, AppendCheckpoint | None] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
 
-    def capture_append_indexes(self, indexes: tuple[BusAppendIndex, ...]) -> None:
-        for index in indexes:
-            self._append_checkpoints[index] = index.capture(self.stream, self.revision)
+    def capture_append_indexes(
+        self, prepared: tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...],
+    ) -> None:
+        for index, record in prepared:
+            self._append_checkpoints[index] = index.capture(record, self.stream, self.revision)
 
     def append_checkpoint(self, index: BusAppendIndex[Checkpoint]) -> Checkpoint | None:
         """Read the index value captured with this exact source cut."""
         if index not in self._append_checkpoints:
             raise ValueError("Append index was not registered before source capture")
-        return self._append_checkpoints[index].value(index.record_type)
+        record = self._append_checkpoints[index]
+        if record is None:
+            return None
+        if not isinstance(record, index.record_type):
+            raise TypeError("Captured append checkpoint belongs to another index")
+        return record
 
     def remember_append_checkpoint(
         self, index: BusAppendIndex[Checkpoint], record: Checkpoint,
@@ -84,8 +91,9 @@ class OpenedWireSnapshot:
         """Keep a computed exact-cut value with this existing source resource."""
         if index not in self._append_checkpoints:
             raise ValueError("Append index was not registered before source capture")
-        retained = index.remember(record)
-        self._append_checkpoints[index].remember(retained)
+        if record.source != self.revision:
+            raise ValueError("Computed append checkpoint belongs to another source cut")
+        self._append_checkpoints[index] = index.remember(record)
 
     @property
     def boundary(self) -> int:
@@ -543,8 +551,14 @@ class WireLog:
             return matched
 
     @contextmanager
-    def _opened_wire_snapshot(self, *, need_sequence: bool = True):
+    def _opened_wire_snapshot(
+        self, *, need_sequence: bool = True, capture_indexes: bool = False,
+    ):
         """Own one fixed opened inode/byte boundary beyond physical custody."""
+        prepared = (
+            tuple((index, index.prepare()) for index in self._append_indexes)
+            if capture_indexes else ()
+        )
         with ExitStack() as resources:
             with _store_lock(self.path) as lock:
                 metadata = (
@@ -576,7 +590,9 @@ class WireLog:
                         raise RelationViolationError("Opened read differs from its certified source cut")
                     snapshot_type = CertifiedOpenedWireSnapshot
                 opened = snapshot_type(metadata, through, stream, revision)
-                opened.capture_append_indexes(tuple(self._append_indexes))
+            # Index file reads happened before the bus cut; prefix validation
+            # happens after its lock is released against the retained descriptor.
+            opened.capture_append_indexes(prepared)
             yield opened
 
     @contextmanager

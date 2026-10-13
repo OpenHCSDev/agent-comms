@@ -8,7 +8,10 @@ import threading
 
 import pytest
 
+from agent_comms.bus_activity_index import ActivityCheckpoint, BusActivityIndex
+from agent_comms.bus_projection import AppendCheckpoint, BusFileRevision
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.messages import Message
 
@@ -137,15 +140,15 @@ def test_activity_clocks_reuse_the_original_boundary_and_extend_on_append(wired,
 
 
 @pytest.mark.parametrize("same_owner", [False, True])
-def test_captured_viewer_cut_keeps_its_admitted_append_checkpoints(wired, monkeypatch, same_owner):
-    first = wired.messaging.send_message("PR111", "#base", "original captured activity")
+def test_open_view_cut_keeps_its_append_checkpoints(wired, monkeypatch, same_owner):
+    first = wired.messaging.send_message("PR111", "#base", "first view activity")
     viewer = wired.messaging.user_identity("/isolated-checkpoint-viewer").name
     # Prepare both actual index owners before taking a cold observer's cut.
     wired.views.viewer_snapshot("/isolated-checkpoint-viewer")
     captured = wired if same_owner else wire(wired.root)
     with captured.views.presentation.snapshot(viewer=viewer) as (basis, source):
         appended = wired.messaging.send_message("fixer", "#base", "later activity")
-        # B advances both index owners; A must retain its own admitted prefix.
+        # B advances both index owners; A keeps the prefix read with its source.
         wired.views.viewer_snapshot("/isolated-checkpoint-viewer")
         parsed = []
         original = Message.from_wire
@@ -190,6 +193,45 @@ def test_computed_checkpoint_stays_with_the_same_opened_cut(wired, monkeypatch):
             source, basis.scopes, basis.scopes, basis.viewer, basis.viewer_names) == first_metrics
         assert wired.bus.last_sent_timestamps(source=source) == first_clocks
         assert parsed == []
+
+
+def test_display_index_registers_once_and_only_view_snapshots_capture_indexes(wired):
+    indexes = wired.bus.log._append_indexes
+    baseline = len(indexes)
+    first = wired.views.presentation.display_index("PR111")
+    assert len(indexes) == baseline + 1
+    assert wired.views.presentation.display_index("PR111") is first
+    assert len(indexes) == baseline + 1
+    with wired.bus.log._opened_wire_snapshot(need_sequence=False) as source:
+        assert source._append_checkpoints == {}
+    with wired.views.presentation.snapshot(viewer="PR111") as (_basis, source):
+        assert set(source._append_checkpoints) == set(indexes)
+
+
+def test_historical_checkpoint_advances_disk_but_cannot_replace_a_farther_prefix(wired):
+    wired.messaging.send_message("PR111", "#base", "first source row")
+    bus = wired.bus.log.path
+    index = BusActivityIndex(bus)
+    with bus.open("rb") as stream:
+        first_source = BusFileRevision.capture(stream)
+        first = ActivityCheckpoint(
+            first_source, first_source.size,
+            AppendCheckpoint.fingerprint(stream, first_source.size), {}, {},
+        )
+    wired.messaging.send_message("PR111", "#base", "later source row")
+    index.write(first)
+    saved = FieldCodec.decode(ActivityCheckpoint, json.loads(index.path.read_text()))
+    assert saved.offset == first.offset
+    with bus.open("rb") as stream:
+        latest_source = BusFileRevision.capture(stream)
+        latest = ActivityCheckpoint(
+            latest_source, latest_source.size,
+            AppendCheckpoint.fingerprint(stream, latest_source.size), {}, {},
+        )
+    index.write(latest)
+    index.write(first)
+    saved = FieldCodec.decode(ActivityCheckpoint, json.loads(index.path.read_text()))
+    assert saved.offset == latest.offset
 
 
 def test_mounted_activity_rebuilds_after_bus_replacement_or_damaged_checkpoint(wired):

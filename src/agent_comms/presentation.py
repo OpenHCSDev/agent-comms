@@ -290,10 +290,11 @@ class BusPresentation:
         self._display_indexes: dict[str, BusDisplayIndex] = {}
 
     def display_index(self, viewer: str) -> BusDisplayIndex:
-        return self._display_indexes.setdefault(
-            viewer,
-            self.bus.log.register_append_index(BusDisplayIndex(self._path, viewer)),
-        )
+        index = self._display_indexes.get(viewer)
+        if index is None:
+            index = self.bus.log.register_append_index(BusDisplayIndex(self._path, viewer))
+            self._display_indexes[viewer] = index
+        return index
 
     @contextmanager
     def snapshot(
@@ -312,7 +313,9 @@ class BusPresentation:
         with ExitStack() as stack:
             with _store_lock(self._wire_lock_path, shared=True):
                 source = stack.enter_context(
-                    self.bus.log._opened_wire_snapshot(need_sequence=False)
+                    self.bus.log._opened_wire_snapshot(
+                        need_sequence=False, capture_indexes=True,
+                    )
                 )
                 with DisplaySelection.reading(
                     self.registry, self.catalog, self.bus.reads, viewer

@@ -84,26 +84,6 @@ class AppendCheckpoint:
 Checkpoint = TypeVar("Checkpoint", bound=AppendCheckpoint)
 
 
-@dataclass
-class CapturedCheckpoint(Generic[Checkpoint]):
-    """One append-index value borrowed for one opened source cut."""
-
-    source: BusFileRevision | None
-    record: AppendCheckpoint | None
-
-    def value(self, expected: type[Checkpoint]) -> Checkpoint | None:
-        if self.record is None:
-            return None
-        if not isinstance(self.record, expected):
-            raise TypeError("Captured append checkpoint belongs to another index")
-        return self.record
-
-    def remember(self, record: Checkpoint) -> None:
-        if record.source != self.source:
-            raise ValueError("Computed append checkpoint belongs to another source cut")
-        self.record = record
-
-
 class BusAppendIndex(Generic[Checkpoint]):
     """One strict record decoder and atomic writer for disposable projections."""
 
@@ -113,27 +93,38 @@ class BusAppendIndex(Generic[Checkpoint]):
         self.bus_path, self.path = bus_path, path
         self._retained: Checkpoint | None = None
 
-    def capture(
-        self, stream: BinaryIO | None, revision: BusFileRevision | None,
-    ) -> CapturedCheckpoint[Checkpoint]:
-        record = self.checkpoint(stream, revision) if stream is not None and revision is not None else None
-        return CapturedCheckpoint(revision, record)
-
-    def checkpoint(self, stream: BinaryIO, revision: BusFileRevision) -> Checkpoint | None:
-        """Borrow this owner's prefix for immediate use or source capture."""
-        retained = self._retained
-        if retained is not None and retained.accepts(revision, stream):
-            return retained
+    def _read(self) -> Checkpoint | None:
         try:
-            record = FieldCodec.decode(self.record_type, json.loads(self.path.read_text()))
+            return FieldCodec.decode(self.record_type, json.loads(self.path.read_text()))
         except FileNotFoundError:
             return None
         except (ValueError, TypeError, KeyError):
-            return None  # Damaged disposable projection: rebuilt from the bus.
-        if record.accepts(revision, stream):
-            self._retained = record
-            return record
+            return None  # Damaged disposable index: rebuilt from the bus.
+
+    def prepare(self) -> Checkpoint | None:
+        """Read a candidate before the bus cut is captured and its lock is taken."""
+        saved = self._read()
+        retained = self._retained
+        if saved is None:
+            return retained
+        if retained is None:
+            return saved
+        return retained if retained.offset >= saved.offset else saved
+
+    def capture(
+        self, prepared: Checkpoint | None, stream: BinaryIO | None,
+        revision: BusFileRevision | None,
+    ) -> Checkpoint | None:
+        if prepared is None or stream is None or revision is None:
+            return None
+        if prepared.accepts(revision, stream):
+            self._retained = prepared
+            return prepared
         return None
+
+    def checkpoint(self, stream: BinaryIO, revision: BusFileRevision) -> Checkpoint | None:
+        """Read and validate a prefix for an immediate, uncaptured consumer."""
+        return self.capture(self.prepare(), stream, revision)
 
     def remember(self, record: Checkpoint) -> Checkpoint:
         payload = record.signed_payload()
@@ -144,10 +135,22 @@ class BusAppendIndex(Generic[Checkpoint]):
     def write(self, record: Checkpoint, *, fsync_parent: bool = False) -> None:
         retained = self.remember(record)
         payload = retained.signed_payload()
-        # A historical cut remains usable in this owner's lifetime, but must
-        # not replace a later append checkpoint published by another reader.
+        # A completed historical prefix remains useful after later appends. It
+        # may advance the disk index, but never replace a farther valid prefix.
         with _store_lock(self.path):
-            with self.bus_path.open("rb") as stream:
-                if BusFileRevision.capture(stream) != retained.source:
+            try:
+                stream = self.bus_path.open("rb")
+            except FileNotFoundError:
+                return
+            with stream:
+                current = BusFileRevision.capture(stream)
+                if not retained.accepts(current, stream):
+                    return
+                saved = self._read()
+                if (
+                    saved is not None
+                    and saved.accepts(current, stream)
+                    and saved.offset > retained.offset
+                ):
                     return
             _atomic_write_text(self.path, json.dumps(payload), fsync_parent=fsync_parent)
