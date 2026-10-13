@@ -1149,9 +1149,15 @@ class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
         branch = f"checkpoint/{self.name}"
 
         def git(*arguments: str, timeout: int = 60):
+            # The declared worktree bounds the search: git stops before
+            # entering the worktree's parent, so a non-repo worktree refuses
+            # instead of discovering a checkout above it (the checkpoint target
+            # is derived from this thread's own declaration, nothing else's).
+            environment = {**os.environ, "GIT_CEILING_DIRECTORIES": str(worktree.parent)}
             try:
                 done = subprocess.run(["git", "-C", str(worktree), *arguments],
-                                      capture_output=True, text=True, timeout=timeout)
+                                      capture_output=True, text=True, timeout=timeout,
+                                      env=environment)
             except (OSError, subprocess.TimeoutExpired):
                 return 1, "", ""
             return done.returncode, done.stdout, done.stderr

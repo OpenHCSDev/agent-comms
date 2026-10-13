@@ -59,10 +59,36 @@ def test_a_dirty_worktree_is_committed_and_pushed_to_the_derived_branch(
     }
 
 
+def test_production_git_never_discovers_a_checkout_above_the_declaration(
+    tmp_path: Path, monkeypatch
+):
+    # The production git() carries the ceiling pin itself; the ancestor repo
+    # here exists on purpose and the declared non-repo worktree must refuse.
+    monkeypatch.delenv("GIT_CEILING_DIRECTORIES", raising=False)
+    comms, _ = _root(tmp_path)
+    ancestor = _repo(tmp_path, "ancestor", remote=False)
+    (ancestor / "base.txt").write_text("base\n")
+    _git(ancestor, "add", "-A")
+    _git(ancestor, "commit", "-q", "-m", "base")
+    nested = ancestor / "nested"
+    nested.mkdir()
+    (nested / "scratch.txt").write_text("uncommitted\n")
+    base = _git(ancestor, "rev-parse", "--short", "HEAD").strip()
+    comms.registry.register(
+        Thread("Nested", frozenset({"team"}), str(nested), created_at=17008.0)
+    )
+    refused = CheckpointCliCommand(name="Nested").apply(comms)
+    assert refused["checkpoint"] == "refused"
+    # The ancestor repo is untouched: no checkpoint commit, no staged scratch.
+    assert _git(ancestor, "status", "--porcelain").strip().startswith("?? nested/")
+    assert _git(ancestor, "rev-parse", "--short", "HEAD").strip() == base
+
+
 def test_a_stale_declaration_or_broken_transport_never_names_a_fake_push(
     tmp_path: Path, monkeypatch
 ):
-    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
+    # The production git() owns the ceiling pin; no test-side pin is needed.
+    monkeypatch.delenv("GIT_CEILING_DIRECTORIES", raising=False)
     comms, _ = _root(tmp_path)
     outside = tmp_path / "outside"
     outside.mkdir()
