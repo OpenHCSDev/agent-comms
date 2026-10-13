@@ -1145,13 +1145,17 @@ class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
     def apply(self, ctx: Comms) -> Any:
         import subprocess
 
-        worktree = Path(ctx.registry.require(self.name).worktree)
+        worktree = Path(ctx.registry.require(self.name).worktree).resolve()
         branch = f"checkpoint/{self.name}"
+        # Git requires an absolute ceiling. Stop before entering the declared
+        # worktree's parent, never checkpoint an ancestor repository.
+        environment = {**os.environ, "GIT_CEILING_DIRECTORIES": str(worktree.parent)}
 
         def git(*arguments: str, timeout: int = 60):
             try:
                 done = subprocess.run(["git", "-C", str(worktree), *arguments],
-                                      capture_output=True, text=True, timeout=timeout)
+                                      capture_output=True, text=True, timeout=timeout,
+                                      env=environment)
             except (OSError, subprocess.TimeoutExpired):
                 return 1, "", ""
             return done.returncode, done.stdout, done.stderr
