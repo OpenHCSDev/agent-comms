@@ -1026,10 +1026,12 @@ class TurnContext:
             OwnerProvenance(owner.incarnation, turn.source_revision(owner)),
         )
         source += tuple(row.context_provenance() for row in inputs)
+        from .context_segments.doctrine import DoctrineSegment
         return cls(
             owner.incarnation,
             turn,
             (
+                DoctrineSegment.capture(),
                 CoordinationSegment.capture(owner, views, relations),
                 UserInputSegment(provenance=source, content=task),
             ),
