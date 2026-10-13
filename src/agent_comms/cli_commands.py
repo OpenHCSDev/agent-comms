@@ -1142,9 +1142,9 @@ class SchemaReportCliCommand(CliCommand, declared_name="schema-report"):
     help = "Report declared DDL differences in existing SQLite stores (including retained copies)"
 
     def apply(self, ctx: Comms) -> Any:
-        from .schema_report import report_stores
+        from .schema_report import StoreSchemaReport
 
-        return FieldCodec.encode(report_stores(ctx))
+        return FieldCodec.encode(StoreSchemaReport.scan(ctx))
 
 
 @dataclass(frozen=True, kw_only=True)

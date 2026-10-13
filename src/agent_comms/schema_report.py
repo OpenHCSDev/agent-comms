@@ -22,6 +22,27 @@ class StoreSchemaReport:
     undeclared_tables: tuple[str, ...]
 
     @classmethod
+    def scan(cls, comms) -> tuple[StoreSchemaReport | UnavailableStoreSchemaReport, ...]:
+        """Inspect existing files and registered journals, not store writers.
+
+        Includes retained copies. Missing databases/tables cannot be inferred
+        from another database's rows.
+        """
+        paths = set(comms.root.rglob("*.sqlite3"))
+        paths.update(NativeSessionFiles(Path(thread.session_file)).input_proof
+                     for thread in comms.registry.all_threads().values()
+                     if thread.session_file)
+        reports = []
+        for path in sorted(paths):
+            if not path.is_file():
+                continue
+            try:
+                reports.append(cls.observe(path))
+            except sqlite3.Error as error:
+                reports.append(UnavailableStoreSchemaReport(str(path), str(error)))
+        return tuple(reports)
+
+    @classmethod
     def observe(cls, path: Path) -> StoreSchemaReport:
         with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True,
                                      timeout=1, isolation_level=None)) as db:
@@ -56,24 +77,3 @@ class StoreSchemaReport:
 class UnavailableStoreSchemaReport:
     path: str
     error: str
-
-
-def report_stores(comms) -> tuple[StoreSchemaReport | UnavailableStoreSchemaReport, ...]:
-    """Inspect existing files, including retained copies, never instantiate stores.
-
-    Missing databases/tables cannot be inferred from another database's rows.
-    Native journals use the existing registered session's file declaration.
-    """
-    paths = set(comms.root.rglob("*.sqlite3"))
-    paths.update(NativeSessionFiles(Path(thread.session_file)).input_proof
-                 for thread in comms.registry.all_threads().values()
-                 if thread.session_file)
-    reports = []
-    for path in sorted(paths):
-        if not path.is_file():
-            continue
-        try:
-            reports.append(StoreSchemaReport.observe(path))
-        except sqlite3.Error as error:
-            reports.append(UnavailableStoreSchemaReport(str(path), str(error)))
-    return tuple(reports)
