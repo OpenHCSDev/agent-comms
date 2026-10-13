@@ -4,9 +4,10 @@ import { setTimeout as sleep } from 'node:timers/promises';
 class RecoveryBudget {
     static emptyWaitMs = 120_000;
     static retries = 3;
-    static backoffMs = 1_000;
+    // Sustained provider outages survive only if the wait stretches to minutes.
+    static backoffMs = [1_000, 10_000, 60_000];
     static get attempts() { return this.retries + 1; }
-    static delay(attempt) { return this.backoffMs * 2 ** (attempt - 1); }
+    static delay(attempt) { return this.backoffMs[Math.min(attempt - 1, this.backoffMs.length - 1)]; }
 }
 
 /** Decode known explicit provider refusals, never generic transport failures. */
