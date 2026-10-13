@@ -1145,15 +1145,13 @@ class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
     def apply(self, ctx: Comms) -> Any:
         import subprocess
 
-        worktree = Path(ctx.registry.require(self.name).worktree)
+        worktree = Path(ctx.registry.require(self.name).worktree).resolve()
         branch = f"checkpoint/{self.name}"
+        # Git requires an absolute ceiling. Stop before entering the declared
+        # worktree's parent, never checkpoint an ancestor repository.
+        environment = {**os.environ, "GIT_CEILING_DIRECTORIES": str(worktree.parent)}
 
         def git(*arguments: str, timeout: int = 60):
-            # The declared worktree bounds the search: git stops before
-            # entering the worktree's parent, so a non-repo worktree refuses
-            # instead of discovering a checkout above it (the checkpoint target
-            # is derived from this thread's own declaration, nothing else's).
-            environment = {**os.environ, "GIT_CEILING_DIRECTORIES": str(worktree.parent)}
             try:
                 done = subprocess.run(["git", "-C", str(worktree), *arguments],
                                       capture_output=True, text=True, timeout=timeout,
