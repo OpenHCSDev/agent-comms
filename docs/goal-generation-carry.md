@@ -57,6 +57,20 @@ Prior accepted physical #777 capture/receipt:
 That check exercised new goal creation; it is not historical-carry acceptance.
 Failed native/session/input originals remain preserved.
 
-Live carry count, backup receipt and affected installed acceptance follow here
-only after the actual operations finish. The temporary tool will be deleted
-before the PR is marked ready.
+Live carry completed: **17 recorded; zero remaining missing rows**. The source
+checks before each write passed. paper1-editor's recorded generation 2/attempt
+were excluded; codex-shepherd's public goal stayed blocked. The backup is
+`.scratch/existing-generation-live-backup-20261013/goal_attempts.sqlite3`, with
+per-write intent/readback and before/after census in adjacent `receipt.json`.
+The SQLite backup was made outside wire/registry locks; no bus was copied.
+
+Offline carry proof: three missing rows recorded, repeat zero; original public
+registry and UNKNOWN input bytes identical, existing attempted generation
+unchanged; Model/Runtime/Owner ordinary Resume refused; explicit Owner Retry
+created generation 2 for the same goal without replaying UNKNOWN. Focused serial
+batch: 34 passed. The first default pytest invocation had 33 passing tests but
+failed the whole-project coverage gate; this is not a full-suite pass.
+
+The temporary tool is deleted after the live run (retained in branch history).
+The opened-store consumption change still needs merge/installation. Candidate
+installed historical-goal acceptance is recorded separately once completed.
