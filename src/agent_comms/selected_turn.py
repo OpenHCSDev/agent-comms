@@ -65,8 +65,7 @@ class SelectedPrompt:
             obligations=obligations,
         )
         projection = OptionalAwarenessProjection.for_selected(
-            WakeCandidateIndex(participant.bus.log),
-            registry=participant.bus._registry,
+            WakeCandidateIndex(participant.bus),
             through_seq=participant.batch.sources[-1].delivery.message.seq,
             generation=participant.identity.generation,
             admission_generation=participant.owner.admission_generation,

@@ -618,7 +618,7 @@ async def test_production_awareness_caller_includes_or_omits_without_losing_orig
 ) -> None:
     root, root_id, comms, initial, _people = _root(tmp_path, direct=True)
     if available:
-        assert WakeCandidateIndex(comms.bus.log).maintain(rebuild=True)
+        assert WakeCandidateIndex(comms.bus).maintain(rebuild=True)
     else:
 
         def unavailable(*_args, **_kwargs):
@@ -709,8 +709,7 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
 
     monkeypatch.setattr(OptionalAwarenessProjection, "__call__", blocked_builder)
     projection = OptionalAwarenessProjection.for_selected(
-        WakeCandidateIndex(first_comms.bus.log),
-        registry=first_comms.registry,
+        WakeCandidateIndex(first_comms.bus),
         through_seq=first_initial.message.seq,
         generation=1,
         admission_generation=1,
@@ -749,7 +748,7 @@ async def test_optional_awareness_requires_complete_binding_and_resource_budget(
     tmp_path: Path, monkeypatch, kind: str
 ) -> None:
     root, root_id, comms, initial, _people = _root(tmp_path, direct=True)
-    assert WakeCandidateIndex(comms.bus.log).maintain(rebuild=True)
+    assert WakeCandidateIndex(comms.bus).maintain(rebuild=True)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)

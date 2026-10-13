@@ -63,43 +63,40 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 requests.append(request)
                 request_times.append(time.monotonic())
                 assert len(requests) <= (8 if broadcast else 2 + seed_count + restart_after_reply + 2 * reject_triage), "Reply observation caused replay or ping-pong"
-                # The current original native input owns its stage. Provider
-                # prompt wording may mention other stages, so never infer the
-                # response contract by searching serialized prompt text.
-                from agent_comms.coordinator import Coordination
-                from agent_comms.native_runtime_input import NativeRuntimeInput
+                serialized = json.dumps(request)
+                if broadcast:
+                    # The current original native reservation owns stage. Join
+                    # its exact ID to the actual saved input, never prior text.
+                    from agent_comms.coordination_tables.assignments import WakeAssignment
+                    from agent_comms.coordinator import Coordination
+                    from agent_comms.native_runtime_input import NativeRuntimeInput
+                    from agent_comms.native_transcript import NativeTranscript
 
-                with Coordination(comms.root / "coordination.sqlite3") as store:
-                    with store.session.read():
-                        pending = NativeRuntimeInput.select(
-                            store.session._connection,
-                            where=("owner_thread=? AND session_entry_id IS NULL" if broadcast
-                                   else "session_entry_id IS NULL"),
-                            parameters=(request["model"],) if broadcast else (),
-                        )
-                        assert len(pending) == 1
-                        original = pending[0]
-                        is_triage = original.stage is TriageNativeExecution
-                        if broadcast:
-                            from agent_comms.coordination_tables.assignments import WakeAssignment
-                            from agent_comms.native_transcript import NativeTranscript
-
+                    with Coordination(comms.root / "coordination.sqlite3") as store:
+                        with store.session.read():
+                            pending = NativeRuntimeInput.select(
+                                store.session._connection,
+                                where="owner_thread=? AND session_entry_id IS NULL",
+                                parameters=(request["model"],),
+                            )
+                            assert len(pending) == 1
+                            original = pending[0]
                             user = next(entry for entry in NativeTranscript(
                                 Path(original.session_file)
                             ).tail() if entry.input_boundary).require_tracked_user()
                             assert user.input_id == original.input_id
+                            is_triage = original.stage is TriageNativeExecution
                             assignments = tuple(WakeAssignment.one(
                                 store.session._connection, assignment_id=identity
                             ) for identity in original.execution.source_assignment_ids(
                                 store.session._connection, original.input_id
                             ))
-                            requires_answer = any(
-                                row.source == question.reference for row in assignments
-                            )
-                if broadcast:
+                            requires_answer = any(row.source == question.reference for row in assignments)
                     request_inputs.append({"input_id": original.input_id,
                                            "stage": original.stage.declared_name,
                                            "owner": original.owner_thread})
+                else:
+                    is_triage = "bounded triage" in serialized
                 if broadcast and len(requests) <= 2:
                     # Both actual owners must reach the endpoint while the
                     # first request is still open. No model turn may retain

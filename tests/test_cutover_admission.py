@@ -40,7 +40,7 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
             store.participants.register(lookup, name, name, committed=True)
         for _ in range(2):
             reopened = Comms(comms.root)
-            WakeCandidateIndex(reopened.bus.log).maintain(rebuild=True)
+            WakeCandidateIndex(reopened.bus).maintain(rebuild=True)
             assert (
                 await _accept_visible_deliveries(
                     reopened.bus, root_id, store.session.path, lookups["bob"], 0, owner_name="bob"

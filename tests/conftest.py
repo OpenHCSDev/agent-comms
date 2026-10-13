@@ -18,7 +18,7 @@ def _deferred_candidate_scheduler_is_explicit(monkeypatch: pytest.MonkeyPatch) -
     This does not affect fresh subprocess processes used by integration tests.
     """
     monkeypatch.setattr(
-        "agent_comms.candidate_maintenance.schedule_candidate_catchup", lambda *_: None
+        "agent_comms.messaging.schedule_candidate_catchup", lambda *_: None
     )
 
 

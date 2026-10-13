@@ -55,7 +55,7 @@ async def test_native_full_four_tools_publish_and_release(
             accept_delivery_cohort(comms.bus, root_id, fresh.seq, store)
     owner = comms.registry.require("beta")
     comms.registry.register(replace(owner, model="selected-offline/fixture", thinking_level="low"))
-    assert WakeCandidateIndex(comms.bus.log).maintain(rebuild=True)
+    assert WakeCandidateIndex(comms.bus).maintain(rebuild=True)
     (tmp_path / "input.txt").write_text("state=BEFORE\n")
     requests = []
     failures = []
