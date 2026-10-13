@@ -27,7 +27,7 @@ from .activity import (
     StoppedDrainDiagnostic,
     UnavailableDrainDiagnostic,
 )
-from .agent_backend import InputContent, InputId, InputRequest, SendNow, WhenBusy
+from .agent_backend import InputContent, InputId, InputRequest, SendNow
 from .comms import Comms
 from .coordination_errors import CoordinationError, IdentityConflict
 from .native_pi import NativePiUnavailable
@@ -40,7 +40,7 @@ from .native_input_owner import RegistryOwner
 from .input_attempt import InputAttempt
 from .input_disposition import InputDispositions, InputDocument
 from .input_effects import InputEffects
-from .queued_input import QueuedInput, InputHandoffRefused
+from .queued_input import QueuedInput
 from .errors import RelationViolationError
 from .registry_document import RegistryEntry
 from .registry_store import RegistryEntryRevision
@@ -630,19 +630,11 @@ class InputDrain:
             echo=request.defer_display, images=images, controller=controller,
             input_id=request.input_id, origin=request.origin,
         ) as (item, owner, source, custody):
-            if self.backend_inboxes.get(session_id) is not inbox:
-                raise InputHandoffRefused("Original native inbox retired before follow-up handoff")
             item = request.accepted(item, source, owner)
             followup = replace(followup, provenance=(*followup.provenance, source.context_provenance()))
             rendered = TurnContext.render_segments((followup,), images=images)
-            self.following_sources.setdefault(session_id, {})[item.input_id] = item.source()
-            self.queued_inputs.setdefault(session_id, {})[item.input_id] = item
-            inbox.put_nowait(InputRequest(
-                input_id=InputId(item.input_id),
-                content=InputContent(
-                    text=item.prompt, images=tuple(images), contributions=rendered.contributions,
-                ),
-                when_busy=WhenBusy.STEER,
+            item.place(self, session_id, inbox, InputContent(
+                text=item.prompt, images=tuple(images), contributions=rendered.contributions,
             ))
             request.enqueue_control(inbox, item.input_id)
             custody.pop_all()

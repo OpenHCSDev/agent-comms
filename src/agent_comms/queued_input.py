@@ -29,6 +29,8 @@ from .thread_identity import AdmissionIdentity
 from .threads import Thread
 
 if TYPE_CHECKING:
+    from asyncio import Queue
+    from .agent_backend import InputContent, InputRequest, SendNow
     from .acp_extension import QueueItem, QueueScope
     from .registry_document import RegistrySnapshot
     from .input_drain import InputDrain
@@ -173,6 +175,21 @@ class QueuedInput:
                 origin=origin, custody=custody,
             ))
             yield item, owner, row, custody
+
+    def place(
+        self, inputs: InputDrain, session_id: str,
+        inbox: Queue[InputRequest | SendNow], content: InputContent,
+    ) -> None:
+        """The accepted input owns transfer into this turn's existing native queue."""
+        from .agent_backend import InputId, InputRequest, WhenBusy
+
+        if inputs.backend_inboxes.get(session_id) is not inbox:
+            raise InputHandoffRefused("Running turn inbox retired before input placement")
+        inputs.following_sources.setdefault(session_id, {})[self.input_id] = self.source()
+        inputs.queued_inputs.setdefault(session_id, {})[self.input_id] = self
+        inbox.put_nowait(InputRequest(
+            input_id=InputId(self.input_id), content=content, when_busy=WhenBusy.STEER,
+        ))
 
     def bind_turn(
         self, owner: Thread, admission: int, turn_id: str
