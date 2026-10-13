@@ -211,3 +211,10 @@ class AcceptedFollowingInput(FollowingTurnInput, DirectInput):
 
 class RoutedFollowingInput(FollowingTurnInput, RoutedInput):
     pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeliveredFollowingInput(AcceptedFollowingInput):
+    """A pending bus message handed to the recipient's running turn."""
+
+    origins: tuple[Message, ...]

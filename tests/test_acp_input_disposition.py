@@ -1,9 +1,11 @@
 """Saved SDK owner input custody over actual native pipes and the owner socket."""
 
 import asyncio
+import json
 import os
 import sys
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -16,7 +18,13 @@ from agent_comms import pi_events as pi
 from agent_comms.acp_failure import PromptFailureReceipt
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, QueuePromptRequest, SteerPromptRequest, decode_updates, encode_request
 from agent_comms.child_process import BoundedRun, ExitedOutcome
+from agent_comms.assignment_states import DeliveredAssignment
+from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
+from agent_comms.coordination_cohort import sealed_cohort_assignments
+from agent_comms.coordinator import Coordination
+from agent_comms.threads import Thread
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_session_prepare import NativeSessionPreparation
@@ -204,6 +212,68 @@ async def test_native_steer_keeps_original_input_and_turn_custody(native_backend
             await attachment.shutdown()
     assert all(not child.alive() and not child.platform.group_members(child.identity)
                for child in native.children)
+
+
+async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(native_backend):
+    native = native_backend
+    await native.author_history()
+    held = asyncio.Event()
+    native.provider.response_gate = held
+    async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+        comms = owner._comms
+        root_id = owner._private_nk_wire_root_id
+        receiver = await Coordination.run_worker(partial(comms.registry.require, session))
+        lookup = stable_thread_lookup(receiver.created_at)
+
+        def prepare():
+            comms.registry.register(
+                Thread(
+                    name="sender", tags=frozenset(), worktree=str(native.project),
+                    created_at=61001.0,
+                )
+            )
+            with Coordination(str(native.root / "coordination.sqlite3")) as store:
+                install_private_cohort_schema(store)
+                store.participants.register(lookup, session, session, committed=True)
+
+        await Coordination.run_worker(prepare)
+        turn = asyncio.create_task(
+            owner.prompt(session, [TextContentBlock(type="text", text="first")])
+        )
+        try:
+            await wait_for(lambda: native.provider.posts == 1)
+            message = await Coordination.run_worker(partial(
+                Comms(native.root, private_initial_writes=True).messaging.send_message,
+                "sender", session, "are you still on the parser?",
+            ))
+            native.provider.response_gate = None
+            # The owner's own observation hands the message to the turn.
+            await wait_for(lambda: len(owner.inputs.dispositions.read().rows) == 2)
+            held.set()
+            assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
+
+            def assignments():
+                with Coordination(str(native.root / "coordination.sqlite3")) as store:
+                    return sealed_cohort_assignments(store, lookup)
+
+            (assignment,) = await Coordination.run_worker(assignments)
+            assert assignment.wire_seq == message.seq
+            assert type(assignment.lifecycle) is DeliveredAssignment
+            # One turn, two inputs: the prompt and the message, each sent once.
+            assert native.provider.posts == 2
+            taken = native.saved_inputs()[-1]
+            assert "are you still on the parser?" in json.dumps(taken)
+            assert "a message arrived while you work" in json.dumps(taken)
+            rows = owner.inputs.dispositions.read().rows
+            assert len(rows) == 2 and all(row.has_started for row in rows.values())
+            assert len({row.turn_id for row in rows.values()}) == 1
+            # Nothing is left to wake for once the turn ends.
+            assert await owner._drain_private_nk(session, root_id) == 0
+            assert native.provider.posts == 2
+        finally:
+            held.set()
+            turn.cancel()
+            await asyncio.gather(turn, return_exceptions=True)
 
 
 async def test_hard_exit_after_owner_acceptance_preserves_unknown_without_replay(native_backend):

@@ -29,9 +29,10 @@ from .activity import (
 )
 from .agent_backend import InputContent, InputId, InputRequest, SendNow
 from .comms import Comms
+from .message_bus import MessageBus
 from .coordination_errors import CoordinationError, IdentityConflict
 from .native_pi import NativePiUnavailable
-from .coordination_cohort import next_sealed_assignment
+from .coordination_cohort import next_sealed_assignment, pending_sealed_assignments
 from .coordinator import Coordination
 from .bus_publication import stable_thread_lookup
 from .cursor_owner import CursorOwner
@@ -40,7 +41,7 @@ from .native_input_owner import RegistryOwner
 from .input_attempt import InputAttempt
 from .input_disposition import InputDispositions, InputDocument
 from .input_effects import InputEffects
-from .queued_input import QueuedInput
+from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
 from .errors import RelationViolationError
 from .registry_document import RegistryEntry
 from .registry_store import RegistryEntryRevision
@@ -644,6 +645,51 @@ class InputDrain:
             field_meta=encode_updates(InputDeliveryChangedUpdate(item.input_id)),
         )
 
+    async def deliver_pending(
+        self, session_id: str, owner: Thread, bus: MessageBus, root_id: str, after_seq: int,
+    ) -> None:
+        """Hand this owner's pending bus messages to its running turn.
+
+        Pi takes each one after its current tool batch. A turn that cannot take
+        follow-ups leaves them pending for the ordinary wake after it ends.
+        """
+        inbox = await self.effects.turns.active_backend_inbox(session_id)
+        # Only an owner turn forwards its inbox to Pi while it runs.
+        if inbox is None or session_id not in self.original_sources:
+            return
+        store_path = self.comms.root / "coordination.sqlite3"
+        lookup = stable_thread_lookup(owner.created_at)
+
+        def read(store: Coordination):
+            assignments = pending_sealed_assignments(
+                store, lookup, owner.name, after_seq=after_seq
+            )
+            with bus.log.certified_read() as source:
+                if source.marker.root_id != root_id:
+                    raise IdentityConflict("delivered source wire root changed")
+                originals = tuple(source.references(tuple(
+                    assignment.source for assignment in assignments
+                )))
+            return tuple(zip(originals, assignments, strict=True))
+
+        pending = await Coordination.run_async(store_path, read)
+        pending = pending[:max(await QueuedInput.capacity(self, session_id), 0)]
+        if not pending:
+            return
+        unplaced: tuple[DeliveredInput, ...] = ()
+        async with _async_store_lock(self.comms._wire_lock_path):
+            reserved = await Coordination.run_async(store_path, partial(
+                DeliveredInput.reserve_pending, self, owner.name, root_id, pending,
+            ))
+            for index, (item, content) in enumerate(reserved):
+                try:
+                    item.place(self, session_id, inbox, content)
+                except InputHandoffRefused:
+                    unplaced = tuple(item for item, _ in reserved[index:])
+                    break
+        for item in unplaced:
+            await item.not_started(self)
+
     def bind_native_turn(
         self, session_id: str, owner: Thread, admission: int, turn_id: str
     ) -> asyncio.Queue[InputRequest | SendNow]:
@@ -699,7 +745,12 @@ class InputDrain:
         if input_id is None and original.notice_keys:
             input_id = row.public_id
         item = self.queued_inputs.get(session_id, {}).get(input_id or "")
-        text = item.text if item else original.notice_text if input_id == row.public_id else None
+        if item is not None:
+            await item.native_started(self)
+        text = (
+            item.started_text if item
+            else original.notice_text if input_id == row.public_id else None
+        )
         await self.emit_input_started(
             session_id,
             text,
@@ -717,7 +768,9 @@ class InputDrain:
         if source is not None:
             # Native write was refused; keep the durable notice, never replay it.
             await self.emit_input_delivery_changed(session_id)
-        if self.queued_inputs.get(session_id, {}).pop(input_id, None):
+        item = self.queued_inputs.get(session_id, {}).pop(input_id, None)
+        if item is not None:
+            await item.not_started(self)
             await self.emit_queue_state(session_id)
 
     def finish_original_inputs(self, keys: tuple[str, ...]) -> InputDocument:
@@ -743,6 +796,8 @@ class InputDrain:
             # retain accepted queued input for the next distinct turn.
             self.following_sources.pop(session_id, None)
             remaining = self.queued_inputs.pop(session_id, {})
+            for item in remaining.values():
+                await item.not_started(self)
             if remaining:
                 self.restored_inputs.setdefault(session_id, {}).update(
                     {
