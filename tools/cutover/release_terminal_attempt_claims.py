@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """One-time exact release of claims stranded after terminal attempt settlement.
 
-First run without ``--apply`` against a copied and resealed private root. That
-trial invokes the real #780 release owner and writes the exact changed-claim
-manifest. Review it, then pass the same manifest with ``--apply`` to the source
-root. Any failed append has UNKNOWN outcome; never retry without inspecting the
-bus. The tool does not alter coordinator SQL, registry state, input records, or
-attempt disposition.
+``--plan`` reads a certified root without repairing or publishing anything and
+writes the exact proposed manifest outside that root. ``--apply`` requires that
+manifest, refuses any release-set drift before publication, then uses the #780
+release owner. No default destructive trial mode exists. An append failure has
+UNKNOWN outcome; never retry without inspecting the bus.
 """
 
 from __future__ import annotations
@@ -15,10 +14,18 @@ import argparse
 import hashlib
 import json
 from dataclasses import asdict, dataclass
+from contextlib import ExitStack
+import sqlite3
 from pathlib import Path
 
 from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordinator import Coordination
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_tables.attempts import AttemptRecord
+from agent_comms.coordination_tables.executions import ExecutionRecord
+from agent_comms.store_files import _store_lock, StoreLockContention
+from agent_comms.coordination_session import NativeBoundary
+from agent_comms.wire_log import WireLog
 from agent_comms.envelope_claim_transitions import ClaimOwner, project_verified_transitions
 
 
@@ -72,18 +79,27 @@ def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _fixed_store_digests(root: Path) -> dict[Path, str]:
-    protected = (
-        root / "coordination.sqlite3",
-        root / "registry.json",
-        root / "input_dispositions.json",
-        root / "owner_release_receipts.json",
-    )
-    return {path: _digest(path) for path in protected if path.exists()}
+def _fixed_store_digests(root: Path, db: sqlite3.Connection) -> dict[str, str]:
+    # Never open/close another fd for this SQLite inode while holding its read
+    # transaction: POSIX close can release the connection's process-wide locks.
+    protected = ("registry.json", "input_dispositions.json", "owner_release_receipts.json")
+    return {
+        "coordination.sqlite3": hashlib.sha256(db.serialize()).hexdigest(),
+        **{name: _digest(root / name) for name in protected if (root / name).exists()},
+    }
 
 
-def _manifest(snapshot, claims: tuple[ClaimOwner, ...]) -> TerminalClaimManifest:
-    attempt = snapshot.require_attempt()
+def _selected(attempt, claims) -> tuple[ClaimOwner, ...]:
+    # Preflight the complete set selected by RecoverySnapshot.release_resources,
+    # not just the subset named in the manifest. Publication remains its work.
+    return tuple(claim for claim in claims if claim.admission is not None
+                 and claim.admission.execution_id == attempt.execution_id
+                 and claim.admission.attempt_ordinal == attempt.attempt_ordinal
+                 and claim.admission.recipient_lookup == attempt.owner_lookup
+                 and claim.admission.participant_generation == attempt.owner_generation)
+
+
+def _manifest(attempt, claims: tuple[ClaimOwner, ...]) -> TerminalClaimManifest:
     if not (
         attempt.lifecycle.terminal
         and attempt.lifecycle.backend_done
@@ -104,45 +120,62 @@ def _manifest(snapshot, claims: tuple[ClaimOwner, ...]) -> TerminalClaimManifest
     )
 
 
+def plan(root: Path, execution_id: str) -> TerminalClaimManifest:
+    """Shared physical locks and read-only SQL; no checkpoint repair or append."""
+    # These must already exist: a read-only plan must not create lock files.
+    for name in ("wire", "bus.jsonl", "registry.json"):
+        if not (root / f".{name}.lock").is_file():
+            raise RecoveryBlocked(f"existing {name} lock is required for read-only planning")
+    log = WireLog(root / "bus.jsonl")
+    contention = StoreLockContention(NativeBoundary.lock_wait_seconds)
+    with (
+        _store_lock(root / "wire", shared=True, contention=contention),
+        _store_lock(log.path, shared=True, contention=contention) as bus_lock,
+        _store_lock(root / "registry.json", shared=True, contention=contention),
+        CoordinationStore.observing(root / "coordination.sqlite3", lock_timeout=0) as db,
+    ):
+        execution = ExecutionRecord.one(db, execution_id=execution_id)
+        if execution is None or execution.lifecycle.current_attempt_ordinal is None:
+            raise RecoveryBlocked("execution has no recorded attempt")
+        attempt = AttemptRecord.one(db, execution_id=execution_id,
+                                    attempt_ordinal=execution.lifecycle.current_attempt_ordinal)
+        if attempt is None:
+            raise RecoveryBlocked("recorded attempt is absent")
+        metadata = log._private_marker_unlocked()
+        rows, _ = bus_lock.claim_transitions(log, metadata)
+        claims = project_verified_transitions(rows)
+        return _manifest(attempt, _selected(attempt, claims.values()))
+
+
 def repair(
     root: Path,
     execution_id: str,
-    expected: TerminalClaimManifest | None = None,
+    expected: TerminalClaimManifest,
 ) -> tuple[TerminalClaimManifest, dict[str, object]]:
-    """Use the settlement owner, then prove its exact claim-table delta.
-
-    ``expected is None`` is the destructive trial intended only for a copied
-    store set. Supplying the resulting manifest requires the source root to
-    have every unchanged exact claim before the same owner is invoked there.
-    """
+    """Refuse release-set drift before append; verify while all locks remain held."""
+    if expected.execution_id != execution_id or not expected.claims:
+        raise RecoveryBlocked("a nonempty matching plan is required")
     database = root / "coordination.sqlite3"
-    fixed = _fixed_store_digests(root)
-    with Coordination(str(database)) as store, store.session.boundary() as boundary:
+    with (
+        Coordination(str(database), lock_timeout=0) as store,
+        store.session.boundary(blocking=False) as boundary,
+        ExitStack() as protected,
+    ):
+        for name in ("input_dispositions.json", "owner_release_receipts.json"):
+            protected.enter_context(_store_lock(root / name, shared=True, blocking=False))
+        # The SQL read transaction prevents another writer committing while the
+        # bus and protected-file locks cover the entire before/release/after span.
+        protected.enter_context(store.session.read())
+        db = store.session._connection
         snapshot = store.snapshots.get(execution_id)
-        terminal = _manifest(snapshot, ())
-        if expected is not None:
-            if terminal != TerminalClaimManifest(
-                expected.execution_id,
-                expected.attempt_ordinal,
-                expected.owner_lookup,
-                expected.participant_generation,
-                expected.phase,
-                (),
-            ):
-                raise RecoveryBlocked("terminal attempt differs from the copied-store trial")
-            if not expected.claims:
-                raise RecoveryBlocked("copied-store trial did not release any claims")
+        attempt = snapshot.require_attempt()
         metadata = boundary.bus.log._private_marker_unlocked()
         before_rows, before_seq = boundary.bus_lock.claim_transitions(boundary.bus.log, metadata)
         before = project_verified_transitions(before_rows)
-        if expected is not None:
-            for claim in expected.claims:
-                current = before.get(claim.resource)
-                if current is None or ExactClaim.from_owner(current) != claim:
-                    raise RecoveryBlocked("exact copied-store claim is absent or changed")
-
-        # This is the only selection and release decision. It is the same owner
-        # used by normal #780 attempt-ending settlement, not a cutover copy.
+        actual = _manifest(attempt, _selected(attempt, before.values()))
+        if actual != expected:
+            raise RecoveryBlocked("complete release set differs from the plan; nothing appended")
+        fixed = _fixed_store_digests(root, db)
         snapshot.release_resources(boundary)
 
         metadata = boundary.bus.log._private_marker_unlocked()
@@ -152,9 +185,9 @@ def repair(
         unchanged = {resource: claim for resource, claim in before.items() if resource in after}
         if unchanged != dict(after):
             raise RecoveryBlocked("claim repair changed a generation instead of releasing it")
-        actual = _manifest(snapshot, removed)
-        if expected is not None and actual != expected:
-            raise RecoveryBlocked("source-root releases differ from the copied-store trial")
+        actual = _manifest(attempt, removed)
+        if actual != expected:
+            raise RecoveryBlocked("actual releases differ from the plan")
         if not actual.claims:
             raise RecoveryBlocked("terminal release owner changed no claims")
         appended = after_rows[len(before_rows):]
@@ -169,8 +202,8 @@ def repair(
             or tuple(sorted(released)) != wanted
         ):
             raise RecoveryBlocked("claim repair appended anything except exact releases")
-    if _fixed_store_digests(root) != fixed:
-        raise RecoveryBlocked("claim repair changed protected private-store state")
+        if _fixed_store_digests(root, db) != fixed:
+            raise RecoveryBlocked("claim repair changed protected private-store state")
     return actual, {
         "execution_id": execution_id,
         "released": len(actual.claims),
@@ -178,7 +211,7 @@ def repair(
         "after_seq": after_seq,
         "unchanged_claims": len(after),
         "protected_stores_unchanged": True,
-        "trial": expected is None,
+        "applied": True,
     }
 
 
@@ -187,15 +220,21 @@ def main() -> None:
     parser.add_argument("--root", required=True, type=Path)
     parser.add_argument("--execution", required=True)
     parser.add_argument("--manifest", required=True, type=Path)
-    parser.add_argument("--apply", action="store_true")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--plan", action="store_true")
+    mode.add_argument("--apply", action="store_true")
     args = parser.parse_args()
     root = args.root.expanduser().resolve(strict=True)
-    expected = TerminalClaimManifest.read(args.manifest) if args.apply else None
-    if expected is not None and expected.execution_id != args.execution:
-        raise SystemExit("manifest execution differs from --execution")
-    actual, result = repair(root, args.execution, expected)
-    if not args.apply:
+    if args.manifest.resolve().is_relative_to(root):
+        raise SystemExit("manifest must be outside the bus root")
+    if args.plan:
+        actual = plan(root, args.execution)
         actual.write(args.manifest)
+        result = {"planned": len(actual.claims), "applied": False,
+                  "manifest": str(args.manifest)}
+    else:
+        expected = TerminalClaimManifest.read(args.manifest)
+        _, result = repair(root, args.execution, expected)
     print(json.dumps(result, sort_keys=True))
 
 
