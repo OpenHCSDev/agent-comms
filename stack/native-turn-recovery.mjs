@@ -22,60 +22,57 @@ class NativeRunState {
 }
 
 class NothingProduced extends NativeRunState {
-    produced() {
-        this.close();
-        if (this.attempt > 1) {
-            this.owner.finishRetry(true);
-        }
-        return new OutputProduced(this.owner, this.attempt);
-    }
+    produced() { return new OutputProduced(this.owner, this.attempt); }
+    terminal() { return new ClosedNothingProduced(this.owner, this.attempt); }
     finished(message) {
         // The recovery budget is the one owner of a refusal's retry count: it is
         // decoded and announced once here, before the refused message reaches
         // Core, so Core reports only the recovery's final outcome.
         if (!this.owner.tracked) return this;
-        if (!this.owner.retryable(message)) return this;
+        if (!this.owner.retryable(message)) return this.terminal(message);
         const reason = message.errorMessage || 'Provider request failed';
-        const refused = new RefusedNothingProduced(this.owner, this.attempt, reason);
-        refused.announce();
-        return refused;
+        return new RefusedNothingProduced(this.owner, this.attempt, reason).announce(message);
     }
 }
 
-class OutputProduced extends NativeRunState {}
+/** Every live recovery state shares completion and retirement behavior. */
+class RecoveringNothingProduced extends NothingProduced {
+    produced() {
+        this.owner.finishRetry(true);
+        return super.produced();
+    }
+    terminal(message) {
+        this.owner.finishRetry(false, message?.errorMessage);
+        return super.terminal(message);
+    }
+    close() { this.owner.state = this.terminal(); }
+}
 
-class RefusedNothingProduced extends NothingProduced {
+class OutputProduced extends NativeRunState {}
+class ClosedNothingProduced extends NativeRunState {}
+
+class RefusedNothingProduced extends RecoveringNothingProduced {
     constructor(owner, attempt, reason) { super(owner, attempt); this.reason = reason; }
     get mayRetry() { return this.attempt < RecoveryBudget.attempts; }
     refusal() { return this; }
-    announce() {
+    announce(message) {
         if (!this.mayRetry) {
-            // The final refusal keeps the refusal window closed: Core reports
-            // this message_end as the outcome after the recovery gave up.
-            this.owner.finishRetry(false, this.reason);
-            return;
+            // Close before this original terminal reaches Core. Retiring the
+            // returned closed state cannot publish the outcome a second time.
+            return this.terminal(message);
         }
         this.owner.emit({ type: 'native_retry_start', attempt: this.attempt,
             maxAttempts: RecoveryBudget.retries, delayMs: RecoveryBudget.delay(this.attempt),
             errorMessage: this.reason });
+        return this;
     }
     finished() { return this; }
     async recover(message) {
-        if (!this.mayRetry) {
-            this.owner.state = new ExhaustedNothingProduced(this.owner, this.attempt, this.reason);
-            return false;
-        }
         const backoff = new BackoffNothingProduced(this.owner, this.attempt, this.reason);
         this.owner.state = backoff;
         return backoff.recover(message);
     }
 }
-
-class ExhaustedNothingProduced extends RefusedNothingProduced {
-    async recover() { return false; }
-}
-
-class CancelledNothingProduced extends NativeRunState {}
 
 class BackoffNothingProduced extends RefusedNothingProduced {
     constructor(owner, attempt, reason) {
@@ -84,15 +81,23 @@ class BackoffNothingProduced extends RefusedNothingProduced {
     }
     get retrying() { return true; }
     cancel() { this.controller.abort(); }
+    close() {
+        this.controller.abort();
+        super.close();
+    }
     async recover(message) {
         const delayMs = RecoveryBudget.delay(this.attempt);
         try { await sleep(delayMs, undefined, { signal: this.controller.signal }); }
         catch (error) {
             if (error.name !== 'AbortError') throw error;
-            this.owner.state = new CancelledNothingProduced(this.owner, this.attempt);
-            this.owner.finishRetry(false, 'Retry cancelled');
+            // Retirement already closed the window if it aborted this wait.
+            if (this.owner.state === this) {
+                this.owner.state = this.terminal({ errorMessage: 'Retry cancelled' });
+            }
             return false;
         }
+        // A late production/retirement owns the run now, not this old wait.
+        if (this.owner.state !== this) return false;
         // Continue the already committed context; retain the failed assistant in
         // the native journal and remove ONLY that exact assistant from model context.
         // The refusal was already announced and counted at recognition; the
@@ -100,7 +105,7 @@ class BackoffNothingProduced extends RefusedNothingProduced {
         const messages = this.owner.agent.state.messages;
         if (messages.at(-1) !== message) throw new Error('Native recovery context changed');
         this.owner.agent.state.messages = messages.slice(0, -1);
-        this.owner.state = new NothingProduced(this.owner, this.attempt + 1);
+        this.owner.state = new RecoveringNothingProduced(this.owner, this.attempt + 1);
         return true;
     }
 }

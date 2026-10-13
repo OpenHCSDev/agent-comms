@@ -23,8 +23,9 @@ from delivery_owner_fixture import canonical_agent
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("notification_fails", [False, True])
+@pytest.mark.parametrize("refuse_before_terminal", [False, True])
 async def test_actual_native_outcome_classifies_once_and_next_input_is_independent(
-    wired, tmp_path, monkeypatch, notification_fails,
+    wired, tmp_path, monkeypatch, notification_fails, refuse_before_terminal,
 ):
     provider = LoopbackProvider(status=200, text="saved isolated history",
                                 error_message="insufficient_quota")
@@ -86,6 +87,17 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
             # This existing HTTP fixture supports 400/503 errors. The shared
             # classifier's explicit quota exclusion overrides server-error text.
             provider.status = 400
+            if refuse_before_terminal:
+                class AfterRequestHeaders:
+                    async def wait(self):
+                        # Response selection follows the existing HTTP owner's
+                        # parsed request count, not acceptance of a TCP socket.
+                        provider.status = 503 if provider.posts == 2 else 400
+                        provider.error_message = (
+                            "Our servers are currently overloaded. Please try again later."
+                            if provider.posts == 2 else "insufficient_quota"
+                        )
+                provider.response_gate = AfterRequestHeaders()
             with pytest.raises(RequestError) as caught:
                 await agent.turns.run_agent_turn("project", "project", "New input receiving a refusal",
                                                 original_owner_input=True)
@@ -96,18 +108,26 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
             assert isinstance(failure.source, NativeMessageFailureSource)
             assert failure.failure.input_state.has_started
             assert len(calls) == 1
+            if refuse_before_terminal:
+                assert failure.failure.retry_result.attempt == 1
+                assert failure.failure.retry_result.success is False
+                assert "insufficient_quota" in failure.failure.retry_result.final_error
+            else:
+                assert failure.failure.retry_result is None
             request_failure = FieldCodec.decode(RequestFailure, caught.value.data["agentCommsFailure"])
             assert request_failure.notification_published is (not notification_fails)
             assert request_failure.failure == failure.failure
             assert not any(isinstance(item, InputFailedUpdate) for update in updates
                            for item in decode_updates(update.field_meta))
             assert saved.read_bytes().startswith(original)
+            provider.response_gate = None
             provider.status = 200
             provider.text = "answered a genuinely new independent input"
             await agent.turns.run_agent_turn("project", "project", "Distinct new work after settled failure",
                                             original_owner_input=True)
             assert len(calls) == 1  # Successful completion does not reclassify an old error.
-            assert provider.posts == 3  # Seed, failed input, new input; no replay.
+            assert provider.posts == 3 + int(refuse_before_terminal)
+            # Only a native re-request adds an HTTP post; user commits stay three.
             journal = [json.loads(line) for line in saved.read_text().splitlines()]
             users = [row["message"] for row in journal if row.get("type") == "message"
                      and row["message"]["role"] == "user"]
