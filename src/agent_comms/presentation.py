@@ -287,7 +287,10 @@ class BusPresentation:
         self.catalog = catalog
         self._path = bus.log.path
         self._wire_lock_path = bus.log.path.parent / "wire"
-        self._display_metrics: dict[str, DisplayCheckpoint] = {}
+        self._display_indexes: dict[str, BusDisplayIndex] = {}
+
+    def display_index(self, viewer: str) -> BusDisplayIndex:
+        return self._display_indexes.setdefault(viewer, BusDisplayIndex(self._path, viewer))
 
     @contextmanager
     def snapshot(
@@ -311,6 +314,12 @@ class BusPresentation:
                 ) as basis:
                     if target is not None:
                         basis.scope(target)
+                    # Borrow the existing checkpoint owners before releasing the
+                    # cut. A later writer cannot replace these admitted prefixes
+                    # with checkpoints newer than the source we must display.
+                    self.bus.prepare_activity(source)
+                    if basis.viewer is not None and source.revision is not None:
+                        self.display_index(basis.viewer).checkpoint(source.stream, source.revision)
             yield basis, source
 
     def channel_page(
@@ -404,26 +413,14 @@ class BusPresentation:
         Caches may be reused or published only for an unchanged bus revision.
         """
         semantics = DisplayMetricScope(scopes, activity_scopes, viewer_names)
-        cached = self._display_metrics.get(viewer)
-        if source.revision is not None and cached is not None:
-            if cached.current_for(source.revision, semantics):
-                return ({name: ChannelActivity(*clocks) for name, clocks in cached.activity.items()},
-                        dict(cached.counts))
         initial = semantics.empty_metrics
-        projected = BusDisplayIndex(self._path, viewer).snapshot(
-            source, semantics,
-        )
+        projected = self.display_index(viewer).snapshot(source, semantics)
         if projected is None:
             metrics = initial
             for message, _ in source.public_records():
                 semantics.observe(message, metrics)
         else:
             metrics = projected.metrics
-            if file_revision(self._path) == (
-                projected.source.inode, projected.source.size,
-                projected.source.modified, projected.source.changed,
-            ):
-                self._display_metrics[viewer] = projected
         return ({name: ChannelActivity(*clocks) for name, clocks in metrics[0].items()},
                 dict(metrics[1]))
 

@@ -33,12 +33,11 @@ class ActivityCheckpoint(AppendCheckpoint):
         return (self.source, self.offset) == (revision, revision.size)
 
 
-class BusActivityIndex(BusAppendIndex):
+class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
     record_type = ActivityCheckpoint
 
     def __init__(self, bus_path: Path):
         super().__init__(bus_path, bus_path.with_name("bus_activity_latest.json"))
-        self._retained: ActivityCheckpoint | None = None
 
     def snapshot(self, source: BusFileRevision | None, stream: BinaryIO | None,
                  parse: Callable[[Mapping[str, Any]], Iterable[ActivityFields]]) -> ActivitySnapshot:
@@ -60,10 +59,9 @@ class BusActivityIndex(BusAppendIndex):
             channels, sent = dict(checkpoint.channels), dict(checkpoint.sent)
             offset = checkpoint.offset
         if offset == source.size:
-            self._retained = checkpoint or ActivityCheckpoint(
+            return (checkpoint or ActivityCheckpoint(
                 source, source.size, AppendCheckpoint.fingerprint(stream, source.size),
-                channels, sent)
-            return self._retained.snapshot
+                channels, sent)).snapshot
         stream.seek(offset)
         while stream.tell() < source.size:
             raw = stream.readline(source.size - stream.tell())
@@ -84,7 +82,6 @@ class BusActivityIndex(BusAppendIndex):
                     AppendCheckpoint.fingerprint(stream, source.size), channels, sent)
         with suppress(OSError):
             self.write(projected, fsync_parent=True)
-        self._retained = projected
         return projected.snapshot
 
 

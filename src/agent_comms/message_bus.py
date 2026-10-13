@@ -101,6 +101,11 @@ class MessageBus:
         self._view_unread_cache[viewer] = ViewUnread(revision, scopes, counts)
         return dict(counts)
 
+    def prepare_activity(self, source: OpenedWireSnapshot) -> None:
+        """Admit the small persisted prefix while this source cut is being captured."""
+        if source.revision is not None and source.stream is not None:
+            self._activity.checkpoint(source.stream, source.revision)
+
     def _activity_clocks(self, source: OpenedWireSnapshot | None = None):
         """The existing index borrows the original captured source after release."""
         if source is not None:

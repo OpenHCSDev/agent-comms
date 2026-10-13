@@ -5,12 +5,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Generic, TypeVar
 
 from .field_codec import FieldCodec
-from .store_files import _atomic_write_text
+from .store_files import _atomic_write_text, _store_lock
 
 
 @dataclass(frozen=True)
@@ -81,23 +81,41 @@ class AppendCheckpoint:
         return self.tail == self.fingerprint(stream, self.offset)
 
 
-class BusAppendIndex:
+Checkpoint = TypeVar("Checkpoint", bound=AppendCheckpoint)
+
+
+class BusAppendIndex(Generic[Checkpoint]):
     """One strict record decoder and atomic writer for disposable projections."""
 
-    record_type: type[AppendCheckpoint]
+    record_type: type[Checkpoint]
 
     def __init__(self, bus_path: Path, path: Path):
         self.bus_path, self.path = bus_path, path
+        self._retained: Checkpoint | None = None
 
-    def checkpoint(self, stream: BinaryIO, revision: BusFileRevision):
+    def checkpoint(self, stream: BinaryIO, revision: BusFileRevision) -> Checkpoint | None:
+        """Borrow this owner's captured prefix before consulting a later disk writer."""
+        retained = self._retained
+        if retained is not None and retained.accepts(revision, stream):
+            return retained
         try:
             record = FieldCodec.decode(self.record_type, json.loads(self.path.read_text()))
         except FileNotFoundError:
             return None
         except (ValueError, TypeError, KeyError):
             return None  # Damaged disposable projection: rebuilt from the bus.
-        return record if record.accepts(revision, stream) else None
+        if record.accepts(revision, stream):
+            self._retained = record
+            return record
+        return None
 
-    def write(self, record: AppendCheckpoint, *, fsync_parent: bool = False) -> None:
-        _atomic_write_text(self.path, json.dumps(record.signed_payload()),
-                           fsync_parent=fsync_parent)
+    def write(self, record: Checkpoint, *, fsync_parent: bool = False) -> None:
+        payload = record.signed_payload()
+        self._retained = replace(record, integrity=payload["integrity"])
+        # A historical cut remains usable in this owner's lifetime, but must
+        # not replace a later append checkpoint published by another reader.
+        with _store_lock(self.path):
+            with self.bus_path.open("rb") as stream:
+                if BusFileRevision.capture(stream) != record.source:
+                    return
+            _atomic_write_text(self.path, json.dumps(payload), fsync_parent=fsync_parent)

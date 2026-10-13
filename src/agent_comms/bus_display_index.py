@@ -108,7 +108,7 @@ class DisplayCheckpoint(AppendCheckpoint):
         return metrics
 
 
-class BusDisplayIndex(BusAppendIndex):
+class BusDisplayIndex(BusAppendIndex[DisplayCheckpoint]):
     record_type = DisplayCheckpoint
 
     def __init__(self, bus_path: Path, viewer: str):
@@ -125,6 +125,8 @@ class BusDisplayIndex(BusAppendIndex):
             if stream.read(1) != b"\n":
                 return None
         checkpoint = self.checkpoint(stream, source)
+        if checkpoint is not None and checkpoint.current_for(source, semantics):
+            return checkpoint
         if checkpoint is None:
             metrics, offset = semantics.empty_metrics, 0
         else:
