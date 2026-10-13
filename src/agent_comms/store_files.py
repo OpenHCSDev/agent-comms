@@ -10,10 +10,11 @@ import stat
 import tempfile
 import time
 from collections.abc import Iterator, Mapping
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import ExitStack, asynccontextmanager, contextmanager
+from contextvars import Context, ContextVar
 from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO, TYPE_CHECKING
+from typing import BinaryIO, ClassVar, TYPE_CHECKING
 
 from .errors import RelationViolationError
 from .private_path import PrivateFileRole
@@ -70,6 +71,42 @@ class StoreLock:
 
     descriptor: int
     source: CertifiedSourceRead | None
+    released_actions: ClassVar[ContextVar[ExitStack]] = ContextVar("store_lock_released_actions")
+
+    @classmethod
+    def worker_context(cls) -> Context:
+        """Carry only this lock lifetime into joined work, not human permissions."""
+        context = Context()
+        try:
+            actions = cls.released_actions.get()
+        except LookupError:
+            pass
+        else:
+            context.run(cls.released_actions.set, actions)
+        return context
+
+    @classmethod
+    @contextmanager
+    def releasing(cls):
+        """Nested locks share the outer lock's post-release work.
+
+        Reset the borrowed scope before running actions, so actions may acquire
+        fresh locks without inheriting the retired lifetime. Physical release
+        and durability resource closure happen inside this scope.
+        """
+        try:
+            cls.released_actions.get()
+        except LookupError:
+            pass
+        else:
+            yield
+            return
+        with ExitStack() as actions:
+            token = cls.released_actions.set(actions)
+            try:
+                yield
+            finally:
+                cls.released_actions.reset(token)
 
     def certified_read(self) -> CertifiedSourceRead:
         if self.source is None:
@@ -120,7 +157,9 @@ def _store_lock_file(store_path: Path):
     """
     store_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = store_path.with_name(f".{store_path.name}.lock")
-    with os.fdopen(os.open(lock_path, os.O_RDONLY | os.O_CREAT, 0o666), "rb") as lock_file:
+    with StoreLock.releasing(), os.fdopen(
+        os.open(lock_path, os.O_RDONLY | os.O_CREAT, 0o666), "rb"
+    ) as lock_file:
         yield lock_file
 
 
