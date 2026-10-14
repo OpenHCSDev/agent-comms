@@ -710,23 +710,39 @@ class PrivateEvidenceRead:
             yield raw
 
     def _decode_captured(self, size):
-        """Decode one verified physical row at a time up to the captured size."""
+        """Decode through a fresh buffer over the pinned descriptor each time."""
         try:
-            self.stream.seek(self.size)
+            descriptor = os.dup(self.stream.fileno())
         except (OSError, ValueError) as error:
-            raise NativePiUnavailable("Native Pi evidence file is unavailable or not private") from error
-        remaining = size - self.size
-        while remaining:
+            raise NativePiUnavailable(
+                "Native Pi evidence file is unavailable or not private"
+            ) from error
+        try:
+            decoder = os.fdopen(descriptor, "rb")
+        except BaseException:
+            os.close(descriptor)
+            raise
+        try:
             try:
-                raw = self.stream.readline(remaining)
+                decoder.seek(self.size)
             except (OSError, ValueError) as error:
                 raise NativePiUnavailable(
                     "Native Pi evidence file is unavailable or not private"
                 ) from error
-            if not raw or not raw.endswith(b"\n"):
-                raise NativePiUnavailable("Native Pi evidence file is incomplete")
-            remaining -= len(raw)
-            yield self._decode_row(raw)
+            remaining = size - self.size
+            while remaining:
+                try:
+                    raw = decoder.readline(remaining)
+                except (OSError, ValueError) as error:
+                    raise NativePiUnavailable(
+                        "Native Pi evidence file is unavailable or not private"
+                    ) from error
+                if not raw or not raw.endswith(b"\n"):
+                    raise NativePiUnavailable("Native Pi evidence file is incomplete")
+                remaining -= len(raw)
+                yield self._decode_row(raw)
+        finally:
+            decoder.close()
 
     @staticmethod
     def _decode_row(raw):
