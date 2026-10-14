@@ -802,7 +802,8 @@ class PrivateEvidenceRead:
                 last = raw[-1:]
             if info.st_size > self.size and last != b"\n":
                 raise NativePiUnavailable("Native Pi evidence file is incomplete")
-            if self._observe_revision_after(revision) != revision:
+            observed = self._observe_revision_after(revision)
+            if not revision.holds_cut(observed, info.st_size):
                 raise NativeEvidencePrefixChanged(
                     "Native Pi evidence source changed during observation"
                 )

@@ -71,7 +71,8 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
         assert rebuilt.counts(viewer, {"worker": str(source)}).counts == {"worker": 1}
         assert comms.bus.pending_count("receiver", "#team") == 1
         assert comms.bus.reads.read().transcripts == document.transcripts
-        comms.messaging.acknowledge("receiver")
+        references = tuple(message.reference for message in comms.bus.inbox("receiver"))
+        comms.messaging.acknowledge("receiver", references)
         assert comms.bus.pending_count("receiver", "#team") == 0
         assert rebuilt.counts(viewer, {"worker": str(source)}).counts == {"worker": 1}
     finally:

@@ -23,6 +23,7 @@ from .messages import Message
 from .message_reference import MessageReference
 from .messaging import Messaging
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
+from .private_path import FileRevision
 from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .registration import Registration
 from .routing import TurnRouting
@@ -106,7 +107,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     requested_name: str
     thread: ThreadProvenance = field(metadata={"content_exclude": True})
     session_file: str
-    native_revision: tuple[int, int, int, int] | None
+    native_revision: FileRevision | None = field(metadata={"content_exclude": True})
     route_revision: TranscriptRouteRevision
     bus_revision: tuple[int, int, int, int] | None = field(metadata={"content_exclude": True})
     coordination_revision: tuple[int, int, int, int] | None = field(
@@ -174,18 +175,32 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
         """The original witnessed byte/receipt bound owns page preparation."""
         return self.through or TranscriptCursor(
             self.session_file,
-            self.native_revision[1] if self.native_revision is not None else 0,
+            self.native_revision.size if self.native_revision is not None else 0,
             self.receipt_frontier,
         )
 
+    def contains_native_cut(self, other: TranscriptReadIdentity) -> bool:
+        """Whether ``other`` still contains this read's captured native bytes.
+
+        Native sessions are append-only within one inode.  The page is bounded
+        by this identity's cursor, so later bytes belong to the next update and
+        cannot revoke preparation already admitted for this cut.  Replacement,
+        truncation, or a non-growth revision can have changed bytes in the cut.
+        """
+        captured, current = self.native_revision, other.native_revision
+        if captured is None or current is None:
+            return captured == current
+        return captured.holds_cut(current, self.page_bound.offset)
+
     def same_content(self, other: TranscriptReadIdentity) -> bool:
-        """Fence content, including the original native publication proof.
+        """Fence the captured cut and its original publication proof.
 
         Reader acknowledgements and thread activity do not change page content.
         The scoped published relation remains fenced: an obligation can commit
         just after its wire append and replace the native final reply projection.
+        Native growth after the captured byte bound belongs to a later update.
         """
-        return self.content_identity == other.content_identity
+        return self.contains_native_cut(other) and self.content_identity == other.content_identity
 
 
 @dataclass(frozen=True, slots=True)
@@ -392,7 +407,7 @@ class Transcripts:
                 name,
                 thread,
                 session_file,
-                file_revision(Path(session_file)) if session_file else None,
+                FileRevision.capture(Path(session_file)) if session_file else None,
                 routes.revision(),
                 file_revision(log.path),
                 file_revision(root / "coordination.sqlite3"),

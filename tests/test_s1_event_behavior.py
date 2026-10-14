@@ -15,6 +15,7 @@ from agent_comms.comms import Comms
 from agent_comms.agent_backend import PlacedCompaction
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
+from agent_comms.messages import InfoKind, Message
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.threads import Thread
 from agent_comms.transcript_updates import TurnTranscriptUpdate
@@ -126,7 +127,10 @@ async def owner_turn(comms, tmp_path):
     )
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
-    execution = OwnedTurn(owner.turns, session.session_id, name, "work", reply_targets=("#comms",))
+    origin = Message("user", "#comms", "work", InfoKind)
+    execution = OwnedTurn(
+        owner.turns, session.session_id, name, "work", origins=(origin,)
+    )
     try:
         async with AsyncExitStack() as resources:
             async with AsyncExitStack() as permits:
@@ -286,9 +290,9 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
     comms.threads.attach_session(name, str(native.session))
+    origin = Message("user", "#comms", "native acceptance", InfoKind)
     execution = OwnedTurn(
-        owner.turns, session.session_id, name, "native acceptance",
-        reply_targets=("#comms",),
+        owner.turns, session.session_id, name, "native acceptance", origins=(origin,)
     )
     try:
         if provider_status == 200:

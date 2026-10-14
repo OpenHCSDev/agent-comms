@@ -89,6 +89,25 @@ def test_next_decode_cannot_reuse_prefetched_bytes(tmp_path):
         assert tuple(source._decode_captured(len(first + new)))[0]["id"] == "new"
 
 
+def test_growth_during_prefix_read_keeps_the_captured_entries(tmp_path, monkeypatch):
+    session = _evidence(tmp_path)
+    with PrivateEvidenceRead.open(session) as source:
+        read_chunks = source._pread_chunks
+        appended = False
+
+        def grow_after_captured_chunk(start, stop):
+            nonlocal appended
+            for raw in read_chunks(start, stop):
+                yield raw
+                if not appended:
+                    append_to(session)
+                    appended = True
+
+        monkeypatch.setattr(source, "_pread_chunks", grow_after_captured_chunk)
+        assert len(tuple(source.rows())) == 2
+        assert tuple(source.rows())[0]["id"] == "concurrent-append"
+
+
 def test_append_during_decoding_is_read_on_the_next_observation(tmp_path):
     session = _evidence(tmp_path)
     original = session.read_bytes()

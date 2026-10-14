@@ -9,7 +9,6 @@ from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, M
 from agent_comms.routing import ScheduledTurn
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.threads import Thread
-from agent_comms.wake import derive_exact_reply_target
 
 
 def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
@@ -27,7 +26,7 @@ def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
     assert Comms(tmp_path).views.channel_history("#team")[0].mentions == message.mentions
     assert Message.from_wire(message.to_wire()) == message
     scheduled = ScheduledTurn.incoming(message)
-    assert derive_exact_reply_target(scheduled.origin) == "#team"
+    assert scheduled.origin.exact_reply_target == "#team"
     assert "Response policy: mentioned_only" in scheduled.prompt
     assert "only resolved mentioned identities may respond: @alpha, @beta" in scheduled.prompt
     assert "unmentioned observers dismiss quietly" in scheduled.prompt
@@ -200,7 +199,7 @@ def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch)
         invoke_tool(comms, "comms_model", {"model": "openrouter/own", "service_tier": "fast"})
 
 
-def test_dismiss_reports_mentions_and_advances_only_own_cursor(comms, tmp_path, monkeypatch):
+def test_targeted_inbox_returns_mentions_and_advances_only_own_cursor(comms, tmp_path):
     from agent_comms import invoke_tool
 
     for name in ("alpha", "beta"):
@@ -208,30 +207,26 @@ def test_dismiss_reports_mentions_and_advances_only_own_cursor(comms, tmp_path, 
     comms.messaging.send_user_message("#team", "@alpha please review", worktree=str(tmp_path))
     assert comms.bus.pending_count("alpha", "#team") == 1
     assert comms.bus.pending_count("beta", "#team") == 1
-    monkeypatch.setenv("PI_AGENT_ID", "beta")
-    result = invoke_tool(comms, "comms_dismiss", {"target": "#team"})
-    assert result == {
-        "thread": "beta",
-        "target": "#team",
-        "acknowledged": 1,
-        "mentioned": ["alpha"],
-        "dismissed": True,
-    }
+    result = invoke_tool(
+        comms, "comms_inbox", {"thread": "beta", "target": "#team"}
+    )
+    assert [message["text"] for message in result["messages"]] == ["@alpha please review"]
+    assert result["messages"][0]["mentions"][0]["thread"] == "alpha"
+    assert result["acknowledged"] == 1
     # beta no longer sees the ping; alpha's delivery is untouched.
     assert comms.bus.pending_count("beta", "#team") == 0
     assert comms.bus.pending_count("alpha", "#team") == 1
 
 
-def test_dismiss_requires_a_target(tmp_path, monkeypatch):
+def test_inbox_rejects_an_empty_target(tmp_path):
     import pytest
 
     from agent_comms import invoke_tool
 
     comms = Comms(tmp_path)
     comms.registry.declare(Thread("beta", frozenset({"team"}), str(tmp_path)))
-    monkeypatch.setenv("PI_AGENT_ID", "beta")
-    with pytest.raises(ValueError, match="channel target"):
-        invoke_tool(comms, "comms_dismiss", {"target": ""})
+    with pytest.raises(ValueError, match="inbox target"):
+        invoke_tool(comms, "comms_inbox", {"thread": "beta", "target": ""})
 
 
 def test_committed_channel_mention_follows_recipient_renames_without_expanding_audience(tmp_path):

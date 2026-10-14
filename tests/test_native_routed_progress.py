@@ -143,7 +143,6 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
                     "worker",
                     "Please help",
                     origins=(origin,),
-                    reply_targets=("#team",),
                 ),
                 40,
             )

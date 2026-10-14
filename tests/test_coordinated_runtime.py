@@ -1897,7 +1897,7 @@ async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monke
         assert context["current_goal"]["text"] == "Restore channel subscribers"
         assert context["current_goal"]["progress"] == "Routing fixed"
         assert context["original_assignment"].startswith("Bootstrap:")
-        assert "A prior task assignment, bootstrap instruction to wait" in prompt
+        assert "Answer direct requests, engage owned work, and ignore chatter" in prompt
 
 
 async def test_selected_execution_cannot_be_run_twice_or_reentered(tmp_path, monkeypatch):
