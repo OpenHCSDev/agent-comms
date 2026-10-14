@@ -12,6 +12,7 @@ from .locked_store import LockedStore
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
+    from .acp_extension import ContextUsage
     from .threads import Thread
 
 
@@ -41,6 +42,17 @@ class AgentRuntimeInfo:
             return None
         return self.context_used / self.context_size * 100
 
+    @property
+    def context_usage(self) -> ContextUsage | None:
+        if self.context_used is None or not self.context_size:
+            return None
+        from .acp_extension import ContextUsage
+
+        return ContextUsage(self.context_used, self.context_size)
+
+    @classmethod
+    def optional_context_usage(cls, info: AgentRuntimeInfo | None) -> ContextUsage | None:
+        return info.context_usage if info is not None else None
 
 
 @dataclass(frozen=True, slots=True)

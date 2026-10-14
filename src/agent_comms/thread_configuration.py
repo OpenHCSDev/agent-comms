@@ -5,9 +5,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .acp_extension import ContextUsage, CoordinationChangedUpdate
+from .acp_extension import CoordinationChangedUpdate
 from .pi_vocabulary import ThinkingLevel
 from .registration import Registration
+from .runtime_info import AgentRuntimeInfo
 from .thread_identity import ThreadIncarnation
 from .thread_management import ThreadManagement
 from .agent_activity import AgentActivity
@@ -23,11 +24,7 @@ class ThreadConfiguration:
     def answer(self, name: str) -> CoordinationChangedUpdate:
         thread = self.registry.require(name)
         info = self.agents.agent_info_of(thread.name)
-        usage = (
-            ContextUsage(info.context_used, info.context_size)
-            if info is not None and info.context_used is not None and info.context_size
-            else None
-        )
+        usage = AgentRuntimeInfo.optional_context_usage(info)
         return CoordinationChangedUpdate(
             ThreadIncarnation(thread.name, thread.created_at),
             str(self.root.resolve()),
