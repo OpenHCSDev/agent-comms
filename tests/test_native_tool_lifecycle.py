@@ -24,18 +24,21 @@ def policy(request, tmp_path):
     name = "selected_claimed_write" if selected else "write"
     args = {"resource": "x", "contents": "value"} if selected else {"path": "x", "content": "value"}
 
-    def action(call):
+    def commit(call, round_number):
         effects.append(call.call_id)
-        slot = input_id if selected else call.slot(input_id)
+        slot = input_id if selected else call.slot(input_id, round_number)
         ledger_call = call.call_id if selected else slot
         broker.consume_selected_slot(tmp_path, slot, ledger_call)
         if selected:
             broker.record_selected_terminal(tmp_path, slot, ledger_call)
 
     socket = (
-        broker.SelectedToolSocket(tmp_path, token, action)
+        broker.SelectedToolSocket(tmp_path, token, lambda call: commit(call, 0))
         if selected
-        else CodingToolSocket(tmp_path, token, SimpleNamespace(admit=action))
+        else CodingToolSocket(
+            tmp_path, token,
+            SimpleNamespace(admit=lambda round_number, call: commit(call, round_number)),
+        )
     )
 
     def raw(call_id="one", arguments=None):
@@ -208,7 +211,7 @@ async def test_failed_admission_is_consumed_and_never_retried(policy, monkeypatc
         )
     else:
 
-        def fail(_call):
+        def fail(*_args):
             p.effects.append("attempted")
             if failure == "cancel-action":
                 raise asyncio.CancelledError()
@@ -278,7 +281,8 @@ async def test_interleaved_calls_wait_on_their_own_native_start(tmp_path):
     tmp_path.chmod(0o700)
     observed = []
     socket = CodingToolSocket(
-        tmp_path, secrets.token_hex(32), SimpleNamespace(admit=lambda c: observed.append(c.call_id))
+        tmp_path, secrets.token_hex(32),
+        SimpleNamespace(admit=lambda round_number, call: observed.append(call.call_id)),
     )
     arguments = {"path": "x"}
     socket.announce(
