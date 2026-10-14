@@ -554,7 +554,7 @@ def test_direct_registry_stop_in_other_process_waits_for_fenced_bus_and_sql(
         )
         actual_append = case.bus.publisher._publish_keyed_response_unlocked
         env = os.environ.copy()
-        for name in ("PI_AGENT_ID", "PI_PARENT_ID", "PI_AGENT_TAGS", "AGENT_COMMS_THREAD"):
+        for name in ("PI_PARENT_ID", "PI_AGENT_TAGS", "AGENT_COMMS_THREAD"):
             env.pop(name, None)
         env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
 

@@ -8,7 +8,6 @@ from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_
 
 class TestToolCatalog:
     def test_collaboration_tools_share_one_mutual_contact(self, comms, monkeypatch):
-        monkeypatch.delenv("PI_AGENT_ID", raising=False)
         monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
         comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt"))
         comms.registry.declare(Thread(name="b", tags=frozenset(), worktree="/wt"))
@@ -42,9 +41,8 @@ class TestToolCatalog:
         assert not comms.views.full_history()
 
     def test_collaboration_tool_rejects_bad_arguments_before_writes(self, comms, monkeypatch):
-        monkeypatch.delenv("PI_AGENT_ID", raising=False)
         monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
-        with pytest.raises(ValueError, match="identity"):
+        with pytest.raises(ValueError, match="AGENT_COMMS_THREAD"):
             invoke_tool(comms, "comms_collaborations", {})
         with pytest.raises(
             ValueError,
@@ -105,7 +103,6 @@ class TestToolCatalog:
             invoke_tool(comms, "comms_threads", {"active_only": "yes"})
 
     def test_threads_tool_includes_callers_bounded_sent_outcomes(self, comms, monkeypatch):
-        monkeypatch.delenv("PI_AGENT_ID", raising=False)
         monkeypatch.setenv("AGENT_COMMS_THREAD", "sender")
         comms.registry.declare(Thread(name="sender", tags=frozenset(), worktree="/wt"))
         comms.registry.declare(Thread(name="recipient", tags=frozenset(), worktree="/wt"))

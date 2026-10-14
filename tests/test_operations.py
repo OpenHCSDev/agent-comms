@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+from dataclasses import replace
 import sys
 
 import pytest
@@ -10,8 +11,18 @@ from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.messages import QuestionKind
+from agent_comms.owner_launch import CallingThreadUnavailable, RestartEnvironment
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
+
+
+def test_calling_thread_is_declared_by_owner_launch_environment():
+    assert RestartEnvironment.calling_thread(
+        {"AGENT_COMMS_THREAD": "owner"}
+    ) == "owner"
+    with pytest.raises(CallingThreadUnavailable, match="AGENT_COMMS_THREAD"):
+        RestartEnvironment.calling_thread({})
+    assert not RestartEnvironment.called_by("owner", lambda caller: caller, environment={})
 
 
 class TestMessaging:
@@ -264,13 +275,27 @@ class TestThreadOps:
         assert wired.registry.status("fixer").declared_name == "running"
 
     def test_release_only_allows_the_calling_thread(self, wired, monkeypatch):
-        monkeypatch.setenv("PI_AGENT_ID", "fixer")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
 
         with pytest.raises(RelationViolationError, match="cannot release"):
             wired.owners.release("PR111")
 
         wired.owners.release("fixer")
         assert wired.registry.status("fixer").declared_name == "stopped"
+
+    def test_stop_current_calling_thread_uses_voluntary_release(self, wired, monkeypatch):
+        owner = wired.registry.require("fixer")
+        wired.registry.register(
+            replace(owner, process_identity=ProcessIdentity.capture(os.getpid()))
+        )
+        before = wired.registry.snapshot().admission_generations[owner.name]
+        monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
+
+        wired.owners.stop(owner.name)
+
+        snapshot = wired.registry.snapshot()
+        assert snapshot.statuses[owner.name].declared_name == "stopped"
+        assert snapshot.admission_generations[owner.name] > before
 
     def test_archive_requires_stopped_thread(self, wired):
         wired.messaging.send("PR111", "fixer", "kept after archive")
@@ -511,13 +536,13 @@ class TestPollAndWire:
         assert "ledger" in snap
 
     def test_poll_current_thread_from_env(self, wired, monkeypatch, tmp_path):
-        monkeypatch.setenv("PI_AGENT_ID", "fixer")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
         snap = wired.views.poll()
         assert snap["thread"]["name"] == "fixer"
 
     def test_adopt_current_registers_from_env(self, comms, monkeypatch, tmp_path):
-        monkeypatch.setenv("PI_AGENT_ID", "me")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "me")
         monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
         thread = comms.threads.adopt_current()
         assert thread.name == "me"
@@ -588,7 +613,6 @@ class TestReDeclarationPreservesProvenance:
     def test_current_thread_reads_agent_comms_tags(self, monkeypatch, tmp_path):
         from agent_comms.threads import current_thread
 
-        monkeypatch.delenv("PI_AGENT_ID", raising=False)
         monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
         monkeypatch.setenv("AGENT_COMMS_TAGS", "ci, docs")
         monkeypatch.chdir(tmp_path)

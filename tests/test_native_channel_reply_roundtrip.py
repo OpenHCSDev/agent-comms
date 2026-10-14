@@ -216,7 +216,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
         "AGENT_COMMS_AGENT_ARGS": "--offline --no-extensions --no-skills --no-context-files",
     }.items():
         monkeypatch.setenv(key, value)
-    for key in ("PI_PROMPT", "PI_PARENT_ID", "PI_AGENT_ID", "AGENT_COMMS_THREAD"):
+    for key in ("PI_PROMPT", "PI_PARENT_ID", "AGENT_COMMS_THREAD"):
         monkeypatch.delenv(key, raising=False)
     comms = Comms(tmp_path / "wire")
     projects = {}

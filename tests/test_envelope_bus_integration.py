@@ -314,11 +314,11 @@ def test_public_rename_preserves_claim_release_then_new_owner_wins(
         "alice", "bob", "Claim before rename", claims=[ExistingFileClaim(Path("a.py"))]
     )
     original = comms.registry.require("alice")
-    monkeypatch.setenv("PI_AGENT_ID", "alice")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "alice")
     result = comms.threads.rename_self("alice-new")
     assert (result.previous, result.current, result.changed) == ("alice", "alice-new", True)
     for previous, current in (("alice-new", "alice-next"), ("alice-next", "alice-final")):
-        monkeypatch.setenv("PI_AGENT_ID", previous)
+        monkeypatch.setenv("AGENT_COMMS_THREAD", previous)
         renamed = comms.threads.rename_self(current)
         assert (renamed.previous, renamed.current, renamed.changed) == (previous, current, True)
     assert comms.registry.require("alice-final").created_at == original.created_at
@@ -374,9 +374,9 @@ def test_rename_back_to_own_alias_preserves_claim_release(
         "alice", "bob", "Claim before rename", claims=[ExistingFileClaim(Path("a.py"))]
     )
     assert claimed.claim_transition is not None
-    monkeypatch.setenv("PI_AGENT_ID", "alice")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "alice")
     assert comms.threads.rename_self("alice-new").changed
-    monkeypatch.setenv("PI_AGENT_ID", "alice-new")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "alice-new")
 
     assert comms.threads.rename_self("alice").current == "alice"
 
@@ -725,7 +725,6 @@ Comms(root, private_claim_writes=True).messaging.send_message(
     source = str(Path(__file__).resolve().parents[1] / "src")
     env = os.environ.copy()
     for key in (
-        "PI_AGENT_ID",
         "PI_PARENT_ID",
         "PI_AGENT_TAGS",
         "AGENT_COMMS_THREAD",

@@ -222,7 +222,7 @@ async def run_configured(options):
             XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),
             XDG_DATA_HOME=str(root / 'data'), AGENT_COMMS_DEBUG_LOG=str(root / 'owner-debug.log'))
         for name in ('PYTHONPATH', 'AGENT_COMMS_THREAD', 'AGENT_COMMS_STARTUP_INPUT_KEY',
-            'PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK', 'PI_AGENT_ID'):
+            'PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK'):
             environment.pop(name, None)
         # Credentials remain only in the acquired launch environment. The
         # explicit fork path owns all native writes; original accounts stay intact.

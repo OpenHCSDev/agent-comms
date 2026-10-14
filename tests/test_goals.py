@@ -27,7 +27,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Verify the release"))
     comms.threads.set_thread_configuration(comms.registry.require('worker'), model='test/model')
     comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
-    monkeypatch.setenv("PI_AGENT_ID", "worker")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     comms.threads.rename_self("renamed")
     restored = wire(tmp_path).registry.require("worker")
     assert restored.goal == goal
@@ -58,7 +58,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
 def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
-    monkeypatch.setenv("PI_AGENT_ID", "worker")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish the release"))
     comms.goals.update_goal("worker", PausedGoalAction(progress="Paused after an uncertain turn"))
     resume = next(
@@ -103,7 +103,7 @@ def test_goal_control_distinguishes_resume_retry_and_completion(state, action, l
 def test_agent_can_set_its_own_persistent_goal(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
-    monkeypatch.setenv("PI_AGENT_ID", "worker")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     tool = next(
         tool
         for tool in ToolRequest.members_with(ToolRequest)

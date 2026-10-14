@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 import shlex
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
@@ -20,6 +20,10 @@ from .private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV
 from .native_arguments import NativeArguments
 from .registry_document import RegistrySnapshot
 from .threads import Thread
+
+
+class CallingThreadUnavailable(RelationViolationError):
+    """The process environment does not declare its owner thread."""
 
 
 @dataclass(frozen=True)
@@ -69,6 +73,26 @@ class RestartEnvironment:
         metadata={"wire_name": "PI_CODING_AGENT_DIR", "native": True},
     )
     owner_key: ClassVar[str] = "AGENT_COMMS_THREAD"
+
+    @classmethod
+    def calling_thread(cls, environment: Mapping[str, str] = os.environ) -> str:
+        caller = environment.get(cls.owner_key)
+        if not caller:
+            raise CallingThreadUnavailable(
+                f"Calling thread requires {cls.owner_key}."
+            )
+        return caller
+
+    @classmethod
+    def called_by(
+        cls,
+        name: str,
+        canonicalize: Callable[[str], str],
+        *,
+        environment: Mapping[str, str] = os.environ,
+    ) -> bool:
+        caller = environment.get(cls.owner_key)
+        return caller is not None and canonicalize(caller) == name
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "native_config", self.absolute(self.native_config))

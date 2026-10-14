@@ -124,9 +124,10 @@ class Thread(ThreadProvenance):
         from .runtime_requests import ProjectRuntimeRequest
 
         project = ProjectRuntimeRequest.for_native(snapshot, self)
+        from .owner_launch import RestartEnvironment
+
         return {
-            "AGENT_COMMS_THREAD": self.name,
-            "PI_AGENT_ID": self.name,
+            RestartEnvironment.owner_key: self.name,
             "AGENT_COMMS_ROOT": str(root),
             "PI_PARENT_ID": self.parent or "",
             "AGENT_COMMS_MANAGED": "1",
@@ -473,15 +474,10 @@ class Thread(ThreadProvenance):
 
 
 def current_thread() -> Thread:
-    """Declare the current thread from process environment.
+    """Declare the current thread from its owner launch environment."""
+    from .owner_launch import RestartEnvironment
 
-    Fail-closed: raises if neither PI_AGENT_ID nor AGENT_COMMS_THREAD is set.
-    """
-    name = os.environ.get("PI_AGENT_ID") or os.environ.get("AGENT_COMMS_THREAD")
-    if not name:
-        raise UnregisteredThreadError(
-            "PI_AGENT_ID is not set. This process is not an orchestrated thread."
-        )
+    name = RestartEnvironment.calling_thread()
     tag_env = os.environ.get("PI_AGENT_TAGS") or os.environ.get("AGENT_COMMS_TAGS", "")
     tags = frozenset(t.strip() for t in tag_env.split(",") if t.strip())
     return Thread(

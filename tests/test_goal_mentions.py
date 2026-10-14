@@ -83,7 +83,6 @@ def test_exact_goal_mentions_are_mutual_read_only_awareness_with_provenance(
         ("owner", SelfMentionBinding),
         ("unknown", UnknownMentionBinding),
     ]
-    monkeypatch.delenv("PI_AGENT_ID", raising=False)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     tool = invoke_tool(comms, "comms_collaborations", {})
     assert tool["collaborations"] == []
@@ -241,7 +240,6 @@ def test_collaboration_tool_ignores_unrelated_malformed_bus_history(
     bus.chmod(0o600)
     original_bus = bus.read_bytes()
     original_relationships = comms.relationships.store.path.read_bytes()
-    monkeypatch.delenv("PI_AGENT_ID", raising=False)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     assert comms.relationships.collaborations("owner") == (manual,)
     result = invoke_tool(comms, "comms_collaborations", {})

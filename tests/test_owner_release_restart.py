@@ -59,7 +59,7 @@ async def test_installed_idle_worker_retains_state_across_runtime_restart(tmp_pa
 
         resources.push_async_callback(retire_owned_worker)
         environment = dict(os.environ)
-        for key in ('PYTHONPATH', 'PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK', 'PI_AGENT_ID',
+        for key in ('PYTHONPATH', 'PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK',
                     'AGENT_COMMS_THREAD', 'AGENT_COMMS_STARTUP_INPUT_KEY'):
             environment.pop(key, None)
         environment.update(PATH=str(Path(source_python).parent)+os.pathsep+environment.get('PATH', ''),
@@ -173,7 +173,6 @@ while True: time.sleep(0.01)
         **os.environ,
         "AGENT_COMMS_ROOT": str(root),
         "AGENT_COMMS_THREAD": "worker",
-        "PI_AGENT_ID": "worker",
         "PI_WORKTREE": str(tmp_path),
         # This real source process must declare the command it actually runs.
         # Restart capture cannot infer extinct launch arguments from its PID.

@@ -279,7 +279,7 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
 
 
 def test_delivered_assignment_uses_its_recorded_conversation_response(
-    archived_notification,
+    archived_notification, monkeypatch
 ):
     from agent_comms.assignment_states import DeferredAssignment
     from agent_comms.coordination_cohort import accept_delivery_cohort
@@ -301,15 +301,104 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(
             DeliveredAssignment,
             expected_revision=paused.revision,
         )
+    unrelated = old.messaging.send_message("agent", "sender", "unrelated later message")
+    notification, = old.views.message_notifications_for_references(
+        (original.reference,)
+    )[original.seq, original.message_id]
+    assert unrelated.reply_reference is None
+    assert notification.state.startswith("Read ")
+    assert notification.reply_reference is None
+
+    import os
+    from uuid import uuid4
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.input_origin import WireInputOrigin
+
+    owner = old.registry.require("agent")
+    old.registry.register(
+        replace(owner, process_identity=ProcessIdentity.capture(os.getpid()))
+    )
+    owner, generation = old.registry.live_owner_with_admission("agent")
+    owner, _ = old.registry.lease_live_turn_with_admission(
+        owner, "reply-turn", expected_generation=generation
+    )
+    lease = owner.require_turn_lease()
+    inputs = InputDispositions(old.root / InputDispositions.filename)
+    key = inputs.bus_key(original, owner)
+    source_text = "delivered original"
+    assert inputs.record(
+        key,
+        seq=original.seq,
+        owner=owner.name,
+        admission=lease.admission_generation,
+        target=original.target,
+        text=source_text,
+        origin=WireInputOrigin(root_id, original.reference),
+    )
+    native_id = uuid4().hex
+    assert inputs.bind(
+        key,
+        admission=lease.admission_generation,
+        turn_id=lease.turn_id,
+        native_id=native_id,
+        text=source_text,
+    )
+    assert inputs.started(
+        key, turn_id=lease.turn_id, native_id=native_id, text=source_text
+    )
+    monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
     response = old.messaging.send_message("agent", "sender", "recorded reply")
 
     notification, = old.views.message_notifications_for_references(
         (original.reference,)
     )[original.seq, original.message_id]
 
+    assert response.reply_reference == original.reference
     assert notification.state.startswith("Answered ")
     assert notification.reply_reference == response.reference
     assert notification.answered_at_ms == int(response.timestamp * 1000)
+
+
+def test_recorded_response_resolution_keeps_other_collective_lifecycles(
+    archived_notification,
+):
+    from agent_comms.assignment_states import DeferredAssignment
+    from agent_comms.coordination_cohort import accept_delivery_cohort
+    from agent_comms.coordinator import Coordination
+
+    old, _live, _source, _messages, root_id = archived_notification
+    for name in ("sender", "reader", "agent"):
+        old.registry.register(
+            replace(old.registry.require(name), tags=frozenset({"team"}))
+        )
+    original = old.messaging.send_initial_cohort(
+        "sender", "#team", "collective mixed response states"
+    )
+    with Coordination(str(old.root / "coordination.sqlite3")) as store:
+        assignments = accept_delivery_cohort(
+            old.bus, root_id, original.seq, store
+        ).value.assignments
+        delivered = assignments[0]
+        paused = store.assignments.transition_preengagement(
+            delivered.assignment_id,
+            DeferredAssignment,
+            expected_revision=delivered.revision,
+        ).value
+        store.assignments.transition_preengagement(
+            delivered.assignment_id,
+            DeliveredAssignment,
+            expected_revision=paused.revision,
+        )
+
+    notifications = old.views.message_notifications_for_references(
+        (original.reference,)
+    )[original.seq, original.message_id]
+
+    assert {notification.recipient for notification in notifications} == {
+        "agent",
+        "reader",
+    }
 
 
 def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
