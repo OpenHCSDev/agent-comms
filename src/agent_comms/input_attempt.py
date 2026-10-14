@@ -105,9 +105,10 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     def bound_bus_input(self) -> SentInput | None:
         return None
 
-    def active_reply_reference(
+    def delivered_in(
         self, lease: TurnLeaseFence, root_id: str, snapshot: RegistrySnapshot
     ) -> MessageReference | None:
+        """The bus message this input delivered into the lease's turn."""
         return None
 
 
@@ -287,7 +288,7 @@ class StartedInput(SentInput):
             raise RelationViolationError("Input start admission changed")
         return self
 
-    def active_reply_reference(self, lease, root_id, snapshot):
+    def delivered_in(self, lease, root_id, snapshot):
         if (
             lease.identity.incarnation.matches_recorded_name(self.owner, snapshot)
             and self.matches_admission(lease.admission_generation)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from agent_comms.typed_table import JsonStorage
 import json
 import os
 import sqlite3
@@ -439,19 +440,8 @@ def test_publication_uncertain_and_recursive_privacy(tmp_path: Path):
         key = canonical_publication_key("e", "private-target")
         db.execute("BEGIN IMMEDIATE")
         db.execute(
-            "INSERT INTO publication_intents VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (
-                "e",
-                "Alice",
-                "private-target",
-                "info",
-                0,
-                1.0,
-                "private-payload",
-                hashlib.sha256(b"private-payload").hexdigest(),
-                key,
-                message.message_id,
-            ),
+            "INSERT INTO publication_intents VALUES (?,?,?,?,?)",
+            ("e", "private-target", JsonStorage.to_sql(message), key, message.message_id),
         )
         db.execute(
             (

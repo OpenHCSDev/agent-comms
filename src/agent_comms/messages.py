@@ -161,8 +161,8 @@ class Message:
     report: ChangeReport | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_order": 13}
     )
-    reply_reference: MessageReference | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_order": 14}
+    answers: tuple[MessageReference, ...] = field(
+        default=(), metadata={"wire_omit_default": True, "wire_order": 14}
     )
 
     @property
@@ -206,11 +206,6 @@ class Message:
     def claim_transitions(self) -> tuple[ClaimTransition, ...]:
         """This envelope's claim change, as the bus-ordered sequence a claim table folds."""
         return () if self.claim_transition is None else (self.claim_transition,)
-
-    @property
-    def answered_references(self) -> tuple[MessageReference, ...]:
-        """The earlier message this one answers, as the rows a reply index folds."""
-        return () if self.reply_reference is None else (self.reply_reference,)
 
     def require_claim_transition(self) -> ClaimTransition:
         if self.claim_transition is None:

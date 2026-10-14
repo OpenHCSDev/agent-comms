@@ -243,7 +243,7 @@ class CommittedDelivery(MessageWireRecord):
                               self.audience.sender_lookup, offset=offset, length=length)
         for recipient in self.audience.recipients:
             yield Addressed(recipient.recipient_lookup, self.message.seq)
-        for answered in self.message.answered_references:
+        for answered in self.message.answers:
             yield Replies(answered.seq, self.message.seq)
 
     def delivery_messages(self):

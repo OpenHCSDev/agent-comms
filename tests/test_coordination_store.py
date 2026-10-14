@@ -1261,13 +1261,8 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
         )
         intent = PublicationIntents(
             "exec",
-            "thread",
             "owner",
-            InfoKind,
-            False,
-            1.0,
-            "reply",
-            hashlib.sha256(b"reply").hexdigest(),
+            message,
             canonical_publication_key("exec", "owner"),
             message.message_id,
         )

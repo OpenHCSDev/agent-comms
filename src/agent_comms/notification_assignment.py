@@ -66,7 +66,7 @@ class AssignmentProgress(DeclaredFamily, affix="Progress"):
             notification,
             state=notification.receipt_state(self.answered_label, answered_at_ms),
             detail="",
-            reply_reference=reference,
+            answer=reference,
             answered_at_ms=answered_at_ms,
             **self.read_fields(),
         )
@@ -215,7 +215,7 @@ class AnsweredResponse(AssignmentResponse):
             state=notification.receipt_state("Answered", self.received_at_ms),
             detail="",
             busy=False,
-            reply_reference=self.reference,
+            answer=self.reference,
             read_at_ms=delivered_at_ms,
             answered_at_ms=self.received_at_ms,
         )
@@ -384,7 +384,8 @@ class NotificationAssignment(NotificationSource):
             captured = source.replies(tuple({row.assignment.source for row in eligible}))
         replies: dict[MessageReference, list[CommittedDelivery]] = {}
         for reply in captured:
-            replies.setdefault(reply.message.reply_reference, []).append(reply)
+            for answered in reply.message.answers:
+                replies.setdefault(answered, []).append(reply)
         resolved = []
         for row in rows:
             if row.assignment.lifecycle.records_conversation_response:

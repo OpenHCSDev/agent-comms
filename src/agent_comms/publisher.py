@@ -534,7 +534,7 @@ class Publisher:
         matched, previous_sequence, metadata = self.log._keyed_receipt_unlocked(intent)
         if matched is not None:
             return matched
-        message = intent.expected_message
+        message = intent.message
         # A durable exact replay above wins even after registry/route renames.
         sender, target = self._validate_publish_request(
             message, registry_snapshot=registry_snapshot

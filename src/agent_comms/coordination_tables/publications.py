@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
-import math
 from dataclasses import dataclass, fields
 from dataclasses import field as dataclass_field
-from typing import Type
 
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
@@ -17,14 +14,12 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_errors import CoordinationError, IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
-from agent_comms.field_codec import projected
 from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message, MessageKind
+from agent_comms.messages import Message
 from agent_comms.typed_table import (
     Column,
     ExactStorage,
     ForeignKey,
-    TypedRow,
     TypedTable,
 )
 
@@ -41,30 +36,21 @@ def canonical_publication_key(execution_id: str, exact_target: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class PublicationIntents(CoordinatorTable, TypedTable):
+    """One obligation route's frozen response: the exact Message it publishes."""
+
     def matches_request(self, execution_id: str, message: Message) -> bool:
-        return self.execution_id == execution_id and self.expected_message == message
+        return self.execution_id == execution_id and self.message == message
 
     def matches_publication(self, message: Message) -> bool:
         """Compare the frozen intent once against the Message-owned content snapshot."""
-        return self.expected_message == message.publication_snapshot
+        return self.message == message.publication_snapshot
 
-    def validate_receipt(self, receipt: PublicationReceipt) -> None:
-        expected = (
-            self.execution_id, self.publication_key, self.expected_message_id,
-            self.sender, self.exact_target, self.message_type, self.notice,
-            self.timestamp, self.payload_digest,
-        )
-        observed = (
-            receipt.execution_id, receipt.publication_key, receipt.message_id,
-            receipt.sender, receipt.exact_target, receipt.message_type, receipt.notice,
-            receipt.timestamp, receipt.payload_digest,
-        )
-        if observed != expected:
+    def validate_receipt(self, receipt: PublicationReceipts) -> None:
+        if receipt.message_id != self.expected_message_id:
             raise IntegrityViolationError("receipt envelope does not match frozen intent")
 
     execution_id: str = dataclass_field(
         metadata={
-            "snapshot_exclude": True,
             "sql": Column(
                 primary_key=True,
                 storage=ExactStorage,
@@ -73,18 +59,8 @@ class PublicationIntents(CoordinatorTable, TypedTable):
             ),
         }
     )
-    sender: str = dataclass_field(
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                storage=ExactStorage,
-                check="typeof(sender) = 'text' AND length(sender) BETWEEN 1 AND 256",
-            ),
-        }
-    )
     exact_target: str = dataclass_field(
         metadata={
-            "snapshot_exclude": True,
             "sql": Column(
                 primary_key=True, storage=ExactStorage,
                 check="""
@@ -92,39 +68,7 @@ class PublicationIntents(CoordinatorTable, TypedTable):
             ),
         }
     )
-    message_type: Type[MessageKind] = dataclass_field(
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(storage=ExactStorage, check="typeof(message_type) = 'text'"),
-        }
-    )
-    notice: bool = dataclass_field(metadata={"snapshot_exclude": True, "sql": Column()})
-    timestamp: float = dataclass_field(
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(check="timestamp >= 0 AND timestamp < 1.0e999"),
-        }
-    )
-    payload: str = dataclass_field(
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                storage=ExactStorage,
-                check="""
-        typeof(payload) = 'text' AND length(CAST(payload AS BLOB)) BETWEEN 1 AND 120000
-    """,
-            ),
-        }
-    )
-    payload_digest: str = dataclass_field(
-        metadata={
-            "sql": Column(
-                storage=ExactStorage,
-                check="""
-      typeof(payload_digest) = 'text' AND length(payload_digest) BETWEEN 1 AND 256""",
-            )
-        }
-    )
+    message: Message = dataclass_field(metadata={"sql": Column(check="json_valid(message)")})
     publication_key: str = dataclass_field(
         metadata={
             "sql": Column(
@@ -138,7 +82,6 @@ class PublicationIntents(CoordinatorTable, TypedTable):
     )
     expected_message_id: str = dataclass_field(
         metadata={
-            "snapshot_exclude": True,
             "sql": Column(
                 storage=ExactStorage,
                 unique=True,
@@ -151,53 +94,17 @@ class PublicationIntents(CoordinatorTable, TypedTable):
     )
 
     def __post_init__(self) -> None:
-        for field, value in (
-            ("execution_id", self.execution_id),
-            ("sender", self.sender),
-            ("exact_target", self.exact_target),
-            ("payload", self.payload),
-            ("payload_digest", self.payload_digest),
-            ("publication_key", self.publication_key),
-            ("expected_message_id", self.expected_message_id),
-        ):
-            require_nonempty(value, field)
         validate_execution_id(self.execution_id)
-        for field, value in (
-            ("sender", self.sender),
-            ("payload_digest", self.payload_digest),
-            ("expected_message_id", self.expected_message_id),
-        ):
-            require_bounded(value, field, MAX_IDENTIFIER_CHARS)
-        object.__setattr__(self, "message_type", MessageKind.field_value(self.message_type))
-        timestamp = float(self.timestamp)
-        object.__setattr__(self, "timestamp", 0.0 if timestamp == 0.0 else timestamp)
-        if not math.isfinite(self.timestamp) or self.timestamp < 0:
-            raise ValueError("publication timestamp must be finite and non-negative")
-        object.__setattr__(self, "notice", bool(self.notice))
-        if len(self.payload.encode("utf-8")) > MAX_PUBLICATION_PAYLOAD_BYTES:
+        require_nonempty(self.message.body, "payload")
+        require_bounded(self.message.sender, "sender", MAX_IDENTIFIER_CHARS)
+        if self.message.target != self.exact_target:
+            raise IntegrityViolationError("publication route is not its message target")
+        if len(self.message.body.encode("utf-8")) > MAX_PUBLICATION_PAYLOAD_BYTES:
             raise ValueError("publication payload exceeds byte limit")
-        if hashlib.sha256(self.payload.encode()).hexdigest() != self.payload_digest:
-            raise IntegrityViolationError("publication payload digest does not match")
         if self.publication_key != canonical_publication_key(self.execution_id, self.exact_target):
             raise IntegrityViolationError("publication key is not canonical")
-        if self.expected_message.message_id != self.expected_message_id:
+        if self.message.message_id != self.expected_message_id:
             raise IntegrityViolationError("expected message id does not match Message authority")
-
-    @projected(view="snapshot")
-    def payload_utf8_bytes(self):
-        return len(self.payload.encode("utf-8"))
-
-    @property
-    def expected_message(self) -> Message:
-        """Reconstruct through the existing message identity authority."""
-        return Message(
-            sender=self.sender,
-            target=self.exact_target,
-            body=self.payload,
-            type=self.message_type,
-            timestamp=self.timestamp,
-            notice=self.notice,
-        )
 
     obligation_intent_required: int | None = dataclass_field(
         init=False, compare=False, metadata={"sql": Column(generated="1")}
@@ -258,62 +165,25 @@ END"""
 
     @classmethod
     def validate_sql(cls, *values: object) -> int:
-        """SQLite positional input follows the declared constructor; validate once."""
+        """SQLite positional input follows the declared columns; decode and validate once."""
         try:
-            cls(*values)
+            cls(**{
+                item.name: item.decode(value)
+                for item, value in zip(
+                    (item for item in cls._fields() if item.init), values, strict=True
+                )
+            })
         except (TypeError, ValueError, CoordinationError):
             return 0  # The trigger refuses an invalid envelope; other errors are defects.
         return 1
 
 
-@dataclass(frozen=True, slots=True)
-class PublicationReceipt(TypedRow):
+@dataclass(frozen=True, kw_only=True)
+class PublicationReceipts(CoordinatorTable, TypedTable):
     @property
     def reference(self) -> MessageReference:
         return MessageReference(self.seq, self.message_id)
 
-    execution_id: str = dataclass_field(metadata={"snapshot_exclude": True})
-    publication_key: str = dataclass_field(metadata={"snapshot_exclude": True})
-    seq: int
-    message_id: str
-    sender: str = dataclass_field(metadata={"snapshot_exclude": True})
-    exact_target: str = dataclass_field(metadata={"snapshot_exclude": True})
-    message_type: Type[MessageKind] = dataclass_field(metadata={"snapshot_exclude": True})
-    notice: bool = dataclass_field(metadata={"snapshot_exclude": True})
-    timestamp: float = dataclass_field(metadata={"snapshot_exclude": True})
-    payload_digest: str = dataclass_field(metadata={"snapshot_exclude": True})
-
-    def __post_init__(self) -> None:
-        for field, value in (
-            ("execution_id", self.execution_id),
-            ("publication_key", self.publication_key),
-            ("message_id", self.message_id),
-            ("sender", self.sender),
-            ("exact_target", self.exact_target),
-            ("payload_digest", self.payload_digest),
-        ):
-            require_nonempty(value, field)
-        validate_execution_id(self.execution_id)
-        for field, value in (
-            ("sender", self.sender),
-            ("message_id", self.message_id),
-            ("payload_digest", self.payload_digest),
-        ):
-            require_bounded(value, field, MAX_IDENTIFIER_CHARS)
-        object.__setattr__(self, "message_type", MessageKind.field_value(self.message_type))
-        if self.publication_key != canonical_publication_key(self.execution_id, self.exact_target):
-            raise IntegrityViolationError("receipt publication key is not canonical")
-        timestamp = float(self.timestamp)
-        object.__setattr__(self, "timestamp", 0.0 if timestamp == 0.0 else timestamp)
-        if not math.isfinite(self.timestamp) or self.timestamp < 0:
-            raise ValueError("receipt timestamp must be finite and non-negative")
-        object.__setattr__(self, "notice", bool(self.notice))
-        if self.seq <= 0:
-            raise ValueError("receipt seq must be positive")
-
-
-@dataclass(frozen=True, kw_only=True)
-class PublicationReceipts(CoordinatorTable, TypedTable):
     execution_id: str = dataclass_field(
         metadata={
             "sql": Column(

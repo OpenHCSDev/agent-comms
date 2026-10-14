@@ -14,10 +14,8 @@ if TYPE_CHECKING:
 from .envelope_claim_transitions import FileClaimPath
 from .errors import RelationViolationError, UnregisteredThreadError
 from .message_bus import MessageBus
-from .owner_launch import RestartEnvironment
 from .messages import InfoKind, Message, MessageKind
 from .change_report import ChangeReport
-from .channel_targets import is_channel_target
 from .store_files import _store_lock
 from .thread_identity import ThreadRole
 from .threads import Thread
@@ -84,7 +82,7 @@ class Messaging:
                 notice=notice,
                 task=task,
                 report=report,
-                reply_reference=self._active_reply_reference(owner, target),
+                answers=self._answered_by(owner, target),
             )
             if claims or releases:
                 committed = self.bus.publisher.publish_claim_envelope(
@@ -98,30 +96,16 @@ class Messaging:
                 committed = self.bus.publisher.publish_ordinary(message)
         return committed
 
-    def _active_reply_reference(self, owner: Thread, target: str) -> MessageReference | None:
+    def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:
+        """What this owner's message to target answers among its running turn's inputs."""
         lease = owner.turn_lease
         if lease is None:
-            return None
+            return ()
         from .input_disposition import InputDispositions
 
-        snapshot = self.registry.snapshot()
-        if not RestartEnvironment.called_by(
-            owner.name, canonicalize=snapshot.canonical_name
-        ):
-            return None
         inputs = InputDispositions(self.root / InputDispositions.filename).read()
         with self.bus.log.certified_read() as source:
-            references = inputs.active_reply_references(
-                lease, source.marker.root_id, snapshot
-            )
-            originals = tuple(source.references(references))
-        canonical_target = target if is_channel_target(target) else snapshot.canonical_name(target)
-        matching = tuple(
-            original.message.reference
-            for original in originals
-            if original.message.exact_reply_target == canonical_target
-        )
-        return matching[-1] if matching else None
+            return inputs.answered_by(lease, source, self.registry.snapshot(), target)
 
     def initialize_private_initial_protocol(self) -> str:
         """Initialize the private protocol on a fresh owner-only root."""
