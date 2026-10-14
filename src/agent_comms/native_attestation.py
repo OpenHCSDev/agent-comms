@@ -109,6 +109,34 @@ class PendingAttestation(NativeAttestation):
         return observed
 
 
+@dataclass(frozen=True)
+class KnownSessionAttestation(NativeAttestation):
+    """Core's verified saved-session identity for a tracked prompt."""
+
+    identity: NativeSessionIdentity
+    observed = True
+
+    @property
+    def diagnostic_evidence(self):
+        return {"session_id": self.identity.session_id, "session_file": self.identity.session_file}
+
+    def require_identity(self) -> NativeSessionIdentity:
+        return self.identity
+
+    def admits_extension_input(self, inputs) -> bool:
+        return inputs.permits_admission
+
+    def conflicts(self, data) -> bool:
+        """Reject every reported component that differs from the known identity."""
+        return any(
+            observed is not None and observed != expected
+            for expected, observed in (
+                (self.identity.session_id, data.session_id),
+                (self.identity.session_file, data.session_file),
+            )
+        )
+
+
 @dataclass
 class ObservedAttestation(NativeAttestation):
     state: StateData

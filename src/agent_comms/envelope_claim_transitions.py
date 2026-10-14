@@ -35,18 +35,6 @@ class ClaimConflict(ClaimTransitionError):  # noqa: N818 - domain-specific losin
         super().__init__(f"Resource already claimed by {existing.owner!r}")
 
 
-class OutsideProjectError(ClaimTransitionError):
-    """A file claim names a path outside the thread's project directory."""
-
-    def __init__(self, resource: Path, project: Path):
-        self.resource, self.project = resource, project
-        super().__init__(
-            f"{resource} is outside this thread's project directory {project}. "
-            "File edits are limited to the project. To work in another directory, "
-            "change your project with comms_set_project."
-        )
-
-
 @dataclass(frozen=True)
 class FileClaimPath(ABC):
     """A caller's file operation owns which physical paths may be claimed."""
@@ -77,8 +65,6 @@ class FileClaimPath(ABC):
             raise ClaimTransitionError("Symlink aliases are not supported.")
         if resolved == base:
             raise ClaimTransitionError("Worktree directories cannot be claimed.")
-        if not resolved.is_relative_to(base):
-            raise OutsideProjectError(resolved, base)
         try:
             self.validate_leaf(resolved)
         except FileNotFoundError as error:
@@ -387,17 +373,19 @@ def project_verified_transitions(rows: Iterable[ClaimTransition]) -> ClaimProjec
 
 
 def _release_resource(worktree: Path, path: str | Path) -> str:
-    """Identify a prior canonical claim even if its original file was deleted."""
+    """Identify a prior absolute claim even if its original file was deleted."""
     physical_root = worktree.resolve(strict=True)
     raw = path if isinstance(path, str) else str(path)
     supplied = Path(raw)
     if str(supplied) != raw:
         raise RelationViolationError("Claim release requires canonical spelling.")
-    candidate = supplied if supplied.is_absolute() else physical_root / supplied
-    if ".." in candidate.parts:
+    if ".." in supplied.parts:
         raise RelationViolationError("Claim release cannot traverse parent directories.")
+    candidate = supplied if supplied.is_absolute() else physical_root / supplied
     try:
-        candidate.relative_to(physical_root)
-    except ValueError as error:
-        raise RelationViolationError("Claim release is outside the owner's worktree.") from error
-    return str(candidate)
+        resolved = candidate.resolve(strict=False)
+    except (OSError, RuntimeError, ValueError) as error:
+        raise RelationViolationError(f"Cannot resolve claim release {candidate}: {error}") from error
+    if resolved != candidate:
+        raise RelationViolationError("Claim release cannot use symlink aliases.")
+    return str(resolved)

@@ -21,6 +21,7 @@ from .attempt_states import (
 )
 from .attempt_store import AttemptStore
 from .coordination_errors import IdentityConflict
+from .coordination_tables.attempts import ReplayAssessments, ReplayFact
 from .coordination_session import NativeBoundary
 from .coordinator import Coordination
 from .mro_dispatch import MroDispatch, handles
@@ -86,6 +87,22 @@ class DurableTurn(MroDispatch):
         if self.current.starting:
             self.advance(PromptAcceptedAttempt)
         self.advance(ModelRunningAttempt)
+
+    def record_response_fact(self, fact: ReplayFact) -> None:
+        """Retain output evidence with the attempt facts that already own replay safety."""
+        ReplayAssessments.accumulate(
+            self.attempts.session._connection, self.fence.execution_id, fact
+        )
+
+    @handles(pi.MessageUpdate)
+    def response_output(self, event):
+        delta = event.assistant_message_event
+        if delta is not None and delta.response_progress and delta.progress:
+            self.record_response_fact(ReplayFact.ASSISTANT_OUTPUT)
+
+    @handles(pi.ToolExecutionStart)
+    def tool_output(self, event):
+        self.record_response_fact(ReplayFact.TOOL_CALL_STARTED)
 
     @handles(NativePhaseChanged)
     def excursion(self, event):

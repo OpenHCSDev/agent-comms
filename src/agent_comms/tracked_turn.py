@@ -338,35 +338,39 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             custody.push(retirement)
             try:
                 self.custody = custody
-                self.native = await self.acquire_native(custody, reuse=True)
-                custody.push_async_callback(self.retain_or_close)
-                await custody.enter_async_context(self.native.failures())
-                custody.callback(self.native.reader.pending.cancel_all)
-                if self.tool_socket is not None:
-                    self.tool_socket.expected_pid = self.native.proc.pid
-                self.watchdog.reading()
-                try:
+                # Transport resources are the turn's innermost lifetime. Stop
+                # retires them before native-child custody can block, so an
+                # interrupted selected turn cannot leave its socket path behind.
+                async with AsyncExitStack() as transport:
+                    self.native = await self.acquire_native(transport, reuse=True)
+                    custody.push_async_callback(self.retain_or_close)
+                    await custody.enter_async_context(self.native.failures())
+                    custody.callback(self.native.reader.pending.cancel_all)
+                    if self.tool_socket is not None:
+                        self.tool_socket.expected_pid = self.native.proc.pid
+                    self.watchdog.reading()
                     try:
-                        await self.attest()
-                        await self.admit_prompt()
-                        while not self.finished:
-                            event = await self.next_event()
-                            async for update in self.consume_native_event(event):
-                                if self.observe_event is not None:
-                                    await self.observe_event(update)
-                            if not self.finished and self.observe_event is not None:
-                                await self.observe_event(event)
-                        result = await self.result()
-                        # A per-input tool socket dies with this input; only a
-                        # tool-less child stays usable by the next input.
-                        self.retainable = self.tool_socket is None
-                        return result
-                    except (SelectedToolDenied, PromptSendFailure, TimeoutError, OSError) as error:
-                        raise NativePiUnavailable(
-                            f"Native Pi operation failed: {type(error).__name__}: {error}"
-                        ) from error
-                except NativePiUnavailable as error:
-                    self.admission.raise_native_failure(error, self.native.attestation)
+                        try:
+                            await self.attest()
+                            await self.admit_prompt()
+                            while not self.finished:
+                                event = await self.next_event()
+                                async for update in self.consume_native_event(event):
+                                    if self.observe_event is not None:
+                                        await self.observe_event(update)
+                                if not self.finished and self.observe_event is not None:
+                                    await self.observe_event(event)
+                            result = await self.result()
+                            # A per-input tool socket dies with this input; only a
+                            # tool-less child stays usable by the next input.
+                            self.retainable = self.tool_socket is None
+                            return result
+                        except (SelectedToolDenied, PromptSendFailure, TimeoutError, OSError) as error:
+                            raise NativePiUnavailable(
+                                f"Native Pi operation failed: {type(error).__name__}: {error}"
+                            ) from error
+                    except NativePiUnavailable as error:
+                        self.admission.raise_native_failure(error, self.native.attestation)
             finally:
                 # LIFO starts the measurement immediately before cleanup. No
                 # await or manual close may separate this from stack retirement.
@@ -448,6 +452,13 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         )
 
     async def attest(self) -> None:
+        self.native.attestation = self.launch.session.tracked_attestation(
+            self.native.attestation
+        )
+        if self.native.attestation.observed:
+            identity = self.native.attestation.require_identity()
+            self.active_session_file = self.launch.session.attest(identity)
+            return
         request = self.native.attestation.request
         with self.startup.measurements.operation("get_state_send"):
             await self.send(request)
@@ -582,6 +593,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             # Its output, not the retained refusal from the prior request, owns
             # this tracked turn's terminal result.
             self.request_retried()
+        else:
+            self.fail_terminal(event.final_error or "Provider request failed")
 
     def request_retried(self) -> None:
         super().request_retried()

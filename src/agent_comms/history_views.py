@@ -91,7 +91,7 @@ class HistoryViews:
         self.goals = goals
         self.ledger = ledger
         self._wire_lock_path = root / "wire"
-        self.presentation = BusPresentation(bus, registry, channels.catalog)
+        self.presentation = BusPresentation(bus, registry, channels.catalog, agents)
         self.transcript_reads = transcript_read_state(bus.reads.path)
 
     def message_notifications(self, messages: Sequence[Message]):
@@ -320,8 +320,10 @@ class HistoryViews:
             frozenset(channel for channel in channels if channel not in views or views[channel].archived),
         )
 
-    def thread_presentation(self, name: str) -> ThreadPresentation | None:
-        """Read one current executable thread, including its assigned messages."""
+    def thread_presentation(
+        self, name: str, *, sent_source_limit: int = 5
+    ) -> ThreadPresentation | None:
+        """Read one current executable thread and its bounded authored outcomes."""
         snapshot = self.registry.snapshot()
         thread = snapshot.threads.get(snapshot.canonical_name(name))
         if thread is None:
@@ -335,15 +337,21 @@ class HistoryViews:
             self.agents.runtime_info.read().get(thread.name),
             GoalWaits(self.root / GoalWaits.filename).read(),
         )
-        read, sources = self.transcripts.capture_page_window(thread.name, source_limit=5)
-        if not read.identity.thread.incarnation.current(snapshot):
+        captured = self.transcripts.capture_page_window(
+            thread.name, source_limit=5, sent_source_limit=sent_source_limit
+        )
+        owner = captured.read.identity.thread
+        if not owner.incarnation.current(snapshot):
             raise StaleRevision("Thread source incarnation changed during presentation")
         return replace(
             view.presentation,
             notifications=MessageNotification.for_sources(
-                self.root, self.registry, read.identity.thread, sources
+                self.root, self.registry, owner, captured.sources
             ),
-            read_identity=read.identity,
+            sent_notifications=MessageNotification.for_sources(
+                self.root, self.registry, owner, captured.sent_sources
+            ),
+            read_identity=captured.read.identity,
         )
 
     def coordination_snapshot(
@@ -394,7 +402,7 @@ class HistoryViews:
             captured_viewer,
             {view.thread.name: view.thread.session_file or "" for view in snapshot.threads},
         )
-        return replace(snapshot, thread_unread=unread.counts, thread_unread_pending=unread.pending)
+        return replace(snapshot, thread_unread=unread.counts, unread_pending=unread.pending)
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
         """Acknowledge only the native transcript boundary actually displayed."""

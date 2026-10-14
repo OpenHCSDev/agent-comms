@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass, field, replace
+from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -20,6 +21,7 @@ from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
 from .message_page import MessagePage, MessagePageRequest
+from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import ChannelDisplayScope, DMDisplayScope
 from .read_ledger import ReadLedger
@@ -37,7 +39,6 @@ if TYPE_CHECKING:
     from .catalog_store import ChannelCatalog
     from .goal_waits import GoalWait
     from .message_bus import MessageBus
-    from .message_reference import MessageReference
     from .messages import Message
     from .read_ledger import ReadLedger
     from .read_ledger import ReadDocument
@@ -60,10 +61,26 @@ class MessageNotification:
     busy: bool = False
     message: Message | None = None
     displayed_to: tuple[ThreadIncarnation, ...] = ()
+    reply_reference: MessageReference | None = None
+    read_at_ms: int | None = None
+    answered_at_ms: int | None = None
+    changed: bool = False
 
     @property
     def recipient(self) -> str:
         return self.recipient_identity.canonical_thread
+
+    @staticmethod
+    def receipt_state(label: str, timestamp_ms: int | None) -> str:
+        """Format a required durable receipt in the viewer's local time."""
+        if timestamp_ms is None:
+            raise ValueError(f"{label} notification requires a durable receipt time")
+        recorded = datetime.fromtimestamp(timestamp_ms / 1000).astimezone()
+        now = datetime.now().astimezone()
+        when = recorded.strftime("%H:%M")
+        if recorded.date() != now.date():
+            when = recorded.strftime("%b %d %H:%M").replace(" 0", " ")
+        return f"{label} {when}"
 
     @classmethod
     def window(
@@ -171,15 +188,56 @@ class MessageNotification:
                 notification = observation.after_inbox_read(
                     outcome.project(observation), source, reads, document, snapshot
                 )
+                displayed_to = observation.displayed_recipient(
+                    notification, source, reads, document, snapshot
+                )
                 result[key].append(
                     replace(
                         notification,
-                        displayed_to=observation.displayed_recipient(
-                            notification, source, reads, document, snapshot
-                        ),
+                        displayed_to=displayed_to,
+                        changed=notification.changed or bool(displayed_to),
                     )
                 )
+            direct_read = cls.direct_read_notification(
+                source, snapshot, reads, document, owner_lookup=owner_lookup
+            )
+            if direct_read is not None:
+                result[key].append(direct_read)
         return {key: tuple(rows) for key, rows in result.items()}
+
+    @classmethod
+    def direct_read_notification(
+        cls, source, snapshot, reads, document, *, owner_lookup
+    ) -> MessageNotification | None:
+        """Project a human DM read even though humans have no wake assignment."""
+        from .bus_publication import stable_thread_lookup
+        from .channel_targets import is_channel_target
+
+        message = source.message
+        if (
+            source.audience.recipients
+            or is_channel_target(message.target)
+            or (owner_lookup is not None and source.audience.sender_lookup != owner_lookup)
+        ):
+            return None
+        name = snapshot.canonical_name(message.target)
+        target = snapshot.threads.get(name)
+        if target is None or not reads.human(target.role):
+            return None
+        recipient = FrozenRecipient(stable_thread_lookup(target.created_at), target.name)
+        displayed_to = reads.displayed_recipient(
+            message, recipient, snapshot, document=document
+        )
+        if not displayed_to:
+            return None
+        return cls(
+            recipient,
+            "Read",
+            "",
+            priority=2,
+            displayed_to=displayed_to,
+            changed=True,
+        )
 
     @classmethod
     def recent(
@@ -281,10 +339,14 @@ class DisplaySelection:
 
 
 class BusPresentation:
-    def __init__(self, bus: MessageBus, registry: Registration, catalog: ChannelCatalog):
+    def __init__(
+        self, bus: MessageBus, registry: Registration, catalog: ChannelCatalog,
+        agents: AgentActivity,
+    ):
         self.bus = bus
         self.registry = registry
         self.catalog = catalog
+        self.agents = agents
         self._path = bus.log.path
         self._wire_lock_path = bus.log.path.parent / "wire"
         self._display_indexes: dict[str, BusDisplayIndex] = {}
@@ -295,6 +357,27 @@ class BusPresentation:
             index = self.bus.log.register_append_index(BusDisplayIndex(self._path, viewer))
             self._display_indexes[viewer] = index
         return index
+
+    def roster(
+        self, viewer: str, *, show_stopped: bool = True, show_archived: bool = False
+    ) -> CoordinationSnapshot:
+        """Current sidebar rows without advancing whole-bus derived indexes."""
+        with DisplaySelection.reading(
+            self.registry, self.catalog, self.bus.reads, viewer
+        ) as basis:
+            snapshot = CoordinationSnapshot.capture(
+                self._path.parent, basis.registry, basis.catalog, self.agents, basis.channels,
+                {}, {}, unread={}, channel_unread={}, show_stopped=show_stopped,
+                show_archived=show_archived, read_marker_notice=basis.notice,
+            )
+        pending = {
+            *(view.thread.name for view in snapshot.threads),
+            *(view.channel.name for view in snapshot.channels),
+        }
+        snapshot = replace(
+            snapshot, read_marker_notice=self.bus.reads.take_notice(basis.notice)
+        )
+        return replace(snapshot, unread_pending=frozenset(pending))
 
     @contextmanager
     def snapshot(
@@ -625,7 +708,7 @@ class CoordinationSnapshot:
     channel_unread: Mapping[str, int] = field(default_factory=dict)
     channel_order: ChannelSort = ChannelSort.NAME
     thread_unread: Mapping[str, int] = field(default_factory=dict)
-    thread_unread_pending: frozenset[str] = frozenset()
+    unread_pending: frozenset[str] = frozenset()
     show_stopped: bool = True
     show_archived: bool = False
     read_marker_notice: str | None = None

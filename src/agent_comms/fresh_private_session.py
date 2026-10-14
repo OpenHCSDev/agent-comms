@@ -35,7 +35,7 @@ from .native_pi import (
     NativePiUnavailable,
     _durable_private_session_dir,
     _fsync_directory,
-    _read_private_file,
+    _read_private_header,
 )
 
 if TYPE_CHECKING:
@@ -305,14 +305,11 @@ class FreshPrivateSession:
     @staticmethod
     def require_launch_header(path: Path, selected_thinking_level: str | None) -> None:
         """A saved marker can deny reopen; it cannot recreate first-start authority."""
-        rows = _read_private_file(path)
         try:
-            header = NativeEntry.from_evidence(next(rows))
+            header = NativeEntry.from_evidence(_read_private_header(path))
             if not isinstance(header, SessionEntry):
                 raise ValueError("Native source lacks a session header")
             header.require_header()
-            for _ in rows:
-                pass  # Exhaust revision validation without retaining historical bodies.
             expected = (
                 SelectedFreshMarker(1, selected_thinking_level)
                 if selected_thinking_level is not None
@@ -320,7 +317,7 @@ class FreshPrivateSession:
             )
             if header.selected_fresh != expected:
                 raise ValueError("Selected fresh source lacks its exact first-start token")
-        except (StopIteration, ValueError, TypeError, KeyError) as error:
+        except (ValueError, TypeError, KeyError) as error:
             raise NativePiUnavailable(
                 "Selected fresh source cannot reopen without exact first-start token"
             ) from error

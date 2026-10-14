@@ -42,17 +42,19 @@ def _manual_projection_only(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _maintain_in_process(root: str, start, results) -> None:
-    """One independent runtime connection maintaining the shared WAL."""
+def _maintain_in_process(root: str, root_id: str, through_seq: int, start, results) -> None:
+    """One independent runtime connection bootstrapping the shared WAL."""
     start.wait()
     try:
-        complete = WakeCandidateIndex(Comms(Path(root)).bus).maintain(
-            max_rows=256, max_bytes=8 * 1024 * 1024
+        index = WakeCandidateIndex(Comms(Path(root)).bus)
+        outcome = index.catch_up_committed_append(
+            index.notify_committed_append(root_id=root_id, through_seq=through_seq),
+            bootstrap_new=True, max_rows=256, max_bytes=8 * 1024 * 1024,
         )
     except BaseException as error:
         results.put(("error", type(error).__name__, str(error)))
     else:
-        results.put(("ok", complete))
+        results.put(("ok", outcome.caught_up))
 
 
 def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
@@ -76,10 +78,9 @@ def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
 
 
 def test_two_processes_serialize_checkpoint_replay_and_commit(tmp_path: Path) -> None:
-    comms, _root_id, _lookup = _private(tmp_path)
+    comms, root_id, _lookup = _private(tmp_path)
     index = WakeCandidateIndex(comms.bus)
     comms.messaging.send_initial_cohort("sender", "#team", "initial")
-    assert index.maintain(rebuild=True)
     for number in range(128):
         comms.messaging.send_initial_cohort(
             "sender", "#team", f"{number:04d} " + "x" * 4096
@@ -90,7 +91,7 @@ def test_two_processes_serialize_checkpoint_replay_and_commit(tmp_path: Path) ->
     processes = [
         context.Process(
             target=_maintain_in_process,
-            args=(str(comms.root), start, results),
+            args=(str(comms.root), root_id, expected_seq, start, results),
         )
         for _ in range(2)
     ]
