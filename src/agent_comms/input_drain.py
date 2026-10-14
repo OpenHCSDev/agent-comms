@@ -22,6 +22,7 @@ from .acp_extension import (
     QueueProjection,
     encode_updates,
 )
+from .activity import DrainReadiness
 from .agent_backend import InputContent, InputId, InputRequest, SendNow, TurnInboxItem
 from .comms import Comms
 from .coordination_errors import CoordinationError, IdentityConflict
@@ -535,11 +536,10 @@ class InputDrain(InputObservation):
     async def drain_inbox(self, session_id: str) -> int:
         """Push undelivered messages and retire an older failure on success."""
         async with self.drain_locks.setdefault(session_id, asyncio.Lock()):
-            owner = (await self._own_entry(session_id)).entry.owner_identity
             count = await self.drain_owned_inbox(session_id)
             await Coordination.run_worker(partial(
-                self.comms.agents.set_drain_diagnostic,
-                self.sessions.require(session_id), owner, None,
+                DrainReadiness.retire_current,
+                self.comms.agents, self.sessions.require(session_id),
             ))
             return count
 

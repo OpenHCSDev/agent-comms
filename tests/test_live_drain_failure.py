@@ -1,6 +1,7 @@
 """The actual background drain exposes broken SQLite state and observes recovery."""
 
 import asyncio
+import json
 import os
 import shutil
 import sqlite3
@@ -58,6 +59,13 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
         assert "Inbox unavailable" in failed.presentation.summary
         assert diagnostic.error_type in failed.presentation.summary
         assert "Ready" not in failed.presentation.summary
+        documents = list((comms.root / "diagnostics").glob("drain-*.json"))
+        assert documents
+        encoded_diagnostics = [
+            json.loads(document.read_text())["drain"] for document in documents
+        ]
+        assert all("recorded_at" not in encoded for encoded in encoded_diagnostics)
+        assert all(encoded["kind"] == "unavailable_drain" for encoded in encoded_diagnostics)
         # Repeated retries must neither flood the log nor repair the broken schema.
         log = comms.root / "activity.jsonl"
         observed = log.read_bytes()
@@ -106,6 +114,9 @@ async def test_successful_drain_clears_failure_during_active_turn(tmp_path):
         assert current.activity.readiness.source_diagnostic() is None
         assert current.thread.executing
         assert current.presentation.busy and not current.presentation.attention
+        activity = (comms.root / "activity.jsonl").read_bytes()
+        await agent.inputs.drain_inbox("beta")
+        assert (comms.root / "activity.jsonl").read_bytes() == activity
     finally:
         comms.agents.finish_turn(lease)
         await agent.shutdown()

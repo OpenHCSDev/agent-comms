@@ -110,7 +110,8 @@ async def test_repeated_turn_preparation_displays_real_native_drain_failure(tmp_
     view = comms.views.thread_views()[0]
     assert isinstance(view.activity.readiness, FailedPreparingDrainReadiness)
     recorded = datetime.fromtimestamp(failure.recorded_at).astimezone().strftime("%H:%M")
-    assert view.presentation.summary.startswith(f"Failed {recorded}")
-    assert "native request never opened" in view.presentation.summary
+    label, detail = view.presentation.summary.splitlines()
+    assert label == f"Failed {recorded}"
+    assert "native request never opened" in detail
     assert view.presentation.attention and view.presentation.busy
     comms.agents.finish_turn(repeated.turn_lease)
