@@ -120,19 +120,19 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
 
         self.update(advance)
 
-    def consume_notice(self, expected: str) -> bool:
-        """Clear the stored notice once it has been shown; return whether this call cleared it."""
-        consumed = False
+    def take_notice(self, shown: str | None) -> str | None:
+        """Clear the stored notice once it has been shown; return it when this call cleared it."""
+        taken = None
 
-        def consume(document: ReadDocument) -> ReadDocument:
-            nonlocal consumed
-            if document.notice != expected:
+        def take(document: ReadDocument) -> ReadDocument:
+            nonlocal taken
+            if shown is None or document.notice != shown:
                 return document
-            consumed = True
+            taken = shown
             return replace(document, notice=None)
 
-        self.update(consume)
-        return consumed
+        self.update(take)
+        return taken
 
     def seen_sequences(
         self, viewer: str, snapshot: RegistryProvenance, *, document: ReadDocument | None = None
