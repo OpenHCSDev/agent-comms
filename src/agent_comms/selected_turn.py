@@ -44,11 +44,24 @@ class SelectedPrompt:
             tuple(segments),
         )
 
+    def sent_outcomes(self):
+        participant = self.participant
+        presentation = participant.comms.views.thread_presentation(
+            participant.owner.thread.name,
+            sent_source_limit=SelectedWakeSegment.sent_source_limit,
+        )
+        if presentation is None:
+            return ()
+        return tuple(
+            outcome for outcome in presentation.sent_notifications if outcome.changed
+        )[:SelectedWakeSegment.sent_limit]
+
     def triage(self) -> RenderedInput:
         participant = self.participant
         frame = SelectedWakeSegment.capture(
             tuple((source.delivery, source.assignment) for source in participant.batch.sources),
             participant.owner.thread,
+            sent_outcomes=self.sent_outcomes(),
         )
         return self.context(
             (frame, SelectedTriageSegment.capture(participant, frame.provenance))
@@ -63,6 +76,7 @@ class SelectedPrompt:
             ),
             participant.owner.thread,
             obligations=obligations,
+            sent_outcomes=self.sent_outcomes(),
         )
         projection = OptionalAwarenessProjection.for_selected(
             WakeCandidateIndex(participant.bus),

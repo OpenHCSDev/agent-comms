@@ -110,7 +110,7 @@ class ExternalRecipientActivity(RecipientActivity):
         ):
             return replace(notification, state="Checked by CLI",
                            detail="The external participant acknowledged this original inbox message.",
-                           priority=2, busy=False)
+                           priority=2, busy=False, changed=True)
         return notification
 
 

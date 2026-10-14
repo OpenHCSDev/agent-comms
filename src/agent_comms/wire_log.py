@@ -203,14 +203,27 @@ class ConversationSourceWindowRequest:
     limit: int
     ascending: bool
 
-    def capture(self, source, lookup: str):
-        return source.conversation_sources(
-            lookup,
-            self.predicate,
-            self.parameters,
-            limit=self.limit,
-            ascending=self.ascending,
+    def capture(self, source, lookup: str) -> ConversationSourceWindow:
+        rows = (
+            source.conversation_sources(
+                lookup,
+                self.predicate,
+                self.parameters,
+                limit=self.limit,
+                ascending=self.ascending,
+            )
+            if self.limit
+            else ()
         )
+        return ConversationSourceWindow(self, tuple(rows))
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationSourceWindow:
+    """One request and its rows from the same certified wire cut."""
+
+    request: ConversationSourceWindowRequest
+    sources: tuple[CommittedDelivery, ...]
 
 
 class WireLog:
@@ -291,21 +304,21 @@ class WireLog:
     def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):
         """Read an original window through its existing canonical barrier."""
         request = ConversationSourceWindowRequest(predicate, parameters, limit, ascending)
-        return self.conversation_source_windows(lookup, (request,))[0]
+        return self.conversation_source_windows(lookup, (request,))[0].sources
 
     def conversation_source_windows(
         self, lookup: str, requests: tuple[ConversationSourceWindowRequest, ...]
-    ):
+    ) -> tuple[ConversationSourceWindow, ...]:
         """Read named original windows through one canonical barrier."""
         with _store_lock(self.path) as lock:
             if not self.path.exists():
-                return tuple(() for _ in requests)
+                return tuple(ConversationSourceWindow(request, ()) for request in requests)
             marker = self._private_marker_unlocked()
             source = lock.certified_read()
             source.require_marker(marker)
-            originals = tuple(request.capture(source, lookup) for request in requests)
+            windows = tuple(request.capture(source, lookup) for request in requests)
             source.require_current()
-        return tuple(tuple(window) for window in originals)
+        return windows
 
     def addressed_sources(self, lookup: str, after_seq: int = 0) -> Iterator[CommittedDelivery]:
         """Borrow bounded pages from one original committed append-only cut.

@@ -64,6 +64,7 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     notification_detail: ClassVar[str] = "Awaiting a recorded notification outcome."
     notification_priority: ClassVar[int] = 3
     notification_busy: ClassVar[bool] = False
+    notification_changed: ClassVar[bool] = False
 
     def notification(
         self,
@@ -83,6 +84,7 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
             self.notification_detail,
             self.notification_priority,
             self.notification_busy,
+            changed=self.notification_changed,
         )
 
     terminal: ClassVar[bool] = False
@@ -231,6 +233,7 @@ class FullPendingAssignment(PendingNotification, AssignmentState):
 
 
 class IgnoredAssignment(AssignmentState):
+    notification_changed = True
     notification_priority = 2
     notification_state = "Checked — no response"
     notification_detail = "The agent checked this message and chose not to respond."
@@ -298,6 +301,7 @@ class AssignmentDecision:
 
 @dataclass(frozen=True)
 class BoundAssignment(AssignmentDecision, AssignmentState):
+    notification_changed = True
     decision: Engagement
 
     def notification(
@@ -424,6 +428,7 @@ class CompletedAssignment(BoundAssignment):
 
 @dataclass(frozen=True)
 class InterruptedAssignment(AssignmentDecision, AssignmentState):
+    notification_changed = True
     decision: PendingDecision | Engagement
     preengagement_target = True
 
@@ -502,6 +507,7 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
     """
 
     decision: PendingDecision
+    notification_changed = True
 
     def notification(
         self,

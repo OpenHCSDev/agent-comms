@@ -447,6 +447,29 @@ def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: P
     assert len(comms.views.channel_history("#team")) == 1
 
 
+def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> None:
+    from agent_comms.presentation import MessageNotification
+
+    root, _root_id, _comms, initial, people = _root(tmp_path)
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        lookup = stable_thread_lookup(people[1].created_at)
+        assignment = sealed_cohort_assignments(store, lookup)[0]
+    sent_outcome = MessageNotification(
+        initial.audience.recipients[0], "Read", "",
+        message=initial.message, changed=True,
+    )
+    frame = TurnContext.render_segments((SelectedWakeSegment.capture(
+        ((initial, assignment),), people[1], sent_outcomes=(sent_outcome,)
+    ),)).text
+    assert 'recent_sent_outcomes: [{"source_seq":' in frame
+    assert '"state":"Read"' in frame
+    with pytest.raises(ValueError, match="changed authored-message outcomes"):
+        SelectedWakeSegment.capture(
+            ((initial, assignment),), people[1],
+            sent_outcomes=(replace(sent_outcome, changed=False),),
+        )
+
+
 async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, monkeypatch) -> None:
     root, root_id, comms, initial, people = _root(tmp_path, direct=True)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)

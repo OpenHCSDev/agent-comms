@@ -305,6 +305,15 @@ class TranscriptRead:
         return page
 
 
+@dataclass(frozen=True, slots=True)
+class TranscriptSourceWindow:
+    """One transcript read and its same-cut conversation source windows."""
+
+    read: TranscriptRead
+    sources: tuple[CommittedDelivery, ...]
+    sent_sources: tuple[CommittedDelivery, ...]
+
+
 class Transcripts:
     def __init__(self, root: Path, registry: Registration, bus: MessageBus, messaging: Messaging):
         self.root = root
@@ -340,10 +349,9 @@ class Transcripts:
         through: TranscriptCursor | None = None,
         historical_source: str | None = None,
     ) -> TranscriptRead:
-        read, _sources, _sent_sources = self.capture_page_window(
+        return self.capture_page_window(
             name, before=before, after=after, through=through, historical_source=historical_source,
-        )
-        return read
+        ).read
 
     def capture_page_window(
         self,
@@ -355,11 +363,7 @@ class Transcripts:
         after: TranscriptCursor | None = None,
         through: TranscriptCursor | None = None,
         historical_source: str | None = None,
-    ) -> tuple[
-        TranscriptRead,
-        tuple[CommittedDelivery, ...],
-        tuple[CommittedDelivery, ...],
-    ]:
+    ) -> TranscriptSourceWindow:
         """Expose the source owner's complete identity without parsing its page.
 
         Native bytes alone are insufficient: input display/routing and older
@@ -380,13 +384,7 @@ class Transcripts:
         from .transcript_receipts import AssignedTranscriptSource
 
         source = AssignedTranscriptSource.for_thread(root, thread, log)
-        if sent_source_limit:
-            receipt_frontier, sources, sent_sources = source.presentation_window(
-                limit=source_limit, sent_limit=sent_source_limit
-            )
-        else:
-            receipt_frontier, sources = source.window(limit=source_limit)
-            sent_sources = ()
+        captured = source.window(limit=source_limit, sent_limit=sent_source_limit)
         read = TranscriptRead(
             self,
             constructor(
@@ -409,13 +407,13 @@ class Transcripts:
                     else PublishedReplyRevision(0, 0)
                 ),
                 file_revision(root / self.bus.reads.path.name),
-                receipt_frontier,
+                captured.cursor,
                 before,
                 after,
                 through,
             ),
         )
-        return read, sources, sent_sources
+        return TranscriptSourceWindow(read, captured.sources, captured.sent_sources)
 
     def _page_source(self, name, through, historical_source):
         member = (LiveTranscriptReadIdentity if historical_source is None

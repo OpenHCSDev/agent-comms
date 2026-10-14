@@ -15,10 +15,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .transcript_events import TranscriptEvent
 
-from .bus_publication import stable_thread_lookup
+from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .routing import MessageRoute, TurnRouting
 from .thread_identity import ThreadIncarnation
 from .transcript_events import AssistantTranscript, IncomingTranscript, SentTranscript, UserTranscript
+
+from .wire_log import ConversationSourceWindowRequest
 
 if TYPE_CHECKING:
     from .wire_log import WireLog
@@ -52,6 +54,15 @@ class AssignedSourceCursor:
 
     def at(self, sequence: int) -> AssignedSourceCursor:
         return replace(self, sequence=sequence)
+
+
+@dataclass(frozen=True)
+class AssignedSourceWindow:
+    """Conversation and sent sources captured with one receipt frontier."""
+
+    cursor: AssignedSourceCursor
+    sources: tuple[CommittedDelivery, ...]
+    sent_sources: tuple[CommittedDelivery, ...]
 
 
 class TranscriptTraversal(ABC):
@@ -227,25 +238,23 @@ class AssignedTranscriptSource:
 
     @property
     def frontier(self):
-        return self.window()[0]
+        return self.window().cursor
 
-    def window(self, *, limit=1):
-        """One certified original window owns both rows and its frontier."""
-        return self._window(self.rows(limit=limit))
-
-    def presentation_window(self, *, limit=1, sent_limit=5):
-        """Conversation and authored rows from one certified original cut."""
+    def window(self, *, limit=1, sent_limit=0) -> AssignedSourceWindow:
+        """One certified cut owns conversation, sent rows and their frontier."""
         lookup = stable_thread_lookup(self.recipient.created_at)
-        rows, sent = self.log.conversation_sources_with_sent(
-            lookup, "1", (), limit=limit, ascending=False, sent_limit=sent_limit
+        conversation_request = ConversationSourceWindowRequest("1", (), limit, False)
+        sent_request = ConversationSourceWindowRequest(
+            "w.sender_lookup=?", (lookup,), sent_limit, False
         )
-        cursor, rows = self._window(rows)
-        return cursor, rows, sent
-
-    def _window(self, rows):
-        return AssignedSourceCursor(
+        conversation, sent = self.log.conversation_source_windows(
+            lookup, (conversation_request, sent_request)
+        )
+        rows = conversation.sources
+        cursor = AssignedSourceCursor(
             str(self.root), self.recipient, rows[0].message.seq if rows else 0
-        ), rows
+        )
+        return AssignedSourceWindow(cursor, rows, sent.sources)
 
     def page_rows(self, traversal, sequence, through, *, limit):
         predicate, parameters = traversal.predicate(sequence, through)

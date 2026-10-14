@@ -196,6 +196,20 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     assert {item.recipient_identity for item in renamed}=={item.recipient_identity for item in notices}
 
 
+def test_capture_page_window_names_zero_and_nonzero_sent_windows(tmp_path):  # noqa: F811
+    from agent_comms.transcripts import TranscriptSourceWindow
+
+    _path, _root_id, comms, initial, _people = _root(tmp_path)
+    ordinary = comms.transcripts.capture_page_window("sender")
+    assert isinstance(ordinary, TranscriptSourceWindow)
+    assert ordinary.sent_sources == ()
+    with_sent = comms.transcripts.capture_page_window("sender", sent_source_limit=5)
+    assert isinstance(with_sent, TranscriptSourceWindow)
+    assert [source.message.reference for source in with_sent.sent_sources] == [
+        initial.message.reference
+    ]
+
+
 def test_notification_window_preserves_exact_receipts_and_rejects_duplicates(tmp_path):  # noqa: F811
     root, _root_id, comms, initial, _people = _root(tmp_path)
     records = NotificationAssignment.select(root, "w.wire_seq=?", (initial.message.seq,))
