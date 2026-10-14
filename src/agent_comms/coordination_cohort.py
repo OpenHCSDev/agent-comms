@@ -310,20 +310,6 @@ def accept_delivery_cohort(
         return Applied(_receipt_matches(db, initial))
 
 
-def sealed_cohort_sequences(store: Coordination, wire_root_id: str) -> frozenset[int]:
-    """Already committed cohort batches, derived from their immutable receipts."""
-    with store.session.read():
-        assert_cohort_schema(store.session._connection)
-        return frozenset(
-            row.wire_seq
-            for row in ClaimBatchReceipts.select(
-                store.session._connection,
-                where="wire_root_id=? AND sealed=1",
-                parameters=(wire_root_id,),
-            )
-        )
-
-
 def next_sealed_assignment(
     store: Coordination,
     recipient_lookup: str,
