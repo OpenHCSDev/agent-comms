@@ -307,17 +307,11 @@ class WireLog:
             return [message for record in records for message in record.messages()]
 
     def record_context(self, manifest) -> None:
-        """Append the original context projection through its sealed writer.
-
-        Journal-backed values remain source references. Only nonrecoverable
-        public contributions are retained in this observation.
-        """
-        from .wire_record import ContextManifestWireObservation, ObservationWireRecord
-
-        with self.locked():
+        """Append the context records chosen by the certified entry owner."""
+        with self.locked() as lock:
             marker = self._private_marker_unlocked()
-            record = ObservationWireRecord(ContextManifestWireObservation(manifest))
-            self._append_private_unlocked(marker, record.to_wire())
+            for record in lock.certified_read().context_records(manifest):
+                self._append_private_unlocked(marker, record.to_wire())
 
     def context_manifests(self, name: str, registry):
         return tuple(resource.value for resource in self.context_manifest_resources(name, registry))
