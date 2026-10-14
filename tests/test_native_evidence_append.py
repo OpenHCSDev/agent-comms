@@ -112,6 +112,18 @@ def test_decode_uses_buffered_reader(tmp_path):
         assert len(tuple(source.rows())) == 2
 
 
+def test_next_decode_cannot_reuse_prefetched_bytes(tmp_path):
+    session = _evidence(tmp_path)
+    first, old, new = b'{"id":"first"}\n', b'{"id":"old"}\n', b'{"id":"new"}\n'
+    session.write_bytes(first + old)
+    with PrivateEvidenceRead.open(session) as source:
+        assert tuple(source._decode_captured(len(first)))[0]["id"] == "first"
+        with session.open("r+b", buffering=0) as writer:
+            os.pwrite(writer.fileno(), new, len(first))
+        source.size = len(first)
+        assert tuple(source._decode_captured(len(first + new)))[0]["id"] == "new"
+
+
 def test_append_during_decoding_is_read_on_the_next_observation(tmp_path):
     session = _evidence(tmp_path)
     original = session.read_bytes()
