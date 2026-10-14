@@ -21,7 +21,6 @@ from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.attempts import ReplayAssessments, ReplayFact
-from agent_comms.turn_phase import ResponseOutputPhase
 from delivery_owner_fixture import (
     canonical_delivery_owner,
     drain_diagnostic,
@@ -101,7 +100,7 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
         outcomes = comms.views.message_notifications([first])[(first.seq, first.message_id)]
         assert {row.recipient: row.state for row in outcomes} == {
             "alpha": "Checked — no response",
-            "beta": "Responded",
+            "beta": "Answered",
         }
         assert not any(row.busy for row in outcomes)
 
