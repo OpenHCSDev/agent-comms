@@ -93,9 +93,6 @@ class LiveAttempt(AttemptState):
 
 
 class TerminalAttempt(AttemptState):
-    def retry_finality(self) -> bool:
-        return self.failed
-
     @property
     @abstractmethod
     def release_wording(self) -> str: ...
@@ -133,7 +130,7 @@ class PromptStartingAttempt(LiveAttempt):
     @classmethod
     def successors(cls):
         return (
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             PromptAcceptedAttempt,
             ProviderUnavailableAttempt,
         )
@@ -146,7 +143,7 @@ class PromptAcceptedAttempt(LiveAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             ModelRunningAttempt,
             ModelStalledAttempt,
         )
@@ -166,7 +163,7 @@ class ModelRunningAttempt(ContextualAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             CompactionAttempt,
             ModelStalledAttempt,
             ProviderUnavailableAttempt,
@@ -182,7 +179,7 @@ class ToolRunningAttempt(ContextualAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             ModelRunningAttempt,
             SettlingAttempt,
         )
@@ -193,7 +190,7 @@ class CompactionAttempt(ContextualAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             ModelRunningAttempt,
             ModelStalledAttempt,
         )
@@ -216,7 +213,7 @@ class SettlingAttempt(ContextualAttempt):
     @classmethod
     def successors(cls):
         return (
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             SucceededAttempt,
         )
 
@@ -226,7 +223,7 @@ class ModelStalledAttempt(LiveAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
         )
 
 
@@ -234,7 +231,7 @@ class AbortingAttempt(LiveAttempt):
     @classmethod
     def successors(cls):
         return (
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             RetryingAttempt,
         )
 
@@ -243,7 +240,7 @@ class RetryingAttempt(LiveAttempt):
     @classmethod
     def successors(cls):
         return (
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             ModelRunningAttempt,
             ModelStalledAttempt,
             PromptStartingAttempt,
@@ -255,7 +252,7 @@ class ProviderUnavailableAttempt(LiveAttempt):
     @classmethod
     def successors(cls):
         return (
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             RetryingAttempt,
         )
 
@@ -280,7 +277,20 @@ class SucceededAttempt(TerminalAttempt):
         return ()
 
 
-class AttemptFailedAttempt(TerminalAttempt):
+class UnsuccessfulTerminal(TerminalAttempt):
+    """A terminal attempt that did not succeed, irrespective of retry authority."""
+
+    failed = True
+
+    def retry_finality(self) -> bool:
+        return True
+
+    @classmethod
+    def successors(cls):
+        return ()
+
+
+class AttemptFailedAttempt(UnsuccessfulTerminal):
     @property
     def release_wording(self) -> str:
         return "Released files after a failed turn"
@@ -293,14 +303,14 @@ class AttemptFailedAttempt(TerminalAttempt):
             return DeferredExecution(attempt.attempt_ordinal), DeferredResponse()
         return FailedExecution(attempt.attempt_ordinal), FailedResponse()
 
-    failed = True
 
-    @classmethod
-    def successors(cls):
-        return ()
-
-
-class UnknownOutcomeAttempt(AttemptFailedAttempt):
+class UnknownOutcomeAttempt(UnsuccessfulTerminal):
     @property
     def release_wording(self) -> str:
         return "Released files after a turn with unknown outcome; read them before editing"
+
+    def disposition(self, snapshot, attempt):
+        from .execution_states import FailedExecution
+        from .obligation_states import FailedResponse
+
+        return FailedExecution(attempt.attempt_ordinal), FailedResponse()

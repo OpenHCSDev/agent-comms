@@ -18,6 +18,7 @@ from agent_comms.attempt_states import (
     SettlingAttempt,
     ToolRunningAttempt,
     UnknownOutcomeAttempt,
+    UnsuccessfulTerminal,
 )
 
 
@@ -38,7 +39,7 @@ FAILED_SUCCESSOR_SOURCES = (
 @pytest.mark.parametrize("source", FAILED_SUCCESSOR_SOURCES)
 def test_attempt_failure_successor_accepts_declared_unknown_subclass(source):
     assert source(1).may_become(UnknownOutcomeAttempt())
-    assert source.successors().count(AttemptFailedAttempt) == 1
+    assert source.successors().count(UnsuccessfulTerminal) == 1
 
 
 def test_attempt_transition_table_expands_declared_failure_subclasses():

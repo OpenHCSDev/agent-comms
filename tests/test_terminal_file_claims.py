@@ -5,6 +5,7 @@ import json
 import os
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,6 +13,8 @@ from agent_comms.attempt_states import AttemptFailedAttempt, UnknownOutcomeAttem
 from agent_comms.claim_admission import publish_selected_resource_claim
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
+from agent_comms.execution_states import FailedExecution
+from agent_comms.obligation_states import FailedResponse
 from agent_comms.owner_fence import OwnerFence
 from test_claim_bus_read import selected_turn
 
@@ -45,7 +48,7 @@ def test_terminal_outcomes_release_exact_claims(monkeypatch, outcome):
             "SELECT phase, phase_kind FROM attempts WHERE execution_id = ? AND attempt_ordinal = ?",
             (attempt.execution_id, attempt.attempt_ordinal),
         ).fetchone()
-        assert phase == (expected_outcome.declared_name, expected_outcome.declared_name)
+        assert tuple(phase) == (expected_outcome.declared_name, expected_outcome.declared_name)
         assert dict(comms.bus.log.claim_projection()) == {}
         notice = comms.views.full_history()[-1]
         release = notice.claim_transition.releases[0]
@@ -68,6 +71,15 @@ def test_terminal_outcomes_release_exact_claims(monkeypatch, outcome):
         assert (comms.root / "bus.jsonl").read_bytes() == before
         assert comms.bus.log.claim_projection()[str(resource)] == current
         assert later.claim_transition.generation == current.generation
+
+
+def test_unknown_outcome_never_defers_when_retry_is_otherwise_authorized():
+    execution, response = UnknownOutcomeAttempt().disposition(
+        SimpleNamespace(retry_authorized=True), SimpleNamespace(attempt_ordinal=1)
+    )
+
+    assert type(execution) is FailedExecution
+    assert type(response) is FailedResponse
 
 
 def test_terminal_release_spans_the_existing_envelope_bound():
