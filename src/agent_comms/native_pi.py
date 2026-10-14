@@ -646,6 +646,12 @@ def _read_private_file(path: Path):
         yield from evidence.rows()
 
 
+def _read_private_header(path: Path):
+    """Decode only row one while the source owner verifies every captured byte."""
+    with PrivateEvidenceRead.open(path) as evidence:
+        return evidence.header()
+
+
 class NativeEvidencePrefixChanged(NativePiUnavailable):
     """The retained verified prefix must be reacquired from byte zero."""
 
@@ -789,6 +795,30 @@ class PrivateEvidenceRead:
             raise NativePiUnavailable("Native Pi evidence row has wrong type")
         return row
 
+    def header(self):
+        """Return row one after verifying the complete captured byte prefix."""
+        try:
+            size, digest = self._capture_append()
+            self.stream.seek(0)
+            raw = self.stream.readline(size)
+            if not raw or not raw.endswith(b"\n"):
+                raise NativePiUnavailable("Native Pi evidence header is incomplete")
+            header = self._decode_row(raw)
+            self._commit_snapshot(size, digest)
+            return header
+        except BaseException:
+            self.close()
+            raise
+
+    def _commit_snapshot(self, size, digest) -> None:
+        try:
+            self.verify_snapshot(size, digest.digest())
+        except (OSError, ValueError) as error:
+            raise NativePiUnavailable(
+                "Native Pi evidence file is unavailable or not private"
+            ) from error
+        self.prefix = VerifiedNativeEvidencePrefix(size, digest)
+
     def rows(self):
         try:
             previous_size = self.size
@@ -808,13 +838,7 @@ class PrivateEvidenceRead:
             # Acquisition verifies the fixed revision first. Decode then holds
             # only one physical row; final verification rejects any later change.
             yield from self._decode_captured(size)
-            try:
-                self.verify_snapshot(size, digest.digest())
-            except (OSError, ValueError) as error:
-                raise NativePiUnavailable(
-                    "Native Pi evidence file is unavailable or not private"
-                ) from error
-            self.prefix = VerifiedNativeEvidencePrefix(size, digest)
+            self._commit_snapshot(size, digest)
         except BaseException:
             self.close()
             raise
