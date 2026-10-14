@@ -63,6 +63,11 @@ class PrivateSendAdmission:
         return self.selected.bus
 
     @property
+    def following_after_seq(self) -> int:
+        """The selected sources which cannot also become following input."""
+        return max(assignment.wire_seq for assignment in self.stage.assignments)
+
+    @property
     def store_path(self) -> Path:
         return self.selected.store.session.path
 

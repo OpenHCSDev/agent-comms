@@ -129,25 +129,11 @@ class ArchivedAccess(WireAccess):
         return index.current()
 
     def context_resources(self, source, incarnation, snapshot, *, previous=()):
-        from .wire_log import WireLog
-        from .private_bus_checkpoint import CapturedWireSource, ContextManifestSources
-
-        # Later observation indexes are not part of an older archive. Read
-        # the original typed observations in the same certified byte cut.
-        source.require_current()
-        source.stream.seek(0)
-        resources = []
-        offset = 0
-        for record in WireLog._snapshot_records(source.marker, source.stream, source.witness.offset):
-            length = source.stream.tell() - offset
-            for manifest in record.context_manifests():
-                if manifest.thread.resolved(snapshot) == incarnation:
-                    pointer = ContextManifestSources(offset=offset, length=length, thread=manifest.thread)
-                    resources.append(CapturedWireSource(source.witness.source_identity,
-                        pointer, pointer.read_bytes(source.stream), manifest))
-            offset += length
-        source.require_current()
-        return iter(resources)
+        # Compact turn records require their entry/turn pointer tables. Cutover
+        # rebuilds both tables with the rewritten archived source.
+        return source.indexed_context_resources(
+            incarnation, snapshot, previous=previous
+        )
 
 
 @dataclass

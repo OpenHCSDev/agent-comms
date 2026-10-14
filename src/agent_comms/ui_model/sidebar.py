@@ -15,7 +15,7 @@ from agent_comms.presentation import CoordinationSnapshot, ThreadView
 from agent_comms.thread_execution import ConversationPreparation, ThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.ui_model.changes import KeyedModel
-from agent_comms.ui_model.unread import ExactUnread, UnreadPresentation
+from agent_comms.ui_model.unread import UnreadPresentation
 
 
 @dataclass(frozen=True)
@@ -29,10 +29,10 @@ class PersonUnread(ConversationPreparation):
         name = self.person.thread.name
         if self.person.status.active:
             return UnreadPresentation.for_thread(self.snapshot, name)
-        return ExactUnread(self.snapshot.unread.get(name, 0))
+        return UnreadPresentation.for_bus(self.snapshot, name)
 
     def external(self) -> UnreadPresentation:
-        return ExactUnread(self.snapshot.unread.get(self.person.thread.name, 0))
+        return UnreadPresentation.for_bus(self.snapshot, self.person.thread.name)
 
 
 @dataclass(frozen=True)
@@ -67,7 +67,7 @@ class ChannelRowModel:
     name: str
     label: str
     tooltip: str
-    unread: int
+    unread: UnreadPresentation
     active: bool
     members: tuple[str, ...]
     pinned_members: frozenset[str]
@@ -81,7 +81,7 @@ class ChannelRowModel:
             f"{'* ' if channel.pinned else ''}{channel.name} {view.active_agents}/{view.registered_agents}",
             f"{view.active_agents} running or idle / {view.registered_agents} registered agents"
             f" · tags: {', '.join(sorted(channel.tags)) or 'all'}",
-            snapshot.channel_unread.get(channel.name, 0),
+            UnreadPresentation.for_channel(snapshot, channel.name),
             any(name in busy for name in view.members),
             tuple(name for name in view.members if name in {person.thread.name for person in snapshot.threads}),
             frozenset(view.pinned_members),
