@@ -281,18 +281,33 @@ class WireLog:
 
     @contextmanager
     def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None,
-               contention: StoreLockContention | None = None):
+               shared: bool = False, contention: StoreLockContention | None = None):
         """The existing canonical bus lock and durability read barrier."""
         with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes,
-                         contention=contention) as lock:
+                         shared=shared, contention=contention) as lock:
             yield lock
 
     @contextmanager
-    def certified_read(self, *, blocking: bool = True, contention: StoreLockContention | None = None):
+    def certified_read(self, *, blocking: bool = True, shared: bool = False,
+                       contention: StoreLockContention | None = None):
         """Borrow the original source verified by this canonical lock barrier."""
-        with _store_lock(self.path, blocking=blocking, contention=contention) as lock:
+        with _store_lock(self.path, blocking=blocking, shared=shared,
+                         contention=contention) as lock:
             with self._certified_source(lock) as source:
                 yield source
+
+    @contextmanager
+    def certified_claim_read(self):
+        """Prefer concurrent read custody; repair an incomplete index before yielding."""
+        from .private_bus_checkpoint import CheckpointNeedsRepair
+
+        with ExitStack() as resources:
+            try:
+                source = resources.enter_context(self.certified_read(shared=True))
+            except CheckpointNeedsRepair:
+                resources.close()
+                source = resources.enter_context(self.certified_read())
+            yield source
 
     async def read_certified_async(self, read: Callable):
         """Acquire cancellably, then consume the whole source in its worker.

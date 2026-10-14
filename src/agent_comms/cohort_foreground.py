@@ -87,7 +87,7 @@ async def _accept_visible_deliveries(
     infer a cohort from an ordinary public message or its body.
     """
     def accept(resource: Coordination) -> int:
-        with bus.log.certified_read() as source:
+        with bus.log.certified_claim_read() as source:
             _require_no_private_owner_rename(bus.log.path.parent)
             marker = bus.log._private_marker_unlocked()
             if marker.root_id != root_id:
