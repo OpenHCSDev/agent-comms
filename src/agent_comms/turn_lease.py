@@ -38,17 +38,6 @@ class ActiveTurn:
             and turn_generation > 0
         )
 
-    def progress_description(self, observed_at: float | None = None) -> str:
-        """Describe this owner's current phase and age without persisting a display phase."""
-        elapsed = max(0, int((time.time() if observed_at is None else observed_at) - self.started_at))
-        if elapsed < 60:
-            age = f"{elapsed}s"
-        elif elapsed < 3_600:
-            age = f"{elapsed // 60}m"
-        else:
-            age = f"{elapsed // 3_600}h"
-        return f"{self.phase.progress_activity} ({age})"
-
     @classmethod
     def from_wire(cls, data: Mapping) -> ActiveTurn:
         return FieldCodec.decode(cls, data)

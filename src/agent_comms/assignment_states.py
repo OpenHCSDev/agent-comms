@@ -60,8 +60,8 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     def require_completion(self) -> Engagement:
         raise IdentityConflict("wake assignment is not completed")
 
-    notification_state: ClassVar[str] = "Pending"
-    notification_detail: ClassVar[str] = "Awaiting a recorded notification outcome."
+    notification_state: ClassVar[str] = "Not read yet"
+    notification_detail: ClassVar[str] = ""
     notification_priority: ClassVar[int] = 3
     notification_busy: ClassVar[bool] = False
 
@@ -197,8 +197,8 @@ class TriagePendingAssignment(PendingNotification, AssignmentState):
             raise IdentityConflict("bounded triage cannot inherit a response obligation")
         return self.mode.triage_expectation(), "No response obligation exists until triage engages."
 
-    notification_state = "Pending"
-    notification_detail = "Queued for a bounded relevance check; not yet checked."
+    notification_state = "Not read yet"
+    notification_detail = ""
 
     triage_pending = True
     preengagement_target = True
@@ -214,8 +214,8 @@ class TriagePendingAssignment(PendingNotification, AssignmentState):
 
 
 class FullPendingAssignment(PendingNotification, AssignmentState):
-    notification_state = "Pending"
-    notification_detail = "Queued for an agent response; not yet started."
+    notification_state = "Not read yet"
+    notification_detail = ""
 
     full_pending = True
     preengagement_target = True
@@ -231,8 +231,28 @@ class FullPendingAssignment(PendingNotification, AssignmentState):
 
 
 class IgnoredAssignment(AssignmentState):
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity,
+        updated_at_ms=0,
+        triage_inflight=False,
+        blocked_by_prior=False,
+    ):
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        checked_at_ms = activity.read_at_ms if activity.model_context else updated_at_ms
+        return replace(
+            notification,
+            state=notification.state_at("Checked", checked_at_ms),
+            detail="",
+        )
+
     notification_priority = 2
-    notification_state = "Checked — no reply needed"
+    notification_state = "Checked"
     notification_detail = ""
 
     terminal = True
@@ -338,7 +358,7 @@ class EngagedAssignment(BoundAssignment):
             recipient, observation=observation, activity=activity
         )
         return observation.selected_response(
-            notification, updated_at_ms, activity.progress
+            notification, updated_at_ms, activity.progress, activity.read_at_ms
         )
 
     def wake_frame(self, source, obligation) -> tuple[str, str]:
@@ -365,7 +385,7 @@ class EngagedAssignment(BoundAssignment):
     def require_engagement(self) -> Engagement:
         return self.decision
 
-    notification_state = "Working — will reply"
+    notification_state = "Not read yet"
     notification_detail = ""
     notification_priority = 1
     notification_busy = True
@@ -395,15 +415,15 @@ class CompletedAssignment(BoundAssignment):
         if reference is None:
             return replace(
                 notification,
-                state="Read — no reply",
-                detail="The response turn ended without a published reply.",
+                state=notification.state_at("Read", activity.read_at_ms) + " — no reply",
+                detail="",
                 priority=2,
                 busy=False,
             )
         return replace(
             notification,
-            state="Answered",
-            detail=f"Reply published as message {reference.seq}.",
+            state=notification.state_at("Answered", activity.response_received_at_ms),
+            detail="",
             reply_reference=reference,
         )
 
@@ -448,29 +468,18 @@ class DeferredAssignment(InterruptedAssignment):
         from .presentation import MessageNotification
 
         if observation.turn_started_by(updated_at_ms) and triage_inflight:
-            return MessageNotification(
-                recipient,
-                "Checking relevance…",
-                "Checking relevance before deciding whether to respond.",
-                priority=0,
-                busy=True,
-            )
+            return MessageNotification(recipient, "Not read yet", "", priority=0, busy=True)
         if triage_inflight:
-            return MessageNotification(
-                recipient,
-                "Outcome uncertain",
-                "The check was attempted but no decision was confirmed. "
-                "Do not automatically retry.",
-            )
+            return MessageNotification(recipient, "Interrupted before read", "")
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        return activity.progress.interrupted_notification(notification)
+        return activity.progress.interrupted_notification(
+            notification, activity.read_at_ms
+        )
 
-    notification_state = "Interrupted — outcome unknown"
-    notification_detail = (
-        "Processing was interrupted without a terminal outcome. The message may not have reached the model; do not automatically retry."
-    )
+    notification_state = "Interrupted before read"
+    notification_detail = ""
 
     deferred = True
     engageable = True
@@ -514,11 +523,16 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        return observation.delivered_response(notification, updated_at_ms)
+        return replace(
+            notification,
+            state=notification.state_at("Read", updated_at_ms),
+            detail="",
+            busy=False,
+        )
 
     notification_priority = 2
-    notification_state = "Delivered"
-    notification_detail = "Delivered into the agent's running turn."
+    notification_state = "Read"
+    notification_detail = ""
 
     terminal = True
     preengagement_target = True
@@ -537,6 +551,25 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
 
 
 class FailedAssignment(InterruptedAssignment):
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity,
+        updated_at_ms=0,
+        triage_inflight=False,
+        blocked_by_prior=False,
+    ):
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        return replace(
+            notification,
+            state=notification.state_at("Failed", updated_at_ms),
+            detail="",
+        )
+
     def rejected_triage_history(self, execution, **source):
         """A proved rejected result is delivered source, never an IGNORE decision."""
         from .historical_native_inputs import FailedTriageHistoricalNativeInput
@@ -544,7 +577,7 @@ class FailedAssignment(InterruptedAssignment):
         return FailedTriageHistoricalNativeInput(execution=execution, **source)
 
     notification_state = "Failed"
-    notification_detail = "Notification processing failed; inspect the agent error before retrying."
+    notification_detail = ""
 
     terminal = True
     failed = True

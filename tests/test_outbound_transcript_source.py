@@ -164,7 +164,7 @@ def test_saved_notification_uses_exact_owner_drain_readiness(tmp_path, direct): 
     comms.agents.activity.emit(replace(activity,diagnostic=foreign))
     current = next(item for item in comms.views.recent_notifications('sender')
                    if item.recipient=='beta')
-    assert current.state=='Pending'
+    assert current.state=='Not read yet'
 
 
 def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):  # noqa: F811
@@ -281,7 +281,7 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     lookup = stable_thread_lookup(target.created_at)
     receipts = comms.views.recent_notifications("sender")
     beta = next(item for item in receipts if item.recipient_identity.recipient_lookup == lookup)
-    assert beta.message.reference == message.reference and beta.state == "Pending"
+    assert beta.message.reference == message.reference and beta.state == "Not read yet"
     assignments = NotificationAssignment.select(
         root, "w.wire_seq=? AND w.recipient_lookup=?", (message.seq, lookup)
     )
@@ -338,7 +338,7 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     target_outcome = next(
         item for item in outcomes if item.recipient_identity.recipient_lookup == lookup
     )
-    assert target_outcome.state == "Checked — no reply needed"
+    assert target_outcome.state.startswith("Checked ")
     assert target_outcome.detail == ""
 
 

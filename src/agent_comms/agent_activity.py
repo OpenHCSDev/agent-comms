@@ -56,16 +56,10 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
         notification: MessageNotification,
         updated_at_ms: int,
         progress: AssignmentProgress,
+        read_at_ms: int | None,
     ) -> MessageNotification:
-        return progress.interrupted_notification(notification)
-
-    def delivered_response(
-        self, notification: MessageNotification, updated_at_ms: int
-    ) -> MessageNotification:
-        return replace(
-            notification,
-            state="Read — no reply",
-            detail="The message entered a turn that has ended without a linked reply.",
+        return progress.selected_notification(
+            notification, read_at_ms, busy=self.turn_started_by(updated_at_ms)
         )
 
 
@@ -75,15 +69,6 @@ class RecordedRecipientActivity(RecipientActivity):
 
     def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
         return notification
-
-    def selected_response(
-        self,
-        notification: MessageNotification,
-        updated_at_ms: int,
-        progress: AssignmentProgress,
-    ) -> MessageNotification:
-        return replace(notification, state="Response selected", busy=False, priority=3,
-            detail="The recorded assignment selected a response; completion is not recorded.")
 
     def displayed_recipient(self, notification, source, reads, document, snapshot):
         return reads.historical_displayed_recipient(
@@ -128,31 +113,6 @@ class LiveRecipientActivity(RecipientActivity):
 
     def turn_started_by(self, updated_at_ms: int) -> bool:
         return self.thread.turn_started_by(updated_at_ms)
-
-    def selected_response(
-        self,
-        notification: MessageNotification,
-        updated_at_ms: int,
-        progress: AssignmentProgress,
-    ) -> MessageNotification:
-        if not self.turn_started_by(updated_at_ms):
-            return super().selected_response(notification, updated_at_ms, progress)
-        turn = self.thread.active_turn
-        assert turn is not None
-        return progress.running_notification(notification, turn.progress_description())
-
-    def delivered_response(
-        self, notification: MessageNotification, updated_at_ms: int
-    ) -> MessageNotification:
-        if self.turn_started_by(updated_at_ms):
-            return replace(
-                notification,
-                state="Read — current turn",
-                detail="The message entered the agent's current turn; no linked reply exists yet.",
-                busy=True,
-                priority=1,
-            )
-        return super().delivered_response(notification, updated_at_ms)
 
     def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
         from .presentation import MessageNotification
