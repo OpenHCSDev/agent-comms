@@ -156,7 +156,7 @@ class ReadRequest(AwaitedRead):
             return ReadAnswered(self.request_id, self.read(comms))
         except CoordinationReadUnavailable:
             return ReadBusy(self.request_id)
-        except UnreadableHistory as error:
+        except (UnreadableHistory, StaleRevision) as error:
             return self.refused(error)
 
 
