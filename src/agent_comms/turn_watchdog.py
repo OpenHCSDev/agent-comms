@@ -53,14 +53,13 @@ class TurnWait(DeclaredFamily, affix="Wait"):
         finally:
             self.elapsed += min(remaining, max(0.0, clock() - started_at))
 
-    def failure_context(self, session: TurnSession) -> tuple[str, str]:
-        return self.reason, self.phase
+    def diagnosis(self, session: TurnSession) -> str:
+        return f"{self.reason}: phase={self.phase}"
 
     def expired(self, session: TurnSession) -> TurnWaitExpired:
-        reason, phase = self.failure_context(session)
         return TurnWaitExpired(
             self,
-            f"{reason}: phase={phase}; no progress for "
+            f"{self.diagnosis(session)}; no progress for "
             f"{self.elapsed:.3f}s; input_started={session.started_input}"
         )
 
@@ -116,10 +115,10 @@ class InputStartWait(TurnWait):
 
 
 class ModelWait(TurnWait):
-    def failure_context(self, session: TurnSession) -> tuple[str, str]:
+    def diagnosis(self, session: TurnSession) -> str:
         watchdog = session.watchdog
         stalled = watchdog.phase.stalled(watchdog.prompt_accepted)
-        return stalled.stall_reason, stalled.declared_name
+        return f"{stalled.stall_reason}: phase={stalled.declared_name}"
 
     async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         watchdog = session.watchdog
