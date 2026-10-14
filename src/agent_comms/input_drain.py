@@ -436,7 +436,7 @@ class InputDrain(InputObservation):
                 # owner's: its own entry and private observation are what it
                 # last settled.
                 revision = await Coordination.run_worker(
-                    partial(self._tick_revision, session_id, paths)
+                    partial(self._tick_revision, session_id)
                 )
                 idle = (
                     settled is not None
