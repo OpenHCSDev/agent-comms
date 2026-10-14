@@ -43,29 +43,7 @@ if TYPE_CHECKING:
     from .acp_extension import QueueItem, QueueScope
     from .registry_document import RegistrySnapshot
     from .input_drain import InputDrain
-    from .turn_context import RenderedInput
     from .turn_runner import TurnRunner
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class PreparedDeliveryItem:
-    """One pending bus message rendered and reserved-ready, read by field."""
-
-    key: str
-    row: ReservedInput
-    rendered: RenderedInput
-    message: Message
-    assignment: WakeAssignment
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class PreparedDelivery:
-    """A delivery batch decided under no lock; custody comes later per item."""
-
-    owner: Thread
-    context: QueuedInputContext
-    snapshot: RegistrySnapshot
-    items: tuple[PreparedDeliveryItem, ...]
 
 
 class InputHandoffRefused(RelationViolationError):
@@ -171,30 +149,21 @@ class QueuedInput:
         return item, owner, document.lookup(item.key)
 
     @staticmethod
-    def _remaining(inputs: InputDrain, session_id: str, document) -> int:
-        """One owner for the follow-up allowance: threshold and count live here."""
+    def remaining_capacity(inputs: InputDrain, session_id: str) -> int:
+        """How many follow-ups the current locked transaction may still place."""
+        document = inputs.dispositions.read()
         return 32 - sum(
             not document.all_started(source.keys)
             for source in inputs.following_sources.get(session_id, {}).values()
         )
 
-    @staticmethod
-    def _refuse_over_capacity() -> None:
-        raise RequestError.invalid_params(
-            {"reason": "Too many follow-up inputs awaiting their own user start."}
-        )
-
     @classmethod
-    async def capacity(cls, inputs: InputDrain, session_id: str) -> int:
-        """How many more follow-ups this turn can hold before their own user start."""
-        document = await Coordination.run_worker(inputs.dispositions.read)
-        return cls._remaining(inputs, session_id, document)
-
-    @classmethod
-    def require_capacity_unlocked(cls, inputs: InputDrain, session_id: str) -> None:
-        """Recheck synchronously under wire custody; the pre-check can race."""
-        if cls._remaining(inputs, session_id, inputs.dispositions.read()) <= 0:
-            cls._refuse_over_capacity()
+    def require_capacity(cls, inputs: InputDrain, session_id: str) -> None:
+        """Follow-ups cannot exceed the original live awaiting-start allowance."""
+        if cls.remaining_capacity(inputs, session_id) <= 0:
+            raise RequestError.invalid_params(
+                {"reason": "Too many follow-up inputs awaiting their own user start."}
+            )
 
     @classmethod
     @asynccontextmanager
@@ -209,19 +178,17 @@ class QueuedInput:
         The consumer transfers this original ExitStack only after binding its
         live input, or into its existing longer turn-acquisition lifetime.
         """
-        async with _async_store_lock(inputs.comms._wire_lock_path), AsyncExitStack() as rollback:
+        async with AsyncExitStack() as rollback:
             custody = ExitStack()
             rollback.push_async_callback(Coordination.run_worker, custody.close)
-            # No await while holding the wire lock. The capacity check runs
-            # once, here under custody: a pre-check outside could both pass a
-            # stale count and refuse a freed slot, so it owns nothing.
-            cls.require_capacity_unlocked(inputs, session_id)
-            item, owner, row = cls.capture(
-                inputs, name, text=text, prompt=prompt, echo=echo,
-                images=images, controller=controller, input_id=input_id,
-                origin=origin, custody=custody,
-            )
-            yield item, owner, row, custody
+            async with _async_store_lock(inputs.comms._wire_lock_path):
+                cls.require_capacity(inputs, session_id)
+                item, owner, row = cls.capture(
+                    inputs, name, text=text, prompt=prompt, echo=echo,
+                    images=images, controller=controller, input_id=input_id,
+                    origin=origin, custody=custody,
+                )
+                yield item, owner, row, custody
 
     def place(
         self, inputs: InputDrain, session_id: str,
@@ -257,8 +224,6 @@ class QueuedInput:
         inputs = turns.inputs
         try:
             async with _async_store_lock(inputs.comms._wire_lock_path):
-                # No await while holding the wire lock: every check below is
-                # synchronous file work under the acquired physical custody.
                 self.require_live_source(inputs, session_id)
                 snapshot = inputs.comms.registry.snapshot()
                 canonical = snapshot.canonical_name(name)
@@ -350,14 +315,16 @@ class DeliveredInput(QueuedInput):
         )
 
     @classmethod
-    def _prepared_pending(
+    def reserve_pending(
         cls,
         inputs: InputDrain,
         name: str,
         root_id: str,
         pending: tuple[tuple[CommittedDelivery, WakeAssignment], ...],
-    ) -> PreparedDelivery:
-        """Synchronous preparation outside the wire lock: no reservation yet."""
+        store: Coordination,
+    ) -> tuple[tuple[Self, InputContent], ...]:
+        """Called inside the wire boundary: reserve each input, then pause its assignment."""
+        from .agent_backend import InputContent
         from .context_segments.wake import DeliveredMessageSegment
         from .routing import ScheduledTurn
         from .turn_context import TurnContext
@@ -367,7 +334,7 @@ class DeliveredInput(QueuedInput):
         owner = snapshot.threads[canonical]
         context = QueuedInputContext.capture(owner, snapshot.admission_identity(canonical))
         document = inputs.dispositions.read()
-        items = []
+        reserved = []
         for source, assignment in pending:
             message = source.message
             key = InputDispositions.bus_key(message, owner)
@@ -382,27 +349,22 @@ class DeliveredInput(QueuedInput):
                 ScheduledTurn.incoming(message, aliases=snapshot.aliases).prompt,
                 origin=WireInputOrigin(root_id, message.reference),
             )
-            items.append(PreparedDeliveryItem(
-                key=key, row=row, rendered=rendered, message=message, assignment=assignment,
+            with ExitStack() as custody:
+                inputs.dispositions.reserve_originals(row, custody=custody)
+                paused = store.assignments.transition_preengagement(
+                    assignment.assignment_id, DeferredAssignment,
+                    expected_revision=assignment.revision,
+                ).value
+                custody.pop_all()
+            reserved.append((
+                cls(
+                    text=row.source_text, echo=False, context=context,
+                    input_id=ACPInputIdText.new(), prompt=rendered.text,
+                    bus_key=key, message=message, assignment=paused,
+                ),
+                InputContent(text=rendered.text, contributions=rendered.contributions),
             ))
-        return PreparedDelivery(owner=owner, context=context, snapshot=snapshot,
-                                items=tuple(items))
-
-    @classmethod
-    def _decide_consume_unlocked(cls, inputs: InputDrain, session_id: str, inbox, item: Self,
-                                 content, row: ReservedInput, custody: ExitStack) -> None:
-        """Decide and consume one delivered slot atomically under wire custody.
-
-        Synchronous: capacity recheck, disposition reservation and inbox
-        placement share one acquisition, so a concurrent follow-up cannot take
-        the last slot between them. Raises RequestError when full and
-        RelationViolationError when the row is already owned, both without any
-        mutation by this call; InputHandoffRefused means the row was reserved
-        and the caller must settle it.
-        """
-        cls.require_capacity_unlocked(inputs, session_id)
-        inputs.dispositions.reserve_originals(row, custody=custody)
-        item.place(inputs, session_id, inbox, content)
+        return tuple(reserved)
 
     @classmethod
     async def deliver_pending(
@@ -433,52 +395,24 @@ class DeliveredInput(QueuedInput):
             return tuple(zip(originals, assignments, strict=True))
 
         pending = await Coordination.run_async(store_path, read)
-        pending = pending[:max(await cls.capacity(inputs, session_id), 0)]
         if not pending:
             return
-        from .agent_backend import InputContent
-        # Preparation reads registry/dispositions without wire custody and never
-        # holds a lock across an await. Reservation takes the wire lock only
-        # for synchronous file work; coordination transitions run outside it.
-        prepared = await Coordination.run_worker(
-            partial(cls._prepared_pending, inputs, owner.name, root_id, pending)
-        )
-        for prepared_item in prepared.items:
-            custody = ExitStack()
-            try:
-                paused = await Coordination.run_async(
-                    store_path,
-                    lambda store, item=prepared_item: store.assignments.transition_preengagement(
-                        item.assignment.assignment_id, DeferredAssignment,
-                        expected_revision=item.assignment.revision,
-                    ).value,
-                )
-            except Exception:
-                continue
-            row = prepared_item.row
-            item = cls(
-                text=row.source_text, echo=False, context=prepared.context,
-                input_id=ACPInputIdText.new(), prompt=prepared_item.rendered.text,
-                bus_key=prepared_item.key, message=prepared_item.message, assignment=paused,
-            )
-            content = InputContent(text=prepared_item.rendered.text,
-                                   contributions=prepared_item.rendered.contributions)
-            try:
-                async with _async_store_lock(inputs.comms._wire_lock_path):
-                    cls._decide_consume_unlocked(inputs, session_id, inbox, item, content, row, custody)
-            except InputHandoffRefused:
-                # The inbox died after the row was reserved: full cleanup.
-                await Coordination.run_worker(custody.close)
-                await item.not_started(inputs)
-                continue
-            except (RequestError, RelationViolationError):
-                # Slot full or row already owned: the row is untouched by us,
-                # so only the paused assignment returns to pending.
-                await Coordination.run_worker(custody.close)
-                await item.settle(inputs, item.assignment.lifecycle.mode.initial_state())
-                continue
-            custody.pop_all()
-            custody.close()
+        unplaced: tuple[Self, ...] = ()
+        async with _async_store_lock(inputs.comms._wire_lock_path):
+            # Placement owns asyncio.Queue and the live input maps, so it must
+            # remain on their event-loop thread. The lock acquisition alone is
+            # asynchronous; this complete transaction contains no await.
+            with Coordination(str(store_path)) as store:
+                accepted = pending[:max(cls.remaining_capacity(inputs, session_id), 0)]
+                reserved = cls.reserve_pending(inputs, owner.name, root_id, accepted, store)
+            for index, (item, content) in enumerate(reserved):
+                try:
+                    item.place(inputs, session_id, inbox, content)
+                except InputHandoffRefused:
+                    unplaced = tuple(item for item, _ in reserved[index:])
+                    break
+        for item in unplaced:
+            await item.not_started(inputs)
 
     async def dispatch(self, turns: TurnRunner, session_id: str, name: str) -> None:
         raise InputHandoffRefused("A bus message its turn never took wakes its owner instead")
@@ -513,7 +447,7 @@ class DeliveredInput(QueuedInput):
 
 class InitialInput(QueuedInput):
     @classmethod
-    async def require_capacity(cls, inputs: InputDrain, session_id: str) -> None:
+    def require_capacity(cls, inputs: InputDrain, session_id: str) -> None:
         """A new original is not a following input in the live native queue."""
 
     @classmethod
