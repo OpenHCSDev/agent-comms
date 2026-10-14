@@ -16,6 +16,7 @@ from pydantic import (
 )
 
 from agent_comms.activity import ActivityState
+from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import (
     AssistantTranscript, ThinkingTranscript, ToolEndTranscript,
     TranscriptEvent, UserTranscript, NoticeTranscript,
@@ -556,21 +557,58 @@ class WebSearchItem(Item):
         return f'Searching: {self.query}'
 
 
+class PatchChange(TaggedWire, ABC):
+    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
+        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+
+    @abstractmethod
+    def paths(self, path: str) -> tuple[str, str]: ...
+
+
+class AddedFile(PatchChange):
+    wire_tag = 'add'
+
+    def paths(self, path: str) -> tuple[str, str]:
+        return '/dev/null', path
+
+
+class DeletedFile(PatchChange):
+    wire_tag = 'delete'
+
+    def paths(self, path: str) -> tuple[str, str]:
+        return path, '/dev/null'
+
+
+class UpdatedFile(PatchChange):
+    wire_tag = 'update'
+    move_path: str | None = None
+
+    def paths(self, path: str) -> tuple[str, str]:
+        return path, path if self.move_path is None else self.move_path
+
+
 class FileChange(WireModel):
     path: str
     diff: str
-    kind: JsonValue
+    kind: PatchChange.declared_union()
+
+    def events(self, call_id: str, ok: bool) -> tuple[TranscriptEvent, ...]:
+        before, after = self.kind.paths(self.path)
+        patch = ToolDiff(f'--- {before}\n+++ {after}\n{self.diff}')
+        return ToolCall(call_id, 'edit', {'file_path': self.path}).finished('', ok, diff=patch)
 
 
 class FileChangeItem(Item):
     wire_tag = 'fileChange'
     doing = 'Editing files'
     changes: list[FileChange]
-    status: str
+    status: Literal['inProgress', 'completed', 'failed', 'declined']
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript('File changes: ' + self.status + '\n' +
-                                 '\n'.join(f'{change.path}\n{change.diff}' for change in self.changes)),)
+        if self.status == 'inProgress':
+            raise ValueError('File change completion still says inProgress')
+        return tuple(event for index, change in enumerate(self.changes)
+                     for event in change.events(f'{self.id}:{index}', self.status == 'completed'))
 
 
 class AgentState(WireModel):

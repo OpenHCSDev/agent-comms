@@ -25,6 +25,7 @@ from agent_comms.activity import ActivityState
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.native_tools import NativeTool
+from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import TranscriptEvent, ToolStartTranscript, ToolEndTranscript
 
 
@@ -86,11 +87,11 @@ class ToolCall:
             return NativeTool.start(self.id, self.name, self.arguments).title
         return self.name
 
-    def finished(self, text: str, ok: bool) -> tuple[TranscriptEvent, ...]:
+    def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None) -> tuple[TranscriptEvent, ...]:
         return (ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
                                     raw_input=self.arguments),
                 ToolEndTranscript(tool_call_id=self.id, tool_name=self.name,
-                                  text=text, ok=ok))
+                                  text=text, ok=ok, diff=diff))
 
 
 @dataclass(frozen=True)
